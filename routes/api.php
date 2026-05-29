@@ -3,6 +3,7 @@
 use App\Http\Controllers\APIController;
 use App\Http\Controllers\DeployController;
 use App\Http\Controllers\MaintenanceDependencyController;
+use App\Http\Controllers\MaintenanceWorkOrderController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
@@ -30,3 +31,6 @@ Route::post('/deploy', [DeployController::class, 'run']);
 Route::get('/maintenance/catalogs', [MaintenanceDependencyController::class, 'catalogs']);
 Route::apiResource('/maintenance/dependencies', MaintenanceDependencyController::class)
     ->parameters(['dependencies' => 'maintenanceDependency']);
+Route::get('/maintenance/work-orders/catalogs', [MaintenanceWorkOrderController::class, 'catalogs']);
+Route::apiResource('/maintenance/work-orders', MaintenanceWorkOrderController::class)
+    ->parameters(['work-orders' => 'maintenanceWorkOrder']);

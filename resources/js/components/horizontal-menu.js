@@ -58,6 +58,12 @@ export const menuItems = [
                 label: 'Dependencias',
                 link: '/maintenance/dependencies',
                 parentId: 900
+            },
+            {
+                id: 902,
+                label: 'Órdenes de trabajo',
+                link: '/maintenance/work-orders',
+                parentId: 900
             }
         ]
     },

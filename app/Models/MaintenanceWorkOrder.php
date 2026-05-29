@@ -10,7 +10,13 @@ class MaintenanceWorkOrder extends Model
     use HasFactory;
 
     protected $fillable = [
+        'source_key',
         'maintenance_dependency_id',
+        'location_code',
+        'location_distribution',
+        'location_sector',
+        'location_name',
+        'location_usage',
         'reported_at',
         'requested_by',
         'assigned_to',
@@ -19,6 +25,7 @@ class MaintenanceWorkOrder extends Model
         'due_date',
         'description',
         'resolution_notes',
+        'photo_reference',
     ];
 
     protected $casts = [
