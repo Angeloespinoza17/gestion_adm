@@ -1,6 +1,8 @@
 <?php
 
 use App\Http\Controllers\APIController;
+use App\Http\Controllers\DeployController;
+use App\Http\Controllers\MaintenanceDependencyController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
@@ -23,3 +25,8 @@ Route::post('/login', [APIController::class, 'login']);
 Route::post('/register', [APIController::class, 'register']);
 Route::post('/forget-password', [APIController::class, 'forget_pass']);
 Route::post('/reset-password', [APIController::class, 'reset_pass']);
+Route::get('/deploy/status', [DeployController::class, 'status']);
+Route::post('/deploy', [DeployController::class, 'run']);
+Route::get('/maintenance/catalogs', [MaintenanceDependencyController::class, 'catalogs']);
+Route::apiResource('/maintenance/dependencies', MaintenanceDependencyController::class)
+    ->parameters(['dependencies' => 'maintenanceDependency']);

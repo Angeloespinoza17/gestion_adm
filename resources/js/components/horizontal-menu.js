@@ -23,6 +23,12 @@ export const menuItems = [
                 parentId: 1
             },
             {
+                id: 132,
+                label: 'Deploy',
+                link: '/deploy',
+                parentId: 1
+            },
+            {
                 id: 4,
                 label: 'menuitems.dashboards.list.crypto',
                 link: '/dashboard/crypto',
@@ -39,6 +45,19 @@ export const menuItems = [
                 label: "menuitems.dashboards.list.jobs.text",
                 link: "/dashboard/job",
                 parentId: 2,
+            }
+        ]
+    },
+    {
+        id: 900,
+        label: 'Mantención',
+        icon: 'bx-wrench',
+        subItems: [
+            {
+                id: 901,
+                label: 'Dependencias',
+                link: '/maintenance/dependencies',
+                parentId: 900
             }
         ]
     },

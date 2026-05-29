@@ -28,6 +28,12 @@ export const menuItems = [
                 parentId: 2
             },
             {
+                id: 132,
+                label: "Deploy",
+                link: "/deploy",
+                parentId: 2
+            },
+            {
                 id: 5,
                 label: "menuitems.dashboards.list.crypto",
                 link: "/dashboard/crypto",
@@ -54,6 +60,19 @@ export const menuItems = [
     {
         id: 6,
         isLayout: true
+    },
+    {
+        id: 900,
+        label: "Mantención",
+        icon: "bx-wrench",
+        subItems: [
+            {
+                id: 901,
+                label: "Dependencias",
+                link: "/maintenance/dependencies",
+                parentId: 900
+            }
+        ]
     },
     {
         id: 7,

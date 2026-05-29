@@ -36,6 +36,16 @@ const routes = [
         component: () => import('../views/dashboard/test.vue'),
     },
     {
+        path: '/deploy',
+        meta: { authRequired: true, title: 'Deploy' },
+        component: () => import('../views/dashboard/deploy.vue'),
+    },
+    {
+        path: '/maintenance/dependencies',
+        meta: { authRequired: true, title: 'Dependencias' },
+        component: () => import('../views/maintenance/dependencies.vue'),
+    },
+    {
         path: "/calendar/tui-calendar",
         name: "TUICalendar",
         meta: { title: "TUI Calendar", authRequired: true },
