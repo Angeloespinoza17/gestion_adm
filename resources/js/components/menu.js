@@ -83,6 +83,12 @@ export const menuItems = [
                 label: "Carga de trabajo",
                 link: "/maintenance/workload",
                 parentId: 900
+            },
+            {
+                id: 904,
+                label: "Planificación visitas",
+                link: "/maintenance/visits",
+                parentId: 900
             }
         ]
     },

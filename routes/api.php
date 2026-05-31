@@ -3,6 +3,7 @@
 use App\Http\Controllers\APIController;
 use App\Http\Controllers\DeployController;
 use App\Http\Controllers\MaintenanceDependencyController;
+use App\Http\Controllers\MaintenanceVisitController;
 use App\Http\Controllers\MaintenanceWorkOrderController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
@@ -36,3 +37,11 @@ Route::get('/maintenance/work-orders/workload', [MaintenanceWorkOrderController:
 Route::get('/maintenance/work-orders/assignee-report', [MaintenanceWorkOrderController::class, 'assigneeReport']);
 Route::apiResource('/maintenance/work-orders', MaintenanceWorkOrderController::class)
     ->parameters(['work-orders' => 'maintenanceWorkOrder']);
+
+Route::get('/maintenance/visits/catalogs', [MaintenanceVisitController::class, 'catalogs']);
+Route::get('/maintenance/visits/{maintenanceVisit}/checklist', [MaintenanceVisitController::class, 'checklist']);
+Route::post('/maintenance/visits/{maintenanceVisit}/checklist', [MaintenanceVisitController::class, 'upsertChecklist']);
+Route::post('/maintenance/visits/{maintenanceVisit}/checklist-photo', [MaintenanceVisitController::class, 'uploadChecklistPhoto']);
+Route::post('/maintenance/visit-checklist-responses/{checklistResponse}/create-work-order', [MaintenanceVisitController::class, 'createWorkOrderFromFinding']);
+Route::apiResource('/maintenance/visits', MaintenanceVisitController::class)
+    ->parameters(['visits' => 'maintenanceVisit']);
