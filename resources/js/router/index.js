@@ -66,6 +66,11 @@ const routes = [
         component: () => import('../views/maintenance/visit-checklist.vue'),
     },
     {
+        path: '/maintenance/annual-plans',
+        meta: { authRequired: true, title: 'Plan anual de mantención' },
+        component: () => import('../views/maintenance/annual-plan.vue'),
+    },
+    {
         path: "/calendar/tui-calendar",
         name: "TUICalendar",
         meta: { title: "TUI Calendar", authRequired: true },

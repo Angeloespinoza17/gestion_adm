@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\APIController;
 use App\Http\Controllers\DeployController;
+use App\Http\Controllers\MaintenanceAnnualPlanController;
 use App\Http\Controllers\MaintenanceDependencyController;
 use App\Http\Controllers\MaintenanceVisitController;
 use App\Http\Controllers\MaintenanceWorkOrderController;
@@ -45,3 +46,7 @@ Route::post('/maintenance/visits/{maintenanceVisit}/checklist-photo', [Maintenan
 Route::post('/maintenance/visit-checklist-responses/{checklistResponse}/create-work-order', [MaintenanceVisitController::class, 'createWorkOrderFromFinding']);
 Route::apiResource('/maintenance/visits', MaintenanceVisitController::class)
     ->parameters(['visits' => 'maintenanceVisit']);
+
+Route::get('/maintenance/annual-plans/catalogs', [MaintenanceAnnualPlanController::class, 'catalogs']);
+Route::apiResource('/maintenance/annual-plans', MaintenanceAnnualPlanController::class)
+    ->parameters(['annual-plans' => 'maintenanceAnnualPlan']);

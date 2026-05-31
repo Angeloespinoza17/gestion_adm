@@ -76,6 +76,12 @@ export const menuItems = [
                 label: 'Planificación visitas',
                 link: '/maintenance/visits',
                 parentId: 900
+            },
+            {
+                id: 905,
+                label: 'Plan anual mantención',
+                link: '/maintenance/annual-plans',
+                parentId: 900
             }
         ]
     },
