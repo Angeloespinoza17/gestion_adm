@@ -32,5 +32,7 @@ Route::get('/maintenance/catalogs', [MaintenanceDependencyController::class, 'ca
 Route::apiResource('/maintenance/dependencies', MaintenanceDependencyController::class)
     ->parameters(['dependencies' => 'maintenanceDependency']);
 Route::get('/maintenance/work-orders/catalogs', [MaintenanceWorkOrderController::class, 'catalogs']);
+Route::get('/maintenance/work-orders/workload', [MaintenanceWorkOrderController::class, 'workload']);
+Route::get('/maintenance/work-orders/assignee-report', [MaintenanceWorkOrderController::class, 'assigneeReport']);
 Route::apiResource('/maintenance/work-orders', MaintenanceWorkOrderController::class)
     ->parameters(['work-orders' => 'maintenanceWorkOrder']);

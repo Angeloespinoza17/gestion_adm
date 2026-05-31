@@ -64,6 +64,12 @@ export const menuItems = [
                 label: 'Órdenes de trabajo',
                 link: '/maintenance/work-orders',
                 parentId: 900
+            },
+            {
+                id: 903,
+                label: 'Carga de trabajo',
+                link: '/maintenance/workload',
+                parentId: 900
             }
         ]
     },

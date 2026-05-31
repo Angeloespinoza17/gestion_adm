@@ -51,6 +51,11 @@ const routes = [
         component: () => import('../views/maintenance/work-orders.vue'),
     },
     {
+        path: '/maintenance/workload',
+        meta: { authRequired: true, title: 'Carga de trabajo' },
+        component: () => import('../views/maintenance/workload.vue'),
+    },
+    {
         path: "/calendar/tui-calendar",
         name: "TUICalendar",
         meta: { title: "TUI Calendar", authRequired: true },

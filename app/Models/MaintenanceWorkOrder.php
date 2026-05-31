@@ -4,10 +4,15 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\Storage;
 
 class MaintenanceWorkOrder extends Model
 {
     use HasFactory;
+
+    protected $appends = [
+        'photo_url',
+    ];
 
     protected $fillable = [
         'source_key',
@@ -32,6 +37,24 @@ class MaintenanceWorkOrder extends Model
         'reported_at' => 'date',
         'due_date' => 'date',
     ];
+
+    public function getPhotoUrlAttribute(): ?string
+    {
+        if (!$this->photo_reference) {
+            return null;
+        }
+
+        $url = Storage::disk('public')->url($this->photo_reference);
+
+        // Evita problemas cuando APP_URL no coincide con el host/protocolo real.
+        // Si el Storage devuelve URL absoluta, la convertimos a ruta relativa.
+        $parts = parse_url((string) $url);
+        if (is_array($parts) && isset($parts['path'])) {
+            return $parts['path'] . (isset($parts['query']) ? '?' . $parts['query'] : '');
+        }
+
+        return $url;
+    }
 
     public function dependency()
     {
