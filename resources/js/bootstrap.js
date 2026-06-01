@@ -23,6 +23,7 @@ window.axios.interceptors.request.use((config) => {
         const value = `Bearer ${token}`;
         config.headers.Authorization = value;
         config.headers['X-Authorization'] = value;
+        config.headers['X-Api-Token'] = token;
     }
     return config;
 });

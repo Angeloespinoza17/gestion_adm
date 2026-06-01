@@ -28,9 +28,10 @@ class InjectAuthorizationHeader
 
             $auth = $serverAuth ?: $xAuth;
             if (!$auth && is_string($cookieToken) && $cookieToken !== '') {
-                $auth = str_starts_with($cookieToken, 'Bearer ')
-                    ? $cookieToken
-                    : 'Bearer '.$cookieToken;
+                $decoded = rawurldecode($cookieToken);
+                $auth = str_starts_with($decoded, 'Bearer ')
+                    ? $decoded
+                    : 'Bearer '.$decoded;
             }
 
             if (is_string($auth) && $auth !== '') {

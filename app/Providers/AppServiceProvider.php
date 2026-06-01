@@ -4,6 +4,7 @@ namespace App\Providers;
 
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\ServiceProvider;
+use Laravel\Sanctum\Sanctum;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -25,5 +26,25 @@ class AppServiceProvider extends ServiceProvider
     public function boot()
     {
         Schema::defaultStringLength(191);
+
+        // cPanel/Apache a veces elimina el header `Authorization` antes de PHP.
+        // Esto permite autenticar Sanctum leyendo el token desde headers alternativos.
+        Sanctum::getAccessTokenFromRequestUsing(function ($request) {
+            $raw = $request->headers->get('X-Api-Token')
+                ?: $request->headers->get('X-Authorization')
+                ?: $request->cookie('cnsc_token');
+
+            if (!is_string($raw) || $raw === '') {
+                return $request->bearerToken();
+            }
+
+            $raw = rawurldecode($raw);
+
+            if (str_starts_with($raw, 'Bearer ')) {
+                return substr($raw, 7);
+            }
+
+            return $raw;
+        });
     }
 }

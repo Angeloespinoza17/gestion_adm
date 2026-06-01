@@ -1,7 +1,7 @@
 <script>
 
 import MetisMenu from "metismenujs";
-import axios from "axios";
+const axios = window.axios;
 
 import { menuItems } from "./menu";
 
@@ -34,7 +34,14 @@ export default {
       }
 
       try {
-        const response = await axios.get("/api/me/modules");
+        const auth = `Bearer ${token}`;
+        const response = await axios.get("/api/me/modules", {
+          headers: {
+            Authorization: auth,
+            "X-Authorization": auth,
+            "X-Api-Token": token,
+          },
+        });
         this.menuItems = this.buildMenuFromModules(response.data.data || []);
       } catch (error) {
         this.menuItems = menuItems;

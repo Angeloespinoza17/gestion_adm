@@ -12,6 +12,7 @@ use App\Http\Controllers\PermissionController;
 use App\Http\Controllers\RoleController;
 use App\Http\Controllers\SystemModuleController;
 use App\Http\Controllers\UserController;
+use App\Http\Controllers\DebugAuthController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
@@ -34,6 +35,7 @@ Route::post('/login', [APIController::class, 'login']);
 Route::post('/register', [APIController::class, 'register']);
 Route::post('/forget-password', [APIController::class, 'forget_pass']);
 Route::post('/reset-password', [APIController::class, 'reset_pass']);
+Route::get('/_debug/auth', [DebugAuthController::class, 'auth']);
 Route::get('/deploy/status', [DeployController::class, 'status']);
 Route::post('/deploy', [DeployController::class, 'run']);
 
