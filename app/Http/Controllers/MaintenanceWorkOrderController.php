@@ -76,6 +76,13 @@ class MaintenanceWorkOrderController extends Controller
         ], 201);
     }
 
+    public function show(MaintenanceWorkOrder $maintenanceWorkOrder): JsonResponse
+    {
+        return response()->json([
+            'data' => $maintenanceWorkOrder->load('dependency:id,code,name,distribution,sector,zone,usage'),
+        ]);
+    }
+
     public function update(Request $request, MaintenanceWorkOrder $maintenanceWorkOrder): JsonResponse
     {
         $payload = $this->validated($request);

@@ -5,6 +5,11 @@
 
     RewriteEngine On
 
+    # Ensure Authorization header reaches PHP under CGI/FastCGI.
+    <IfModule mod_core.c>
+        CGIPassAuth On
+    </IfModule>
+
     # Handle Authorization Header
     RewriteCond %{HTTP:Authorization} .
     RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]

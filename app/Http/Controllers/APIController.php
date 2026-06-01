@@ -5,8 +5,6 @@ namespace App\Http\Controllers;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
-use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Mail;
@@ -50,12 +48,26 @@ class APIController extends Controller
             return $this->sendResponse(400, $validator->errors()->first());
         }
 
-        $credentials = $request->only('email', 'password');
-        if (Auth::attempt($credentials)) {
-            $user = User::where('email', $request->email)->first();
-            return $this->sendResponse($user, "success");
+        $user = User::where('email', $request->email)->first();
+
+        if (!$user) {
+            return $this->sendResponse(400, "Credentials not match with our records");
         }
-        return $this->sendResponse(400, "Credentials not match with our records");
+
+        if (!$user->active) {
+            return $this->sendResponse(400, "Usuario desactivado.");
+        }
+
+        if (!Hash::check($request->password, $user->password)) {
+            return $this->sendResponse(400, "Credentials not match with our records");
+        }
+
+        $token = $user->createToken('web')->plainTextToken;
+
+        return $this->sendResponse([
+            'user' => $user,
+            'token' => $token,
+        ], "success");
     }
 
     // custom register
@@ -78,7 +90,12 @@ class APIController extends Controller
         ]);
 
         if ($user) {
-            return $this->sendResponse($user, "success");
+            $token = $user->createToken('web')->plainTextToken;
+
+            return $this->sendResponse([
+                'user' => $user,
+                'token' => $token,
+            ], "success");
         }
     }
 
@@ -145,5 +162,19 @@ class APIController extends Controller
         } catch (\Throwable $th) {
             return $this->sendResponse(400, "Something went wrong, please contact support.");
         }
+    }
+
+    public function logout(Request $request)
+    {
+        $user = $request->user();
+
+        if ($user && $request->user()->currentAccessToken()) {
+            $request->user()->currentAccessToken()->delete();
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => 'logout',
+        ]);
     }
 }

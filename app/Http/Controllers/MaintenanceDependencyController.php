@@ -43,6 +43,13 @@ class MaintenanceDependencyController extends Controller
         ], 201);
     }
 
+    public function show(MaintenanceDependency $maintenanceDependency): JsonResponse
+    {
+        return response()->json([
+            'data' => $maintenanceDependency,
+        ]);
+    }
+
     public function update(Request $request, MaintenanceDependency $maintenanceDependency): JsonResponse
     {
         $maintenanceDependency->update($this->validated($request, $maintenanceDependency));

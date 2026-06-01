@@ -29,11 +29,20 @@ export default {
       this.processing = true
       await axios.post('/api/login', this.auth).then(({ data }) => {
         if (data.success == true && data.message == 'success') {
+          const user = data.data.user;
+          const token = data.data.token;
+
+          if (token) {
+            localStorage.setItem('token', token);
+            axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+            document.cookie = `cnsc_token=${encodeURIComponent(token)}; path=/; samesite=lax`;
+          }
+
           const logged_user = {
             login: true,
-            user_id: data.data.id,
-            name: data.data.name,
-            email: data.data.email,
+            user_id: user.id,
+            name: user.name,
+            email: user.email,
           }
           localStorage.setItem('user', JSON.stringify(logged_user));
           this.$router.push('/');

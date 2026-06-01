@@ -119,12 +119,17 @@ export default {
     },
 
     logoutUser() {
-      // eslint-disable-next-line no-unused-vars
-      axios.get("http://127.0.0.1:8000/api/logout").then((res) => {
-        this.$router.push({
-          name: "default",
+      axios
+        .post("/api/logout")
+        .catch(() => null)
+        .finally(() => {
+          localStorage.removeItem("user");
+          localStorage.removeItem("token");
+          localStorage.removeItem("permissions");
+          document.cookie = "cnsc_token=; Max-Age=0; path=/; samesite=lax";
+          delete axios.defaults.headers.common["Authorization"];
+          this.$router.push("/login");
         });
-      });
     },
 
     toggleTheme() {
@@ -630,7 +635,7 @@ export default {
             {{ $t("navbar.dropdown.henry.list.lockscreen") }}
           </BDropdownItem>
           <BDropdownDivider></BDropdownDivider>
-          <a href="/logout" class="dropdown-item text-danger">
+          <a href="javascript:void(0)" class="dropdown-item text-danger" @click.prevent="logoutUser">
             <i class="bx bx-power-off font-size-16 align-middle me-1 text-danger"></i>
             {{ $t("navbar.dropdown.henry.list.logout") }}
           </a>

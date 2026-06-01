@@ -1,4 +1,5 @@
 import { createRouter, createWebHistory } from 'vue-router'
+import axios from 'axios'
 
 const routes = [
     {
@@ -42,33 +43,58 @@ const routes = [
     },
     {
         path: '/maintenance/dependencies',
-        meta: { authRequired: true, title: 'Dependencias' },
+        meta: { authRequired: true, title: 'Dependencias', permission: 'ver_mantencion' },
         component: () => import('../views/maintenance/dependencies.vue'),
     },
     {
         path: '/maintenance/work-orders',
-        meta: { authRequired: true, title: 'Órdenes de trabajo' },
+        meta: { authRequired: true, title: 'Órdenes de trabajo', permission: 'ver_mantencion' },
         component: () => import('../views/maintenance/work-orders.vue'),
     },
     {
         path: '/maintenance/workload',
-        meta: { authRequired: true, title: 'Carga de trabajo' },
+        meta: { authRequired: true, title: 'Carga de trabajo', permission: 'ver_reportes_mantencion' },
         component: () => import('../views/maintenance/workload.vue'),
     },
     {
         path: '/maintenance/visits',
-        meta: { authRequired: true, title: 'Planificación de visitas' },
+        meta: { authRequired: true, title: 'Planificación de visitas', permission: 'ver_visitas_mantencion' },
         component: () => import('../views/maintenance/visits.vue'),
     },
     {
         path: '/maintenance/visits/:id/checklist',
-        meta: { authRequired: true, title: 'Checklist de visita' },
+        meta: { authRequired: true, title: 'Checklist de visita', permission: 'ver_visitas_mantencion' },
         component: () => import('../views/maintenance/visit-checklist.vue'),
     },
     {
         path: '/maintenance/annual-plans',
-        meta: { authRequired: true, title: 'Plan anual de mantención' },
+        meta: { authRequired: true, title: 'Plan anual de mantención', permission: 'ver_plan_anual_mantencion' },
         component: () => import('../views/maintenance/annual-plan.vue'),
+    },
+    {
+        path: '/admin/users',
+        meta: { authRequired: true, title: 'Usuarios', permission: 'administrar_usuarios' },
+        component: () => import('../views/admin/users.vue'),
+    },
+    {
+        path: '/admin/roles',
+        meta: { authRequired: true, title: 'Roles', permission: 'administrar_roles' },
+        component: () => import('../views/admin/roles.vue'),
+    },
+    {
+        path: '/admin/permissions',
+        meta: { authRequired: true, title: 'Permisos', permission: 'administrar_permisos' },
+        component: () => import('../views/admin/permissions.vue'),
+    },
+    {
+        path: '/admin/modules',
+        meta: { authRequired: true, title: 'Módulos', permission: 'administrar_modulos' },
+        component: () => import('../views/admin/modules.vue'),
+    },
+    {
+        path: '/admin/cargos',
+        meta: { authRequired: true, title: 'Cargos', permission: 'administrar_cargos' },
+        component: () => import('../views/admin/cargos.vue'),
     },
     {
         path: "/calendar/tui-calendar",
@@ -658,11 +684,40 @@ router.beforeEach(async (routeTo, routeFrom, next) => {
     const authRequired = routeTo.matched.some((route) => route.meta.authRequired);
     if (!authRequired) return next();
 
-    if (localStorage.getItem('user')) {
-        next();
-    } else {
-        next({ name: 'login', query: { redirectFrom: routeTo.fullPath } });
+    const token = localStorage.getItem('token');
+    if (!token) {
+        return next({ name: 'login', query: { redirectFrom: routeTo.fullPath } });
     }
+
+    axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+
+    const requiredPermission = routeTo.meta.permission;
+    if (!requiredPermission) {
+        return next();
+    }
+
+    let permissions = null;
+    try {
+        permissions = JSON.parse(localStorage.getItem('permissions') || 'null');
+    } catch (e) {
+        permissions = null;
+    }
+
+    if (!Array.isArray(permissions)) {
+        try {
+            const response = await axios.get('/api/me/permissions');
+            permissions = response.data.data || [];
+            localStorage.setItem('permissions', JSON.stringify(permissions));
+        } catch (error) {
+            permissions = [];
+        }
+    }
+
+    if (permissions.includes(requiredPermission)) {
+        return next();
+    }
+
+    return next({ path: '/' });
 
 });
 

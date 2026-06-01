@@ -1,6 +1,7 @@
 <script>
 
 import MetisMenu from "metismenujs";
+import axios from "axios";
 
 import { menuItems } from "./menu";
 
@@ -10,73 +11,134 @@ import { menuItems } from "./menu";
 export default {
   data() {
     return {
-      menuItems: menuItems,
+      menuItems: [],
     };
   },
-  mounted: function () {
-    // eslint-disable-next-line no-unused-vars
-    if (document.getElementById("side-menu")) new MetisMenu("#side-menu");
-    // alert(menuRef)
-    var links = document.getElementsByClassName("side-nav-link-ref");
-    var matchingMenuItem = null;
-    const paths = [];
+  watch: {
+    $route() {
+      this.$nextTick(() => this.activateMenu());
+    },
+  },
+  async mounted() {
+    await this.loadMenu();
+    await this.$nextTick();
+    this.initMenu();
+    this.activateMenu();
+  },
+  methods: {
+    async loadMenu() {
+      const token = localStorage.getItem("token");
+      if (!token) {
+        this.menuItems = menuItems;
+        return;
+      }
 
-    for (var i = 0; i < links.length; i++) {
-      paths.push(links[i]["pathname"]);
-    }
-    var itemIndex = paths.indexOf(window.location.pathname);
-    if (itemIndex === -1) {
-      const strIndex = window.location.pathname.lastIndexOf("/");
-      const item = window.location.pathname.substr(0, strIndex).toString();
-      matchingMenuItem = links[paths.indexOf(item)];
-    } else {
-      matchingMenuItem = links[itemIndex];
-    }
+      try {
+        const response = await axios.get("/api/me/modules");
+        this.menuItems = this.buildMenuFromModules(response.data.data || []);
+      } catch (error) {
+        this.menuItems = menuItems;
+      }
+    },
+    buildMenuFromModules(modules) {
+      const byParent = new Map();
+      modules.forEach((mod) => {
+        const parentId = mod.parent_id ?? null;
+        if (!byParent.has(parentId)) byParent.set(parentId, []);
+        byParent.get(parentId).push(mod);
+      });
 
-    if (matchingMenuItem) {
-      matchingMenuItem.classList.add("active");
-      var parent = matchingMenuItem.parentElement;
+      const sortMods = (arr) =>
+        [...arr].sort((a, b) => {
+          const ao = a.sort_order ?? 0;
+          const bo = b.sort_order ?? 0;
+          if (ao !== bo) return ao - bo;
+          return String(a.name).localeCompare(String(b.name));
+        });
 
-      /**
-       * TODO: This is hard coded way of expading/activating parent menu dropdown and working till level 3.
-       * We should come up with non hard coded approach
-       */
-      if (parent) {
-        parent.classList.add("mm-active");
-        const parent2 = parent.parentElement.closest("ul");
-        if (parent2 && parent2.id !== "side-menu") {
-          parent2.classList.add("mm-show");
+      const buildItems = (parentId) => {
+        const children = sortMods(byParent.get(parentId) || []);
+        return children.map((mod) => {
+          const subItems = buildItems(mod.id);
+          const item = {
+            id: mod.id,
+            label: mod.name,
+            icon: mod.icon || undefined,
+          };
 
-          const parent3 = parent2.parentElement;
-          if (parent3) {
-            parent3.classList.add("mm-active");
+          if (subItems.length > 0) {
+            item.subItems = subItems;
+          } else {
+            item.link = mod.frontend_route || "/";
+          }
 
-            var badgeChildAnchor = parent3.querySelector(".badge");
+          return item;
+        });
+      };
 
-            if (!badgeChildAnchor) { var childAnchor = parent3.querySelector(".has-arrow") }
-            
-            var childDropdown = parent3.querySelector(".has-dropdown");
-            if (childAnchor) childAnchor.classList.add("mm-active");
-            if (childDropdown) childDropdown.classList.add("mm-active");
+      return buildItems(null);
+    },
+    initMenu() {
+      if (document.getElementById("side-menu")) new MetisMenu("#side-menu");
+    },
+    activateMenu() {
+      var links = document.getElementsByClassName("side-nav-link-ref");
+      var matchingMenuItem = null;
+      const paths = [];
 
-            const parent4 = parent3.parentElement;
-            if (parent4 && parent4.id !== "side-menu") {
-              parent4.classList.add("mm-show");
-              const parent5 = parent4.parentElement;
-              if (parent5 && parent5.id !== "side-menu") {
-                parent5.classList.add("mm-active");
-                const childanchor = parent5.querySelector(".is-parent");
-                if (childanchor && parent5.id !== "side-menu") {
-                  childanchor.classList.add("mm-active");
+      for (var i = 0; i < links.length; i++) {
+        paths.push(links[i]["pathname"]);
+      }
+      var itemIndex = paths.indexOf(window.location.pathname);
+      if (itemIndex === -1) {
+        const strIndex = window.location.pathname.lastIndexOf("/");
+        const item = window.location.pathname.substr(0, strIndex).toString();
+        matchingMenuItem = links[paths.indexOf(item)];
+      } else {
+        matchingMenuItem = links[itemIndex];
+      }
+
+      if (matchingMenuItem) {
+        matchingMenuItem.classList.add("active");
+        var parent = matchingMenuItem.parentElement;
+
+        if (parent) {
+          parent.classList.add("mm-active");
+          const parent2 = parent.parentElement.closest("ul");
+          if (parent2 && parent2.id !== "side-menu") {
+            parent2.classList.add("mm-show");
+
+            const parent3 = parent2.parentElement;
+            if (parent3) {
+              parent3.classList.add("mm-active");
+
+              var badgeChildAnchor = parent3.querySelector(".badge");
+
+              if (!badgeChildAnchor) {
+                var childAnchor = parent3.querySelector(".has-arrow");
+              }
+
+              var childDropdown = parent3.querySelector(".has-dropdown");
+              if (childAnchor) childAnchor.classList.add("mm-active");
+              if (childDropdown) childDropdown.classList.add("mm-active");
+
+              const parent4 = parent3.parentElement;
+              if (parent4 && parent4.id !== "side-menu") {
+                parent4.classList.add("mm-show");
+                const parent5 = parent4.parentElement;
+                if (parent5 && parent5.id !== "side-menu") {
+                  parent5.classList.add("mm-active");
+                  const childanchor = parent5.querySelector(".is-parent");
+                  if (childanchor && parent5.id !== "side-menu") {
+                    childanchor.classList.add("mm-active");
+                  }
                 }
               }
             }
           }
         }
       }
-    }
-  },
-  methods: {
+    },
     /**
      * Returns true or false if given menu item has child or not
      * @param item menuItem
