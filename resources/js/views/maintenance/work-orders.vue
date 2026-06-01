@@ -21,6 +21,7 @@ export default {
   components: { Layout, Multiselect },
   data() {
     return {
+      debugModals: false,
       loading: false,
       saving: false,
       search: "",
@@ -84,6 +85,12 @@ export default {
     },
   },
   mounted() {
+    try {
+      this.debugModals = localStorage.getItem("CNSC_DEBUG_MODALS") === "1";
+    } catch (e) {
+      this.debugModals = false;
+    }
+    this.debugLog("mounted", { debugModals: this.debugModals });
     this.loadCatalogs();
     this.loadWorkOrders();
   },
@@ -91,6 +98,14 @@ export default {
     this.stopCameraStream();
   },
   methods: {
+    debugLog(...args) {
+      if (!this.debugModals) return;
+      // eslint-disable-next-line no-console
+      console.log("[CNSC][OT][modals]", ...args);
+    },
+    onModalEvent(modal, eventName) {
+      this.debugLog("modal-event", modal, eventName);
+    },
     async loadCatalogs() {
       const response = await axios.get("/api/maintenance/work-orders/catalogs");
       this.catalogs = response.data;
@@ -185,6 +200,7 @@ export default {
       }
     },
     editWorkOrder(workOrder) {
+      this.debugLog("editWorkOrder(click)", { id: workOrder?.id });
       this.error = null;
       this.success = null;
       const assigned = this.parseAssignees(workOrder.assigned_to);
@@ -203,12 +219,15 @@ export default {
       this.dependencySearch = workOrder.dependency ? this.dependencyLabel(workOrder.dependency) : "";
       this.selectedPhoto = null;
       this.showModalCrearOT = true;
+      this.debugLog("showModalCrearOT=true (edit)");
     },
     viewWorkOrder(workOrder) {
+      this.debugLog("viewWorkOrder(click)", { id: workOrder?.id });
       this.activeWorkOrder = workOrder;
       this.detailPhotoError = null;
       this.detailPhotoLoading = Boolean(workOrder?.photo_url);
       this.showModalDetalleOT = true;
+      this.debugLog("showModalDetalleOT=true (view)");
     },
     async deleteWorkOrder(workOrder) {
       if (!confirm(`¿Eliminar la OT #${workOrder.id}?`)) return;
@@ -337,10 +356,12 @@ export default {
       return `/${value}`;
     },
     openCreateModal() {
+      this.debugLog("openCreateModal(click)");
       this.error = null;
       this.success = null;
       this.resetForm();
       this.showModalCrearOT = true;
+      this.debugLog("showModalCrearOT=true (create)");
     },
     toggleSortMode() {
       this.sortMode = this.sortMode === "created" ? "priority" : "created";
@@ -395,6 +416,17 @@ export default {
       }
 
       return error.response?.data?.message || error.message || "Error desconocido";
+    },
+  },
+  watch: {
+    showModalCrearOT(value) {
+      this.debugLog("watch showModalCrearOT", value);
+    },
+    showModalDetalleOT(value) {
+      this.debugLog("watch showModalDetalleOT", value);
+    },
+    showModalTomarFoto(value) {
+      this.debugLog("watch showModalTomarFoto", value);
     },
   },
 };
@@ -532,6 +564,13 @@ export default {
       scrollable
       hide-footer
       centered
+      teleport-to="body"
+      lazy
+      no-fade
+      @show="onModalEvent('crearOT', 'show')"
+      @shown="onModalEvent('crearOT', 'shown')"
+      @hide="onModalEvent('crearOT', 'hide')"
+      @hidden="onModalEvent('crearOT', 'hidden')"
     >
       <BAlert v-if="error" show variant="danger" class="mb-3">{{ error }}</BAlert>
       <BAlert v-if="success" show variant="success" class="mb-3">{{ success }}</BAlert>
@@ -646,6 +685,13 @@ export default {
       scrollable
       hide-footer
       centered
+      teleport-to="body"
+      lazy
+      no-fade
+      @show="onModalEvent('detalleOT', 'show')"
+      @shown="onModalEvent('detalleOT', 'shown')"
+      @hide="onModalEvent('detalleOT', 'hide')"
+      @hidden="onModalEvent('detalleOT', 'hidden')"
     >
       <div v-if="activeWorkOrder">
         <div class="mb-3">
@@ -755,7 +801,13 @@ export default {
       size="lg"
       hide-footer
       centered
+      teleport-to="body"
+      lazy
+      no-fade
       @hide="onHideCameraModal"
+      @show="onModalEvent('tomarFoto', 'show')"
+      @shown="onModalEvent('tomarFoto', 'shown')"
+      @hidden="onModalEvent('tomarFoto', 'hidden')"
     >
       <div v-if="cameraError" class="alert alert-danger mb-3">{{ cameraError }}</div>
 

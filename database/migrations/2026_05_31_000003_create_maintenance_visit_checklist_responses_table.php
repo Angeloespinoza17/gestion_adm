@@ -16,19 +16,29 @@ return new class extends Migration
         try {
             Schema::create('maintenance_visit_checklist_responses', function (Blueprint $table) {
                 $table->id();
-                $table->foreignId('maintenance_visit_id')->constrained('maintenance_visits')->cascadeOnDelete();
-                $table->foreignId('maintenance_checklist_item_id')->constrained('maintenance_checklist_items')->cascadeOnDelete();
+                // MySQL limita el nombre del constraint a 64 caracteres. Laravel genera nombres largos
+                // por defecto, así que definimos nombres cortos para evitar el error 1059.
+                $table->foreignId('maintenance_visit_id')
+                    ->constrained('maintenance_visits', 'id', 'mvcr_visit_fk')
+                    ->cascadeOnDelete();
+
+                $table->foreignId('maintenance_checklist_item_id')
+                    ->constrained('maintenance_checklist_items', 'id', 'mvcr_item_fk')
+                    ->cascadeOnDelete();
 
                 $table->string('review_status')->nullable(); // OK | No OK | N/A
                 $table->text('observations')->nullable();
                 $table->text('finding_description')->nullable();
                 $table->string('photo_reference')->nullable();
-                $table->foreignId('work_order_id')->nullable()->constrained('maintenance_work_orders')->nullOnDelete();
+                $table->foreignId('work_order_id')
+                    ->nullable()
+                    ->constrained('maintenance_work_orders', 'id', 'mvcr_work_order_fk')
+                    ->nullOnDelete();
 
                 $table->timestamps();
 
                 $table->unique(['maintenance_visit_id', 'maintenance_checklist_item_id'], 'visit_item_unique');
-                $table->index(['maintenance_visit_id', 'review_status']);
+                $table->index(['maintenance_visit_id', 'review_status'], 'mvcr_visit_review_idx');
             });
         } catch (QueryException $e) {
             // En algunos entornos `hasTable()` puede devolver false por permisos/cache,

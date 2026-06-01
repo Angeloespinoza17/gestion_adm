@@ -1,7 +1,7 @@
 <script>
 import Layout from "../../layouts/main.vue";
 import PageHeader from "../../components/page-header.vue";
-import DropZone from "../../components/widgets/dropzone.vue";
+import DropZone from "../../components/widgets/dropZone.vue";
 import { ref } from "vue";
 import useVuelidate from "@vuelidate/core";
 import verification from '../../../images/verification-img.png';

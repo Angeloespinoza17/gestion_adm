@@ -25,6 +25,7 @@ export default {
   components: { Layout },
   data() {
     return {
+      debugModals: false,
       loading: false,
       saving: false,
       error: null,
@@ -72,10 +73,24 @@ export default {
     },
   },
   mounted() {
+    try {
+      this.debugModals = localStorage.getItem("CNSC_DEBUG_MODALS") === "1";
+    } catch (e) {
+      this.debugModals = false;
+    }
+    this.debugLog("mounted", { debugModals: this.debugModals });
     this.loadCatalogs();
     this.loadPlans();
   },
   methods: {
+    debugLog(...args) {
+      if (!this.debugModals) return;
+      // eslint-disable-next-line no-console
+      console.log("[CNSC][ANNUAL-PLAN][modals]", ...args);
+    },
+    onModalEvent(modal, eventName) {
+      this.debugLog("modal-event", modal, eventName);
+    },
     async loadCatalogs() {
       const response = await axios.get("/api/maintenance/annual-plans/catalogs");
       this.catalogs = response.data;
@@ -104,12 +119,15 @@ export default {
       }
     },
     openCreate() {
+      this.debugLog("openCreate(click)");
       this.error = null;
       this.success = null;
       this.form = emptyForm();
       this.showModalPlan = true;
+      this.debugLog("showModalPlan=true (create)");
     },
     editPlan(plan) {
+      this.debugLog("editPlan(click)", { id: plan?.id });
       this.error = null;
       this.success = null;
       this.form = {
@@ -120,6 +138,7 @@ export default {
         completed_date: plan.completed_date ? String(plan.completed_date).slice(0, 10) : "",
       };
       this.showModalPlan = true;
+      this.debugLog("showModalPlan=true (edit)");
     },
     async savePlan() {
       this.saving = true;
@@ -165,6 +184,11 @@ export default {
     dependencyLabel(dep) {
       if (!dep) return "-";
       return `${dep.code} · ${dep.name}`;
+    },
+  },
+  watch: {
+    showModalPlan(value) {
+      this.debugLog("watch showModalPlan", value);
     },
   },
 };
@@ -305,7 +329,23 @@ export default {
       </BCardBody>
     </BCard>
 
-    <BModal v-model="showModalPlan" :title="isEditing ? 'Editar mantención programada' : 'Nueva mantención programada'" title-class="font-18" body-class="p-3" size="lg" hide-footer centered scrollable>
+    <BModal
+      v-model="showModalPlan"
+      :title="isEditing ? 'Editar mantención programada' : 'Nueva mantención programada'"
+      title-class="font-18"
+      body-class="p-3"
+      size="lg"
+      hide-footer
+      centered
+      scrollable
+      teleport-to="body"
+      lazy
+      no-fade
+      @show="onModalEvent('annual-plan', 'show')"
+      @shown="onModalEvent('annual-plan', 'shown')"
+      @hide="onModalEvent('annual-plan', 'hide')"
+      @hidden="onModalEvent('annual-plan', 'hidden')"
+    >
       <BAlert v-if="error" show variant="danger" class="mb-3">{{ error }}</BAlert>
       <form @submit.prevent="savePlan">
         <BRow>
@@ -411,4 +451,3 @@ export default {
     </BModal>
   </Layout>
 </template>
-

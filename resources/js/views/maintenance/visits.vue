@@ -17,6 +17,7 @@ export default {
   components: { Layout },
   data() {
     return {
+      debugModals: false,
       loading: false,
       saving: false,
       error: null,
@@ -49,10 +50,24 @@ export default {
     },
   },
   mounted() {
+    try {
+      this.debugModals = localStorage.getItem("CNSC_DEBUG_MODALS") === "1";
+    } catch (e) {
+      this.debugModals = false;
+    }
+    this.debugLog("mounted", { debugModals: this.debugModals });
     this.loadCatalogs();
     this.loadVisits();
   },
   methods: {
+    debugLog(...args) {
+      if (!this.debugModals) return;
+      // eslint-disable-next-line no-console
+      console.log("[CNSC][VISITS][modals]", ...args);
+    },
+    onModalEvent(modal, eventName) {
+      this.debugLog("modal-event", modal, eventName);
+    },
     async loadCatalogs() {
       const response = await axios.get("/api/maintenance/visits/catalogs");
       this.catalogs = response.data;
@@ -81,12 +96,15 @@ export default {
       }
     },
     openCreate() {
+      this.debugLog("openCreate(click)");
       this.error = null;
       this.success = null;
       this.form = emptyForm();
       this.showModalVisit = true;
+      this.debugLog("showModalVisit=true (create)");
     },
     editVisit(visit) {
+      this.debugLog("editVisit(click)", { id: visit?.id });
       this.error = null;
       this.success = null;
       this.form = {
@@ -97,6 +115,7 @@ export default {
         visit_time: visit.visit_time ? String(visit.visit_time).slice(11, 16) : "",
       };
       this.showModalVisit = true;
+      this.debugLog("showModalVisit=true (edit)");
     },
     async saveVisit() {
       this.saving = true;
@@ -142,6 +161,11 @@ export default {
       const [y, m, d] = String(value).slice(0, 10).split("-");
       if (!y || !m || !d) return String(value);
       return `${d}-${m}-${y}`;
+    },
+  },
+  watch: {
+    showModalVisit(value) {
+      this.debugLog("watch showModalVisit", value);
     },
   },
 };
@@ -272,7 +296,23 @@ export default {
       </BCardBody>
     </BCard>
 
-    <BModal v-model="showModalVisit" :title="isEditing ? 'Editar visita' : 'Nueva visita'" title-class="font-18" body-class="p-3" size="lg" hide-footer centered scrollable>
+    <BModal
+      v-model="showModalVisit"
+      :title="isEditing ? 'Editar visita' : 'Nueva visita'"
+      title-class="font-18"
+      body-class="p-3"
+      size="lg"
+      hide-footer
+      centered
+      scrollable
+      teleport-to="body"
+      lazy
+      no-fade
+      @show="onModalEvent('visit', 'show')"
+      @shown="onModalEvent('visit', 'shown')"
+      @hide="onModalEvent('visit', 'hide')"
+      @hidden="onModalEvent('visit', 'hidden')"
+    >
       <BAlert v-if="error" show variant="danger" class="mb-3">{{ error }}</BAlert>
       <form @submit.prevent="saveVisit">
         <BRow>
@@ -344,4 +384,3 @@ export default {
     </BModal>
   </Layout>
 </template>
-

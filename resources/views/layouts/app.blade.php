@@ -11,8 +11,7 @@
     <meta content="Skote is a fully featured premium Vuejs admin dashboard template built on top of awesome Bootstrap 5"
         name="description" />
     <!-- vite css and js  -->
-    <link rel="stylesheet" href="{{ Vite::asset('resources/sass/app.scss') }}" id="layout-css">
-    <script type="module" src="{{ Vite::asset('resources/js/app.js') }}"></script>
+    @vite(['resources/sass/app.scss', 'resources/js/app.js'])
 
     @yield('css')
 </head>
