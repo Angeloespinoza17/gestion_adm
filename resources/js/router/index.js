@@ -97,6 +97,36 @@ const routes = [
         component: () => import('../views/admin/cargos.vue'),
     },
     {
+        path: '/inventory/items',
+        meta: { authRequired: true, title: 'Inventario · Bienes', permission: 'ver_inventario' },
+        component: () => import('../views/inventory/items.vue'),
+    },
+    {
+        path: '/inventory/items/:id',
+        meta: { authRequired: true, title: 'Inventario · Ficha', permission: 'ver_inventario' },
+        component: () => import('../views/inventory/item-show.vue'),
+    },
+    {
+        path: '/inventory/categories',
+        meta: { authRequired: true, title: 'Inventario · Categorías', permission: 'administrar_categorias_inventario' },
+        component: () => import('../views/inventory/categories.vue'),
+    },
+    {
+        path: '/inventory/suppliers',
+        meta: { authRequired: true, title: 'Inventario · Proveedores', permission: 'ver_inventario' },
+        component: () => import('../views/inventory/suppliers.vue'),
+    },
+    {
+        path: '/inventory/reports',
+        meta: { authRequired: true, title: 'Inventario · Reportes', permission: 'ver_reportes_inventario' },
+        component: () => import('../views/inventory/reports.vue'),
+    },
+    {
+        path: '/inventory/labels',
+        meta: { authRequired: true, title: 'Inventario · Etiquetas', permission: 'imprimir_etiquetas_inventario' },
+        component: () => import('../views/inventory/labels.vue'),
+    },
+    {
         path: "/calendar/tui-calendar",
         name: "TUICalendar",
         meta: { title: "TUI Calendar", authRequired: true },

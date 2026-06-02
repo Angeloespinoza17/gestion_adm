@@ -13,6 +13,15 @@ use App\Http\Controllers\RoleController;
 use App\Http\Controllers\SystemModuleController;
 use App\Http\Controllers\UserController;
 use App\Http\Controllers\DebugAuthController;
+use App\Http\Controllers\Inventory\InventoryCategoryController;
+use App\Http\Controllers\Inventory\InventorySubcategoryController;
+use App\Http\Controllers\Inventory\SupplierController as InventorySupplierController;
+use App\Http\Controllers\Inventory\InventoryItemController;
+use App\Http\Controllers\Inventory\InventoryItemPhotoController;
+use App\Http\Controllers\Inventory\InventoryItemDocumentController;
+use App\Http\Controllers\Inventory\InventoryMovementController;
+use App\Http\Controllers\Inventory\InventoryStockController;
+use App\Http\Controllers\Inventory\InventoryReportController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
@@ -149,4 +158,87 @@ Route::middleware('auth:sanctum')->group(function () {
         ->middleware('permission:gestionar_plan_anual_mantencion');
     Route::delete('/maintenance/annual-plans/{maintenanceAnnualPlan}', [MaintenanceAnnualPlanController::class, 'destroy'])
         ->middleware('permission:gestionar_plan_anual_mantencion');
+
+    // Inventario
+    Route::prefix('inventory')->group(function () {
+        // Catálogos
+        Route::get('/categories', [InventoryCategoryController::class, 'index'])
+            ->middleware('permission:ver_inventario');
+        Route::post('/categories', [InventoryCategoryController::class, 'store'])
+            ->middleware('permission:administrar_categorias_inventario');
+        Route::get('/categories/{category}', [InventoryCategoryController::class, 'show'])
+            ->middleware('permission:ver_inventario');
+        Route::put('/categories/{category}', [InventoryCategoryController::class, 'update'])
+            ->middleware('permission:administrar_categorias_inventario');
+        Route::delete('/categories/{category}', [InventoryCategoryController::class, 'destroy'])
+            ->middleware('permission:administrar_categorias_inventario');
+
+        Route::get('/subcategories', [InventorySubcategoryController::class, 'index'])
+            ->middleware('permission:ver_inventario');
+        Route::post('/subcategories', [InventorySubcategoryController::class, 'store'])
+            ->middleware('permission:administrar_categorias_inventario');
+        Route::get('/subcategories/{subcategory}', [InventorySubcategoryController::class, 'show'])
+            ->middleware('permission:ver_inventario');
+        Route::put('/subcategories/{subcategory}', [InventorySubcategoryController::class, 'update'])
+            ->middleware('permission:administrar_categorias_inventario');
+        Route::delete('/subcategories/{subcategory}', [InventorySubcategoryController::class, 'destroy'])
+            ->middleware('permission:administrar_categorias_inventario');
+
+        Route::get('/suppliers', [InventorySupplierController::class, 'index'])
+            ->middleware('permission:ver_inventario');
+        Route::post('/suppliers', [InventorySupplierController::class, 'store'])
+            ->middleware('permission:crear_inventario');
+        Route::get('/suppliers/{supplier}', [InventorySupplierController::class, 'show'])
+            ->middleware('permission:ver_inventario');
+        Route::put('/suppliers/{supplier}', [InventorySupplierController::class, 'update'])
+            ->middleware('permission:editar_inventario');
+        Route::delete('/suppliers/{supplier}', [InventorySupplierController::class, 'destroy'])
+            ->middleware('permission:eliminar_inventario');
+
+        // Bienes
+        Route::get('/items/catalogs', [InventoryItemController::class, 'catalogs'])
+            ->middleware('permission:ver_inventario');
+        Route::get('/items', [InventoryItemController::class, 'index'])
+            ->middleware('permission:ver_inventario');
+        Route::post('/items', [InventoryItemController::class, 'store'])
+            ->middleware('permission:crear_inventario');
+        Route::get('/items/{item}', [InventoryItemController::class, 'show'])
+            ->middleware('permission:ver_inventario');
+        Route::put('/items/{item}', [InventoryItemController::class, 'update'])
+            ->middleware('permission:editar_inventario');
+        Route::delete('/items/{item}', [InventoryItemController::class, 'destroy'])
+            ->middleware('permission:eliminar_inventario');
+
+        // Fotos
+        Route::post('/items/{item}/photos', [InventoryItemPhotoController::class, 'store'])
+            ->middleware('permission:editar_inventario');
+        Route::delete('/photos/{photo}', [InventoryItemPhotoController::class, 'destroy'])
+            ->middleware('permission:eliminar_documentos_inventario');
+        Route::put('/photos/{photo}/main', [InventoryItemPhotoController::class, 'setMain'])
+            ->middleware('permission:editar_inventario');
+
+        // Documentos
+        Route::post('/items/{item}/documents', [InventoryItemDocumentController::class, 'store'])
+            ->middleware('permission:subir_documentos_inventario');
+        Route::delete('/documents/{document}', [InventoryItemDocumentController::class, 'destroy'])
+            ->middleware('permission:eliminar_documentos_inventario');
+
+        // Movimientos
+        Route::get('/items/{item}/movements', [InventoryMovementController::class, 'index'])
+            ->middleware('permission:ver_inventario');
+        Route::post('/items/{item}/move', [InventoryMovementController::class, 'move'])
+            ->middleware('permission:mover_inventario');
+
+        // Stock (insumos)
+        Route::get('/items/{item}/stock', [InventoryStockController::class, 'index'])
+            ->middleware('permission:ver_inventario');
+        Route::post('/items/{item}/stock', [InventoryStockController::class, 'store'])
+            ->middleware('permission:mover_inventario');
+
+        // Reportes
+        Route::get('/reports/dashboard', [InventoryReportController::class, 'dashboard'])
+            ->middleware('permission:ver_reportes_inventario');
+        Route::get('/reports/low-stock', [InventoryReportController::class, 'lowStock'])
+            ->middleware('permission:ver_reportes_inventario');
+    });
 });

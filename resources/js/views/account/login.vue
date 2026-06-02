@@ -34,6 +34,7 @@ export default {
 
           if (token) {
             localStorage.setItem('token', token);
+            localStorage.removeItem('permissions');
             axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
             document.cookie = `cnsc_token=${encodeURIComponent(token)}; path=/; samesite=lax`;
           }

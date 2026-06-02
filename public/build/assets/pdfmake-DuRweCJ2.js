@@ -1,0 +1,1 @@
+import{p as a}from"./pdfmake-DZgiATW0.js";import{v as p,p as i}from"./vfs_fonts-DHuNd0yx.js";let o=!1;function d(){var f,s,t;if(!o){const e=((f=p.pdfMake)==null?void 0:f.vfs)||((t=(s=i)==null?void 0:s.pdfMake)==null?void 0:t.vfs);e&&(a.vfs=e),o=!0}return a}export{d as g};

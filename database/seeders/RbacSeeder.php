@@ -78,6 +78,20 @@ class RbacSeeder extends Seeder
             ['slug' => 'ver_plan_anual_mantencion', 'name' => 'Ver Plan Anual Mantención'],
             ['slug' => 'gestionar_plan_anual_mantencion', 'name' => 'Gestionar Plan Anual Mantención'],
 
+            // Inventario
+            ['slug' => 'ver_inventario', 'name' => 'Ver Inventario'],
+            ['slug' => 'crear_inventario', 'name' => 'Crear Inventario'],
+            ['slug' => 'editar_inventario', 'name' => 'Editar Inventario'],
+            ['slug' => 'eliminar_inventario', 'name' => 'Eliminar Inventario'],
+            ['slug' => 'dar_baja_inventario', 'name' => 'Dar de baja Inventario'],
+            ['slug' => 'mover_inventario', 'name' => 'Mover Inventario'],
+            ['slug' => 'ver_reportes_inventario', 'name' => 'Ver Reportes Inventario'],
+            ['slug' => 'exportar_inventario', 'name' => 'Exportar Inventario'],
+            ['slug' => 'administrar_categorias_inventario', 'name' => 'Administrar Categorías Inventario'],
+            ['slug' => 'subir_documentos_inventario', 'name' => 'Subir Documentos Inventario'],
+            ['slug' => 'eliminar_documentos_inventario', 'name' => 'Eliminar Documentos Inventario'],
+            ['slug' => 'imprimir_etiquetas_inventario', 'name' => 'Imprimir Etiquetas Inventario'],
+
             // Administración
             ['slug' => 'administrar_usuarios', 'name' => 'Administrar Usuarios'],
             ['slug' => 'administrar_roles', 'name' => 'Administrar Roles'],
@@ -118,7 +132,13 @@ class RbacSeeder extends Seeder
             ['slug' => 'maintenance_visits', 'name' => 'Planificación visitas', 'frontend_route' => '/maintenance/visits', 'icon' => null, 'sort' => 4, 'parent' => 'maintenance'],
             ['slug' => 'maintenance_annual_plans', 'name' => 'Plan anual mantención', 'frontend_route' => '/maintenance/annual-plans', 'icon' => null, 'sort' => 5, 'parent' => 'maintenance'],
 
-            ['slug' => 'inventory', 'name' => 'Inventario', 'frontend_route' => '/inventory', 'icon' => 'bx-box', 'sort' => 100],
+            // Inventario (padre + submódulos)
+            ['slug' => 'inventory', 'name' => 'Inventario', 'frontend_route' => null, 'icon' => 'bx-box', 'sort' => 100],
+            ['slug' => 'inventory_items', 'name' => 'Bienes', 'frontend_route' => '/inventory/items', 'icon' => null, 'sort' => 1, 'parent' => 'inventory'],
+            ['slug' => 'inventory_categories', 'name' => 'Categorías', 'frontend_route' => '/inventory/categories', 'icon' => null, 'sort' => 2, 'parent' => 'inventory'],
+            ['slug' => 'inventory_suppliers', 'name' => 'Proveedores', 'frontend_route' => '/inventory/suppliers', 'icon' => null, 'sort' => 3, 'parent' => 'inventory'],
+            ['slug' => 'inventory_reports', 'name' => 'Reportes', 'frontend_route' => '/inventory/reports', 'icon' => null, 'sort' => 4, 'parent' => 'inventory'],
+            ['slug' => 'inventory_labels', 'name' => 'Etiquetas', 'frontend_route' => '/inventory/labels', 'icon' => null, 'sort' => 5, 'parent' => 'inventory'],
             ['slug' => 'reports', 'name' => 'Reportes', 'frontend_route' => '/reports', 'icon' => 'bx-bar-chart', 'sort' => 110],
 
             // Configuración (padre + submódulos)
@@ -207,6 +227,20 @@ class RbacSeeder extends Seeder
             'gestionar_visitas_mantencion',
             'ver_plan_anual_mantencion',
             'gestionar_plan_anual_mantencion',
+
+            'ver_inventario',
+            'crear_inventario',
+            'editar_inventario',
+            // 'eliminar_inventario', // reservado para Super Admin
+            'dar_baja_inventario',
+            'mover_inventario',
+            'ver_reportes_inventario',
+            'exportar_inventario',
+            'administrar_categorias_inventario',
+            'subir_documentos_inventario',
+            'eliminar_documentos_inventario',
+            'imprimir_etiquetas_inventario',
+
             'administrar_usuarios',
             'administrar_roles',
             'administrar_permisos',
@@ -222,6 +256,12 @@ class RbacSeeder extends Seeder
             'maintenance_workload',
             'maintenance_visits',
             'maintenance_annual_plans',
+            'inventory',
+            'inventory_items',
+            'inventory_categories',
+            'inventory_suppliers',
+            'inventory_reports',
+            'inventory_labels',
             'reports',
             'settings',
             'settings_users',
@@ -237,6 +277,10 @@ class RbacSeeder extends Seeder
             'ver_reportes',
             'ver_mantencion',
             'ver_reportes_mantencion',
+            'ver_inventario',
+            'ver_reportes_inventario',
+            'exportar_inventario',
+            'imprimir_etiquetas_inventario',
         ]));
 
         $rolesBySlug['direccion']->modules()->sync($this->ids($modulesBySlug, [
@@ -246,6 +290,10 @@ class RbacSeeder extends Seeder
             'maintenance_workload',
             'maintenance_visits',
             'maintenance_annual_plans',
+            'inventory',
+            'inventory_items',
+            'inventory_reports',
+            'inventory_labels',
             'reports',
         ]));
 
@@ -290,6 +338,17 @@ class RbacSeeder extends Seeder
             'gestionar_visitas_mantencion',
             'ver_plan_anual_mantencion',
             'gestionar_plan_anual_mantencion',
+
+            'ver_inventario',
+            'crear_inventario',
+            'editar_inventario',
+            'dar_baja_inventario',
+            'mover_inventario',
+            'ver_reportes_inventario',
+            'exportar_inventario',
+            'administrar_categorias_inventario',
+            'subir_documentos_inventario',
+            'imprimir_etiquetas_inventario',
         ]));
 
         $rolesBySlug['encargado_mantencion']->modules()->sync($this->ids($modulesBySlug, [
@@ -300,6 +359,12 @@ class RbacSeeder extends Seeder
             'maintenance_workload',
             'maintenance_visits',
             'maintenance_annual_plans',
+            'inventory',
+            'inventory_items',
+            'inventory_categories',
+            'inventory_suppliers',
+            'inventory_reports',
+            'inventory_labels',
         ]));
 
         // Prevención de Riesgos (lectura + reportes)

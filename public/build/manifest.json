@@ -386,6 +386,14 @@
       "__commonjsHelpers-_d1bhYXs.js"
     ]
   },
+  "_pdfmake-DuRweCJ2.js": {
+    "file": "assets/pdfmake-DuRweCJ2.js",
+    "name": "pdfmake",
+    "imports": [
+      "_pdfmake-DZgiATW0.js",
+      "_vfs_fonts-DHuNd0yx.js"
+    ]
+  },
   "_profile-img-BQwYFnal.js": {
     "file": "assets/profile-img-BQwYFnal.js",
     "name": "profile-img",
@@ -462,8 +470,8 @@
       "icons/verification-img.png"
     ]
   },
-  "_vfs_fonts-ywaroK6o.js": {
-    "file": "assets/vfs_fonts-ywaroK6o.js",
+  "_vfs_fonts-DHuNd0yx.js": {
+    "file": "assets/vfs_fonts-DHuNd0yx.js",
     "name": "vfs_fonts",
     "imports": [
       "__commonjsHelpers-_d1bhYXs.js"
@@ -1011,6 +1019,12 @@
       "resources/js/views/admin/permissions.vue",
       "resources/js/views/admin/modules.vue",
       "resources/js/views/admin/cargos.vue",
+      "resources/js/views/inventory/items.vue",
+      "resources/js/views/inventory/item-show.vue",
+      "resources/js/views/inventory/categories.vue",
+      "resources/js/views/inventory/suppliers.vue",
+      "resources/js/views/inventory/reports.vue",
+      "resources/js/views/inventory/labels.vue",
       "resources/js/views/calendar/tui-calendar.vue",
       "resources/js/views/calendar/full-calendar.vue",
       "resources/js/views/chat/chat.vue",
@@ -1146,7 +1160,7 @@
     ]
   },
   "resources/js/views/account/login.vue": {
-    "file": "assets/login-DFvUOb1K.js",
+    "file": "assets/login-DpgAHPt1.js",
     "name": "login",
     "src": "resources/js/views/account/login.vue",
     "isDynamicEntry": true,
@@ -1157,7 +1171,7 @@
     ]
   },
   "resources/js/views/account/register.vue": {
-    "file": "assets/register-DKN4Gp7D.js",
+    "file": "assets/register-tjxbKqtZ.js",
     "name": "register",
     "src": "resources/js/views/account/register.vue",
     "isDynamicEntry": true,
@@ -2155,6 +2169,105 @@
       "_logo-light-D6djr6jC.js"
     ]
   },
+  "resources/js/views/inventory/categories.vue": {
+    "file": "assets/categories-ZNMfRhRM.js",
+    "name": "categories",
+    "src": "resources/js/views/inventory/categories.vue",
+    "isDynamicEntry": true,
+    "imports": [
+      "resources/js/app.js",
+      "_main-CPziUPaa.js",
+      "_avatar-1-W3daOYtq.js",
+      "_avatar-3-DaKGuDds.js",
+      "_logo-BPXRvMPO.js",
+      "_logo-light-D6djr6jC.js"
+    ]
+  },
+  "resources/js/views/inventory/item-show.vue": {
+    "file": "assets/item-show-CBcrySUi.js",
+    "name": "item-show",
+    "src": "resources/js/views/inventory/item-show.vue",
+    "isDynamicEntry": true,
+    "imports": [
+      "resources/js/app.js",
+      "_main-CPziUPaa.js",
+      "_multiselect-C_QVcY2D.js",
+      "_pdfmake-DuRweCJ2.js",
+      "_avatar-1-W3daOYtq.js",
+      "_avatar-3-DaKGuDds.js",
+      "_logo-BPXRvMPO.js",
+      "_logo-light-D6djr6jC.js",
+      "_pdfmake-DZgiATW0.js",
+      "__commonjsHelpers-_d1bhYXs.js",
+      "_vfs_fonts-DHuNd0yx.js"
+    ]
+  },
+  "resources/js/views/inventory/items.vue": {
+    "file": "assets/items-B8du_IZA.js",
+    "name": "items",
+    "src": "resources/js/views/inventory/items.vue",
+    "isDynamicEntry": true,
+    "imports": [
+      "resources/js/app.js",
+      "_main-CPziUPaa.js",
+      "_multiselect-C_QVcY2D.js",
+      "_sweetalert2.esm.all-0Z_61IYw.js",
+      "_avatar-1-W3daOYtq.js",
+      "_avatar-3-DaKGuDds.js",
+      "_logo-BPXRvMPO.js",
+      "_logo-light-D6djr6jC.js"
+    ],
+    "css": [
+      "css/items.min.css"
+    ]
+  },
+  "resources/js/views/inventory/labels.vue": {
+    "file": "assets/labels-DjS0wySv.js",
+    "name": "labels",
+    "src": "resources/js/views/inventory/labels.vue",
+    "isDynamicEntry": true,
+    "imports": [
+      "resources/js/app.js",
+      "_main-CPziUPaa.js",
+      "_multiselect-C_QVcY2D.js",
+      "_pdfmake-DuRweCJ2.js",
+      "_avatar-1-W3daOYtq.js",
+      "_avatar-3-DaKGuDds.js",
+      "_logo-BPXRvMPO.js",
+      "_logo-light-D6djr6jC.js",
+      "_pdfmake-DZgiATW0.js",
+      "__commonjsHelpers-_d1bhYXs.js",
+      "_vfs_fonts-DHuNd0yx.js"
+    ]
+  },
+  "resources/js/views/inventory/reports.vue": {
+    "file": "assets/reports-Bxf8ODUZ.js",
+    "name": "reports",
+    "src": "resources/js/views/inventory/reports.vue",
+    "isDynamicEntry": true,
+    "imports": [
+      "resources/js/app.js",
+      "_main-CPziUPaa.js",
+      "_avatar-1-W3daOYtq.js",
+      "_avatar-3-DaKGuDds.js",
+      "_logo-BPXRvMPO.js",
+      "_logo-light-D6djr6jC.js"
+    ]
+  },
+  "resources/js/views/inventory/suppliers.vue": {
+    "file": "assets/suppliers-CUmv6mS9.js",
+    "name": "suppliers",
+    "src": "resources/js/views/inventory/suppliers.vue",
+    "isDynamicEntry": true,
+    "imports": [
+      "resources/js/app.js",
+      "_main-CPziUPaa.js",
+      "_avatar-1-W3daOYtq.js",
+      "_avatar-3-DaKGuDds.js",
+      "_logo-BPXRvMPO.js",
+      "_logo-light-D6djr6jC.js"
+    ]
+  },
   "resources/js/views/invoices/detail.vue": {
     "file": "assets/detail-CX8QU7Y3.js",
     "name": "detail",
@@ -2348,7 +2461,7 @@
     ]
   },
   "resources/js/views/maintenance/visit-checklist.vue": {
-    "file": "assets/visit-checklist-B2PDtApk.js",
+    "file": "assets/visit-checklist-r0tG7IHB.js",
     "name": "visit-checklist",
     "src": "resources/js/views/maintenance/visit-checklist.vue",
     "isDynamicEntry": true,
@@ -2356,7 +2469,7 @@
       "resources/js/app.js",
       "_main-CPziUPaa.js",
       "_pdfmake-DZgiATW0.js",
-      "_vfs_fonts-ywaroK6o.js",
+      "_vfs_fonts-DHuNd0yx.js",
       "_avatar-1-W3daOYtq.js",
       "_avatar-3-DaKGuDds.js",
       "_logo-BPXRvMPO.js",
@@ -2397,7 +2510,7 @@
     ]
   },
   "resources/js/views/maintenance/workload.vue": {
-    "file": "assets/workload-BWiitw2j.js",
+    "file": "assets/workload-_Lu-Smxv.js",
     "name": "workload",
     "src": "resources/js/views/maintenance/workload.vue",
     "isDynamicEntry": true,
@@ -2405,7 +2518,7 @@
       "resources/js/app.js",
       "_main-CPziUPaa.js",
       "_pdfmake-DZgiATW0.js",
-      "_vfs_fonts-ywaroK6o.js",
+      "_vfs_fonts-DHuNd0yx.js",
       "_avatar-1-W3daOYtq.js",
       "_avatar-3-DaKGuDds.js",
       "_logo-BPXRvMPO.js",

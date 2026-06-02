@@ -60,4 +60,9 @@ class MaintenanceWorkOrder extends Model
     {
         return $this->belongsTo(MaintenanceDependency::class, 'maintenance_dependency_id');
     }
+
+    public function inventoryItem()
+    {
+        return $this->belongsTo(InventoryItem::class, 'inventory_item_id');
+    }
 }
