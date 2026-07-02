@@ -45,7 +45,7 @@ export default {
             email: user.email,
           }
           localStorage.setItem('user', JSON.stringify(logged_user));
-          this.$router.push('/');
+          this.$router.push('/inicio');
         } else {
           if(data.data == 400) {
             this.regError = data.message;

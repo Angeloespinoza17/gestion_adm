@@ -148,15 +148,21 @@ export default {
     <BRow>
       <BCol cols="12">
         <div class="page-title-box d-flex align-items-center justify-content-between">
-          <h4 class="mb-0 font-size-18">Gestión de mantención</h4>
+          <h4 class="mb-0 font-size-18">Activos técnicos</h4>
           <div class="page-title-right">
             <ol class="breadcrumb mb-0">
-              <li class="breadcrumb-item active">Dependencias</li>
+              <li class="breadcrumb-item active">Mantención</li>
+              <li class="breadcrumb-item active">Activos técnicos</li>
             </ol>
           </div>
         </div>
       </BCol>
     </BRow>
+
+    <BAlert show variant="info" class="mb-3">
+      Aquí se gestionan tableros, equipos y elementos técnicos de mantención. Los recintos reservables se administran en
+      <router-link to="/spaces/dependencies" class="alert-link ms-1">Dependencias</router-link>.
+    </BAlert>
 
     <BRow>
       <BCol md="4">
@@ -169,7 +175,7 @@ export default {
                 </span>
               </div>
               <div>
-                <p class="text-muted mb-1">Dependencias</p>
+                <p class="text-muted mb-1">Activos técnicos</p>
                 <h4 class="mb-0">{{ catalogs.total }}</h4>
               </div>
             </div>
@@ -216,7 +222,7 @@ export default {
       <BCol lg="4">
         <BCard no-body>
           <BCardBody>
-            <h5 class="card-title mb-3">{{ isEditing ? "Editar dependencia" : "Nueva dependencia" }}</h5>
+            <h5 class="card-title mb-3">{{ isEditing ? "Editar activo técnico" : "Nuevo activo técnico" }}</h5>
 
             <BAlert v-if="error" show variant="danger">{{ error }}</BAlert>
             <BAlert v-if="success" show variant="success">{{ success }}</BAlert>
@@ -228,8 +234,8 @@ export default {
               </div>
 
               <div class="mb-3">
-                <label class="form-label">Dependencia</label>
-                <input v-model="form.name" type="text" class="form-control" placeholder="Ej: Oficina administrador" required />
+                <label class="form-label">Activo técnico</label>
+                <input v-model="form.name" type="text" class="form-control" placeholder="Ej: Tablero eléctrico patio norte" required />
               </div>
 
               <div class="mb-3">

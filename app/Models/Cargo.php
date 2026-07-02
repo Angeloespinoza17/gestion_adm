@@ -25,5 +25,9 @@ class Cargo extends Model
     {
         return $this->hasMany(User::class);
     }
-}
 
+    public function staff(): HasMany
+    {
+        return $this->hasMany(Staff::class);
+    }
+}

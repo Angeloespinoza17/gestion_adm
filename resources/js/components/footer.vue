@@ -1,5 +1,5 @@
 <template>
-  <footer class="footer">
+  <footer class="footer premium-footer">
     <BContainer fluid>
       <BRow>
         <BCol sm="6">{{ new Date().getFullYear() }} {{ "-" }} {{ new Date().getFullYear() + 1 }} © Skote.</BCol>

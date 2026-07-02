@@ -1,6 +1,7 @@
 <script>
 import axios from "axios";
 import Layout from "../../layouts/main.vue";
+import LoadingState from "../../components/ui/loading-state.vue";
 
 const emptyForm = () => ({
   id: null,
@@ -14,7 +15,7 @@ const emptyForm = () => ({
 });
 
 export default {
-  components: { Layout },
+  components: { Layout, LoadingState },
   data() {
     return {
       loading: false,
@@ -124,6 +125,9 @@ export default {
         { key: 'actions', label: 'Acciones' },
       ]"
     >
+      <template #table-busy>
+        <LoadingState message="Cargando módulos..." compact />
+      </template>
       <template #cell(parent_id)="{ item }">
         <span v-if="!item.parent_id">-</span>
         <span v-else>
@@ -183,4 +187,3 @@ export default {
     </BModal>
   </Layout>
 </template>
-

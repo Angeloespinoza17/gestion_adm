@@ -63,7 +63,7 @@ export default {
 </script>
 
 <template>
-  <BCard no-body>
+  <BCard no-body class="glass-card soft-card border-0 h-100">
     <BCardBody>
       <BCardTitle class="mb-4">Monthly Earning</BCardTitle>
       <BRow>
@@ -78,7 +78,7 @@ export default {
           </p>
 
           <div class="mt-4">
-            <BLink href="javascript: void(0);" class="btn btn-primary btn-sm">
+            <BLink href="javascript: void(0);" class="btn premium-button btn-sm">
               View More
               <i class="mdi mdi-arrow-right ms-1"></i>
             </BLink>

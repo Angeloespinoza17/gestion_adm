@@ -129,7 +129,7 @@ class UserController extends Controller
     public function setRoles(Request $request, User $user): JsonResponse
     {
         $payload = $request->validate([
-            'roles' => ['required', 'array'],
+            'roles' => ['present', 'array'],
             'roles.*' => ['integer', 'exists:roles,id'],
         ]);
 

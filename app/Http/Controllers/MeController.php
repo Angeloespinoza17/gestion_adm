@@ -71,8 +71,9 @@ class MeController extends Controller
         }
 
         return response()->json([
-            'data' => $user->permissionSlugs(),
+            'data' => $user->isSuperAdmin()
+                ? array_values(array_unique(array_merge(['__superadmin__'], $user->permissionSlugs())))
+                : $user->permissionSlugs(),
         ]);
     }
 }
-

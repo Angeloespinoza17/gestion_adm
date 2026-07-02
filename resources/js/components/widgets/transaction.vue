@@ -12,9 +12,10 @@ export default {
       default: function () {
         return [];
       },
-      updating: {
-        type: Boolean,
-      },
+    },
+    updating: {
+      type: Boolean,
+      default: false,
     },
   },
   data() {
@@ -28,7 +29,7 @@ export default {
 
 <template>
   <Loader :loading="updating">
-    <div class="table-responsive mb-0">
+    <div class="table-responsive premium-data-table mb-0">
       <BTableSimple class="table-centered table-nowrap align-middle">
         <BThead class="table-light">
           <BTr>
@@ -74,7 +75,7 @@ export default {
               {{ data.payment[1] }}
             </BTd>
             <BTd>
-              <BButton variant="primary" type="button" class="btn-sm btn-rounded" @click="showModal = true">
+              <BButton variant="primary" type="button" class="btn-sm btn-rounded premium-button" @click="showModal = true">
                 View Details
               </BButton>
             </BTd>

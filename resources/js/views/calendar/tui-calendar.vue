@@ -1,5 +1,6 @@
 <script>
 import FullCalendar from "@fullcalendar/vue3";
+import esLocale from "@fullcalendar/core/locales/es";
 import dayGridPlugin from "@fullcalendar/daygrid";
 import timeGridPlugin from "@fullcalendar/timegrid";
 import interactionPlugin from "@fullcalendar/interaction";
@@ -33,6 +34,8 @@ export default {
 
             calendarEvents: calendarEvents,
             calendarOptions: {
+                locales: [esLocale],
+                locale: "es",
                 headerToolbar: {
                     left: "prev,next today",
                     center: "title",
@@ -51,6 +54,16 @@ export default {
                 editable: true,
                 droppable: true,
                 eventResizableFromStart: true,
+                firstDay: 1,
+                buttonText: {
+                    today: "Hoy",
+                    month: "Mes",
+                    week: "Semana",
+                    day: "Día",
+                    list: "Lista",
+                },
+                allDayText: "Todo el día",
+                noEventsText: "No hay eventos para mostrar",
                 dateClick: this.dateClicked,
                 eventClick: this.editEvent,
                 eventsSet: this.handleEvents,
@@ -81,10 +94,10 @@ export default {
     validations: {
         event: {
             title: {
-                required: helpers.withMessage("Title is required", required),
+                required: helpers.withMessage("El título es obligatorio", required),
             },
             category: {
-                required: helpers.withMessage("Category is required", required),
+                required: helpers.withMessage("La categoría es obligatoria", required),
             },
         },
     },
@@ -168,17 +181,18 @@ export default {
 
         confirm() {
             Swal.fire({
-                title: "Are you sure?",
-                text: "You won't be able to delete this!",
+                title: "¿Estás seguro?",
+                text: "No podrás deshacer esta eliminación.",
                 icon: "warning",
                 showCancelButton: true,
                 confirmButtonColor: "#34c38f",
                 cancelButtonColor: "#f46a6a",
-                confirmButtonText: "Yes, delete it!",
+                confirmButtonText: "Sí, eliminar",
+                cancelButtonText: "Cancelar",
             }).then((result) => {
                 if (result.value) {
                     this.deleteEvent();
-                    Swal.fire("Deleted!", "Event has been deleted.", "success");
+                    Swal.fire("Eliminado", "El evento fue eliminado.", "success");
                 }
             });
         },
@@ -197,7 +211,7 @@ export default {
             Swal.fire({
                 position: "center",
                 icon: "success",
-                title: "Event has been saved",
+                title: "Evento guardado",
                 showConfirmButton: false,
                 timer: 1000,
             });
@@ -208,7 +222,7 @@ export default {
 
 <template>
     <Layout>
-        <PageHeader title="TUI Calendar" pageTitle="Calendar" />
+        <PageHeader title="Calendario" pageTitle="Calendario" />
         <BRow>
             <BCol cols="12">
                 <BCard no-body>
@@ -220,14 +234,14 @@ export default {
                 </BCard>
             </BCol>
         </BRow>
-        <BModal v-model="showModal" title="Add New Event" title-class="text-black font-18" body-class="p-3" hide-footer>
+        <BModal v-model="showModal" title="Agregar evento" title-class="text-black font-18" body-class="p-3" hide-footer>
             <BForm @submit.prevent="handleSubmit">
                 <BRow>
                     <BCol cols="12">
                         <div class="mb-3">
-                            <label for="name">Event Name</label>
+                            <label for="name">Nombre del evento</label>
                             <input id="name" v-model="event.title" type="text" class="form-control"
-                                placeholder="Insert Event name"
+                                placeholder="Ingresa el nombre del evento"
                                 :class="{ 'is-invalid': submitted && v$.event.title.$error }" />
                             <div v-if="submitted && v$.event.title.$error" class="invalid-feedback">
                                 <span v-if="v$.event.title.required.$message">{{
@@ -238,7 +252,7 @@ export default {
                     </BCol>
                     <BCol cols="12">
                         <div class="mb-3">
-                            <label class="control-label">Category</label>
+                            <label class="control-label">Categoría</label>
                             <select v-model="event.category" class="form-control" name="category"
                                 :class="{ 'is-invalid': submitted && v$.event.category.errors }">
                                 <option v-for="option in categories" :key="option.backgroundColor"
@@ -255,26 +269,26 @@ export default {
                 </BRow>
 
                 <div class="text-end pt-5 mt-3">
-                    <BButton variant="light" @click="hideModal">Close</BButton>
-                    <BButton type="submit" variant="success" class="ms-1">Create event</BButton>
+                    <BButton variant="light" @click="hideModal">Cerrar</BButton>
+                    <BButton type="submit" variant="success" class="ms-1">Crear evento</BButton>
                 </div>
             </BForm>
         </BModal>
 
         <!-- Edit Modal -->
-        <BModal v-model="eventModal" title="Edit Event" title-class="text-black font-18" hide-footer body-class="p-3">
+        <BModal v-model="eventModal" title="Editar evento" title-class="text-black font-18" hide-footer body-class="p-3">
             <BForm @submit.prevent="editSubmit">
                 <BRow>
                     <ol cols="12">
                         <div class="mb-3">
-                            <label for="name">Event Name</label>
+                            <label for="name">Nombre del evento</label>
                             <input id="name" v-model="editevent.editTitle" type="text" class="form-control"
-                                placeholder="Insert Event name" />
+                                placeholder="Ingresa el nombre del evento" />
                         </div>
                     </ol>
                     <BCol cols="12">
                         <div class="mb-3">
-                            <label class="control-label">Category</label>
+                            <label class="control-label">Categoría</label>
                             <select v-model="editevent.editcategory" class="form-control" name="category">
                                 <option v-for="option in categories" :key="option.backgroundColor"
                                     :value="`${option.value}`">{{ option.name }}</option>
@@ -283,9 +297,9 @@ export default {
                     </BCol>
                 </BRow>
                 <div class="text-end p-3">
-                    <BButton variant="light" @click="closeModal">Close</BButton>
-                    <BButton class="ms-1" variant="danger" @click="confirm">Delete</BButton>
-                    <BButton class="ms-1" variant="success" @click="editSubmit">Save</BButton>
+                    <BButton variant="light" @click="closeModal">Cerrar</BButton>
+                    <BButton class="ms-1" variant="danger" @click="confirm">Eliminar</BButton>
+                    <BButton class="ms-1" variant="success" @click="editSubmit">Guardar</BButton>
                 </div>
             </BForm>
         </BModal>

@@ -143,12 +143,12 @@ export default {
 </script>
 
 <template>
-  <header id="page-topbar">
+  <header id="page-topbar" class="floating-navbar">
     <div class="navbar-header">
       <div class="d-flex">
         <!-- LOGO -->
         <div class="navbar-brand-box">
-          <router-link to="/" class="logo logo-dark">
+          <router-link to="/inicio" class="logo logo-dark">
             <span class="logo-sm">
               <img src="@/assets/images/logo.svg" alt height="22" />
             </span>
@@ -157,7 +157,7 @@ export default {
             </span>
           </router-link>
 
-          <router-link to="/" class="logo logo-light">
+          <router-link to="/inicio" class="logo logo-light">
             <span class="logo-sm">
               <img src="@/assets/images/logo-light.svg" alt height="22" />
             </span>

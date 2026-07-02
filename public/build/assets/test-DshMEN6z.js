@@ -1,1 +1,0 @@
-import{b as e,K as s,f as a,ab as n,U as r,e as c}from"../js/app2.js";const p={};function l(u,t,_,f,d,i){const o=r("Layout");return s(),a(o,null,{default:n(()=>[...t[0]||(t[0]=[c("div",null,"ok",-1)])]),_:1})}const x=e(p,[["render",l]]);export{x as default};

@@ -21,7 +21,7 @@ export default {
 </script>
 
 <template>
-  <BCard no-body class="mini-stats-wid">
+  <BCard no-body class="mini-stats-wid stat-card-modern glass-card soft-card border-0 h-100">
     <BCardBody>
       <div class="d-flex">
         <div class="flex-grow-1">

@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Security\SecurityIncident;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -118,5 +119,9 @@ class InventoryItem extends Model
     {
         return $this->hasMany(MaintenanceWorkOrder::class, 'inventory_item_id');
     }
-}
 
+    public function securityIncidents(): HasMany
+    {
+        return $this->hasMany(SecurityIncident::class, 'inventory_item_id');
+    }
+}

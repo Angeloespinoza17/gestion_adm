@@ -1,13 +1,14 @@
 <script>
 import axios from "axios";
 import Layout from "../../layouts/main.vue";
+import LoadingState from "../../components/ui/loading-state.vue";
 import pdfMake from "pdfmake/build/pdfmake";
 import pdfFonts from "pdfmake/build/vfs_fonts";
 
 pdfMake.vfs = pdfFonts?.pdfMake?.vfs || pdfFonts;
 
 export default {
-  components: { Layout },
+  components: { Layout, LoadingState },
   data() {
     return {
       loading: false,
@@ -351,7 +352,7 @@ export default {
 
     <BCard no-body>
       <BCardBody>
-        <div v-if="loading" class="text-muted text-center py-4">Cargando...</div>
+        <LoadingState v-if="loading" message="Cargando checklist..." compact />
         <div v-else-if="items.length === 0" class="text-muted text-center py-4">No hay ítems de checklist.</div>
 
         <div v-else>

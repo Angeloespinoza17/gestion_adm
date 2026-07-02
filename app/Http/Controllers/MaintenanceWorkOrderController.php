@@ -118,7 +118,7 @@ class MaintenanceWorkOrderController extends Controller
             'dependencies' => MaintenanceDependency::query()
                 ->where('active', true)
                 ->orderBy('code')
-                ->get(['id', 'code', 'name', 'distribution', 'sector', 'zone']),
+                ->get(['id', 'code', 'name', 'distribution', 'sector', 'zone', 'is_reservable']),
             'summary' => [
                 'total' => MaintenanceWorkOrder::count(),
                 'open' => MaintenanceWorkOrder::whereNotIn('status', ['Terminado', 'Anulado'])->count(),

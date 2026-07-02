@@ -1,6 +1,7 @@
 <script>
 import axios from "axios";
 import Layout from "../../layouts/main.vue";
+import LoadingState from "../../components/ui/loading-state.vue";
 
 const emptyForm = () => ({
   id: null,
@@ -11,7 +12,7 @@ const emptyForm = () => ({
 });
 
 export default {
-  components: { Layout },
+  components: { Layout, LoadingState },
   data() {
     return {
       loading: false,
@@ -108,6 +109,9 @@ export default {
         { key: 'actions', label: 'Acciones' },
       ]"
     >
+      <template #table-busy>
+        <LoadingState message="Cargando cargos..." compact />
+      </template>
       <template #cell(active)="{ item }">
         <BBadge :variant="item.active ? 'success' : 'secondary'">{{ item.active ? "Sí" : "No" }}</BBadge>
       </template>
@@ -147,4 +151,3 @@ export default {
     </BModal>
   </Layout>
 </template>
-

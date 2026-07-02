@@ -7,7 +7,7 @@ export const menuItems = [
             {
                 id: 2,
                 label: 'menuitems.dashboards.list.default',
-                link: '/',
+                link: '/inicio',
                 parentId: 1
             },
             {
@@ -82,6 +82,381 @@ export const menuItems = [
                 label: 'Plan anual mantención',
                 link: '/maintenance/annual-plans',
                 parentId: 900
+            }
+        ]
+    },
+    {
+        id: 906,
+        label: 'Control de Nochero',
+        icon: 'bx-shield-quarter',
+        subItems: [
+            {
+                id: 9061,
+                label: 'Panel de rondas',
+                link: '/security/dashboard',
+                parentId: 906
+            },
+            {
+                id: 9062,
+                label: 'Turnos y rondas',
+                link: '/security/shifts',
+                parentId: 906
+            },
+            {
+                id: 9063,
+                label: 'Novedades pendientes',
+                link: '/security/incidents',
+                parentId: 906
+            }
+        ]
+    },
+    {
+        id: 9065,
+        label: 'Prevención de Riesgos',
+        icon: 'bx-shield-alt-2',
+        subItems: [
+            {
+                id: 90651,
+                label: 'Dashboard',
+                link: '/risk-prevention',
+                parentId: 9065
+            },
+            {
+                id: 90652,
+                label: 'Extintores',
+                link: '/risk-prevention/extinguishers',
+                parentId: 9065
+            },
+            {
+                id: 90653,
+                label: 'Accidentes',
+                link: '/risk-prevention/accidents',
+                parentId: 9065
+            },
+            {
+                id: 90654,
+                label: 'Emergencias y planes',
+                link: '/risk-prevention/emergencies',
+                parentId: 9065
+            },
+            {
+                id: 90655,
+                label: 'EPP y seguridad',
+                link: '/risk-prevention/epp',
+                parentId: 9065
+            },
+            {
+                id: 90656,
+                label: 'Capacitaciones',
+                link: '/risk-prevention/trainings',
+                parentId: 9065
+            },
+            {
+                id: 90657,
+                label: 'Centro de documentos',
+                link: '/risk-prevention/documents',
+                parentId: 9065
+            },
+            {
+                id: 90658,
+                label: 'Reportes',
+                link: '/risk-prevention/reports',
+                parentId: 9065
+            }
+        ]
+    },
+    {
+        id: 9070,
+        label: 'Portería',
+        icon: 'bx-door-open',
+        subItems: [
+            {
+                id: 9071,
+                label: 'Panel de portería',
+                link: '/porter/dashboard',
+                parentId: 9070
+            },
+            {
+                id: 9072,
+                label: 'Buscar estudiante',
+                link: '/porter/students',
+                parentId: 9070
+            },
+            {
+                id: 9073,
+                label: 'Retiros',
+                link: '/porter/withdrawals',
+                parentId: 9070
+            },
+            {
+                id: 9074,
+                label: 'Recepción de objetos',
+                link: '/porter/received-items',
+                parentId: 9070
+            },
+            {
+                id: 9075,
+                label: 'Mercadería',
+                link: '/porter/goods',
+                parentId: 9070
+            },
+            {
+                id: 90751,
+                label: 'Control de visitas',
+                link: '/porter/visits',
+                parentId: 9070
+            },
+            {
+                id: 90752,
+                label: 'Control de proveedores',
+                link: '/porter/providers',
+                parentId: 9070
+            },
+            {
+                id: 90753,
+                label: 'Bitácora diaria',
+                link: '/porter/daily-log',
+                parentId: 9070
+            },
+            {
+                id: 90754,
+                label: 'Control de llaves',
+                link: '/porter/keys',
+                parentId: 9070
+            },
+            {
+                id: 9076,
+                label: 'Reportes de portería',
+                link: '/porter/reports',
+                parentId: 9070
+            }
+        ]
+    },
+    {
+        id: 910,
+        label: 'Funcionarios',
+        icon: 'bx-id-card',
+        subItems: [
+            {
+                id: 911,
+                label: 'Listado de funcionarios',
+                link: '/staff',
+                parentId: 910
+            },
+            {
+                id: 912,
+                label: 'Departamentos',
+                link: '/staff/departments',
+                parentId: 910
+            }
+        ]
+    },
+    {
+        id: 9150,
+        label: 'Permisos',
+        icon: 'bx-calendar-minus',
+        subItems: [
+            {
+                id: 913,
+                label: 'Dashboard permisos',
+                link: '/staff/permissions/dashboard',
+                parentId: 9150
+            },
+            {
+                id: 914,
+                label: 'Mis permisos',
+                link: '/staff/permissions',
+                parentId: 9150
+            },
+            {
+                id: 915,
+                label: 'Bandeja de permisos',
+                link: '/staff/permissions/review',
+                parentId: 9150
+            },
+            {
+                id: 916,
+                label: 'Reportes de permisos',
+                link: '/staff/permissions/reports',
+                parentId: 9150
+            },
+            {
+                id: 917,
+                label: 'Tipos de permiso',
+                link: '/staff/permissions/types',
+                parentId: 9150
+            },
+            {
+                id: 918,
+                label: 'Quién debe enterarse',
+                link: '/staff/permissions/watchers',
+                parentId: 9150
+            },
+            {
+                id: 919,
+                label: 'Destinatarios por funcionario',
+                link: '/staff/permissions/watchers-summary',
+                parentId: 9150
+            }
+        ]
+    },
+    {
+        id: 920,
+        label: 'Contratos',
+        icon: 'bx-file',
+        subItems: [
+            {
+                id: 921,
+                label: 'Listado de contratos',
+                link: '/contracts',
+                parentId: 920
+            },
+            {
+                id: 922,
+                label: 'Plantillas',
+                link: '/contracts/templates',
+                parentId: 920
+            },
+            {
+                id: 923,
+                label: 'Cláusulas',
+                link: '/contracts/clauses',
+                parentId: 920
+            },
+            {
+                id: 924,
+                label: 'Firmas',
+                link: '/contracts/signatures',
+                parentId: 920
+            }
+        ]
+    },
+    {
+        id: 9240,
+        label: 'Equipo de Apoyo',
+        icon: 'bx-heart-circle',
+        subItems: [
+            {
+                id: 9241,
+                label: 'Dashboard',
+                link: '/apoyo-profesional',
+                parentId: 9240
+            },
+            {
+                id: 9242,
+                label: 'Atenciones',
+                link: '/apoyo-profesional/atenciones',
+                parentId: 9240
+            },
+            {
+                id: 9243,
+                label: 'Ficha estudiante',
+                link: '/apoyo-profesional/historial',
+                parentId: 9240
+            },
+            {
+                id: 9244,
+                label: 'Derivaciones',
+                link: '/apoyo-profesional/derivaciones',
+                parentId: 9240
+            },
+            {
+                id: 9245,
+                label: 'Seguimientos',
+                link: '/apoyo-profesional/seguimientos',
+                parentId: 9240
+            },
+            {
+                id: 9246,
+                label: 'Planes de apoyo',
+                link: '/apoyo-profesional/planes',
+                parentId: 9240
+            },
+            {
+                id: 9247,
+                label: 'Entrevistas',
+                link: '/apoyo-profesional/entrevistas',
+                parentId: 9240
+            },
+            {
+                id: 9248,
+                label: 'Documentos',
+                link: '/apoyo-profesional/documentos',
+                parentId: 9240
+            },
+            {
+                id: 9249,
+                label: 'Reportes',
+                link: '/apoyo-profesional/reportes',
+                parentId: 9240
+            }
+        ]
+    },
+    {
+        id: 925,
+        label: 'Calendario y Fechas Relevantes',
+        icon: 'bx-calendar-event',
+        subItems: [
+            {
+                id: 9251,
+                label: 'Calendario',
+                link: '/relevant-calendar',
+                parentId: 925
+            },
+            {
+                id: 9252,
+                label: 'Tipos de procesos',
+                link: '/relevant-calendar/process-types',
+                parentId: 925
+            },
+            {
+                id: 9253,
+                label: 'Instituciones',
+                link: '/relevant-calendar/institutions',
+                parentId: 925
+            }
+        ]
+    },
+    {
+        id: 940,
+        label: 'Configuración',
+        icon: 'bx-cog',
+        subItems: [
+            {
+                id: 941,
+                label: 'Usuarios',
+                link: '/admin/users',
+                parentId: 940
+            },
+            {
+                id: 942,
+                label: 'Roles',
+                link: '/admin/roles',
+                parentId: 940
+            },
+            {
+                id: 943,
+                label: 'Permisos',
+                link: '/admin/permissions',
+                parentId: 940
+            },
+            {
+                id: 944,
+                label: 'Módulos',
+                link: '/admin/modules',
+                parentId: 940
+            },
+            {
+                id: 945,
+                label: 'Cargos',
+                link: '/admin/cargos',
+                parentId: 940
+            },
+            {
+                id: 946,
+                label: 'Organigrama',
+                link: '/admin/organigram',
+                parentId: 940
             }
         ]
     },

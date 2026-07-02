@@ -8,6 +8,7 @@ import SideNav from "./side-nav.vue";
  */
 export default {
   components: { simplebar, SideNav },
+  emits: ["toggle-menu"],
   props: {
     isCondensed: {
       type: Boolean,
@@ -44,13 +45,13 @@ export default {
 
 <template>
   <!-- ========== Left Sidebar Start ========== -->
-  <div class="vertical-menu">
+  <div class="vertical-menu premium-sidebar">
     <simplebar v-if="!isCondensed" :settings="settings" class="h-100" ref="currentMenu" id="my-element">
-      <SideNav />
+      <SideNav @toggle-menu="$emit('toggle-menu')" />
     </simplebar>
 
     <simplebar v-else class="h-100">
-      <SideNav />
+      <SideNav @toggle-menu="$emit('toggle-menu')" />
     </simplebar>
   </div>
   <!-- Left Sidebar End -->

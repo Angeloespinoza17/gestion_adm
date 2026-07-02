@@ -1,6 +1,8 @@
 <script>
 import axios from "axios";
+import Swal from "sweetalert2";
 import Layout from "../../layouts/main.vue";
+import LoadingState from "../../components/ui/loading-state.vue";
 import Multiselect from "@vueform/multiselect";
 
 const emptyForm = () => ({
@@ -15,7 +17,7 @@ const emptyForm = () => ({
 });
 
 export default {
-  components: { Layout, Multiselect },
+  components: { Layout, LoadingState, Multiselect },
   data() {
     return {
       loading: false,
@@ -26,6 +28,7 @@ export default {
       catalogs: { cargos: [], roles: [] },
       showModal: false,
       form: emptyForm(),
+      passwordTouched: false,
       error: null,
       success: null,
     };
@@ -48,6 +51,11 @@ export default {
     this.loadUsers();
   },
   methods: {
+    normalizeIdList(values) {
+      return (values || [])
+        .map((value) => Number(value))
+        .filter((value) => Number.isInteger(value) && value > 0);
+    },
     async loadCatalogs() {
       const response = await axios.get("/api/admin/users/catalogs");
       this.catalogs = response.data;
@@ -73,6 +81,7 @@ export default {
     },
     openCreate() {
       this.form = emptyForm();
+      this.passwordTouched = false;
       this.showModal = true;
     },
     openEdit(user) {
@@ -86,7 +95,30 @@ export default {
         active: Boolean(user.active),
         roles: (user.roles || []).map((r) => r.id),
       };
+      this.passwordTouched = false;
       this.showModal = true;
+    },
+    onPasswordInput(value) {
+      this.passwordTouched = true;
+      this.form.password = value;
+    },
+    async showSuccess(message) {
+      this.success = message;
+      await Swal.fire({
+        icon: "success",
+        title: "Listo",
+        text: message,
+        confirmButtonText: "Aceptar",
+      });
+    },
+    async showError(message) {
+      this.error = message;
+      await Swal.fire({
+        icon: "error",
+        title: "No se pudo guardar",
+        text: message,
+        confirmButtonText: "Aceptar",
+      });
     },
     async save() {
       this.saving = true;
@@ -97,18 +129,18 @@ export default {
           await axios.put(`/api/admin/users/${this.form.id}`, {
             name: this.form.name,
             email: this.form.email,
-            password: this.form.password || null,
+            password: this.passwordTouched && this.form.password ? this.form.password : null,
             cargo_id: this.form.cargo_id,
             user_type: this.form.user_type || null,
             active: this.form.active,
           });
           await axios.put(`/api/admin/users/${this.form.id}/roles`, {
-            roles: this.form.roles,
+            roles: this.normalizeIdList(this.form.roles),
           });
           await axios.put(`/api/admin/users/${this.form.id}/cargo`, {
             cargo_id: this.form.cargo_id,
           });
-          this.success = "Usuario actualizado.";
+          await this.showSuccess("Usuario actualizado.");
         } else {
           await axios.post("/api/admin/users", {
             name: this.form.name,
@@ -117,36 +149,59 @@ export default {
             cargo_id: this.form.cargo_id,
             user_type: this.form.user_type || null,
             active: this.form.active,
-            roles: this.form.roles,
+            roles: this.normalizeIdList(this.form.roles),
           });
-          this.success = "Usuario creado.";
+          await this.showSuccess("Usuario creado.");
         }
         this.showModal = false;
         this.loadUsers(this.pagination.current_page);
       } catch (error) {
-        this.error = this.formatError(error);
+        await this.showError(this.formatError(error));
       } finally {
         this.saving = false;
       }
     },
     async toggleActive(user) {
-      await axios.put(`/api/admin/users/${user.id}/active`, {
-        active: !user.active,
-      });
-      this.loadUsers(this.pagination.current_page);
+      try {
+        await axios.put(`/api/admin/users/${user.id}/active`, {
+          active: !user.active,
+        });
+        await this.showSuccess(`Usuario ${user.active ? "desactivado" : "activado"}.`);
+        this.loadUsers(this.pagination.current_page);
+      } catch (error) {
+        await this.showError(this.formatError(error));
+      }
     },
     async remove(user) {
-      if (!confirm(`Eliminar usuario ${user.email}?`)) return;
-      await axios.delete(`/api/admin/users/${user.id}`);
-      this.loadUsers(this.pagination.current_page);
+      const result = await Swal.fire({
+        icon: "warning",
+        title: "Eliminar usuario",
+        text: `Se eliminará ${user.email}.`,
+        showCancelButton: true,
+        confirmButtonText: "Sí, eliminar",
+        cancelButtonText: "Cancelar",
+      });
+
+      if (!result.isConfirmed) return;
+
+      try {
+        await axios.delete(`/api/admin/users/${user.id}`);
+        await this.showSuccess("Usuario eliminado.");
+        this.loadUsers(this.pagination.current_page);
+      } catch (error) {
+        await this.showError(this.formatError(error));
+      }
     },
     formatError(error) {
-      return (
-        error?.response?.data?.message ||
-        error?.response?.data?.errors?.[Object.keys(error.response.data.errors)[0]]?.[0] ||
-        error?.message ||
-        "Error desconocido"
-      );
+      const validationErrors = error?.response?.data?.errors;
+      if (validationErrors && typeof validationErrors === "object") {
+        const firstKey = Object.keys(validationErrors)[0];
+        if (firstKey && Array.isArray(validationErrors[firstKey]) && validationErrors[firstKey][0]) {
+          return validationErrors[firstKey][0];
+        }
+      }
+
+      return error?.response?.data?.message || error?.message || "Error desconocido";
     },
   },
 };
@@ -185,6 +240,9 @@ export default {
         ]"
         small
       >
+        <template #table-busy>
+          <LoadingState message="Cargando usuarios..." compact />
+        </template>
         <template #cell(cargo)="{ item }">
           {{ item.cargo?.name || "-" }}
         </template>
@@ -232,7 +290,13 @@ export default {
         </div>
         <div class="col-md-6 mb-3">
           <label class="form-label">{{ isEditing ? "Password (opcional)" : "Password" }}</label>
-          <BFormInput v-model="form.password" type="password" />
+          <BFormInput
+            :model-value="form.password"
+            type="password"
+            autocomplete="new-password"
+            name="new-password"
+            @update:model-value="onPasswordInput"
+          />
         </div>
         <div class="col-md-6 mb-3">
           <label class="form-label">Cargo</label>
@@ -266,4 +330,3 @@ export default {
     </BModal>
   </Layout>
 </template>
-

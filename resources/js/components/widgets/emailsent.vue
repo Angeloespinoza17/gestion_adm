@@ -152,7 +152,7 @@ export default {
 </script>
 <template>
   <Loader :loading="updating">
-    <BCard no-body>
+    <BCard no-body class="glass-card soft-card border-0 h-100">
       <BCardBody>
         <div class="d-sm-flex flex-wrap">
           <BCardTitle class="mb-4">Email Sent</BCardTitle>

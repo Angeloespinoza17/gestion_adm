@@ -12,7 +12,7 @@ export const menuItems = [
             {
                 id: 3,
                 label: "menuitems.dashboards.list.default",
-                link: "/",
+                link: "/inicio",
                 parentId: 2
             },
             {
@@ -68,7 +68,7 @@ export const menuItems = [
         subItems: [
             {
                 id: 901,
-                label: "Dependencias",
+                label: "Activos técnicos",
                 link: "/maintenance/dependencies",
                 parentId: 900
             },
@@ -99,9 +99,489 @@ export const menuItems = [
         ]
     },
     {
+        id: 930,
+        label: "Espacios",
+        icon: "bx-calendar-event",
+        subItems: [
+            {
+                id: 931,
+                label: "Dependencias",
+                link: "/spaces/dependencies",
+                parentId: 930
+            },
+            {
+                id: 932,
+                label: "Tipos de dependencia",
+                link: "/spaces/dependency-types",
+                parentId: 930
+            },
+            {
+                id: 933,
+                label: "Gestores",
+                link: "/spaces/approvers",
+                parentId: 930
+            },
+            {
+                id: 934,
+                label: "Reservas",
+                link: "/spaces/reservations",
+                parentId: 930
+            },
+            {
+                id: 935,
+                label: "Calendario",
+                link: "/spaces/calendar",
+                parentId: 930
+            },
+            {
+                id: 936,
+                label: "Estadísticas",
+                link: "/spaces/statistics",
+                parentId: 930
+            }
+        ]
+    },
+    {
+        id: 938,
+        label: "Control de Nochero",
+        icon: "bx-shield-quarter",
+        subItems: [
+            {
+                id: 9381,
+                label: "Panel de rondas",
+                link: "/security/dashboard",
+                parentId: 938
+            },
+            {
+                id: 9382,
+                label: "Turnos y rondas",
+                link: "/security/shifts",
+                parentId: 938
+            },
+            {
+                id: 9383,
+                label: "Novedades pendientes",
+                link: "/security/incidents",
+                parentId: 938
+            }
+        ]
+    },
+    {
+        id: 939,
+        label: "Prevención de Riesgos",
+        icon: "bx-shield-alt-2",
+        subItems: [
+            {
+                id: 9391,
+                label: "Dashboard",
+                link: "/risk-prevention",
+                parentId: 939
+            },
+            {
+                id: 9392,
+                label: "Extintores",
+                link: "/risk-prevention/extinguishers",
+                parentId: 939
+            },
+            {
+                id: 9393,
+                label: "Accidentes",
+                link: "/risk-prevention/accidents",
+                parentId: 939
+            },
+            {
+                id: 9394,
+                label: "Emergencias y planes",
+                link: "/risk-prevention/emergencies",
+                parentId: 939
+            },
+            {
+                id: 9395,
+                label: "EPP y seguridad",
+                link: "/risk-prevention/epp",
+                parentId: 939
+            },
+            {
+                id: 9396,
+                label: "Capacitaciones",
+                link: "/risk-prevention/trainings",
+                parentId: 939
+            },
+            {
+                id: 9397,
+                label: "Centro de documentos",
+                link: "/risk-prevention/documents",
+                parentId: 939
+            },
+            {
+                id: 9398,
+                label: "Reportes",
+                link: "/risk-prevention/reports",
+                parentId: 939
+            }
+        ]
+    },
+    {
         id: 7,
         label: "menuitems.apps.text",
         isTitle: true
+    },
+    {
+        id: 9050,
+        label: "Estudiantes",
+        icon: "bx-user",
+        subItems: [
+            {
+                id: 9051,
+                label: "Listado de estudiantes",
+                link: "/students",
+                parentId: 9050
+            },
+            {
+                id: 9052,
+                label: "Niveles",
+                link: "/students/levels",
+                parentId: 9050
+            },
+            {
+                id: 9053,
+                label: "Años académicos",
+                link: "/students/academic-years",
+                parentId: 9050
+            },
+            {
+                id: 9054,
+                label: "Cursos por año",
+                link: "/students/courses",
+                parentId: 9050
+            },
+            {
+                id: 9055,
+                label: "Promoción anual",
+                link: "/students/promotions",
+                parentId: 9050
+            },
+            {
+                id: 9056,
+                label: "Cambios y retiros",
+                link: "/students/movements",
+                parentId: 9050
+            }
+        ]
+    },
+    {
+        id: 9070,
+        label: "Portería",
+        icon: "bx-door-open",
+        subItems: [
+            {
+                id: 9071,
+                label: "Panel de portería",
+                link: "/porter/dashboard",
+                parentId: 9070
+            },
+            {
+                id: 9072,
+                label: "Buscar estudiante",
+                link: "/porter/students",
+                parentId: 9070
+            },
+            {
+                id: 9073,
+                label: "Retiros",
+                link: "/porter/withdrawals",
+                parentId: 9070
+            },
+            {
+                id: 9074,
+                label: "Recepción de objetos",
+                link: "/porter/received-items",
+                parentId: 9070
+            },
+            {
+                id: 9075,
+                label: "Mercadería",
+                link: "/porter/goods",
+                parentId: 9070
+            },
+            {
+                id: 90751,
+                label: "Control de visitas",
+                link: "/porter/visits",
+                parentId: 9070
+            },
+            {
+                id: 90752,
+                label: "Control de proveedores",
+                link: "/porter/providers",
+                parentId: 9070
+            },
+            {
+                id: 90753,
+                label: "Bitácora diaria",
+                link: "/porter/daily-log",
+                parentId: 9070
+            },
+            {
+                id: 90754,
+                label: "Control de llaves",
+                link: "/porter/keys",
+                parentId: 9070
+            },
+            {
+                id: 9076,
+                label: "Reportes de portería",
+                link: "/porter/reports",
+                parentId: 9070
+            }
+        ]
+    },
+    {
+        id: 910,
+        label: "Funcionarios",
+        icon: "bx-id-card",
+        subItems: [
+            {
+                id: 911,
+                label: "Listado de funcionarios",
+                link: "/staff",
+                parentId: 910
+            },
+            {
+                id: 912,
+                label: "Departamentos",
+                link: "/staff/departments",
+                parentId: 910
+            }
+        ]
+    },
+    {
+        id: 9150,
+        label: "Permisos",
+        icon: "bx-calendar-minus",
+        subItems: [
+            {
+                id: 913,
+                label: "Dashboard permisos",
+                link: "/staff/permissions/dashboard",
+                parentId: 9150
+            },
+            {
+                id: 914,
+                label: "Mis permisos",
+                link: "/staff/permissions",
+                parentId: 9150
+            },
+            {
+                id: 915,
+                label: "Bandeja de permisos",
+                link: "/staff/permissions/review",
+                parentId: 9150
+            },
+            {
+                id: 916,
+                label: "Reportes de permisos",
+                link: "/staff/permissions/reports",
+                parentId: 9150
+            },
+            {
+                id: 917,
+                label: "Tipos de permiso",
+                link: "/staff/permissions/types",
+                parentId: 9150
+            },
+            {
+                id: 918,
+                label: "Quién debe enterarse",
+                link: "/staff/permissions/watchers",
+                parentId: 9150
+            },
+            {
+                id: 919,
+                label: "Destinatarios por funcionario",
+                link: "/staff/permissions/watchers-summary",
+                parentId: 9150
+            }
+        ]
+    },
+    {
+        id: 9160,
+        label: "Tareas",
+        icon: "bx-list-check",
+        subItems: [
+            {
+                id: 9161,
+                label: "Mi backlog",
+                link: "/tasks/backlog",
+                parentId: 9160
+            },
+            {
+                id: 9162,
+                label: "Asignadores de tareas",
+                link: "/tasks/assigners",
+                parentId: 9160
+            }
+        ]
+    },
+    {
+        id: 920,
+        label: "Contratos",
+        icon: "bx-file",
+        subItems: [
+            {
+                id: 921,
+                label: "Listado de contratos",
+                link: "/contracts",
+                parentId: 920
+            },
+            {
+                id: 922,
+                label: "Plantillas",
+                link: "/contracts/templates",
+                parentId: 920
+            },
+            {
+                id: 923,
+                label: "Cláusulas",
+                link: "/contracts/clauses",
+                parentId: 920
+            },
+            {
+                id: 924,
+                label: "Firmas",
+                link: "/contracts/signatures",
+                parentId: 920
+            }
+        ]
+    },
+    {
+        id: 9240,
+        label: "Equipo de Apoyo",
+        icon: "bx-heart-circle",
+        subItems: [
+            {
+                id: 9241,
+                label: "Dashboard",
+                link: "/apoyo-profesional",
+                parentId: 9240
+            },
+            {
+                id: 9242,
+                label: "Atenciones",
+                link: "/apoyo-profesional/atenciones",
+                parentId: 9240
+            },
+            {
+                id: 9243,
+                label: "Ficha estudiante",
+                link: "/apoyo-profesional/historial",
+                parentId: 9240
+            },
+            {
+                id: 9244,
+                label: "Derivaciones",
+                link: "/apoyo-profesional/derivaciones",
+                parentId: 9240
+            },
+            {
+                id: 9245,
+                label: "Seguimientos",
+                link: "/apoyo-profesional/seguimientos",
+                parentId: 9240
+            },
+            {
+                id: 9246,
+                label: "Planes de apoyo",
+                link: "/apoyo-profesional/planes",
+                parentId: 9240
+            },
+            {
+                id: 9247,
+                label: "Entrevistas",
+                link: "/apoyo-profesional/entrevistas",
+                parentId: 9240
+            },
+            {
+                id: 9248,
+                label: "Documentos",
+                link: "/apoyo-profesional/documentos",
+                parentId: 9240
+            },
+            {
+                id: 9249,
+                label: "Reportes",
+                link: "/apoyo-profesional/reportes",
+                parentId: 9240
+            }
+        ]
+    },
+    {
+        id: 925,
+        label: "Calendario y Fechas Relevantes",
+        icon: "bx-calendar-event",
+        subItems: [
+            {
+                id: 9251,
+                label: "Calendario",
+                link: "/relevant-calendar",
+                parentId: 925
+            },
+            {
+                id: 9252,
+                label: "Tipos de procesos",
+                link: "/relevant-calendar/process-types",
+                parentId: 925
+            },
+            {
+                id: 9253,
+                label: "Instituciones",
+                link: "/relevant-calendar/institutions",
+                parentId: 925
+            }
+        ]
+    },
+    {
+        id: 940,
+        label: "Configuración",
+        icon: "bx-cog",
+        subItems: [
+            {
+                id: 941,
+                label: "Usuarios",
+                link: "/admin/users",
+                parentId: 940
+            },
+            {
+                id: 942,
+                label: "Roles",
+                link: "/admin/roles",
+                parentId: 940
+            },
+            {
+                id: 943,
+                label: "Permisos",
+                link: "/admin/permissions",
+                parentId: 940
+            },
+            {
+                id: 944,
+                label: "Módulos",
+                link: "/admin/modules",
+                parentId: 940
+            },
+            {
+                id: 945,
+                label: "Cargos",
+                link: "/admin/cargos",
+                parentId: 940
+            },
+            {
+                id: 946,
+                label: "Organigrama",
+                link: "/admin/organigram",
+                parentId: 940
+            }
+        ]
     },
     {
         id: 8,

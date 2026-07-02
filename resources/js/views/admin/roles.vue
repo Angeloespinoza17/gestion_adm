@@ -1,6 +1,7 @@
 <script>
 import axios from "axios";
 import Layout from "../../layouts/main.vue";
+import LoadingState from "../../components/ui/loading-state.vue";
 import Multiselect from "@vueform/multiselect";
 
 const emptyForm = () => ({
@@ -14,7 +15,7 @@ const emptyForm = () => ({
 });
 
 export default {
-  components: { Layout, Multiselect },
+  components: { Layout, LoadingState, Multiselect },
   data() {
     return {
       loading: false,
@@ -46,6 +47,11 @@ export default {
     this.loadRoles();
   },
   methods: {
+    normalizeIdList(values) {
+      return (values || [])
+        .map((value) => Number(value))
+        .filter((value) => Number.isInteger(value) && value > 0);
+    },
     async loadCatalogs() {
       const response = await axios.get("/api/admin/roles/catalogs");
       this.catalogs = response.data;
@@ -93,8 +99,12 @@ export default {
             description: this.form.description || null,
             active: this.form.active,
           });
-          await axios.put(`/api/admin/roles/${this.form.id}/permissions`, { permissions: this.form.permissions });
-          await axios.put(`/api/admin/roles/${this.form.id}/modules`, { modules: this.form.modules });
+          await axios.put(`/api/admin/roles/${this.form.id}/permissions`, {
+            permissions: this.normalizeIdList(this.form.permissions),
+          });
+          await axios.put(`/api/admin/roles/${this.form.id}/modules`, {
+            modules: this.normalizeIdList(this.form.modules),
+          });
           this.success = "Rol actualizado.";
         } else {
           const response = await axios.post(`/api/admin/roles`, {
@@ -104,8 +114,12 @@ export default {
             active: this.form.active,
           });
           const id = response.data.data.id;
-          await axios.put(`/api/admin/roles/${id}/permissions`, { permissions: this.form.permissions });
-          await axios.put(`/api/admin/roles/${id}/modules`, { modules: this.form.modules });
+          await axios.put(`/api/admin/roles/${id}/permissions`, {
+            permissions: this.normalizeIdList(this.form.permissions),
+          });
+          await axios.put(`/api/admin/roles/${id}/modules`, {
+            modules: this.normalizeIdList(this.form.modules),
+          });
           this.success = "Rol creado.";
         }
         this.showModal = false;
@@ -152,6 +166,9 @@ export default {
         { key: 'actions', label: 'Acciones' },
       ]"
     >
+      <template #table-busy>
+        <LoadingState message="Cargando roles..." compact />
+      </template>
       <template #cell(active)="{ item }">
         <BBadge :variant="item.active ? 'success' : 'secondary'">{{ item.active ? "Sí" : "No" }}</BBadge>
       </template>
@@ -213,4 +230,3 @@ export default {
     </BModal>
   </Layout>
 </template>
-

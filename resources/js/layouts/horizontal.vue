@@ -2,7 +2,6 @@
 import HorizontalTopbar from "../components/horizontal-topbar.vue";
 import HorizontalNav from "../components/horizontal-nav.vue";
 import RightBar from "../components/right-bar.vue";
-import Footer from "../components/footer.vue";
 
 /**
  * Horizontal-layout
@@ -11,7 +10,6 @@ export default {
     components: {
         HorizontalTopbar,
         HorizontalNav,
-        Footer,
         RightBar
     },
     data() {
@@ -36,21 +34,20 @@ export default {
 <template>
     <div>
         <!-- Begin page -->
-        <div id="layout-wrapper">
+        <div id="layout-wrapper" class="premium-admin-shell">
             <HorizontalTopbar />
             <HorizontalNav />
             <!-- ============================================================== -->
             <!-- Start right Content here -->
             <!-- ============================================================== -->
-            <div class="main-content">
-                <div class="page-content">
-                    <BContainer fluid>
+            <div class="main-content premium-main-content">
+                <div class="page-content premium-page-content">
+                    <BContainer fluid class="premium-content-grid">
                         <slot />
                     </BContainer>
                     <!-- container-fluid -->
                 </div>
                 <!-- End Page-content -->
-                <Footer />
             </div>
             <!-- end main content-->
         </div>

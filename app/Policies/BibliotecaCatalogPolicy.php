@@ -1,0 +1,39 @@
+<?php
+
+namespace App\Policies;
+
+use App\Models\User;
+use App\Services\Library\BibliotecaAccessService;
+
+class BibliotecaCatalogPolicy
+{
+    public function __construct(
+        private readonly BibliotecaAccessService $accessService,
+    ) {
+    }
+
+    public function viewAny(User $user): bool
+    {
+        return $this->accessService->canViewModule($user);
+    }
+
+    public function view(User $user, mixed $model = null): bool
+    {
+        return $this->accessService->canViewModule($user);
+    }
+
+    public function create(User $user): bool
+    {
+        return $this->accessService->canCreateBooks($user);
+    }
+
+    public function update(User $user, mixed $model = null): bool
+    {
+        return $this->accessService->canEditBooks($user) || $this->accessService->canManageInventory($user);
+    }
+
+    public function delete(User $user, mixed $model = null): bool
+    {
+        return $this->accessService->canDeleteBooks($user);
+    }
+}

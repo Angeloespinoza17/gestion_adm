@@ -34,11 +34,11 @@ return new class extends Migration
 
                 $table->timestamps();
 
-                $table->index(['planned_year', 'planned_month']);
-                $table->index(['maintenance_dependency_id', 'planned_year', 'planned_month']);
-                $table->index(['responsible', 'planned_year']);
-                $table->index('status');
-                $table->index('frequency');
+                $table->index(['planned_year', 'planned_month'], 'map_year_month_idx');
+                $table->index(['maintenance_dependency_id', 'planned_year', 'planned_month'], 'map_dep_year_month_idx');
+                $table->index(['responsible', 'planned_year'], 'map_resp_year_idx');
+                $table->index('status', 'map_status_idx');
+                $table->index('frequency', 'map_frequency_idx');
             });
         } catch (QueryException $e) {
             // Si se alcanzó a crear la tabla antes de fallar la migración, evitamos romper el deploy.

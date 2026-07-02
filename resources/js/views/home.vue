@@ -14,22 +14,23 @@ export default {
   components: { Layout, Profile, Stat, Transaction, Earning, Emailsent, Loader },
   data() {
     return {
-      title: "Dashboard",
       showModal: false,
+      fetchingStats: false,
+      earningStatus: false,
       statData: [
         {
           icon: "bx bx-copy-alt",
-          title: "Orders",
+          title: "Órdenes activas",
           value: "1,235"
         },
         {
           icon: "bx bx-archive-in",
-          title: "Revenue",
+          title: "Ingresos",
           value: "$35, 723"
         },
         {
           icon: "bx bx-purchase-tag-alt",
-          title: "Average Price",
+          title: "Ticket promedio",
           value: "$16.2"
         }
       ],
@@ -96,49 +97,118 @@ export default {
       type: Boolean,
     },
   },
-  mounted() {
-    setTimeout(() => {
-      this.showModal = true;
-    }, 1500);
-  },
+  computed: {
+    currentUserName() {
+      try {
+        const user = JSON.parse(localStorage.getItem("user") || "{}");
+        return user.name || "equipo";
+      } catch (error) {
+        return "equipo";
+      }
+    },
+    greeting() {
+      const hour = new Date().getHours();
+
+      if (hour < 12) {
+        return "Buenos dias";
+      }
+
+      if (hour < 19) {
+        return "Buenas tardes";
+      }
+
+      return "Buenas noches";
+    },
+    heroMetrics() {
+      return [
+        {
+          label: "Indicadores",
+          value: this.statData.length,
+          caption: "Bloques clave del dashboard"
+        },
+        {
+          label: "Movimientos",
+          value: this.transactions.length,
+          caption: "Registros recientes visibles"
+        },
+        {
+          label: "Estado general",
+          value: "Optimo",
+          caption: "Sistema estable y operativo"
+        },
+        {
+          label: "Vista activa",
+          value: "Inicio",
+          caption: "Resumen administrativo principal"
+        }
+      ];
+    }
+  }
 };
 </script>
 
 <template>
   <Layout>
-    <BRow>
-      <BCol cols="12">
-        <div class="page-title-box d-flex align-items-center justify-content-between">
-          <h4 class="mb-0 font-size-18">Dashboard</h4>
-
-          <div class="page-title-right">
-            <ol class="breadcrumb mb-0">
-              <li class="breadcrumb-item active">Welcome to Skote Dashboard</li>
-            </ol>
+    <section class="dashboard-hero dashboard-hero--embedded">
+      <BRow class="align-items-center g-4">
+        <BCol xl="7">
+          <span class="dashboard-hero__eyebrow">
+            <i class="bx bx-shield-quarter"></i>
+            Panel principal
+          </span>
+          <h1 class="dashboard-hero__title mb-3">
+            <span class="gradient-title">{{ greeting }}, {{ currentUserName }}</span>
+          </h1>
+          <p class="dashboard-hero__subtitle text-muted mb-0">
+            Resumen visual del sistema administrativo escolar con acceso rapido a indicadores,
+            actividad reciente y seguimiento operativo.
+          </p>
+          <div class="d-flex flex-wrap gap-2 mt-4">
+            <BLink href="javascript:void(0);" class="btn premium-button">
+              Ver panorama general
+            </BLink>
+            <BLink href="javascript:void(0);" class="btn btn-light">
+              Revisar actividad
+            </BLink>
           </div>
-        </div>
-      </BCol>
-    </BRow>
+        </BCol>
+        <BCol xl="5">
+          <div class="dashboard-hero__metrics">
+            <div
+              v-for="metric in heroMetrics"
+              :key="metric.label"
+              class="dashboard-hero__metric glass-card"
+            >
+              <span class="dashboard-hero__label">{{ metric.label }}</span>
+              <div class="dashboard-hero__value">{{ metric.value }}</div>
+              <div class="dashboard-hero__caption">{{ metric.caption }}</div>
+            </div>
+          </div>
+        </BCol>
+      </BRow>
+    </section>
 
-    <BRow>
+    <BRow class="g-4">
       <BCol xl="4">
         <Profile :updating="fetchingStats" />
         <Earning :updating="earningStatus" />
       </BCol>
       <BCol xl="8">
-        <BRow>
+        <BRow class="g-4">
           <BCol md="4" v-for="stat of statData" :key="stat.icon" >
             <Stat :icon="stat.icon" :title="stat.title" :value="stat.value" />
           </BCol>
         </BRow>
-        <Emailsent :updating="fetchingStats" />
+        <div class="mt-4">
+          <Emailsent :updating="fetchingStats" />
+        </div>
       </BCol>
     </BRow>
 
-    <BRow>
+    <BRow class="g-4 mt-1">
       <BCol xl="4">
         <Loader :loading="fetchingStats">
-          <BCard no-body>
+          <BCard no-body class="glass-card soft-card border-0 h-100">
             <BCardBody>
               <BCardTitle class="mb-4">Social Source</BCardTitle>
               <div class="text-center">
@@ -202,7 +272,7 @@ export default {
       </BCol>
       <BCol xl="4">
         <Loader :loading="fetchingStats">
-          <BCard no-body>
+          <BCard no-body class="glass-card soft-card border-0 h-100">
             <BCardBody>
               <BCardTitle class="mb-5">Activity</BCardTitle>
               <ul class="verti-timeline list-unstyled">
@@ -275,7 +345,7 @@ export default {
                 </li>
               </ul>
               <div class="text-center mt-4">
-                <BLink href="javascript: void(0);" class="btn btn-primary btn-sm">View More <i
+                <BLink href="javascript: void(0);" class="btn premium-button btn-sm">View More <i
                     class="mdi mdi-arrow-right ms-1"></i></BLink>
               </div>
             </BCardBody>
@@ -284,7 +354,7 @@ export default {
       </BCol>
       <BCol xl="4">
         <Loader :loading="fetchingStats">
-          <BCard no-body>
+          <BCard no-body class="glass-card soft-card border-0 h-100">
             <BCardBody>
               <BCardTitle class="mb-4">Top Cities Selling Product</BCardTitle>
 
@@ -341,9 +411,9 @@ export default {
       </BCol>
     </BRow>
 
-    <BRow>
+    <BRow class="mt-1">
       <BCol lg="12">
-        <BCard no-body>
+        <BCard no-body class="glass-card soft-card border-0 overflow-hidden">
           <BCardBody>
             <BCardTitle class="mb-4">Latest Transaction</BCardTitle>
             <Transaction :transactions="transactions" :updating="fetchingStats"/>

@@ -1,6 +1,7 @@
 <script>
 import axios from "axios";
 import Layout from "../../layouts/main.vue";
+import LoadingState from "../../components/ui/loading-state.vue";
 import Multiselect from "@vueform/multiselect";
 import Swal from "sweetalert2";
 
@@ -30,7 +31,7 @@ const emptyForm = () => ({
 });
 
 export default {
-  components: { Layout, Multiselect },
+  components: { Layout, LoadingState, Multiselect },
   data() {
     return {
       loading: false,
@@ -469,6 +470,9 @@ export default {
         ]"
         small
       >
+        <template #table-busy>
+          <LoadingState message="Cargando inventario..." compact />
+        </template>
         <template #cell(category)="{ item }">
           {{ item.category?.name || "-" }}
         </template>

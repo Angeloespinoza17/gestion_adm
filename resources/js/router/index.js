@@ -1,15 +1,53 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import axios from 'axios'
 
+const pmeSepRoute = (path, title) => ({
+    path,
+    meta: { authRequired: true, title, permission: 'ver_modulo_pme' },
+    component: () => import('../views/pme-sep/index.vue'),
+})
+
+const accountingRoute = (path, title, permission = 'contabilidad.ver') => ({
+    path,
+    meta: { authRequired: true, title, permission },
+    component: () => import('../views/accounting/index.vue'),
+})
+
+const remunerationRoute = (path, title, permission = 'remuneraciones.ver') => ({
+    path,
+    meta: { authRequired: true, title, permission },
+    component: () => import('../views/remuneration/index.vue'),
+})
+
+const informaticaRoute = (path, title, permission) => ({
+    path,
+    meta: { authRequired: true, title, permission },
+    component: () => import('../views/informatica/index.vue'),
+})
+
+const scheduleRoute = (path, title, permission = 'ver_horarios') => ({
+    path,
+    meta: { authRequired: true, title, permission },
+    component: () => import('../views/schedule/index.vue'),
+})
+
 const routes = [
     {
         path: '/',
-        name: 'dashboard',
+        redirect: '/inicio',
+    },
+    {
+        path: '/inicio',
+        name: 'inicio',
         meta: {
-            title: 'Dashboard',
+            title: 'Inicio',
             authRequired: true,
         },
         component: () => import('../views/home.vue'),
+    },
+    {
+        path: '/dashboard',
+        redirect: '/inicio',
     },
     {
         path: '/dashboard/saas',
@@ -43,8 +81,118 @@ const routes = [
     },
     {
         path: '/maintenance/dependencies',
-        meta: { authRequired: true, title: 'Dependencias', permission: 'ver_mantencion' },
+        meta: { authRequired: true, title: 'Activos técnicos', permission: 'ver_mantencion' },
         component: () => import('../views/maintenance/dependencies.vue'),
+    },
+    {
+        path: '/spaces/dependencies',
+        meta: { authRequired: true, title: 'Dependencias', permission: 'ver_dependencias' },
+        component: () => import('../views/spaces/dependencies.vue'),
+    },
+    {
+        path: '/spaces/dependencies/:id',
+        meta: { authRequired: true, title: 'Ficha dependencia', permission: 'ver_dependencias' },
+        component: () => import('../views/spaces/dependency-show.vue'),
+    },
+    {
+        path: '/spaces/dependency-types',
+        meta: { authRequired: true, title: 'Tipos de dependencia', permission: 'ver_dependencias' },
+        component: () => import('../views/spaces/dependency-types.vue'),
+    },
+    {
+        path: '/spaces/approvers',
+        meta: { authRequired: true, title: 'Gestores de aprobación', permission: 'ver_dependencias' },
+        component: () => import('../views/spaces/approvers.vue'),
+    },
+    {
+        path: '/spaces/reservations',
+        meta: { authRequired: true, title: 'Reservas', permission: 'ver_reservas' },
+        component: () => import('../views/spaces/reservations.vue'),
+    },
+    {
+        path: '/spaces/calendar',
+        meta: { authRequired: true, title: 'Calendario de reservas', permission: 'ver_reservas' },
+        component: () => import('../views/spaces/calendar.vue'),
+    },
+    {
+        path: '/spaces/statistics',
+        meta: { authRequired: true, title: 'Estadísticas de espacios', permission: 'ver_estadisticas_espacios' },
+        component: () => import('../views/spaces/statistics.vue'),
+    },
+    {
+        path: '/relevant-calendar',
+        meta: { authRequired: true, title: 'Calendario y Fechas Relevantes', permission: 'ver_calendario_fechas_relevantes' },
+        component: () => import('../views/relevant-calendar/index.vue'),
+    },
+    {
+        path: '/relevant-calendar/events/:id',
+        meta: { authRequired: true, title: 'Detalle de proceso', permission: 'ver_calendario_fechas_relevantes' },
+        component: () => import('../views/relevant-calendar/detail.vue'),
+    },
+    {
+        path: '/relevant-calendar/process-types',
+        meta: { authRequired: true, title: 'Tipos de procesos', permission: 'administrar_tipos_calendario_fechas_relevantes' },
+        component: () => import('../views/relevant-calendar/process-types.vue'),
+    },
+    {
+        path: '/relevant-calendar/institutions',
+        meta: { authRequired: true, title: 'Instituciones', permission: 'administrar_instituciones_calendario_fechas_relevantes' },
+        component: () => import('../views/relevant-calendar/institutions.vue'),
+    },
+    {
+        path: '/risk-prevention',
+        meta: { authRequired: true, title: 'Dashboard de Prevención', permission: 'ver_prevencion_riesgos' },
+        component: () => import('../views/risk-prevention/dashboard.vue'),
+    },
+    {
+        path: '/risk-prevention/extinguishers',
+        meta: { authRequired: true, title: 'Gestión de Extintores', permission: 'ver_prevencion_riesgos' },
+        component: () => import('../views/risk-prevention/extinguishers.vue'),
+    },
+    {
+        path: '/risk-prevention/accidents',
+        meta: { authRequired: true, title: 'Registro de Accidentes', permission: 'ver_prevencion_riesgos' },
+        component: () => import('../views/risk-prevention/accidents.vue'),
+    },
+    {
+        path: '/risk-prevention/emergencies',
+        meta: { authRequired: true, title: 'Emergencias y Planes', permission: 'ver_prevencion_riesgos' },
+        component: () => import('../views/risk-prevention/emergencies.vue'),
+    },
+    {
+        path: '/risk-prevention/epp',
+        meta: { authRequired: true, title: 'EPP y Seguridad', permission: 'ver_prevencion_riesgos' },
+        component: () => import('../views/risk-prevention/epp.vue'),
+    },
+    {
+        path: '/risk-prevention/trainings',
+        meta: { authRequired: true, title: 'Capacitaciones', permission: 'ver_prevencion_riesgos' },
+        component: () => import('../views/risk-prevention/trainings.vue'),
+    },
+    {
+        path: '/risk-prevention/documents',
+        meta: { authRequired: true, title: 'Centro de Documentos', permission: 'ver_prevencion_riesgos' },
+        component: () => import('../views/risk-prevention/documents.vue'),
+    },
+    {
+        path: '/risk-prevention/reports',
+        meta: { authRequired: true, title: 'Reportes de Prevención', permission: 'ver_prevencion_riesgos' },
+        component: () => import('../views/risk-prevention/reports.vue'),
+    },
+    {
+        path: '/security/dashboard',
+        meta: { authRequired: true, title: 'Panel de rondas', permission: 'ver_rondas_seguridad' },
+        component: () => import('../views/security/dashboard.vue'),
+    },
+    {
+        path: '/security/shifts',
+        meta: { authRequired: true, title: 'Turnos y rondas', permission: 'ver_rondas_seguridad' },
+        component: () => import('../views/security/shifts.vue'),
+    },
+    {
+        path: '/security/incidents',
+        meta: { authRequired: true, title: 'Novedades pendientes', permission: 'ver_rondas_seguridad' },
+        component: () => import('../views/security/incidents.vue'),
     },
     {
         path: '/maintenance/work-orders',
@@ -95,6 +243,484 @@ const routes = [
         path: '/admin/cargos',
         meta: { authRequired: true, title: 'Cargos', permission: 'administrar_cargos' },
         component: () => import('../views/admin/cargos.vue'),
+    },
+    {
+        path: '/admin/organigram',
+        meta: { authRequired: true, title: 'Organigrama', permission: 'administrar_organigrama' },
+        component: () => import('../views/admin/organigram.vue'),
+    },
+    {
+        path: '/students',
+        meta: { authRequired: true, title: 'Estudiantes', permission: 'ver_estudiantes' },
+        component: () => import('../views/students/index.vue'),
+    },
+    {
+        path: '/students/levels',
+        meta: { authRequired: true, title: 'Niveles', permission: 'ver_estudiantes' },
+        component: () => import('../views/students/levels.vue'),
+    },
+    {
+        path: '/students/academic-years',
+        meta: { authRequired: true, title: 'Años académicos', permission: 'ver_estudiantes' },
+        component: () => import('../views/students/academic-years.vue'),
+    },
+    {
+        path: '/students/courses',
+        meta: { authRequired: true, title: 'Cursos por año', permission: 'ver_estudiantes' },
+        component: () => import('../views/students/courses.vue'),
+    },
+    {
+        path: '/students/promotions',
+        meta: { authRequired: true, title: 'Promoción anual', permission: 'promover_estudiantes' },
+        component: () => import('../views/students/promotions.vue'),
+    },
+    {
+        path: '/students/movements',
+        meta: { authRequired: true, title: 'Cambios y retiros', permission: 'gestionar_matriculas_estudiantes' },
+        component: () => import('../views/students/movements.vue'),
+    },
+    {
+        path: '/schedule',
+        redirect: '/schedule/teacher',
+    },
+    scheduleRoute('/schedule/teacher', 'Horario docente'),
+    scheduleRoute('/schedule/course', 'Horario por curso'),
+    scheduleRoute('/schedule/config', 'Configuración horaria', 'configurar_horarios'),
+    scheduleRoute('/schedule/jornadas', 'Jornadas escolares', 'configurar_jornadas'),
+    scheduleRoute('/schedule/study-plans', 'Asignaturas y plan de estudio', 'configurar_plan_estudio'),
+    scheduleRoute('/schedule/contracts', 'Contratos docentes', 'configurar_contratos_docentes'),
+    scheduleRoute('/schedule/conflicts', 'Conflictos de horario'),
+    {
+        path: '/students/new',
+        meta: { authRequired: true, title: 'Nueva estudiante', permission: 'crear_estudiantes' },
+        component: () => import('../views/students/form.vue'),
+    },
+    {
+        path: '/students/:id',
+        meta: { authRequired: true, title: 'Ficha de estudiante', permission: 'ver_ficha_estudiante' },
+        component: () => import('../views/students/form.vue'),
+    },
+    {
+        path: '/porter/dashboard',
+        meta: { authRequired: true, title: 'Panel de portería', permission: 'ver_porteria' },
+        component: () => import('../views/porter/dashboard.vue'),
+    },
+    {
+        path: '/porter/students',
+        meta: { authRequired: true, title: 'Consulta de estudiantes', permission: 'ver_porteria' },
+        component: () => import('../views/porter/students.vue'),
+    },
+    {
+        path: '/porter/withdrawals',
+        meta: { authRequired: true, title: 'Retiros de estudiantes', permission: 'ver_porteria' },
+        component: () => import('../views/porter/withdrawals.vue'),
+    },
+    {
+        path: '/porter/received-items',
+        meta: { authRequired: true, title: 'Recepción de objetos', permission: 'ver_porteria' },
+        component: () => import('../views/porter/received-items.vue'),
+    },
+    {
+        path: '/porter/goods',
+        meta: { authRequired: true, title: 'Mercadería', permission: 'ver_porteria' },
+        component: () => import('../views/porter/goods.vue'),
+    },
+    {
+        path: '/porter/visits',
+        meta: { authRequired: true, title: 'Control de visitas', permission: 'ver_porteria' },
+        component: () => import('../views/porter/visits.vue'),
+    },
+    {
+        path: '/porter/providers',
+        meta: { authRequired: true, title: 'Control de proveedores', permission: 'ver_porteria' },
+        component: () => import('../views/porter/providers.vue'),
+    },
+    {
+        path: '/porter/daily-log',
+        meta: { authRequired: true, title: 'Bitácora diaria', permission: 'ver_porteria' },
+        component: () => import('../views/porter/daily-log.vue'),
+    },
+    {
+        path: '/porter/keys',
+        meta: { authRequired: true, title: 'Control de llaves', permission: 'ver_porteria' },
+        component: () => import('../views/porter/keys.vue'),
+    },
+    {
+        path: '/porter/reports',
+        meta: { authRequired: true, title: 'Reportes de portería', permission: 'ver_porteria' },
+        component: () => import('../views/porter/reports.vue'),
+    },
+    {
+        path: '/infirmary',
+        meta: { authRequired: true, title: 'Dashboard de Enfermería', permission: 'ver_enfermeria' },
+        component: () => import('../views/infirmary/dashboard.vue'),
+    },
+    {
+        path: '/infirmary/attentions',
+        meta: { authRequired: true, title: 'Atenciones de Enfermería', permission: 'ver_enfermeria' },
+        component: () => import('../views/infirmary/attentions.vue'),
+    },
+    {
+        path: '/infirmary/history',
+        meta: { authRequired: true, title: 'Ficha médica', permission: 'ver_enfermeria' },
+        component: () => import('../views/infirmary/history.vue'),
+    },
+    {
+        path: '/infirmary/inventory',
+        meta: { authRequired: true, title: 'Inventario de medicamentos', permission: 'ver_enfermeria' },
+        component: () => import('../views/infirmary/inventory.vue'),
+    },
+    {
+        path: '/infirmary/medications',
+        meta: { authRequired: true, title: 'Administración de medicamentos', permission: 'ver_enfermeria' },
+        component: () => import('../views/infirmary/medications.vue'),
+    },
+    {
+        path: '/infirmary/accidents',
+        meta: { authRequired: true, title: 'Accidentes escolares', permission: 'ver_enfermeria' },
+        component: () => import('../views/infirmary/accidents.vue'),
+    },
+    {
+        path: '/infirmary/calls',
+        meta: { authRequired: true, title: 'Registro de llamados', permission: 'ver_enfermeria' },
+        component: () => import('../views/infirmary/calls.vue'),
+    },
+    {
+        path: '/infirmary/reports',
+        meta: { authRequired: true, title: 'Reportes de Enfermería', permission: 'ver_reportes_enfermeria' },
+        component: () => import('../views/infirmary/reports.vue'),
+    },
+    {
+        path: '/biblioteca',
+        meta: { authRequired: true, title: 'Dashboard Biblioteca Escolar', permission: 'ver_modulo_biblioteca' },
+        component: () => import('../views/library/index.vue'),
+    },
+    {
+        path: '/biblioteca/catalogo',
+        meta: { authRequired: true, title: 'Catálogo Bibliográfico', permission: 'ver_modulo_biblioteca' },
+        component: () => import('../views/library/index.vue'),
+    },
+    {
+        path: '/biblioteca/inventario',
+        meta: { authRequired: true, title: 'Ejemplares e Inventario', permission: 'ver_modulo_biblioteca' },
+        component: () => import('../views/library/index.vue'),
+    },
+    {
+        path: '/biblioteca/prestamos',
+        meta: { authRequired: true, title: 'Préstamos y Devoluciones', permission: 'ver_modulo_biblioteca' },
+        component: () => import('../views/library/index.vue'),
+    },
+    {
+        path: '/biblioteca/reservas',
+        meta: { authRequired: true, title: 'Reservas de Recursos', permission: 'ver_modulo_biblioteca' },
+        component: () => import('../views/library/index.vue'),
+    },
+    {
+        path: '/biblioteca/plan-lector',
+        meta: { authRequired: true, title: 'Plan Lector', permission: 'ver_modulo_biblioteca' },
+        component: () => import('../views/library/index.vue'),
+    },
+    {
+        path: '/biblioteca/espacios',
+        meta: { authRequired: true, title: 'Uso de Espacios', permission: 'ver_modulo_biblioteca' },
+        component: () => import('../views/library/index.vue'),
+    },
+    {
+        path: '/biblioteca/reportes',
+        meta: { authRequired: true, title: 'Estadísticas y Reportes Biblioteca', permission: 'ver_estadisticas_biblioteca' },
+        component: () => import('../views/library/index.vue'),
+    },
+    informaticaRoute('/informatica', 'Dashboard Informática', 'informatica.dashboard'),
+    informaticaRoute('/informatica/equipos', 'Equipos Informáticos', 'informatica.equipos.ver'),
+    informaticaRoute('/informatica/prestamos', 'Préstamos de Equipos', 'informatica.prestamos.ver'),
+    informaticaRoute('/informatica/mantenciones', 'Mantenciones Informáticas', 'informatica.mantenciones.ver'),
+    informaticaRoute('/informatica/reportes', 'Reportes de Informática', 'informatica.reportes.ver'),
+    remunerationRoute('/remuneraciones', 'Dashboard Remuneraciones'),
+    remunerationRoute('/remuneraciones/trabajadores', 'Trabajadores Remuneraciones', 'remuneraciones.trabajadores.gestionar'),
+    remunerationRoute('/remuneraciones/contratos', 'Contratos Remuneraciones', 'remuneraciones.contratos.gestionar'),
+    remunerationRoute('/remuneraciones/periodos', 'Períodos Remuneraciones', 'remuneraciones.periodos.cerrar'),
+    remunerationRoute('/remuneraciones/parametros', 'Parámetros Remuneraciones', 'remuneraciones.parametros.gestionar'),
+    remunerationRoute('/remuneraciones/conceptos', 'Haberes y Descuentos', 'remuneraciones.conceptos.gestionar'),
+    remunerationRoute('/remuneraciones/movimientos', 'Movimientos Remuneraciones', 'remuneraciones.movimientos.gestionar'),
+    remunerationRoute('/remuneraciones/liquidaciones', 'Liquidaciones de Sueldo', 'remuneraciones.liquidaciones.calcular'),
+    remunerationRoute('/remuneraciones/pagos', 'Pagos Remuneraciones', 'remuneraciones.pagos.gestionar'),
+    remunerationRoute('/remuneraciones/centralizacion', 'Centralización Remuneraciones', 'remuneraciones.contabilidad.centralizar'),
+    remunerationRoute('/remuneraciones/reportes', 'Reportes Remuneraciones', 'remuneraciones.reportes.ver'),
+    remunerationRoute('/remuneraciones/licencias-medicas', 'Licencias Médicas RR.HH.', 'remuneraciones.rrhh.gestionar'),
+    remunerationRoute('/remuneraciones/cumpleanos', 'Cumpleaños RR.HH.'),
+    remunerationRoute('/remuneraciones/permisos', 'Permisos RR.HH.', 'remuneraciones.rrhh.gestionar'),
+    remunerationRoute('/remuneraciones/gestion-funcionarios', 'Gestión Funcionarios', 'remuneraciones.trabajadores.gestionar'),
+    remunerationRoute('/remuneraciones/control-documental', 'Control Documental RR.HH.', 'remuneraciones.rrhh.gestionar'),
+    remunerationRoute('/remuneraciones/induccion', 'Inducción Funcionarios', 'remuneraciones.rrhh.gestionar'),
+    remunerationRoute('/remuneraciones/clima-laboral', 'Clima Laboral', 'remuneraciones.rrhh.gestionar'),
+    remunerationRoute('/remuneraciones/planes-clima', 'Planes Clima Laboral', 'remuneraciones.rrhh.gestionar'),
+    remunerationRoute('/remuneraciones/dotacion-carga', 'Dotación y Carga Horaria', 'remuneraciones.rrhh.gestionar'),
+    remunerationRoute('/remuneraciones/banco-cv', 'Banco de CV', 'remuneraciones.rrhh.gestionar'),
+    remunerationRoute('/remuneraciones/reemplazos', 'Banco de Reemplazos', 'remuneraciones.rrhh.gestionar'),
+    remunerationRoute('/remuneraciones/perfiles-cargo', 'Perfiles de Cargo', 'remuneraciones.rrhh.gestionar'),
+    remunerationRoute('/remuneraciones/certificados', 'Certificados Laborales', 'remuneraciones.rrhh.gestionar'),
+    remunerationRoute('/remuneraciones/auditoria', 'Auditoría Remuneraciones', 'remuneraciones.admin'),
+    accountingRoute('/contabilidad', 'Dashboard Contabilidad'),
+    accountingRoute('/contabilidad/rendiciones', 'Rendición de Cuentas'),
+    accountingRoute('/contabilidad/presupuesto', 'Presupuesto Anual', 'contabilidad.presupuesto.ver'),
+    accountingRoute('/contabilidad/centros-costo', 'Centros de Costo'),
+    accountingRoute('/contabilidad/manual-cuentas', 'Manual de Cuentas'),
+    accountingRoute('/contabilidad/ingresos', 'Ingresos'),
+    accountingRoute('/contabilidad/egresos', 'Egresos y Pagos'),
+    accountingRoute('/contabilidad/caja-chica', 'Caja Chica'),
+    accountingRoute('/contabilidad/fondos-rendir', 'Fondos por Rendir'),
+    accountingRoute('/contabilidad/conciliacion', 'Conciliación Bancaria'),
+    accountingRoute('/contabilidad/subvenciones', 'Panel de Subvenciones'),
+    accountingRoute('/contabilidad/cheques', 'Gestión de Cheques'),
+    accountingRoute('/contabilidad/facturas', 'Gestión de Facturas'),
+    accountingRoute('/contabilidad/boletas-honorarios', 'Boletas de Honorarios'),
+    accountingRoute('/contabilidad/flujo-caja', 'Flujo de Caja'),
+    accountingRoute('/contabilidad/cuentas-por-pagar', 'Cuentas por Pagar'),
+    accountingRoute('/contabilidad/f29', 'Gestión F29'),
+    accountingRoute('/contabilidad/balance', 'Balance 8 y 9 Columnas', 'contabilidad.balance.ver'),
+    accountingRoute('/contabilidad/dj-ingresos', 'Declaraciones Juradas de Ingresos'),
+    accountingRoute('/contabilidad/dj-arriendo', 'Declaración Jurada de Arriendo'),
+    accountingRoute('/contabilidad/declaracion-renta', 'Declaración de Renta'),
+    accountingRoute('/contabilidad/reportes', 'Reportes Contables', 'contabilidad.balance.ver'),
+    {
+        path: '/convivencia',
+        meta: { authRequired: true, title: 'Dashboard de Convivencia', permission: 'ver_convivencia' },
+        component: () => import('../views/convivencia/index.vue'),
+    },
+    {
+        path: '/convivencia/planes',
+        meta: { authRequired: true, title: 'Plan de Gestión de Convivencia', permission: 'ver_convivencia' },
+        component: () => import('../views/convivencia/index.vue'),
+    },
+    {
+        path: '/convivencia/casos',
+        meta: { authRequired: true, title: 'Casos de Convivencia', permission: 'ver_convivencia' },
+        component: () => import('../views/convivencia/index.vue'),
+    },
+    {
+        path: '/convivencia/denuncias',
+        meta: { authRequired: true, title: 'Denuncias de Convivencia', permission: 'ver_convivencia' },
+        component: () => import('../views/convivencia/index.vue'),
+    },
+    {
+        path: '/convivencia/derivaciones',
+        meta: { authRequired: true, title: 'Derivaciones de Convivencia', permission: 'ver_convivencia' },
+        component: () => import('../views/convivencia/index.vue'),
+    },
+    {
+        path: '/convivencia/protocolos',
+        meta: { authRequired: true, title: 'Protocolos de Convivencia', permission: 'ver_convivencia' },
+        component: () => import('../views/convivencia/index.vue'),
+    },
+    {
+        path: '/convivencia/entrevistas',
+        meta: { authRequired: true, title: 'Entrevistas de Convivencia', permission: 'ver_convivencia' },
+        component: () => import('../views/convivencia/index.vue'),
+    },
+    {
+        path: '/convivencia/medidas',
+        meta: { authRequired: true, title: 'Medidas Formativas', permission: 'ver_convivencia' },
+        component: () => import('../views/convivencia/index.vue'),
+    },
+    {
+        path: '/convivencia/bitacora',
+        meta: { authRequired: true, title: 'Bitácora de Inspectoría', permission: 'ver_convivencia' },
+        component: () => import('../views/convivencia/index.vue'),
+    },
+    {
+        path: '/convivencia/sociogramas',
+        meta: { authRequired: true, title: 'Sociogramas', permission: 'ver_convivencia' },
+        component: () => import('../views/convivencia/index.vue'),
+    },
+    {
+        path: '/convivencia/idps',
+        meta: { authRequired: true, title: 'Indicadores IDPS', permission: 'ver_convivencia' },
+        component: () => import('../views/convivencia/index.vue'),
+    },
+    {
+        path: '/convivencia/reportes',
+        meta: { authRequired: true, title: 'Reportes por Curso', permission: 'ver_convivencia' },
+        component: () => import('../views/convivencia/index.vue'),
+    },
+    {
+        path: '/apoyo-profesional',
+        meta: { authRequired: true, title: 'Dashboard Equipo de Apoyo', permission: 'ver_modulo_apoyo_profesional' },
+        component: () => import('../views/apoyo-profesional/index.vue'),
+    },
+    {
+        path: '/apoyo-profesional/atenciones',
+        meta: { authRequired: true, title: 'Atenciones Profesionales', permission: 'ver_modulo_apoyo_profesional' },
+        component: () => import('../views/apoyo-profesional/index.vue'),
+    },
+    {
+        path: '/apoyo-profesional/historial',
+        meta: { authRequired: true, title: 'Ficha de Apoyo por Estudiante', permission: 'ver_modulo_apoyo_profesional' },
+        component: () => import('../views/apoyo-profesional/index.vue'),
+    },
+    {
+        path: '/apoyo-profesional/derivaciones',
+        meta: { authRequired: true, title: 'Derivaciones Internas', permission: 'ver_modulo_apoyo_profesional' },
+        component: () => import('../views/apoyo-profesional/index.vue'),
+    },
+    {
+        path: '/apoyo-profesional/seguimientos',
+        meta: { authRequired: true, title: 'Seguimientos del Equipo de Apoyo', permission: 'ver_modulo_apoyo_profesional' },
+        component: () => import('../views/apoyo-profesional/index.vue'),
+    },
+    {
+        path: '/apoyo-profesional/planes',
+        meta: { authRequired: true, title: 'Planes de Apoyo', permission: 'ver_modulo_apoyo_profesional' },
+        component: () => import('../views/apoyo-profesional/index.vue'),
+    },
+    {
+        path: '/apoyo-profesional/entrevistas',
+        meta: { authRequired: true, title: 'Entrevistas Profesionales', permission: 'ver_modulo_apoyo_profesional' },
+        component: () => import('../views/apoyo-profesional/index.vue'),
+    },
+    {
+        path: '/apoyo-profesional/documentos',
+        meta: { authRequired: true, title: 'Documentos del Equipo de Apoyo', permission: 'ver_modulo_apoyo_profesional' },
+        component: () => import('../views/apoyo-profesional/index.vue'),
+    },
+    {
+        path: '/apoyo-profesional/reportes',
+        meta: { authRequired: true, title: 'Reportes del Equipo de Apoyo', permission: 'ver_reportes_apoyo_profesional' },
+        component: () => import('../views/apoyo-profesional/index.vue'),
+    },
+    {
+        path: '/centro-apuntes',
+        meta: { authRequired: true, title: 'Dashboard Centro de Apuntes', permission: 'ver_modulo_centro_apuntes' },
+        component: () => import('../views/centro-apuntes/index.vue'),
+    },
+    {
+        path: '/centro-apuntes/solicitudes',
+        meta: { authRequired: true, title: 'Solicitudes y Tareas', permission: 'ver_modulo_centro_apuntes' },
+        component: () => import('../views/centro-apuntes/index.vue'),
+    },
+    {
+        path: '/centro-apuntes/asignaturas',
+        meta: { authRequired: true, title: 'Asignaturas', permission: 'ver_modulo_centro_apuntes' },
+        component: () => import('../views/centro-apuntes/index.vue'),
+    },
+    {
+        path: '/centro-apuntes/maquinas',
+        meta: { authRequired: true, title: 'Máquinas', permission: 'ver_modulo_centro_apuntes' },
+        component: () => import('../views/centro-apuntes/index.vue'),
+    },
+    {
+        path: '/centro-apuntes/insumos',
+        meta: { authRequired: true, title: 'Pañol e Insumos', permission: 'ver_modulo_centro_apuntes' },
+        component: () => import('../views/centro-apuntes/index.vue'),
+    },
+    {
+        path: '/centro-apuntes/movimientos',
+        meta: { authRequired: true, title: 'Movimientos de Stock', permission: 'ver_modulo_centro_apuntes' },
+        component: () => import('../views/centro-apuntes/index.vue'),
+    },
+    {
+        path: '/centro-apuntes/entregas',
+        meta: { authRequired: true, title: 'Entregas de Materiales', permission: 'ver_modulo_centro_apuntes' },
+        component: () => import('../views/centro-apuntes/index.vue'),
+    },
+    {
+        path: '/centro-apuntes/reportes',
+        meta: { authRequired: true, title: 'Reportes Centro de Apuntes', permission: 'ver_reportes_centro_apuntes' },
+        component: () => import('../views/centro-apuntes/index.vue'),
+    },
+    {
+        path: '/staff',
+        meta: { authRequired: true, title: 'Funcionarios', permission: 'ver_funcionarios' },
+        component: () => import('../views/staff/index.vue'),
+    },
+    {
+        path: '/staff/departments',
+        meta: { authRequired: true, title: 'Departamentos', permission: 'administrar_departamentos' },
+        component: () => import('../views/staff/departments.vue'),
+    },
+    {
+        path: '/staff/permissions/dashboard',
+        meta: { authRequired: true, title: 'Dashboard de permisos', permission: 'ver_permisos_personal' },
+        component: () => import('../views/staff/permissions/dashboard.vue'),
+    },
+    {
+        path: '/staff/permissions',
+        meta: { authRequired: true, title: 'Mis permisos', permission: 'ver_permisos_personal' },
+        component: () => import('../views/staff/permissions/index.vue'),
+    },
+    {
+        path: '/staff/permissions/review',
+        meta: { authRequired: true, title: 'Bandeja de permisos', permission: 'ver_permisos_personal' },
+        component: () => import('../views/staff/permissions/review.vue'),
+    },
+    {
+        path: '/staff/permissions/reports',
+        meta: { authRequired: true, title: 'Reportes de permisos', permission: 'ver_permisos_personal' },
+        component: () => import('../views/staff/permissions/reports.vue'),
+    },
+    {
+        path: '/staff/permissions/types',
+        meta: { authRequired: true, title: 'Tipos de permiso', permission: 'ver_permisos_personal' },
+        component: () => import('../views/staff/permissions/types.vue'),
+    },
+    {
+        path: '/staff/permissions/watchers',
+        meta: { authRequired: true, title: 'Quién debe enterarse', permission: 'administrar_destinatarios_permisos_personal' },
+        component: () => import('../views/staff/permissions/watchers.vue'),
+    },
+    {
+        path: '/staff/permissions/watchers-summary',
+        meta: { authRequired: true, title: 'Destinatarios por funcionario', permission: 'administrar_destinatarios_permisos_personal' },
+        component: () => import('../views/staff/permissions/watchers-summary.vue'),
+    },
+    {
+        path: '/tasks/backlog',
+        meta: { authRequired: true, title: 'Backlog de tareas', permission: 'ver_tareas' },
+        component: () => import('../views/tasks/backlog.vue'),
+    },
+    {
+        path: '/tasks/assigners',
+        meta: { authRequired: true, title: 'Asignadores de tareas', permission: 'administrar_asignadores_tareas' },
+        component: () => import('../views/tasks/backlog.vue'),
+    },
+    {
+        path: '/staff/new',
+        meta: { authRequired: true, title: 'Nuevo funcionario', permission: 'gestionar_funcionarios' },
+        component: () => import('../views/staff/form.vue'),
+    },
+    {
+        path: '/staff/:id',
+        meta: { authRequired: true, title: 'Ficha funcionario', permission: 'ver_funcionarios' },
+        component: () => import('../views/staff/form.vue'),
+    },
+    {
+        path: '/contracts',
+        meta: { authRequired: true, title: 'Contratos', permission: 'ver_contratos' },
+        component: () => import('../views/contracts/index.vue'),
+    },
+    {
+        path: '/contracts/templates',
+        meta: { authRequired: true, title: 'Plantillas de contrato', permission: 'administrar_plantillas_contrato' },
+        component: () => import('../views/contracts/templates.vue'),
+    },
+    {
+        path: '/contracts/clauses',
+        meta: { authRequired: true, title: 'Cláusulas contractuales', permission: 'administrar_clausulas_contrato' },
+        component: () => import('../views/contracts/clauses.vue'),
+    },
+    {
+        path: '/contracts/signatures',
+        meta: { authRequired: true, title: 'Firmas de contrato', permission: 'administrar_firmas_contrato' },
+        component: () => import('../views/contracts/signatures.vue'),
+    },
+    {
+        path: '/contracts/new',
+        meta: { authRequired: true, title: 'Nuevo contrato', permission: 'gestionar_contratos' },
+        component: () => import('../views/contracts/form.vue'),
+    },
+    {
+        path: '/contracts/:id',
+        meta: { authRequired: true, title: 'Ficha contrato', permission: 'ver_contratos' },
+        component: () => import('../views/contracts/form.vue'),
     },
     {
         path: '/inventory/items',
@@ -487,6 +1113,7 @@ const routes = [
     },
     {
         path: '/pages/500',
+        alias: '/pages-500',
         meta: { authRequired: true, title: '500' },
         component: () => import('../views/utility/500.vue')
     },
@@ -697,6 +1324,20 @@ const routes = [
         meta: { authRequired: true, title: "Amcharts Maps" },
         component: () => import('../views/maps/amcharts/index.vue')
     },
+    pmeSepRoute('/pme-sep', 'Dashboard PME / SEP'),
+    pmeSepRoute('/pme-sep/configuracion', 'Configuración PME'),
+    pmeSepRoute('/pme-sep/ingresos', 'Ingresos SEP'),
+    pmeSepRoute('/pme-sep/estudiantes', 'Estudiantes SEP'),
+    pmeSepRoute('/pme-sep/dimensiones', 'Dimensiones PME'),
+    pmeSepRoute('/pme-sep/objetivos', 'Objetivos PME'),
+    pmeSepRoute('/pme-sep/estrategias', 'Estrategias PME'),
+    pmeSepRoute('/pme-sep/indicadores', 'Indicadores PME'),
+    pmeSepRoute('/pme-sep/acciones', 'Acciones PME'),
+    pmeSepRoute('/pme-sep/evidencias', 'Evidencias PME'),
+    pmeSepRoute('/pme-sep/hitos', 'Hitos PME'),
+    pmeSepRoute('/pme-sep/metas', 'Metas Estratégicas PME'),
+    pmeSepRoute('/pme-sep/monitoreo', 'Monitoreo Reflexivo PME'),
+    pmeSepRoute('/pme-sep/reportes', 'Reportes PME / SEP'),
 ]
 
 const router = createRouter({
@@ -733,21 +1374,31 @@ router.beforeEach(async (routeTo, routeFrom, next) => {
         permissions = null;
     }
 
-    if (!Array.isArray(permissions)) {
+    const fetchPermissions = async () => {
         try {
             const response = await axios.get('/api/me/permissions');
-            permissions = response.data.data || [];
-            localStorage.setItem('permissions', JSON.stringify(permissions));
+            const freshPermissions = response.data.data || [];
+            localStorage.setItem('permissions', JSON.stringify(freshPermissions));
+            return freshPermissions;
         } catch (error) {
-            permissions = [];
+            return [];
         }
+    };
+
+    if (!Array.isArray(permissions)) {
+        permissions = await fetchPermissions();
     }
 
-    if (permissions.includes(requiredPermission)) {
+    if (permissions.includes('__superadmin__') || permissions.includes(requiredPermission)) {
         return next();
     }
 
-    return next({ path: '/' });
+    permissions = await fetchPermissions();
+    if (permissions.includes('__superadmin__') || permissions.includes(requiredPermission)) {
+        return next();
+    }
+
+    return next({ path: '/inicio' });
 
 });
 

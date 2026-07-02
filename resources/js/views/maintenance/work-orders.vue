@@ -260,7 +260,7 @@ export default {
     dependencyLabel(dependency) {
       if (!dependency) return "Sin dependencia";
 
-      return `${dependency.code} · ${dependency.name}`;
+      return `${dependency.code} · ${dependency.name}${dependency.is_reservable ? " · [Espacio]" : " · [Activo técnico]"}`;
     },
     syncDependencySelection() {
       const match = this.catalogs.dependencies.find(

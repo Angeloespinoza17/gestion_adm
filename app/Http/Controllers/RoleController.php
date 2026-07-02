@@ -93,7 +93,7 @@ class RoleController extends Controller
     public function setPermissions(Request $request, Role $role): JsonResponse
     {
         $payload = $request->validate([
-            'permissions' => ['required', 'array'],
+            'permissions' => ['present', 'array'],
             'permissions.*' => ['integer', 'exists:permissions,id'],
         ]);
 
@@ -108,7 +108,7 @@ class RoleController extends Controller
     public function setModules(Request $request, Role $role): JsonResponse
     {
         $payload = $request->validate([
-            'modules' => ['required', 'array'],
+            'modules' => ['present', 'array'],
             'modules.*' => ['integer', 'exists:system_modules,id'],
         ]);
 

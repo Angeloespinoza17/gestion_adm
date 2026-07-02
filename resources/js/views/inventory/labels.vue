@@ -1,11 +1,12 @@
 <script>
 import axios from "axios";
 import Layout from "../../layouts/main.vue";
+import LoadingState from "../../components/ui/loading-state.vue";
 import Multiselect from "@vueform/multiselect";
 import { getPdfMake } from "../../utils/pdfmake";
 
 export default {
-  components: { Layout, Multiselect },
+  components: { Layout, LoadingState, Multiselect },
   data() {
     return {
       loading: false,
@@ -207,6 +208,9 @@ export default {
               ]"
               small
             >
+              <template #table-busy>
+                <LoadingState message="Cargando items..." compact />
+              </template>
               <template #cell(category)="{ item }">
                 {{ item.category?.name || "-" }}
               </template>
@@ -266,4 +270,3 @@ export default {
     </div>
   </Layout>
 </template>
-

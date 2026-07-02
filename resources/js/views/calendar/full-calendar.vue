@@ -1,6 +1,6 @@
 <template>
   <Layout>
-    <PageHeader title="TUI Calendar" pageTitle="Calendar" />
+    <PageHeader title="Calendario" pageTitle="Calendario" />
 
     <BRow>
       <div class="col-12">
@@ -18,13 +18,13 @@
                     </select>
                   </div>
                   <button class="btn font-16 btn-primary" @click="openNewEventModal">
-                    <i class="mdi mdi-plus-circle-outline"></i> Create New Event
+                    <i class="mdi mdi-plus-circle-outline"></i> Crear evento
                   </button>
                 </div>
 
                 <div id="external-events" class="mt-2">
                   <br>
-                  <p class="text-muted">Drag and drop your event or click in the calendar</p>
+                  <p class="text-muted">Arrastra un evento o haz clic en el calendario</p>
                   <div v-for="event in externalEvents" :key="event.title"
                     :class="`external-event fc-event ${event.className}`" :data-class="event.className"
                     draggable="true">
@@ -65,37 +65,37 @@
                   <div class="row">
                     <div class="col-12">
                       <div class="mb-3">
-                        <label class="form-label">Event Name</label>
-                        <input class="form-control" placeholder="Insert Event Name" type="text"
+                        <label class="form-label">Nombre del evento</label>
+                        <input class="form-control" placeholder="Ingresa el nombre del evento" type="text"
                           v-model="eventForm.title" required />
-                        <div class="invalid-feedback">Please provide a valid event name</div>
+                        <div class="invalid-feedback">Ingresa un nombre válido</div>
                       </div>
                     </div>
                     <div class="col-12">
                       <div class="mb-3">
-                        <label class="form-label">Category</label>
+                        <label class="form-label">Categoría</label>
                         <select class="form-control form-select" v-model="eventForm.category" required>
-                          <option value=""> --Select-- </option>
-                          <option value="bg-danger">Danger</option>
-                          <option value="bg-success">Success</option>
-                          <option value="bg-primary">Primary</option>
-                          <option value="bg-info">Info</option>
-                          <option value="bg-dark">Dark</option>
-                          <option value="bg-warning">Warning</option>
+                          <option value=""> --Seleccionar-- </option>
+                          <option value="bg-danger">Peligro</option>
+                          <option value="bg-success">Éxito</option>
+                          <option value="bg-primary">Primario</option>
+                          <option value="bg-info">Información</option>
+                          <option value="bg-dark">Oscuro</option>
+                          <option value="bg-warning">Advertencia</option>
                         </select>
-                        <div class="invalid-feedback">Please select a valid event category</div>
+                        <div class="invalid-feedback">Selecciona una categoría válida</div>
                       </div>
                     </div>
                   </div>
                   <div class="row mt-2">
                     <div class="col-6">
                       <button type="button" class="btn btn-danger" @click="deleteEvent" v-show="selectedEvent">
-                        Delete
+                        Eliminar
                       </button>
                     </div>
                     <div class="col-6 text-end">
-                      <button type="button" class="btn btn-light me-1" @click="closeModal">Close</button>
-                      <button type="submit" class="btn btn-success">Save</button>
+                      <button type="button" class="btn btn-light me-1" @click="closeModal">Cerrar</button>
+                      <button type="submit" class="btn btn-success">Guardar</button>
                     </div>
                   </div>
                 </form>
@@ -114,6 +114,7 @@
 <script>
 import { ref, reactive, onMounted, onUnmounted } from 'vue'
 import { Calendar } from '@fullcalendar/core'
+import esLocale from '@fullcalendar/core/locales/es'
 import dayGridPlugin from '@fullcalendar/daygrid'
 import timeGridPlugin from '@fullcalendar/timegrid'
 import listPlugin from '@fullcalendar/list'
@@ -129,12 +130,12 @@ export default {
     const calendarEl = ref(null)
     const calendar = ref(null)
     const showModal = ref(false)
-    const modalTitle = ref('Event')
+    const modalTitle = ref('Evento')
     const selectedEvent = ref(null)
     const newEventData = ref(null)
     const formValidated = ref(false)
-    const selectedLocale = ref('en')
-    const availableLocales = ref(['en'])
+    const selectedLocale = ref('es')
+    const availableLocales = ref(['es'])
 
     const eventForm = reactive({
       title: '',
@@ -142,59 +143,59 @@ export default {
     })
 
     const externalEvents = ref([
-      { title: 'New Event Planning', className: 'bg-success' },
-      { title: 'Meeting', className: 'bg-info' },
-      { title: 'Generating Reports', className: 'bg-warning' },
-      { title: 'Create New theme', className: 'bg-danger' }
+      { title: 'Planificación de evento', className: 'bg-success' },
+      { title: 'Reunión', className: 'bg-info' },
+      { title: 'Generación de reportes', className: 'bg-warning' },
+      { title: 'Crear nuevo tema', className: 'bg-danger' }
     ])
 
     const defaultEvents = ref([
       {
-        title: 'All Day Event',
+        title: 'Evento de todo el día',
         start: new Date(new Date().getFullYear(), new Date().getMonth(), 1)
       },
       {
-        title: 'Long Event',
+        title: 'Evento extendido',
         start: new Date(new Date().getFullYear(), new Date().getMonth(), new Date().getDate() - 5),
         end: new Date(new Date().getFullYear(), new Date().getMonth(), new Date().getDate() - 2),
         className: 'bg-warning'
       },
       {
         id: 999,
-        title: 'Repeating Event',
+        title: 'Evento repetido',
         start: new Date(new Date().getFullYear(), new Date().getMonth(), new Date().getDate() - 3, 16, 0),
         allDay: false,
         className: 'bg-info'
       },
       {
         id: 999,
-        title: 'Repeating Event',
+        title: 'Evento repetido',
         start: new Date(new Date().getFullYear(), new Date().getMonth(), new Date().getDate() + 4, 16, 0),
         allDay: false,
         className: 'bg-primary'
       },
       {
-        title: 'Meeting',
+        title: 'Reunión',
         start: new Date(new Date().getFullYear(), new Date().getMonth(), new Date().getDate(), 10, 30),
         allDay: false,
         className: 'bg-success'
       },
       {
-        title: 'Lunch',
+        title: 'Almuerzo',
         start: new Date(new Date().getFullYear(), new Date().getMonth(), new Date().getDate(), 12, 0),
         end: new Date(new Date().getFullYear(), new Date().getMonth(), new Date().getDate(), 14, 0),
         allDay: false,
         className: 'bg-danger'
       },
       {
-        title: 'Birthday Party',
+        title: 'Cumpleaños',
         start: new Date(new Date().getFullYear(), new Date().getMonth(), new Date().getDate() + 1, 19, 0),
         end: new Date(new Date().getFullYear(), new Date().getMonth(), new Date().getDate() + 1, 22, 30),
         allDay: false,
         className: 'bg-success'
       },
       {
-        title: 'Click for Google',
+        title: 'Ir a Google',
         start: new Date(new Date().getFullYear(), new Date().getMonth(), 28),
         end: new Date(new Date().getFullYear(), new Date().getMonth(), 29),
         url: 'http://google.com/',
@@ -219,6 +220,7 @@ export default {
 
       calendar.value = new Calendar(calendarEl.value, {
         plugins: [dayGridPlugin, timeGridPlugin, listPlugin, interactionPlugin, bootstrapPlugin],
+        locales: [esLocale],
         editable: true,
         droppable: true,
         selectable: true,
@@ -226,6 +228,16 @@ export default {
         themeSystem: 'bootstrap5',
         weekNumbers: true,
         locale: selectedLocale.value,
+        firstDay: 1,
+        buttonText: {
+          today: 'Hoy',
+          month: 'Mes',
+          week: 'Semana',
+          day: 'Día',
+          list: 'Lista'
+        },
+        allDayText: 'Todo el día',
+        noEventsText: 'No hay eventos para mostrar',
         headerToolbar: {
           left: 'prev,next today',
           right: 'dayGridMonth,timeGridWeek,timeGridDay,listMonth',
@@ -249,12 +261,12 @@ export default {
       calendar.value.render()
 
       // Get available locales
-      availableLocales.value = calendar.value.getAvailableLocaleCodes()
+      availableLocales.value = ['es']
     }
 
     const openNewEventModal = (info = null) => {
       showModal.value = true
-      modalTitle.value = 'Add Event'
+      modalTitle.value = 'Agregar evento'
       selectedEvent.value = null
       newEventData.value = info || { date: new Date(), allDay: true }
       resetForm()
@@ -262,7 +274,7 @@ export default {
 
     const openEditEventModal = (event) => {
       showModal.value = true
-      modalTitle.value = 'Edit Event'
+      modalTitle.value = 'Editar evento'
       selectedEvent.value = event
       newEventData.value = null
       eventForm.title = event.title

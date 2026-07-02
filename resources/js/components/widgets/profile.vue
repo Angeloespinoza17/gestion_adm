@@ -21,7 +21,7 @@ export default {
 </script>
 <template>
   <Loader :loading="updating">
-    <BCard no-body class="overflow-hidden">
+    <BCard no-body class="overflow-hidden glass-card soft-card border-0 h-100 profile-card-modern">
       <div class="bg-primary-subtle">
         <BRow>
           <BCol cols="7">
@@ -58,7 +58,7 @@ export default {
                 </BCol>
               </BRow>
               <div class="mt-4">
-                <BLink class="btn btn-primary btn-sm">
+                <BLink class="btn premium-button btn-sm">
                   View Profile
                   <i class="mdi mdi-arrow-right ms-1"></i>
                 </BLink>
