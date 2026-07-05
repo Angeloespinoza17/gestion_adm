@@ -33,6 +33,10 @@ class StoreStaffRequest extends FormRequest
             'active' => $this->has('active')
                 ? filter_var($this->input('active'), FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE)
                 : true,
+            'can_receive_maintenance_orders' => $this->has('can_receive_maintenance_orders')
+                ? filter_var($this->input('can_receive_maintenance_orders'), FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE)
+                : false,
+            'maintenance_role' => $this->input('maintenance_role') ?: null,
             'status' => $this->input('status') ?: 'activo',
         ];
 
@@ -103,6 +107,12 @@ class StoreStaffRequest extends FormRequest
             'professional_registration' => ['nullable', 'string', 'max:255'],
             'internal_notes' => ['nullable', 'string'],
             'active' => ['sometimes', 'boolean'],
+            'can_receive_maintenance_orders' => ['sometimes', 'boolean'],
+            'maintenance_role' => [
+                'nullable',
+                'required_if:can_receive_maintenance_orders,true,1',
+                Rule::in(array_column(Staff::MAINTENANCE_ROLE_OPTIONS, 'value')),
+            ],
             'associated_user_id' => [
                 'nullable',
                 'integer',

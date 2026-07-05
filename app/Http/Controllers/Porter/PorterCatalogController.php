@@ -46,7 +46,11 @@ class PorterCatalogController extends Controller
             'education_levels' => EducationLevel::query()->orderBy('order')->get(['id', 'name', 'order', 'type']),
             'departments' => Department::query()->where('active', true)->orderBy('sort_order')->orderBy('name')->get(['id', 'name', 'color']),
             'staff' => Staff::query()->where('active', true)->orderBy('full_name')->get(['id', 'full_name', 'rut', 'cargo_id']),
-            'dependencies' => MaintenanceDependency::query()->where('active', true)->orderBy('name')->get(['id', 'code', 'name', 'responsible_staff_id']),
+            'dependencies' => MaintenanceDependency::query()
+                ->physicalSpaces()
+                ->where('active', true)
+                ->orderBy('name')
+                ->get(['id', 'code', 'name', 'responsible_staff_id']),
             'withdrawal_statuses' => PorterStudentWithdrawal::STATUS_OPTIONS,
             'withdrawal_relationships' => PorterStudentWithdrawal::RELATIONSHIP_OPTIONS,
             'withdrawal_reasons' => PorterStudentWithdrawal::REASON_OPTIONS,

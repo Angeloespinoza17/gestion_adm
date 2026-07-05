@@ -11,6 +11,7 @@ import App from '../js/App.vue'
 import VueApexCharts from "vue3-apexcharts";
 import helper from "./mixins/layouts.mixin";
 import { vMaska } from "maska";
+import { installTableActionNormalizer } from "./utils/table-actions";
 
 import i18n from './i18n'
 import BootstrapVueNext from 'bootstrap-vue-next'
@@ -37,6 +38,7 @@ app.directive("maska", vMaska)
 app.mixin(helper);
 app.use(VueApexCharts);
 app.use(BootstrapVueNext);
+installTableActionNormalizer(routes);
 
 /**
  * The following block of code may be used to automatically register your

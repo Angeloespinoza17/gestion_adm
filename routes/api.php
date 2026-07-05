@@ -84,6 +84,7 @@ use App\Http\Controllers\Inventory\SupplierController as InventorySupplierContro
 use App\Http\Controllers\Inventory\InventoryItemController;
 use App\Http\Controllers\Inventory\InventoryItemPhotoController;
 use App\Http\Controllers\Inventory\InventoryItemDocumentController;
+use App\Http\Controllers\Inventory\InventoryManagementController;
 use App\Http\Controllers\Inventory\InventoryMovementController;
 use App\Http\Controllers\Inventory\InventoryStockController;
 use App\Http\Controllers\Inventory\InventoryReportController;
@@ -972,6 +973,14 @@ Route::prefix('convivencia/public')->middleware('convivencia.installed')->group(
 
     // Inventario
     Route::prefix('inventory')->group(function () {
+        // Gestión por dependencias
+        Route::get('/management/dependencies', [InventoryManagementController::class, 'index'])
+            ->middleware('permission:ver_inventario');
+        Route::get('/management/dependencies/{dependency}', [InventoryManagementController::class, 'show'])
+            ->middleware('permission:ver_inventario');
+        Route::post('/management/dependencies/{dependency}/audits', [InventoryManagementController::class, 'storeAudit'])
+            ->middleware('permission:editar_inventario');
+
         // Catálogos
         Route::get('/categories', [InventoryCategoryController::class, 'index'])
             ->middleware('permission:ver_inventario');

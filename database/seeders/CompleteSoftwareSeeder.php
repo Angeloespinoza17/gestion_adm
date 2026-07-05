@@ -3,6 +3,7 @@
 namespace Database\Seeders;
 
 use Database\Seeders\Modules\ContractsModuleSeeder;
+use Database\Seeders\Modules\InventoryManagementSeeder;
 use Database\Seeders\Modules\InventoryModuleSeeder;
 use Database\Seeders\Modules\MaintenanceModuleSeeder;
 use Database\Seeders\Modules\PorterModuleSeeder;
@@ -32,6 +33,7 @@ class CompleteSoftwareSeeder extends Seeder
             StaffModuleSeeder::class,
             SpacesModuleSeeder::class,
             InventoryModuleSeeder::class,
+            InventoryManagementSeeder::class,
             MaintenanceModuleSeeder::class,
             ContractsModuleSeeder::class,
             StaffPermissionModuleSeeder::class,

@@ -19,6 +19,15 @@ class StoreDependencyRequest extends FormRequest
             'active' => $this->has('active')
                 ? filter_var($this->input('active'), FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE)
                 : true,
+            'is_reservable' => $this->has('is_reservable')
+                ? filter_var($this->input('is_reservable'), FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE)
+                : false,
+            'is_inventory_auditable' => $this->has('is_inventory_auditable')
+                ? filter_var($this->input('is_inventory_auditable'), FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE)
+                : true,
+            'is_maintenance_location' => $this->has('is_maintenance_location')
+                ? filter_var($this->input('is_maintenance_location'), FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE)
+                : true,
             'requires_approval' => $this->has('requires_approval')
                 ? filter_var($this->input('requires_approval'), FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE)
                 : true,
@@ -30,6 +39,13 @@ class StoreDependencyRequest extends FormRequest
     {
         return [
             'dependency_type_id' => ['nullable', 'integer', 'exists:dependency_types,id'],
+            'parent_dependency_id' => [
+                'nullable',
+                'integer',
+                Rule::exists('maintenance_dependencies', 'id')
+                    ->where('dependency_kind', MaintenanceDependency::KIND_SPACE)
+                    ->where('active', true),
+            ],
             'code' => ['required', 'string', 'max:50', 'unique:maintenance_dependencies,code'],
             'name' => ['required', 'string', 'max:255'],
             'description' => ['nullable', 'string'],
@@ -56,6 +72,9 @@ class StoreDependencyRequest extends FormRequest
             'notes' => ['nullable', 'string'],
             'observations' => ['nullable', 'string'],
             'calendar_color' => ['nullable', 'string', 'max:20'],
+            'is_reservable' => ['sometimes', 'boolean'],
+            'is_inventory_auditable' => ['sometimes', 'boolean'],
+            'is_maintenance_location' => ['sometimes', 'boolean'],
             'requires_approval' => ['sometimes', 'boolean'],
             'approver_user_ids' => ['nullable', 'array'],
             'approver_user_ids.*' => ['integer', 'exists:users,id'],

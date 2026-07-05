@@ -45,10 +45,19 @@ class Staff extends Model
         ['value' => 'turnos', 'label' => 'Turnos'],
     ];
 
+    public const MAINTENANCE_ROLE_OPTIONS = [
+        ['value' => 'encargado_mantencion', 'label' => 'Encargado/a de mantención'],
+        ['value' => 'auxiliar_mantenimiento', 'label' => 'Auxiliar de mantenimiento'],
+        ['value' => 'auxiliar_aseo', 'label' => 'Auxiliar de aseo'],
+        ['value' => 'apoyo_operativo', 'label' => 'Apoyo operativo'],
+        ['value' => 'otro', 'label' => 'Otro'],
+    ];
+
     protected $table = 'staff';
 
     protected $appends = [
         'profile_photo_url',
+        'maintenance_role_label',
     ];
 
     protected $fillable = [
@@ -76,6 +85,8 @@ class Staff extends Model
         'internal_notes',
         'profile_photo_path',
         'active',
+        'can_receive_maintenance_orders',
+        'maintenance_role',
         'created_by',
         'updated_by',
     ];
@@ -86,6 +97,7 @@ class Staff extends Model
         'end_date' => 'date:Y-m-d',
         'contract_hours' => 'decimal:2',
         'active' => 'boolean',
+        'can_receive_maintenance_orders' => 'boolean',
     ];
 
     protected function serializeDate(DateTimeInterface $date): string
@@ -107,6 +119,18 @@ class Staff extends Model
         }
 
         return $url;
+    }
+
+    public function getMaintenanceRoleLabelAttribute(): ?string
+    {
+        if (!$this->maintenance_role) {
+            return null;
+        }
+
+        $option = collect(self::MAINTENANCE_ROLE_OPTIONS)
+            ->firstWhere('value', $this->maintenance_role);
+
+        return $option['label'] ?? $this->maintenance_role;
     }
 
     public function cargo(): BelongsTo

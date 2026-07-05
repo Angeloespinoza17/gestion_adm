@@ -25,6 +25,12 @@ class UpdateDependencyRequest extends FormRequest
             $data['requires_approval'] = filter_var($this->input('requires_approval'), FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE);
         }
 
+        foreach (['is_reservable', 'is_inventory_auditable', 'is_maintenance_location'] as $field) {
+            if ($this->has($field)) {
+                $data[$field] = filter_var($this->input($field), FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE);
+            }
+        }
+
         if ($data !== []) {
             $this->merge($data);
         }
@@ -36,6 +42,13 @@ class UpdateDependencyRequest extends FormRequest
 
         return [
             'dependency_type_id' => ['nullable', 'integer', 'exists:dependency_types,id'],
+            'parent_dependency_id' => [
+                'nullable',
+                'integer',
+                Rule::exists('maintenance_dependencies', 'id')
+                    ->where('dependency_kind', MaintenanceDependency::KIND_SPACE)
+                    ->where('active', true),
+            ],
             'code' => ['sometimes', 'string', 'max:50', Rule::unique('maintenance_dependencies', 'code')->ignore($dependencyId)],
             'name' => ['sometimes', 'string', 'max:255'],
             'description' => ['nullable', 'string'],
@@ -62,6 +75,9 @@ class UpdateDependencyRequest extends FormRequest
             'notes' => ['nullable', 'string'],
             'observations' => ['nullable', 'string'],
             'calendar_color' => ['nullable', 'string', 'max:20'],
+            'is_reservable' => ['sometimes', 'boolean'],
+            'is_inventory_auditable' => ['sometimes', 'boolean'],
+            'is_maintenance_location' => ['sometimes', 'boolean'],
             'requires_approval' => ['sometimes', 'boolean'],
             'approver_user_ids' => ['nullable', 'array'],
             'approver_user_ids.*' => ['integer', 'exists:users,id'],

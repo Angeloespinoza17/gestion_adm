@@ -5,6 +5,14 @@ import Multiselect from "@vueform/multiselect";
 import Swal from "sweetalert2";
 import { getPdfMake } from "../../utils/pdfmake";
 
+const maintenanceRoleCatalog = [
+  { value: "encargado_mantencion", label: "Encargado/a de mantención" },
+  { value: "auxiliar_mantenimiento", label: "Auxiliar de mantenimiento" },
+  { value: "auxiliar_aseo", label: "Auxiliar de aseo" },
+  { value: "apoyo_operativo", label: "Apoyo operativo" },
+  { value: "otro", label: "Otro" },
+];
+
 const emptyForm = () => ({
   full_name: "",
   rut: "",
@@ -27,6 +35,8 @@ const emptyForm = () => ({
   professional_registration: "",
   internal_notes: "",
   active: true,
+  can_receive_maintenance_orders: false,
+  maintenance_role: null,
   associated_user_id: null,
   department_ids: [],
 });
@@ -60,6 +70,7 @@ export default {
         statuses: [],
         contract_types: [],
         workdays: [],
+        maintenance_roles: [],
       },
       staff: null,
       form: emptyForm(),
@@ -211,6 +222,16 @@ export default {
         label: workday.label,
       }));
     },
+    maintenanceRoleOptions() {
+      const roles = Array.isArray(this.catalogs.maintenance_roles) && this.catalogs.maintenance_roles.length > 0
+        ? this.catalogs.maintenance_roles
+        : maintenanceRoleCatalog;
+
+      return roles.map((role) => ({
+        value: role.value,
+        label: role.label,
+      }));
+    },
     currentPhotoUrl() {
       return this.profilePhotoPreview || this.staff?.profile_photo_url || null;
     },
@@ -261,6 +282,16 @@ export default {
         this.form.commune_id = null;
       }
     },
+    "form.can_receive_maintenance_orders"(value) {
+      if (!value) {
+        this.form.maintenance_role = null;
+        return;
+      }
+
+      if (!this.form.maintenance_role) {
+        this.form.maintenance_role = "auxiliar_mantenimiento";
+      }
+    },
   },
   mounted() {
     this.load();
@@ -287,7 +318,14 @@ export default {
         }
 
         const responses = await Promise.all(requests);
-        this.catalogs = responses[0].data;
+        const catalogs = responses[0].data || {};
+        this.catalogs = {
+          ...this.catalogs,
+          ...catalogs,
+          maintenance_roles: Array.isArray(catalogs.maintenance_roles) && catalogs.maintenance_roles.length > 0
+            ? catalogs.maintenance_roles
+            : maintenanceRoleCatalog,
+        };
 
         if (!this.isNew) {
           this.staff = responses[1].data.data;
@@ -325,6 +363,8 @@ export default {
             professional_registration: this.staff.professional_registration || "",
             internal_notes: this.staff.internal_notes || "",
             active: Boolean(this.staff.active),
+            can_receive_maintenance_orders: Boolean(this.staff.can_receive_maintenance_orders),
+            maintenance_role: this.staff.maintenance_role || null,
             associated_user_id: this.staff.user?.id ?? null,
             department_ids: (this.staff.departments || []).map((department) => department.id),
           };
@@ -612,6 +652,7 @@ export default {
           ["Título profesional", this.staff.professional_title || "-"],
           ["Especialidad", this.staff.specialty || "-"],
           ["Registro profesional", this.staff.professional_registration || "-"],
+          ["Rol operativo mantención", this.staff.can_receive_maintenance_orders ? (this.staff.maintenance_role_label || "-") : "No recibe OT"],
         ];
 
         const institutionData = [
@@ -844,6 +885,27 @@ export default {
             <BFormCheckbox v-model="form.active" :disabled="!canEdit">Registro activo</BFormCheckbox>
           </div>
 
+          <div class="mb-3">
+            <BFormCheckbox v-model="form.can_receive_maintenance_orders" :disabled="!canEdit">
+              Puede recibir OT de mantención
+            </BFormCheckbox>
+            <div class="small text-muted mt-1">
+              Activa esta opción para que aparezca en responsables de mantención.
+            </div>
+          </div>
+
+          <div v-if="form.can_receive_maintenance_orders" class="mb-3">
+            <label class="form-label">Rol operativo</label>
+            <Multiselect
+              v-model="form.maintenance_role"
+              class="staff-role-multiselect"
+              :options="maintenanceRoleOptions"
+              :searchable="true"
+              placeholder="Seleccionar rol operativo"
+              :disabled="!canEdit"
+            />
+          </div>
+
           <div v-if="staff" class="small text-muted">
             <div>Creado: {{ formatDateTime(staff.created_at) }}</div>
             <div>Actualizado: {{ formatDateTime(staff.updated_at) }}</div>
@@ -1005,6 +1067,12 @@ export default {
             <div class="col-md-3">
               <div class="text-muted small">Usuario asociado</div>
               <div class="fw-semibold">{{ staff.user?.email || "-" }}</div>
+            </div>
+            <div class="col-md-3">
+              <div class="text-muted small">Mantención</div>
+              <div class="fw-semibold">
+                {{ staff.can_receive_maintenance_orders ? (staff.maintenance_role_label || "Responsable OT") : "No recibe OT" }}
+              </div>
             </div>
             <div class="col-md-3">
               <div class="text-muted small">Región</div>
@@ -1346,3 +1414,34 @@ export default {
     </div>
   </Layout>
 </template>
+
+<style scoped>
+:deep(.staff-role-multiselect) {
+  --ms-radius: 0.7rem;
+  --ms-border-color: #dfe6f5;
+  --ms-bg: #fff;
+  --ms-font-size: 0.95rem;
+  width: 100%;
+}
+
+:deep(.staff-role-multiselect .multiselect-wrapper) {
+  min-height: 2.75rem;
+}
+
+:deep(.staff-role-multiselect .multiselect-placeholder),
+:deep(.staff-role-multiselect .multiselect-single-label) {
+  color: #465161;
+  font-weight: 500;
+}
+
+:deep(.staff-role-multiselect .multiselect-dropdown) {
+  z-index: 3000;
+  border-color: #dfe6f5;
+  box-shadow: 0 0.75rem 1.75rem rgba(31, 41, 55, 0.14);
+}
+
+:deep(.staff-role-multiselect .multiselect-option) {
+  color: #364154;
+  font-weight: 500;
+}
+</style>

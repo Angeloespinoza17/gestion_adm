@@ -41,13 +41,22 @@ export default {
     };
   },
   computed: {
-    academicYearOptions() {
-      return [{ value: null, text: "Todos" }].concat(
-        (this.catalogs.academic_years || []).map((year) => ({
-          value: year.id,
-          text: `${year.name}${year.is_active ? " · activo" : ""}`,
-        }))
+    activeAcademicYear() {
+      const activeYearId = this.catalogs.active_academic_year_id;
+
+      return (
+        (this.catalogs.academic_years || []).find((year) => Number(year.id) === Number(activeYearId))
+        || (this.catalogs.academic_years || []).find((year) => year.is_active)
+        || null
       );
+    },
+    activeAcademicYearId() {
+      return this.activeAcademicYear?.id || this.catalogs.active_academic_year_id || null;
+    },
+    academicYearOptions() {
+      return this.activeAcademicYear
+        ? [{ value: this.activeAcademicYear.id, text: `${this.activeAcademicYear.name} · activo` }]
+        : [];
     },
     courseOptions() {
       return [{ value: null, text: "Todos" }].concat(
@@ -87,6 +96,20 @@ export default {
           ? "Retirar estudiante"
           : "Reingresar estudiante";
     },
+    enrollmentFields() {
+      const headerClass = "text-center movements-table__head";
+      const centeredCell = "text-center align-middle movements-table__cell";
+
+      return [
+        { key: "student", label: "Estudiante", thClass: headerClass, tdClass: `${centeredCell} movements-table__cell--student` },
+        { key: "snapshot_course_display_name", label: "Curso actual", thClass: headerClass, tdClass: centeredCell },
+        { key: "enrollment_status", label: "Estado", thClass: headerClass, tdClass: centeredCell },
+        { key: "enrolled_at", label: "Matrícula", thClass: headerClass, tdClass: centeredCell },
+        { key: "withdrawn_at", label: "Retiro", thClass: headerClass, tdClass: centeredCell },
+        { key: "last_movement", label: "Último movimiento", thClass: headerClass, tdClass: `${centeredCell} movements-table__cell--last-movement` },
+        { key: "actions", label: "Acciones", thClass: headerClass, tdClass: `${centeredCell} movements-table__cell--actions` },
+      ];
+    },
   },
   async mounted() {
     await this.loadCatalogs();
@@ -97,12 +120,17 @@ export default {
     async loadCatalogs() {
       const response = await axios.get("/api/students/catalogs");
       this.catalogs = response.data;
-      this.filters.academic_year_id = this.catalogs.active_academic_year_id || null;
+      this.filters.academic_year_id = this.activeAcademicYearId;
     },
     async loadCourses() {
+      if (!this.activeAcademicYearId) {
+        this.courseSections = [];
+        return;
+      }
+
       const response = await axios.get("/api/students/courses", {
         params: {
-          academic_year_id: this.filters.academic_year_id,
+          academic_year_id: this.activeAcademicYearId,
         },
       });
       this.courseSections = response.data.data || [];
@@ -114,7 +142,7 @@ export default {
         const response = await axios.get("/api/students/enrollment-management", {
           params: {
             page,
-            academic_year_id: this.filters.academic_year_id,
+            academic_year_id: this.activeAcademicYearId,
             course_section_id: this.filters.course_section_id,
             enrollment_status: this.filters.enrollment_status,
             search: this.filters.search || null,
@@ -135,6 +163,7 @@ export default {
       }
     },
     async onAcademicYearChange() {
+      this.filters.academic_year_id = this.activeAcademicYearId;
       this.filters.course_section_id = null;
       await this.loadCourses();
       await this.loadEnrollments(1);
@@ -178,6 +207,11 @@ export default {
         return;
       }
 
+      const result = await this.confirmAction();
+      if (!result.isConfirmed) {
+        return;
+      }
+
       this.actionLoading = true;
       this.error = null;
       try {
@@ -213,7 +247,7 @@ export default {
     },
     resetFilters() {
       this.filters = {
-        academic_year_id: this.catalogs.active_academic_year_id || null,
+        academic_year_id: this.activeAcademicYearId,
         course_section_id: null,
         enrollment_status: null,
         search: "",
@@ -223,6 +257,73 @@ export default {
     },
     lastMovement(item) {
       return item.movements?.[0] || null;
+    },
+    confirmAction() {
+      const studentName = `${this.selectedEnrollment?.student_profile?.first_name || ""} ${this.selectedEnrollment?.student_profile?.last_name || ""}`.trim();
+      const config = {
+        transfer: {
+          title: "Confirmar cambio de curso",
+          text: `Se registrará un cambio de curso para ${studentName || "la estudiante"}.`,
+          confirmButtonText: "Sí, cambiar",
+          confirmButtonColor: "#556ee6",
+        },
+        withdraw: {
+          title: "Confirmar retiro",
+          text: `Se retirará a ${studentName || "la estudiante"} del año académico activo.`,
+          confirmButtonText: "Sí, retirar",
+          confirmButtonColor: "#f1b44c",
+        },
+        reenter: {
+          title: "Confirmar reingreso",
+          text: `Se reingresará a ${studentName || "la estudiante"} al año académico activo.`,
+          confirmButtonText: "Sí, reingresar",
+          confirmButtonColor: "#34c38f",
+        },
+      }[this.actionType] || {
+        title: "Confirmar acción",
+        text: "Se registrará el movimiento seleccionado.",
+        confirmButtonText: "Confirmar",
+        confirmButtonColor: "#556ee6",
+      };
+
+      return Swal.fire({
+        ...config,
+        icon: "warning",
+        showCancelButton: true,
+        cancelButtonText: "Cancelar",
+      });
+    },
+    statusLabel(status) {
+      return (this.catalogs.enrollment_statuses || []).find((option) => option.value === status)?.label || status || "-";
+    },
+    statusClass(status) {
+      return {
+        matriculada: "enrolled",
+        regular: "regular",
+        retirada: "retired",
+        egresada: "graduated",
+        suspendida: "suspended",
+        trasladada: "transferred",
+      }[status] || "neutral";
+    },
+    movementLabel(type) {
+      return {
+        matricula: "Matrícula",
+        cambio_curso: "Cambio de curso",
+        retiro: "Retiro",
+        reingreso: "Reingreso",
+      }[type] || type || "-";
+    },
+    movementClass(type) {
+      return {
+        matricula: "enrolled",
+        cambio_curso: "transfer",
+        retiro: "withdraw",
+        reingreso: "reentry",
+      }[type] || "neutral";
+    },
+    displayDate(value) {
+      return value || "-";
     },
     showSuccessAlert(title, text) {
       return Swal.fire({
@@ -268,30 +369,34 @@ export default {
 
     <BAlert v-if="error" variant="danger" show class="mb-3">{{ error }}</BAlert>
 
-    <div class="row g-3 mb-3">
+    <div class="row g-3 mb-3 movements-stats">
       <div class="col-md-4">
-        <BCard>
-          <div class="text-muted small mb-1">Total año</div>
-          <div class="h4 mb-0">{{ summary.total }}</div>
+        <BCard class="movements-stat-card h-100">
+          <div class="movements-stat-card__content">
+            <div>
+              <div class="movements-stat-card__label">Total año</div>
+              <div class="movements-stat-card__value">{{ summary.total }}</div>
+            </div>
+          </div>
         </BCard>
       </div>
       <div class="col-md-4">
-        <BCard class="h-100">
-          <div class="d-flex justify-content-between align-items-center">
+        <BCard class="movements-stat-card h-100">
+          <div class="movements-stat-card__content">
             <div>
-              <div class="text-muted small mb-1">Activas</div>
-              <div class="h4 mb-0">{{ summary.active }}</div>
+              <div class="movements-stat-card__label">Activas</div>
+              <div class="movements-stat-card__value">{{ summary.active }}</div>
             </div>
             <BButton size="sm" variant="outline-success" @click="quickFilter(null)">Ver todas</BButton>
           </div>
         </BCard>
       </div>
       <div class="col-md-4">
-        <BCard class="h-100">
-          <div class="d-flex justify-content-between align-items-center">
+        <BCard class="movements-stat-card h-100">
+          <div class="movements-stat-card__content">
             <div>
-              <div class="text-muted small mb-1">Retiradas</div>
-              <div class="h4 mb-0">{{ summary.retired }}</div>
+              <div class="movements-stat-card__label">Retiradas</div>
+              <div class="movements-stat-card__value">{{ summary.retired }}</div>
             </div>
             <BButton size="sm" variant="outline-warning" @click="quickFilter('retirada')">Ver retiradas</BButton>
           </div>
@@ -303,7 +408,7 @@ export default {
       <div class="row g-3">
         <div class="col-md-3">
           <label class="form-label">Año académico</label>
-          <BFormSelect v-model="filters.academic_year_id" :options="academicYearOptions" @change="onAcademicYearChange" />
+          <BFormSelect v-model="filters.academic_year_id" :options="academicYearOptions" disabled @change="onAcademicYearChange" />
         </div>
         <div class="col-md-3">
           <label class="form-label">Curso</label>
@@ -324,50 +429,61 @@ export default {
       </div>
     </BCard>
 
-    <BCard>
+    <BCard class="movements-table-card">
       <BTable
+        class="movements-table"
         :items="enrollments"
         :busy="loading"
         responsive
-        :fields="[
-          { key: 'student', label: 'Estudiante' },
-          { key: 'snapshot_course_display_name', label: 'Curso actual' },
-          { key: 'enrollment_status', label: 'Estado' },
-          { key: 'enrolled_at', label: 'Matrícula' },
-          { key: 'withdrawn_at', label: 'Retiro' },
-          { key: 'last_movement', label: 'Último movimiento' },
-          { key: 'actions', label: 'Acciones' },
-        ]"
+        :fields="enrollmentFields"
       >
         <template #table-busy>
           <LoadingState message="Cargando matrículas..." compact />
         </template>
 
         <template #cell(student)="{ item }">
-          <div class="fw-semibold">{{ item.student_profile?.first_name }} {{ item.student_profile?.last_name }}</div>
-          <div class="text-muted small">{{ item.student_profile?.rut || "-" }}</div>
+          <div class="movement-student-cell">
+            <div class="movement-student-cell__name">{{ item.student_profile?.first_name }} {{ item.student_profile?.last_name }}</div>
+            <div class="movement-student-cell__rut">{{ item.student_profile?.rut || "-" }}</div>
+          </div>
+        </template>
+
+        <template #cell(snapshot_course_display_name)="{ item }">
+          <span class="movement-course-pill">{{ item.snapshot_course_display_name || "-" }}</span>
         </template>
 
         <template #cell(enrollment_status)="{ item }">
-          <BBadge :variant="item.enrollment_status === 'retirada' ? 'warning' : 'success'">
-            {{ item.enrollment_status }}
-          </BBadge>
+          <span class="movement-status-chip" :class="`movement-status-chip--${statusClass(item.enrollment_status)}`">
+            {{ statusLabel(item.enrollment_status) }}
+          </span>
+        </template>
+
+        <template #cell(enrolled_at)="{ item }">
+          <span class="movement-date-pill">{{ displayDate(item.enrolled_at) }}</span>
+        </template>
+
+        <template #cell(withdrawn_at)="{ item }">
+          <span class="movement-date-pill" :class="{ 'movement-date-pill--empty': !item.withdrawn_at }">
+            {{ displayDate(item.withdrawn_at) }}
+          </span>
         </template>
 
         <template #cell(last_movement)="{ item }">
-          <div v-if="lastMovement(item)">
-            <div class="small fw-semibold">{{ lastMovement(item).movement_type }}</div>
-            <div class="text-muted small">
-              {{ lastMovement(item).snapshot_from_course_display_name || "-" }}
-              →
-              {{ lastMovement(item).snapshot_to_course_display_name || "-" }}
+          <div v-if="lastMovement(item)" class="movement-last-cell">
+            <span class="movement-type-chip" :class="`movement-type-chip--${movementClass(lastMovement(item).movement_type)}`">
+              {{ movementLabel(lastMovement(item).movement_type) }}
+            </span>
+            <div class="movement-last-cell__route">
+              <span>{{ lastMovement(item).snapshot_from_course_display_name || "-" }}</span>
+              <span class="movement-last-cell__arrow" aria-hidden="true">&rarr;</span>
+              <span>{{ lastMovement(item).snapshot_to_course_display_name || "-" }}</span>
             </div>
           </div>
           <span v-else>-</span>
         </template>
 
         <template #cell(actions)="{ item }">
-          <div class="d-flex flex-wrap gap-2">
+          <div class="movement-actions">
             <router-link :to="`/students/${item.student_profile_id}`" class="btn btn-sm btn-outline-secondary">Ficha</router-link>
             <BButton v-if="item.enrollment_status !== 'retirada'" size="sm" variant="outline-primary" @click="openTransfer(item)">
               Cambiar curso
@@ -429,3 +545,305 @@ export default {
     </BModal>
   </Layout>
 </template>
+
+<style scoped>
+.movements-stats {
+  align-items: stretch;
+}
+
+.movements-stat-card :deep(.card-body) {
+  display: flex;
+  height: 100%;
+}
+
+.movements-stat-card__content {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  width: 100%;
+  min-height: 5.75rem;
+}
+
+.movements-stat-card__label {
+  margin-bottom: 0.35rem;
+  color: #64748b;
+  font-size: 0.8rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.movements-stat-card__value {
+  color: #334155;
+  font-size: 1.55rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.movements-table-card {
+  overflow: hidden;
+}
+
+.movements-table-card :deep(.card-body) {
+  overflow-x: auto;
+}
+
+.movements-table {
+  width: 100%;
+  min-width: 0;
+  table-layout: fixed;
+}
+
+.movements-table :deep(table) {
+  width: 100%;
+  min-width: 0;
+  table-layout: fixed;
+}
+
+.movements-table :deep(th),
+.movements-table :deep(td) {
+  text-align: center;
+  vertical-align: middle;
+  overflow-wrap: anywhere;
+}
+
+.movements-table :deep(.movements-table__head) {
+  letter-spacing: 0.08em;
+  white-space: normal;
+}
+
+.movements-table :deep(.movements-table__cell) {
+  color: #4b5563;
+}
+
+.movements-table :deep(.movements-table__cell--student) {
+  text-align: left;
+}
+
+.movements-table :deep(th:nth-child(1)),
+.movements-table :deep(td:nth-child(1)) {
+  width: 17%;
+}
+
+.movements-table :deep(th:nth-child(2)),
+.movements-table :deep(td:nth-child(2)) {
+  width: 12%;
+}
+
+.movements-table :deep(th:nth-child(3)),
+.movements-table :deep(td:nth-child(3)) {
+  width: 10%;
+}
+
+.movements-table :deep(th:nth-child(4)),
+.movements-table :deep(td:nth-child(4)),
+.movements-table :deep(th:nth-child(5)),
+.movements-table :deep(td:nth-child(5)) {
+  width: 12%;
+}
+
+.movements-table :deep(th:nth-child(6)),
+.movements-table :deep(td:nth-child(6)) {
+  width: 18%;
+}
+
+.movements-table :deep(th:nth-child(7)),
+.movements-table :deep(td:nth-child(7)) {
+  width: 19%;
+}
+
+.movement-student-cell {
+  text-align: left;
+}
+
+.movement-student-cell__name {
+  color: #374151;
+  font-weight: 700;
+  line-height: 1.25;
+}
+
+.movement-student-cell__rut {
+  margin-top: 0.2rem;
+  color: #64748b;
+  font-size: 0.8rem;
+  line-height: 1.1;
+}
+
+.movement-course-pill,
+.movement-date-pill,
+.movement-status-chip,
+.movement-type-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  font-weight: 700;
+  line-height: 1.1;
+  white-space: nowrap;
+}
+
+.movement-course-pill {
+  min-width: 0;
+  width: 100%;
+  max-width: 8.8rem;
+  padding: 0.34rem 0.72rem;
+  border: 1px solid #dbeafe;
+  background: #eff6ff;
+  color: #1e40af;
+}
+
+.movement-date-pill {
+  box-sizing: border-box;
+  min-width: 8.25rem;
+  width: 100%;
+  max-width: 8.5rem;
+  padding: 0.34rem 0.8rem;
+  border: 1px solid #e2e8f0;
+  background: #ffffff;
+  color: #475569;
+  overflow: hidden;
+  text-overflow: clip;
+}
+
+.movement-date-pill--empty {
+  color: #94a3b8;
+  background: #f8fafc;
+}
+
+.movement-status-chip {
+  min-width: 0;
+  width: 100%;
+  max-width: 6.7rem;
+  padding: 0.35rem 0.78rem;
+  border: 1px solid transparent;
+  font-size: 0.78rem;
+  text-transform: capitalize;
+}
+
+.movement-status-chip--regular,
+.movement-status-chip--enrolled {
+  color: #047857;
+  background: #ecfdf5;
+  border-color: #a7f3d0;
+}
+
+.movement-status-chip--retired {
+  color: #b45309;
+  background: #fffbeb;
+  border-color: #fcd34d;
+}
+
+.movement-status-chip--suspended {
+  color: #9a3412;
+  background: #fff7ed;
+  border-color: #fed7aa;
+}
+
+.movement-status-chip--transferred,
+.movement-status-chip--graduated {
+  color: #4338ca;
+  background: #eef2ff;
+  border-color: #c7d2fe;
+}
+
+.movement-status-chip--neutral {
+  color: #475569;
+  background: #f8fafc;
+  border-color: #cbd5e1;
+}
+
+.movement-last-cell {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.3rem;
+  width: 100%;
+  min-width: 0;
+}
+
+.movement-type-chip {
+  padding: 0.3rem 0.65rem;
+  border: 1px solid transparent;
+  font-size: 0.74rem;
+}
+
+.movement-type-chip--enrolled {
+  color: #1d4ed8;
+  background: #eff6ff;
+  border-color: #bfdbfe;
+}
+
+.movement-type-chip--transfer {
+  color: #4338ca;
+  background: #eef2ff;
+  border-color: #c7d2fe;
+}
+
+.movement-type-chip--withdraw {
+  color: #b45309;
+  background: #fffbeb;
+  border-color: #fcd34d;
+}
+
+.movement-type-chip--reentry {
+  color: #047857;
+  background: #ecfdf5;
+  border-color: #a7f3d0;
+}
+
+.movement-type-chip--neutral {
+  color: #475569;
+  background: #f8fafc;
+  border-color: #cbd5e1;
+}
+
+.movement-last-cell__route {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  color: #64748b;
+  font-size: 0.78rem;
+  font-weight: 600;
+  line-height: 1.15;
+  max-width: 100%;
+  flex-wrap: wrap;
+  white-space: normal;
+}
+
+.movement-last-cell__arrow {
+  color: #94a3b8;
+}
+
+.movement-actions {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  flex-wrap: wrap;
+  width: 100%;
+  min-width: 0;
+}
+
+.movement-actions :deep(.btn) {
+  padding-right: 0.6rem;
+  padding-left: 0.6rem;
+  white-space: nowrap;
+}
+
+@media (max-width: 767.98px) {
+  .movements-stat-card__content {
+    min-height: 4.75rem;
+  }
+
+  .movement-last-cell,
+  .movement-actions {
+    min-width: 0;
+  }
+
+  .movement-last-cell__route {
+    flex-wrap: wrap;
+    white-space: normal;
+  }
+}
+</style>

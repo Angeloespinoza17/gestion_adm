@@ -18,6 +18,7 @@ class InventoryCategoryController extends Controller
         $active = $request->query('active');
 
         $query = InventoryCategory::query()
+            ->withCount('items')
             ->when($search !== '', function ($query) use ($search) {
                 $query->where(function ($query) use ($search) {
                     $query
@@ -92,4 +93,3 @@ class InventoryCategoryController extends Controller
         ]);
     }
 }
-

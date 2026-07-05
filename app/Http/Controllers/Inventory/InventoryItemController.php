@@ -17,6 +17,7 @@ use App\Services\Inventory\QrValueService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Carbon;
 
 class InventoryItemController extends Controller
 {
@@ -32,12 +33,29 @@ class InventoryItemController extends Controller
                 ->orderBy('name')
                 ->get(['id', 'category_id', 'name', 'slug']),
             'dependencies' => MaintenanceDependency::query()
+                ->physicalSpaces()
+                ->where('active', true)
                 ->orderBy('code')
-                ->get(['id', 'code', 'name', 'distribution', 'sector', 'zone', 'usage']),
+                ->get([
+                    'id',
+                    'code',
+                    'name',
+                    'distribution',
+                    'sector',
+                    'zone',
+                    'usage',
+                    'is_inventory_auditable',
+                    'is_maintenance_location',
+                ]),
             'users' => User::query()
                 ->where('active', true)
+                ->where(function ($query) {
+                    $query
+                        ->where('user_type', 'staff')
+                        ->orWhereNotNull('staff_id');
+                })
                 ->orderBy('name')
-                ->get(['id', 'name', 'email']),
+                ->get(['id', 'name', 'email', 'user_type', 'staff_id']),
             'suppliers' => Supplier::query()
                 ->where('active', true)
                 ->orderBy('name')
@@ -146,6 +164,7 @@ class InventoryItemController extends Controller
         $userId = $request->user()?->id;
         $payload['created_by'] = $userId;
         $payload['updated_by'] = $userId;
+        $payload = $this->normalizeWarrantyPayload($payload);
 
         if (($payload['item_type'] ?? 'asset') === 'consumable' && !isset($payload['stock_quantity'])) {
             $payload['stock_quantity'] = 0;
@@ -197,6 +216,7 @@ class InventoryItemController extends Controller
         unset($payload['photo']);
 
         $payload['updated_by'] = $request->user()?->id;
+        $payload = $this->normalizeWarrantyPayload($payload, $item);
 
         $item->update($payload);
 
@@ -247,5 +267,47 @@ class InventoryItemController extends Controller
             'is_main' => true,
             'uploaded_by' => $uploadedBy,
         ]);
+    }
+
+    private function normalizeWarrantyPayload(array $payload, ?InventoryItem $item = null): array
+    {
+        $touchesWarranty = array_key_exists('has_warranty', $payload)
+            || array_key_exists('warranty_months', $payload)
+            || array_key_exists('purchase_date', $payload);
+
+        if (!$touchesWarranty && $item !== null) {
+            return $payload;
+        }
+
+        $hasWarranty = array_key_exists('has_warranty', $payload)
+            ? filter_var($payload['has_warranty'], FILTER_VALIDATE_BOOLEAN)
+            : (bool) ($item?->has_warranty ?? false);
+
+        $payload['has_warranty'] = $hasWarranty;
+
+        if (!$hasWarranty) {
+            $payload['warranty_months'] = null;
+            $payload['warranty_expires_at'] = null;
+
+            return $payload;
+        }
+
+        $months = array_key_exists('warranty_months', $payload)
+            ? $payload['warranty_months']
+            : $item?->warranty_months;
+
+        $payload['warranty_months'] = $months !== null && $months !== ''
+            ? (int) $months
+            : null;
+
+        $purchaseDate = array_key_exists('purchase_date', $payload)
+            ? $payload['purchase_date']
+            : $item?->purchase_date?->toDateString();
+
+        $payload['warranty_expires_at'] = $payload['warranty_months'] && $purchaseDate
+            ? Carbon::parse($purchaseDate)->addMonthsNoOverflow($payload['warranty_months'])->toDateString()
+            : null;
+
+        return $payload;
     }
 }

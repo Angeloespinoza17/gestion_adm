@@ -50,6 +50,7 @@ class StaffController extends Controller
             'statuses' => Staff::STATUS_OPTIONS,
             'contract_types' => Staff::CONTRACT_TYPE_OPTIONS,
             'workdays' => Staff::WORKDAY_OPTIONS,
+            'maintenance_roles' => Staff::MAINTENANCE_ROLE_OPTIONS,
         ]);
     }
 

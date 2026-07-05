@@ -245,6 +245,12 @@ class StudentEnrollmentLifecycleService
 
     private function ensureEnrollmentEditable(StudentEnrollment $enrollment, ?User $actor = null): void
     {
+        if (!$enrollment->academicYear?->is_active) {
+            throw ValidationException::withMessages([
+                'academic_year_id' => 'Solo puedes modificar matrículas del año académico activo desde este flujo.',
+            ]);
+        }
+
         if ($enrollment->academicYear?->is_closed && !$actor?->isSuperAdmin()) {
             throw ValidationException::withMessages([
                 'academic_year_id' => 'No puedes modificar matrículas de un año académico cerrado.',

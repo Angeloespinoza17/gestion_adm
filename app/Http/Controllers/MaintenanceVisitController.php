@@ -7,6 +7,8 @@ use App\Models\MaintenanceDependency;
 use App\Models\MaintenanceVisit;
 use App\Models\MaintenanceVisitChecklistResponse;
 use App\Models\MaintenanceWorkOrder;
+use App\Models\Staff;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -90,11 +92,22 @@ class MaintenanceVisitController extends Controller
             'visit_types' => ['Inspección', 'Mantención', 'Reunión', 'Otro'],
             'statuses' => ['Programada', 'En progreso', 'Finalizada', 'Cancelada'],
             'review_statuses' => ['OK', 'No OK', 'N/A'],
-            'responsibles' => $this->people(),
+            'responsibles' => $this->responsibles(),
+            'maintenance_assignees' => $this->maintenanceAssigneeCatalog(),
             'dependencies' => MaintenanceDependency::query()
+                ->maintenanceLocations()
                 ->where('active', true)
                 ->orderBy('code')
-                ->get(['id', 'code', 'name', 'distribution', 'sector', 'zone', 'is_reservable']),
+                ->get([
+                    'id',
+                    'code',
+                    'name',
+                    'distribution',
+                    'sector',
+                    'zone',
+                    'is_reservable',
+                    'is_maintenance_location',
+                ]),
         ]);
     }
 
@@ -232,8 +245,15 @@ class MaintenanceVisitController extends Controller
         $statuses = ['Programada', 'En progreso', 'Finalizada', 'Cancelada'];
 
         return $request->validate([
-            'maintenance_dependency_id' => ['required', 'integer', 'exists:maintenance_dependencies,id'],
-            'responsible' => ['required', 'string', 'max:255'],
+            'maintenance_dependency_id' => [
+                'required',
+                'integer',
+                Rule::exists('maintenance_dependencies', 'id')
+                    ->where('dependency_kind', MaintenanceDependency::KIND_SPACE)
+                    ->where('is_maintenance_location', true)
+                    ->where('active', true),
+            ],
+            'responsible' => ['required', 'string', 'max:255', Rule::in($this->allowedResponsibles($request))],
             'visit_date' => ['required', 'date'],
             'visit_time' => ['nullable', 'date_format:H:i'],
             'visit_type' => ['required', 'string', Rule::in($visitTypes)],
@@ -242,24 +262,71 @@ class MaintenanceVisitController extends Controller
         ]);
     }
 
-    private function people(): array
+    private function responsibles(): array
     {
-        return [
-            'Ivan',
-            'Oscar',
-            'Carlos cayul',
-            'Laura davinson',
-            'Lucia pailla',
-            'Lucila valladares',
-            'Llineth',
-            'Maria paz',
-            'Pilar cocio',
-            'Sofia navarro',
-            'Javier casas',
-            'Ariel Villanueva',
-            'Manuel Lara',
-            'Pedro',
-            'Jeaqueline sandoval',
-        ];
+        return $this->maintenanceAssigneeQuery()
+            ->pluck('full_name')
+            ->values()
+            ->all();
+    }
+
+    private function allowedResponsibles(Request $request): array
+    {
+        $responsibles = $this->responsibles();
+
+        $currentVisit = collect($request->route()?->parameters() ?? [])
+            ->first(fn ($parameter) => $parameter instanceof MaintenanceVisit);
+
+        if ($currentVisit instanceof MaintenanceVisit) {
+            $responsibles[] = $currentVisit->responsible;
+        }
+
+        return collect($responsibles)
+            ->filter()
+            ->unique()
+            ->values()
+            ->all();
+    }
+
+    private function maintenanceAssigneeQuery(): Builder
+    {
+        return Staff::query()
+            ->with('cargo:id,name,slug')
+            ->where('active', true)
+            ->where('can_receive_maintenance_orders', true)
+            ->orderBy('full_name');
+    }
+
+    private function maintenanceAssigneeCatalog(): array
+    {
+        return $this->maintenanceAssigneeQuery()
+            ->get([
+                'id',
+                'full_name',
+                'rut',
+                'cargo_id',
+                'maintenance_role',
+                'can_receive_maintenance_orders',
+            ])
+            ->map(fn (Staff $staff) => [
+                'id' => $staff->id,
+                'full_name' => $staff->full_name,
+                'rut' => $staff->rut,
+                'cargo' => $staff->cargo ? [
+                    'id' => $staff->cargo->id,
+                    'name' => $staff->cargo->name,
+                    'slug' => $staff->cargo->slug,
+                ] : null,
+                'maintenance_role' => $staff->maintenance_role,
+                'maintenance_role_label' => $staff->maintenance_role_label,
+                'label' => trim(sprintf(
+                    '%s%s',
+                    $staff->full_name,
+                    $staff->maintenance_role_label ? ' · ' . $staff->maintenance_role_label : ''
+                )),
+                'value' => $staff->full_name,
+            ])
+            ->values()
+            ->all();
     }
 }

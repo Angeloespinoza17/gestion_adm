@@ -4,6 +4,7 @@ namespace Database\Seeders\Modules;
 
 use App\Models\DependencyReservation;
 use App\Models\DependencyReservationCollaborator;
+use App\Models\MaintenanceDependency;
 use Illuminate\Support\Str;
 use Database\Seeders\SchoolDependencySeeder;
 use Database\Seeders\Support\ModuleSeeder;
@@ -100,6 +101,9 @@ class SpacesModuleSeeder extends ModuleSeeder
                 'responsible_staff_id' => $responsible->id,
                 'requires_approval' => $config['requires_approval'],
                 'is_reservable' => $config['is_reservable'],
+                'dependency_kind' => MaintenanceDependency::KIND_SPACE,
+                'is_inventory_auditable' => true,
+                'is_maintenance_location' => true,
                 'available_equipment' => $config['available_equipment'] ?? $dependency->available_equipment,
                 'notes' => $config['notes'] ?? $dependency->notes,
             ]);

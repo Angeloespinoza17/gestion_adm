@@ -195,6 +195,8 @@ class StaffModuleSeeder extends ModuleSeeder
                     'contract_hours' => 44,
                     'professional_title' => 'Técnico en electricidad',
                     'specialty' => 'Infraestructura y mantención',
+                    'can_receive_maintenance_orders' => true,
+                    'maintenance_role' => 'encargado_mantencion',
                 ]),
             ],
             [

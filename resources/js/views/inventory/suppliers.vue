@@ -165,7 +165,7 @@ export default {
         </template>
         <template #cell(actions)="{ item }">
           <div class="d-flex gap-2">
-            <BButton size="sm" variant="info" @click="openEdit(item)">Editar</BButton>
+            <BButton size="sm" variant="warning" @click="openEdit(item)">Editar</BButton>
             <BButton size="sm" variant="danger" @click="remove(item)">Eliminar</BButton>
           </div>
         </template>

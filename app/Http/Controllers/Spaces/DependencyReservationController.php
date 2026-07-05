@@ -25,7 +25,7 @@ class DependencyReservationController extends Controller
 
         return response()->json([
             'dependencies' => MaintenanceDependency::query()
-                ->where('is_reservable', true)
+                ->reservableSpaces()
                 ->with([
                     'type:id,name,color',
                     'responsibleStaff:id,full_name',
@@ -151,7 +151,7 @@ class DependencyReservationController extends Controller
     public function store(StoreDependencyReservationRequest $request): JsonResponse
     {
         $dependency = MaintenanceDependency::query()
-            ->where('is_reservable', true)
+            ->reservableSpaces()
             ->findOrFail($request->integer('maintenance_dependency_id'));
         $this->assertDependencyReservable($dependency);
         $collaboratorStaffIds = collect($request->input('collaborator_staff_ids', []))->map(fn ($id) => (int) $id)->all();
@@ -216,7 +216,7 @@ class DependencyReservationController extends Controller
         $this->assertReservationEditable($request, $dependencyReservation);
 
         $dependency = MaintenanceDependency::query()
-            ->where('is_reservable', true)
+            ->reservableSpaces()
             ->findOrFail($request->integer('maintenance_dependency_id'));
         $this->assertDependencyReservable($dependency);
         $collaboratorStaffIds = collect($request->input('collaborator_staff_ids', []))->map(fn ($id) => (int) $id)->all();
@@ -423,6 +423,15 @@ class DependencyReservationController extends Controller
 
     private function assertDependencyReservable(MaintenanceDependency $dependency): void
     {
+        if (
+            $dependency->dependency_kind !== MaintenanceDependency::KIND_SPACE
+            || !$dependency->is_reservable
+        ) {
+            throw ValidationException::withMessages([
+                'maintenance_dependency_id' => 'La dependencia no está habilitada para reservas.',
+            ]);
+        }
+
         if (
             in_array($dependency->availability_status, [
                 MaintenanceDependency::AVAILABILITY_UNAVAILABLE,

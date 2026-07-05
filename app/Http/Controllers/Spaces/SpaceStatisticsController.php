@@ -27,7 +27,7 @@ class SpaceStatisticsController extends Controller
 
         return response()->json([
             'dependencies' => MaintenanceDependency::query()
-                ->where('is_reservable', true)
+                ->reservableSpaces()
                 ->orderBy('name')
                 ->get(['id', 'name', 'dependency_type_id', 'calendar_color', 'capacity_max']),
             'dependency_types' => DependencyType::query()
@@ -294,7 +294,9 @@ class SpaceStatisticsController extends Controller
             ->values();
 
         if ($selectedReservations->isEmpty()) {
-            $dependency = MaintenanceDependency::query()->find($dependencyId);
+            $dependency = MaintenanceDependency::query()
+                ->reservableSpaces()
+                ->find($dependencyId);
 
             return $dependency ? [
                 'name' => $dependency->name,

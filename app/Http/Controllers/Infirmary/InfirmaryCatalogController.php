@@ -47,6 +47,7 @@ class InfirmaryCatalogController extends Controller
                 ->orderBy('display_name')
                 ->get(['id', 'academic_year_id', 'display_name', 'section_name']),
             'dependencies' => MaintenanceDependency::query()
+                ->physicalSpaces()
                 ->where('active', true)
                 ->orderBy('name')
                 ->get(['id', 'code', 'name', 'location', 'floor_sector']),

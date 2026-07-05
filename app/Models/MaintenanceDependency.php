@@ -11,11 +11,15 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Support\Facades\Storage;
 
 class MaintenanceDependency extends Model
 {
     use HasFactory;
+
+    public const KIND_SPACE = 'space';
+    public const KIND_TECHNICAL_ASSET = 'technical_asset';
 
     public const AVAILABILITY_AVAILABLE = 'disponible';
     public const AVAILABILITY_UNAVAILABLE = 'no_disponible';
@@ -27,6 +31,8 @@ class MaintenanceDependency extends Model
     ];
 
     protected $fillable = [
+        'dependency_kind',
+        'parent_dependency_id',
         'dependency_type_id',
         'code',
         'name',
@@ -52,6 +58,8 @@ class MaintenanceDependency extends Model
         'calendar_color',
         'requires_approval',
         'is_reservable',
+        'is_inventory_auditable',
+        'is_maintenance_location',
     ];
 
     protected $casts = [
@@ -60,6 +68,8 @@ class MaintenanceDependency extends Model
         'capacity_max' => 'integer',
         'requires_approval' => 'boolean',
         'is_reservable' => 'boolean',
+        'is_inventory_auditable' => 'boolean',
+        'is_maintenance_location' => 'boolean',
     ];
 
     protected function serializeDate(DateTimeInterface $date): string
@@ -83,9 +93,50 @@ class MaintenanceDependency extends Model
         return $url;
     }
 
+    public function scopePhysicalSpaces($query)
+    {
+        return $query->where('dependency_kind', self::KIND_SPACE);
+    }
+
+    public function scopeTechnicalAssets($query)
+    {
+        return $query->where('dependency_kind', self::KIND_TECHNICAL_ASSET);
+    }
+
+    public function scopeReservableSpaces($query)
+    {
+        return $query
+            ->physicalSpaces()
+            ->where('is_reservable', true);
+    }
+
+    public function scopeInventoryAuditableSpaces($query)
+    {
+        return $query
+            ->physicalSpaces()
+            ->where('is_inventory_auditable', true);
+    }
+
+    public function scopeMaintenanceLocations($query)
+    {
+        return $query
+            ->physicalSpaces()
+            ->where('is_maintenance_location', true);
+    }
+
     public function type(): BelongsTo
     {
         return $this->belongsTo(DependencyType::class, 'dependency_type_id');
+    }
+
+    public function parentDependency(): BelongsTo
+    {
+        return $this->belongsTo(self::class, 'parent_dependency_id');
+    }
+
+    public function technicalAreas(): HasMany
+    {
+        return $this->hasMany(self::class, 'parent_dependency_id');
     }
 
     public function responsibleStaff(): BelongsTo
@@ -96,6 +147,22 @@ class MaintenanceDependency extends Model
     public function workOrders(): HasMany
     {
         return $this->hasMany(MaintenanceWorkOrder::class);
+    }
+
+    public function inventoryItems(): HasMany
+    {
+        return $this->hasMany(InventoryItem::class, 'dependency_id');
+    }
+
+    public function inventoryAudits(): HasMany
+    {
+        return $this->hasMany(InventoryDependencyAudit::class, 'maintenance_dependency_id');
+    }
+
+    public function latestInventoryAudit(): HasOne
+    {
+        return $this->hasOne(InventoryDependencyAudit::class, 'maintenance_dependency_id')
+            ->latestOfMany('audited_at');
     }
 
     public function reservations(): HasMany

@@ -120,7 +120,7 @@ class BibliotecaSeeder extends Seeder
             [
                 'name' => 'Biblioteca Escolar',
                 'frontend_route' => null,
-                'icon' => 'bx-book-reader',
+                'icon' => 'bx-book-open',
                 'sort_order' => 85,
                 'active' => true,
                 'parent_id' => null,

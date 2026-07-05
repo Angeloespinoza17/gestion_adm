@@ -11,6 +11,14 @@ const emptyForm = () => ({
   type: "parvularia",
 });
 
+const TYPE_CHIP_CLASS_BY_TYPE = {
+  parvularia: "levels-type-chip--parvularia",
+  basica: "levels-type-chip--basica",
+  media: "levels-type-chip--media",
+  tecnico: "levels-type-chip--tecnico",
+  diferencial: "levels-type-chip--diferencial",
+};
+
 export default {
   components: { Layout, LoadingState },
   data() {
@@ -149,6 +157,16 @@ export default {
     typeLabel(level) {
       return this.typeOptions.find((option) => option.value === level.type)?.label || level.type || "-";
     },
+    typeChipClass(level) {
+      return TYPE_CHIP_CLASS_BY_TYPE[this.normalizeType(level.type)] || "levels-type-chip--neutral";
+    },
+    normalizeType(value) {
+      return String(value || "")
+        .trim()
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .toLowerCase();
+    },
     showErrorAlert(text) {
       return Swal.fire({ title: "Error", text, icon: "error" });
     },
@@ -206,7 +224,7 @@ export default {
             <LoadingState message="Cargando niveles..." compact />
           </template>
           <template #cell(type)="{ item }">
-            <BBadge variant="light">{{ typeLabel(item) }}</BBadge>
+            <span class="levels-type-chip" :class="typeChipClass(item)">{{ typeLabel(item) }}</span>
           </template>
           <template #cell(active_students_count)="{ item }">
             <span class="levels-counter">{{ item.active_students_count || 0 }}</span>
@@ -301,6 +319,56 @@ export default {
   justify-content: center;
   font-weight: 600;
   color: #495057;
+}
+
+.levels-type-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 76px;
+  padding: 0.28rem 0.75rem;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  line-height: 1.15;
+  white-space: nowrap;
+}
+
+.levels-type-chip--parvularia {
+  color: #9a3412;
+  background: #fff7ed;
+  border-color: #fed7aa;
+}
+
+.levels-type-chip--basica {
+  color: #1d4ed8;
+  background: #eff6ff;
+  border-color: #bfdbfe;
+}
+
+.levels-type-chip--media {
+  color: #047857;
+  background: #ecfdf5;
+  border-color: #a7f3d0;
+}
+
+.levels-type-chip--tecnico {
+  color: #6d28d9;
+  background: #f5f3ff;
+  border-color: #ddd6fe;
+}
+
+.levels-type-chip--diferencial {
+  color: #be185d;
+  background: #fdf2f8;
+  border-color: #fbcfe8;
+}
+
+.levels-type-chip--neutral {
+  color: #475569;
+  background: #f8fafc;
+  border-color: #cbd5e1;
 }
 
 .levels-action-btn {

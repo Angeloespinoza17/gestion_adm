@@ -81,7 +81,7 @@ const routes = [
     },
     {
         path: '/maintenance/dependencies',
-        meta: { authRequired: true, title: 'Activos técnicos', permission: 'ver_mantencion' },
+        meta: { authRequired: true, title: 'Áreas técnicas', permission: 'ver_mantencion' },
         component: () => import('../views/maintenance/dependencies.vue'),
     },
     {
@@ -731,6 +731,11 @@ const routes = [
         path: '/inventory/items/:id',
         meta: { authRequired: true, title: 'Inventario · Ficha', permission: 'ver_inventario' },
         component: () => import('../views/inventory/item-show.vue'),
+    },
+    {
+        path: '/inventory/management',
+        meta: { authRequired: true, title: 'Inventario · Gestión', permission: 'ver_inventario' },
+        component: () => import('../views/inventory/management.vue'),
     },
     {
         path: '/inventory/categories',

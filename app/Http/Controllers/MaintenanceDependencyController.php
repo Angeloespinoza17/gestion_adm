@@ -24,10 +24,12 @@ class MaintenanceDependencyController extends Controller
         $responsibleStaffId = $request->query('responsible_staff_id');
         $status = trim((string) $request->query('availability_status'));
         $active = $request->query('active');
+        $parentDependencyId = $request->query('parent_dependency_id');
 
         $dependencies = $this->queryForContext($request)
             ->with([
                 'type:id,name,color',
+                'parentDependency:id,code,name,distribution,sector,zone',
                 'responsibleStaff:id,full_name,rut',
             ])
             ->withCount([
@@ -50,10 +52,22 @@ class MaintenanceDependencyController extends Controller
                         ->orWhere('usage', 'like', "%{$search}%")
                         ->orWhere('available_equipment', 'like', "%{$search}%")
                         ->orWhere('notes', 'like', "%{$search}%")
-                        ->orWhere('observations', 'like', "%{$search}%");
+                        ->orWhere('observations', 'like', "%{$search}%")
+                        ->orWhereHas('parentDependency', function ($query) use ($search) {
+                            $query
+                                ->where('code', 'like', "%{$search}%")
+                                ->orWhere('name', 'like', "%{$search}%")
+                                ->orWhere('distribution', 'like', "%{$search}%")
+                                ->orWhere('sector', 'like', "%{$search}%")
+                                ->orWhere('zone', 'like', "%{$search}%");
+                        });
                 });
             })
             ->when($typeId, fn ($query) => $query->where('dependency_type_id', $typeId))
+            ->when(
+                $this->isMaintenanceContext($request) && $parentDependencyId !== null && $parentDependencyId !== '',
+                fn ($query) => $query->where('parent_dependency_id', $parentDependencyId)
+            )
             ->when($responsibleStaffId, fn ($query) => $query->where('responsible_staff_id', $responsibleStaffId))
             ->when($status !== '', fn ($query) => $query->where('availability_status', $status));
 
@@ -76,8 +90,7 @@ class MaintenanceDependencyController extends Controller
         $image = $request->file('image');
         $approverIds = array_map('intval', $payload['approver_user_ids'] ?? []);
         unset($payload['image'], $payload['approver_user_ids']);
-        $payload['is_reservable'] = $this->isSpacesContext($request);
-        $payload['requires_approval'] = $payload['is_reservable'] ? true : (bool) ($payload['requires_approval'] ?? false);
+        $payload = $this->normalizePayloadForContext($request, $payload);
 
         $dependency = MaintenanceDependency::query()->create($payload);
         $this->syncApprovers($dependency, $approverIds);
@@ -87,7 +100,9 @@ class MaintenanceDependencyController extends Controller
         }
 
         return response()->json([
-            'message' => 'Dependencia creada correctamente.',
+            'message' => $this->isMaintenanceContext($request)
+                ? 'Área técnica creada correctamente.'
+                : 'Dependencia creada correctamente.',
             'data' => $this->loadDependency($dependency->fresh()),
         ], 201);
     }
@@ -109,8 +124,7 @@ class MaintenanceDependencyController extends Controller
         $image = $request->file('image');
         $approverIds = array_map('intval', $payload['approver_user_ids'] ?? []);
         unset($payload['image'], $payload['approver_user_ids']);
-        $payload['is_reservable'] = $this->isSpacesContext($request);
-        $payload['requires_approval'] = $payload['is_reservable'] ? true : (bool) ($payload['requires_approval'] ?? false);
+        $payload = $this->normalizePayloadForContext($request, $payload);
 
         $maintenanceDependency->update($payload);
         $this->syncApprovers($maintenanceDependency, $approverIds);
@@ -120,7 +134,9 @@ class MaintenanceDependencyController extends Controller
         }
 
         return response()->json([
-            'message' => 'Dependencia actualizada correctamente.',
+            'message' => $this->isMaintenanceContext($request)
+                ? 'Área técnica actualizada correctamente.'
+                : 'Dependencia actualizada correctamente.',
             'data' => $this->loadDependency($maintenanceDependency->fresh()),
         ]);
     }
@@ -145,7 +161,9 @@ class MaintenanceDependencyController extends Controller
         Storage::disk('public')->deleteDirectory(sprintf('dependencies/%d', $maintenanceDependency->id));
 
         return response()->json([
-            'message' => 'Dependencia eliminada correctamente.',
+            'message' => $this->isMaintenanceContext(request())
+                ? 'Área técnica eliminada correctamente.'
+                : 'Dependencia eliminada correctamente.',
         ]);
     }
 
@@ -170,6 +188,11 @@ class MaintenanceDependencyController extends Controller
             'sectors' => $this->distinct(request(), 'sector'),
             'zones' => $this->distinct(request(), 'zone'),
             'usages' => $this->distinct(request(), 'usage'),
+            'physical_dependencies' => MaintenanceDependency::query()
+                ->physicalSpaces()
+                ->where('active', true)
+                ->orderBy('code')
+                ->get(['id', 'code', 'name', 'distribution', 'sector', 'zone']),
             'statuses' => [
                 ['value' => MaintenanceDependency::AVAILABILITY_AVAILABLE, 'label' => 'Disponible'],
                 ['value' => MaintenanceDependency::AVAILABILITY_UNAVAILABLE, 'label' => 'No disponible'],
@@ -178,6 +201,8 @@ class MaintenanceDependencyController extends Controller
             ],
             'total' => $this->queryForContext(request())->count(),
             'active' => $this->queryForContext(request())->where('active', true)->count(),
+            'associated' => $this->queryForContext(request())->whereNotNull('parent_dependency_id')->count(),
+            'unassociated' => $this->queryForContext(request())->whereNull('parent_dependency_id')->count(),
         ]);
     }
 
@@ -188,7 +213,7 @@ class MaintenanceDependencyController extends Controller
 
         return response()->json([
             'dependencies' => MaintenanceDependency::query()
-                ->where('is_reservable', true)
+                ->reservableSpaces()
                 ->with([
                     'type:id,name,color',
                     'responsibleStaff:id,full_name,rut',
@@ -232,7 +257,11 @@ class MaintenanceDependencyController extends Controller
 
     public function updateApprovers(Request $request, MaintenanceDependency $maintenanceDependency): JsonResponse
     {
-        abort_unless($maintenanceDependency->is_reservable, 404);
+        abort_unless(
+            $maintenanceDependency->dependency_kind === MaintenanceDependency::KIND_SPACE
+            && $maintenanceDependency->is_reservable,
+            404
+        );
 
         $payload = $request->validate([
             'approver_user_ids' => ['nullable', 'array'],
@@ -271,6 +300,7 @@ class MaintenanceDependencyController extends Controller
     {
         return $dependency->load([
             'type:id,name,color,description',
+            'parentDependency:id,code,name,distribution,sector,zone',
             'responsibleStaff:id,full_name,rut',
             'approvers:id,name,email,staff_id',
             'approvers.staff:id,full_name,rut',
@@ -295,11 +325,11 @@ class MaintenanceDependencyController extends Controller
         $query = MaintenanceDependency::query();
 
         if ($this->isSpacesContext($request)) {
-            return $query->where('is_reservable', true);
+            return $query->physicalSpaces();
         }
 
         if ($this->isMaintenanceContext($request)) {
-            return $query->where('is_reservable', false);
+            return $query->technicalAssets();
         }
 
         return $query;
@@ -317,13 +347,52 @@ class MaintenanceDependencyController extends Controller
 
     private function ensureDependencyVisibleInContext(Request $request, MaintenanceDependency $dependency): void
     {
-        if ($this->isSpacesContext($request) && !$dependency->is_reservable) {
+        if (
+            $this->isSpacesContext($request)
+            && $dependency->dependency_kind !== MaintenanceDependency::KIND_SPACE
+        ) {
             abort(404);
         }
 
-        if ($this->isMaintenanceContext($request) && $dependency->is_reservable) {
+        if (
+            $this->isMaintenanceContext($request)
+            && $dependency->dependency_kind !== MaintenanceDependency::KIND_TECHNICAL_ASSET
+        ) {
             abort(404);
         }
+    }
+
+    private function normalizePayloadForContext(Request $request, array $payload): array
+    {
+        if ($this->isSpacesContext($request)) {
+            $isReservable = (bool) ($payload['is_reservable'] ?? false);
+
+            $payload['dependency_kind'] = MaintenanceDependency::KIND_SPACE;
+            $payload['parent_dependency_id'] = null;
+            $payload['is_reservable'] = $isReservable;
+            $payload['requires_approval'] = $isReservable
+                ? (bool) ($payload['requires_approval'] ?? true)
+                : false;
+            $payload['is_inventory_auditable'] = (bool) ($payload['is_inventory_auditable'] ?? true);
+            $payload['is_maintenance_location'] = (bool) ($payload['is_maintenance_location'] ?? true);
+
+            return $payload;
+        }
+
+        if ($this->isMaintenanceContext($request)) {
+            $payload['dependency_kind'] = MaintenanceDependency::KIND_TECHNICAL_ASSET;
+            $payload['is_reservable'] = false;
+            $payload['requires_approval'] = false;
+            $payload['is_inventory_auditable'] = false;
+            $payload['is_maintenance_location'] = false;
+            $payload['parent_dependency_id'] = $payload['parent_dependency_id'] ?? null;
+
+            return $payload;
+        }
+
+        $payload['dependency_kind'] = $payload['dependency_kind'] ?? MaintenanceDependency::KIND_SPACE;
+
+        return $payload;
     }
 
     private function storeImage(MaintenanceDependency $dependency, UploadedFile $image): void

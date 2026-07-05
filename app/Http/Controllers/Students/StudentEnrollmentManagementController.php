@@ -23,13 +23,17 @@ class StudentEnrollmentManagementController extends Controller
     public function index(Request $request): JsonResponse
     {
         $activeYearId = AcademicYear::query()->where('is_active', true)->value('id');
-        $academicYearId = $request->query('academic_year_id') ?: $activeYearId;
+        $academicYearId = $activeYearId;
         $courseSectionId = $request->query('course_section_id');
         $status = trim((string) $request->query('enrollment_status'));
         $search = trim((string) $request->query('search'));
 
         $baseQuery = StudentEnrollment::query()
-            ->when($academicYearId, fn ($query) => $query->where('academic_year_id', $academicYearId))
+            ->when(
+                $academicYearId,
+                fn ($query) => $query->where('academic_year_id', $academicYearId),
+                fn ($query) => $query->whereRaw('1 = 0'),
+            )
             ->when($courseSectionId, fn ($query) => $query->where('course_section_id', $courseSectionId))
             ->when($status !== '', fn ($query) => $query->where('enrollment_status', $status))
             ->when($search !== '', function ($query) use ($search) {
@@ -59,8 +63,8 @@ class StudentEnrollmentManagementController extends Controller
                     ->orderByDesc('effective_date')
                     ->orderByDesc('id'),
             ])
-            ->orderBy('snapshot_course_display_name')
-            ->orderBy('id')
+            ->orderByDesc('student_enrollments.updated_at')
+            ->orderByDesc('student_enrollments.id')
             ->paginate((int) $request->query('per_page', 20));
 
         return response()->json([

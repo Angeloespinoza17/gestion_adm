@@ -3,6 +3,8 @@
 namespace Database\Seeders\Modules;
 
 use App\Models\MaintenanceAnnualPlan;
+use App\Models\InventoryItem;
+use App\Models\MaintenanceDependency;
 use App\Models\MaintenanceVisit;
 use App\Models\MaintenanceVisitChecklistResponse;
 use App\Models\MaintenanceWorkOrder;
@@ -201,10 +203,14 @@ class MaintenanceModuleSeeder extends ModuleSeeder
 
     private function seedAnnualPlan(): void
     {
+        $technicalArea = $this->ensureAnnualPlanTechnicalArea();
+
         $plans = [
             [
                 'title' => 'Revisión tablero eléctrico laboratorio',
                 'dependency' => 'DEP-003',
+                'item_type' => 'dependency_component',
+                'component_name' => 'Tablero eléctrico',
                 'planned_year' => 2026,
                 'planned_month' => 7,
                 'category' => 'Eléctrica',
@@ -215,22 +221,26 @@ class MaintenanceModuleSeeder extends ModuleSeeder
                 'description' => 'Chequeo preventivo de tablero, enchufes y canalización.',
             ],
             [
-                'title' => 'Inspección extintores auditorio',
+                'title' => 'Mantención anual extintor CO2 auditorio',
                 'dependency' => 'DEP-010',
+                'item_type' => 'inventory_item',
+                'inventory_code' => 'SEG-0001',
                 'planned_year' => 2026,
-                'planned_month' => 6,
-                'category' => 'Seguridad',
+                'planned_month' => 8,
+                'category' => 'Extintores',
                 'responsible' => 'Nicolás Pérez Salazar',
-                'frequency' => 'Semestral',
-                'status' => 'Cumplida',
-                'scheduled_date' => '2026-06-09',
-                'completed_date' => '2026-06-09',
-                'description' => 'Validación de vigencia, sellos y accesibilidad.',
-                'notes' => 'Sin observaciones críticas.',
+                'frequency' => 'Anual',
+                'status' => 'Programada',
+                'scheduled_date' => '2026-08-20',
+                'last_maintenance_date' => '2025-08-20',
+                'alert_days' => 45,
+                'description' => 'Recarga, revisión de sello, manómetro, ubicación y señalética.',
             ],
             [
                 'title' => 'Mantención cubierta gimnasio',
                 'dependency' => 'DEP-007',
+                'item_type' => 'dependency_component',
+                'component_name' => 'Cubierta',
                 'planned_year' => 2026,
                 'planned_month' => 7,
                 'category' => 'Infraestructura',
@@ -243,6 +253,7 @@ class MaintenanceModuleSeeder extends ModuleSeeder
             [
                 'title' => 'Control sanitario enfermería',
                 'dependency' => 'DEP-014',
+                'item_type' => 'dependency',
                 'planned_year' => 2026,
                 'planned_month' => 8,
                 'category' => 'General',
@@ -255,6 +266,7 @@ class MaintenanceModuleSeeder extends ModuleSeeder
             [
                 'title' => 'Limpieza profunda CRA y biblioteca',
                 'dependency' => 'DEP-018',
+                'item_type' => 'dependency',
                 'planned_year' => 2026,
                 'planned_month' => 6,
                 'category' => 'Aseo',
@@ -265,17 +277,62 @@ class MaintenanceModuleSeeder extends ModuleSeeder
                 'description' => 'Rutina intensiva de limpieza y sanitización de estanterías.',
                 'notes' => 'Pendiente reprogramación por actividad institucional.',
             ],
+            [
+                'title' => 'Revisión ventanas biblioteca',
+                'dependency' => 'DEP-018',
+                'item_type' => 'dependency_component',
+                'component_name' => 'Ventanas',
+                'planned_year' => 2026,
+                'planned_month' => 7,
+                'category' => 'Elementos constructivos',
+                'responsible' => 'Ricardo Fuentes Leal',
+                'frequency' => 'Semestral',
+                'status' => 'Programada',
+                'scheduled_date' => '2026-07-22',
+                'last_maintenance_date' => '2026-01-22',
+                'alert_days' => 20,
+                'description' => 'Revisión de cierres, vidrios, sellos y apertura segura.',
+            ],
+            [
+                'title' => 'Mantención caja de redes biblioteca',
+                'dependency' => 'DEP-018',
+                'item_type' => 'technical_area',
+                'technical_area_id' => $technicalArea->id,
+                'planned_year' => 2026,
+                'planned_month' => 9,
+                'category' => 'Redes/Informática',
+                'responsible' => 'Ricardo Fuentes Leal',
+                'frequency' => 'Semestral',
+                'status' => 'Programada',
+                'scheduled_date' => '2026-09-10',
+                'last_maintenance_date' => '2026-03-10',
+                'alert_days' => 30,
+                'description' => 'Ordenamiento, limpieza, revisión de patch cords y etiquetado.',
+            ],
         ];
 
         foreach ($plans as $plan) {
+            $dependency = $this->dependency($plan['dependency']);
+            $inventoryItem = isset($plan['inventory_code'])
+                ? InventoryItem::query()->where('code', $plan['inventory_code'])->first()
+                : null;
+            $itemType = $plan['item_type'] ?? 'dependency';
+            $resolvedItemType = $inventoryItem ? $itemType : ($itemType === 'inventory_item' ? 'dependency_component' : $itemType);
+
             MaintenanceAnnualPlan::query()->updateOrCreate(
                 [
-                    'maintenance_dependency_id' => $this->dependency($plan['dependency'])->id,
+                    'maintenance_dependency_id' => $dependency->id,
                     'planned_year' => $plan['planned_year'],
                     'planned_month' => $plan['planned_month'],
                     'title' => $plan['title'],
                 ],
                 [
+                    'item_type' => $resolvedItemType,
+                    'inventory_item_id' => $inventoryItem?->id,
+                    'technical_area_id' => $resolvedItemType === 'technical_area' ? ($plan['technical_area_id'] ?? null) : null,
+                    'component_name' => $resolvedItemType === 'dependency_component'
+                        ? ($plan['component_name'] ?? $plan['title'])
+                        : null,
                     'category' => $plan['category'],
                     'responsible' => $plan['responsible'],
                     'frequency' => $plan['frequency'],
@@ -283,9 +340,43 @@ class MaintenanceModuleSeeder extends ModuleSeeder
                     'description' => $plan['description'] ?? null,
                     'scheduled_date' => $plan['scheduled_date'] ?? null,
                     'completed_date' => $plan['completed_date'] ?? null,
+                    'last_maintenance_date' => $plan['last_maintenance_date'] ?? $plan['completed_date'] ?? null,
+                    'alert_days' => $plan['alert_days'] ?? 30,
+                    'alert_enabled' => $plan['alert_enabled'] ?? true,
                     'notes' => $plan['notes'] ?? null,
                 ],
             );
         }
+    }
+
+    private function ensureAnnualPlanTechnicalArea(): MaintenanceDependency
+    {
+        $parent = $this->dependency('DEP-018');
+
+        return MaintenanceDependency::query()->updateOrCreate(
+            ['code' => 'AT-BIB-RED-01'],
+            [
+                'dependency_kind' => MaintenanceDependency::KIND_TECHNICAL_ASSET,
+                'parent_dependency_id' => $parent->id,
+                'name' => 'Caja de redes biblioteca',
+                'description' => 'Punto técnico para red y conectividad de biblioteca.',
+                'location' => $parent->location,
+                'floor_sector' => $parent->floor_sector,
+                'distribution' => $parent->distribution ?: 'Sector CRA',
+                'sector' => $parent->sector ?: 'Primer piso',
+                'zone' => 'Zona técnica',
+                'usage' => 'Redes',
+                'distribution_code' => 'AT',
+                'floor_code' => 'BIB',
+                'dependency_code' => 'RED',
+                'numbering' => 1,
+                'active' => true,
+                'calendar_color' => '#5b74df',
+                'requires_approval' => false,
+                'is_reservable' => false,
+                'is_inventory_auditable' => false,
+                'is_maintenance_location' => false,
+            ],
+        );
     }
 }

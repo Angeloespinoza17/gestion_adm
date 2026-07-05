@@ -143,6 +143,7 @@ export default {
         :fields="[
           { key: 'name', label: 'Nombre' },
           { key: 'code_prefix', label: 'Prefijo' },
+          { key: 'items_count', label: 'Bienes' },
           { key: 'active', label: 'Activa' },
           { key: 'actions', label: 'Acciones' },
         ]"
@@ -156,9 +157,14 @@ export default {
             {{ item.active ? "Sí" : "No" }}
           </BBadge>
         </template>
+        <template #cell(items_count)="{ item }">
+          <span class="inventory-category-count">
+            {{ item.items_count ?? 0 }}
+          </span>
+        </template>
         <template #cell(actions)="{ item }">
           <div class="d-flex gap-2">
-            <BButton size="sm" variant="info" @click="openEdit(item)">Editar</BButton>
+            <BButton size="sm" variant="warning" @click="openEdit(item)">Editar</BButton>
             <BButton size="sm" variant="danger" @click="remove(item)">Eliminar</BButton>
           </div>
         </template>
@@ -209,3 +215,21 @@ export default {
     </BModal>
   </Layout>
 </template>
+
+<style scoped>
+.inventory-category-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 2.25rem;
+  min-height: 1.65rem;
+  padding: 0.24rem 0.6rem;
+  border: 1px solid #bfdbfe;
+  border-radius: 999px;
+  color: #1d4ed8;
+  background: #eff6ff;
+  font-size: 0.78rem;
+  font-weight: 650;
+  line-height: 1;
+}
+</style>

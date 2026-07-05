@@ -68,7 +68,7 @@ export const menuItems = [
         subItems: [
             {
                 id: 901,
-                label: "Activos técnicos",
+                label: "Áreas técnicas",
                 link: "/maintenance/dependencies",
                 parentId: 900
             },
@@ -272,7 +272,7 @@ export const menuItems = [
     {
         id: 9070,
         label: "Portería",
-        icon: "bx-door-open",
+        icon: "bx-building-house",
         subItems: [
             {
                 id: 9071,

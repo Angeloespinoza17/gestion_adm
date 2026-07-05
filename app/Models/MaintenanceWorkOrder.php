@@ -17,6 +17,9 @@ class MaintenanceWorkOrder extends Model
     protected $fillable = [
         'source_key',
         'maintenance_dependency_id',
+        'technical_area_id',
+        'inventory_item_id',
+        'dependency_component',
         'location_code',
         'location_distribution',
         'location_sector',
@@ -64,5 +67,10 @@ class MaintenanceWorkOrder extends Model
     public function inventoryItem()
     {
         return $this->belongsTo(InventoryItem::class, 'inventory_item_id');
+    }
+
+    public function technicalArea()
+    {
+        return $this->belongsTo(MaintenanceDependency::class, 'technical_area_id');
     }
 }

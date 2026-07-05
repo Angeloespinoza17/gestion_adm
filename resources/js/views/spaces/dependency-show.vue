@@ -70,6 +70,9 @@ export default {
     canCreateReservation() {
       return this.permissions.includes("crear_reservas");
     },
+    canReserveDependency() {
+      return this.canCreateReservation && Boolean(this.dependency?.is_reservable);
+    },
     canEditReservation() {
       return this.permissions.includes("editar_reservas") || this.permissions.includes("administrar_calendario");
     },
@@ -123,7 +126,7 @@ export default {
       }
     },
     handleDateClick(info) {
-      if (!this.canCreateReservation) {
+      if (!this.canReserveDependency) {
         return;
       }
       this.editingReservation = null;
@@ -148,7 +151,7 @@ export default {
       this.refreshCalendar();
     },
     openReschedule(item) {
-      if (!this.canCreateReservation) {
+      if (!this.canReserveDependency) {
         return;
       }
 
@@ -199,7 +202,7 @@ export default {
       </div>
       <div class="d-flex gap-2">
         <router-link to="/spaces/dependencies" class="btn btn-outline-secondary">Volver</router-link>
-        <BButton v-if="canCreateReservation" variant="primary" @click="showFormModal = true">Reservar</BButton>
+        <BButton v-if="canReserveDependency" variant="primary" @click="showFormModal = true">Reservar</BButton>
       </div>
     </div>
 
@@ -214,12 +217,21 @@ export default {
           <div class="mb-2"><span class="text-muted">Capacidad:</span> {{ dependency.capacity_max || "-" }}</div>
           <div class="mb-2"><span class="text-muted">Estado:</span> {{ dependency.availability_status }}</div>
           <div class="mb-2"><span class="text-muted">Responsable:</span> {{ dependency.responsible_staff?.full_name || "-" }}</div>
-          <div class="mb-2"><span class="text-muted">Aprobación:</span> {{ dependency.requires_approval ? "Sí" : "No" }}</div>
+          <div class="mb-2"><span class="text-muted">Reservable:</span> {{ dependency.is_reservable ? "Sí" : "No" }}</div>
+          <div v-if="dependency.is_reservable" class="mb-2">
+            <span class="text-muted">Aprobación:</span> {{ dependency.requires_approval ? "Sí" : "No" }}
+          </div>
+          <div class="mb-2">
+            <span class="text-muted">Inventario:</span> {{ dependency.is_inventory_auditable ? "Se revisa" : "No aplica" }}
+          </div>
+          <div class="mb-2">
+            <span class="text-muted">Mantención:</span> {{ dependency.is_maintenance_location ? "Ubicación habilitada" : "No aplica" }}
+          </div>
           <div class="mb-2"><span class="text-muted">Equipamiento:</span> {{ dependency.available_equipment || "-" }}</div>
           <div><span class="text-muted">Observaciones:</span> {{ dependency.observations || "-" }}</div>
         </BCard>
 
-        <BCard title="Próximas reservas">
+        <BCard v-if="dependency.is_reservable" title="Próximas reservas">
           <div v-if="upcomingReservations.length === 0" class="text-muted">
             No hay reservas próximas.
           </div>
@@ -230,7 +242,7 @@ export default {
           </div>
         </BCard>
 
-        <BCard title="Gestores de aprobación">
+        <BCard v-if="dependency.is_reservable" title="Gestores de aprobación">
           <div v-if="!(dependency.approvers || []).length" class="text-muted">
             No hay gestores asignados.
           </div>
@@ -242,11 +254,14 @@ export default {
       </div>
 
       <div class="col-lg-8">
-        <BCard title="Calendario propio">
+        <BCard v-if="dependency.is_reservable" title="Calendario propio">
           <FullCalendar ref="fullCalendar" :options="calendarOptions" />
         </BCard>
+        <BCard v-else title="Reservas">
+          <div class="text-muted">Esta dependencia existe para inventario o mantención, pero no está habilitada para reservas.</div>
+        </BCard>
 
-        <BCard title="Historial de reservas" class="mt-3">
+        <BCard v-if="dependency.is_reservable" title="Historial de reservas" class="mt-3">
           <BTable
             :items="historyReservations"
             :fields="[
@@ -272,6 +287,7 @@ export default {
     </div>
 
     <ReservationFormModal
+      v-if="dependency?.is_reservable"
       v-model="showFormModal"
       :catalogs="catalogs"
       :reservation="editingReservation"

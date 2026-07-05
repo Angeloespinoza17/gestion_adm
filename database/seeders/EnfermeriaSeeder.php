@@ -428,7 +428,10 @@ class EnfermeriaSeeder extends Seeder
     {
         $attentionService = app(InfirmaryAttentionService::class);
         $studentContextService = app(InfirmaryStudentContextService::class);
-        $dependencies = \App\Models\MaintenanceDependency::query()->where('active', true)->get();
+        $dependencies = \App\Models\MaintenanceDependency::query()
+            ->physicalSpaces()
+            ->where('active', true)
+            ->get();
         $inspectors = Staff::query()->whereHas('cargo', fn ($query) => $query->where('slug', 'inspectoria'))->get();
         $nurse = $this->actor;
         $items = collect();
@@ -536,7 +539,10 @@ class EnfermeriaSeeder extends Seeder
      */
     private function seedAccidents($students, $attentions): void
     {
-        $dependencies = \App\Models\MaintenanceDependency::query()->where('active', true)->get();
+        $dependencies = \App\Models\MaintenanceDependency::query()
+            ->physicalSpaces()
+            ->where('active', true)
+            ->get();
         $staff = Staff::query()->where('active', true)->get();
 
         foreach (range(1, 20) as $index) {

@@ -43,6 +43,7 @@ class SecurityCatalogController extends Controller
                 ->orderBy('full_name')
                 ->get(['id', 'full_name', 'rut', 'cargo_id']),
             'dependencies' => MaintenanceDependency::query()
+                ->physicalSpaces()
                 ->where('active', true)
                 ->orderBy('distribution')
                 ->orderBy('sector')

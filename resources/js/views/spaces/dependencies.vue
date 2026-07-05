@@ -20,7 +20,10 @@ const emptyForm = () => ({
   observations: "",
   notes: "",
   calendar_color: "#34c38f",
-  requires_approval: true,
+  is_reservable: false,
+  is_inventory_auditable: true,
+  is_maintenance_location: true,
+  requires_approval: false,
   approver_user_ids: [],
   active: true,
   distribution: "",
@@ -109,6 +112,14 @@ export default {
       );
     },
   },
+  watch: {
+    "form.is_reservable"(value) {
+      if (!value) {
+        this.form.requires_approval = false;
+        this.form.approver_user_ids = [];
+      }
+    },
+  },
   mounted() {
     this.loadCatalogs();
     this.load();
@@ -148,7 +159,6 @@ export default {
         return;
       }
       this.form = emptyForm();
-      this.form.requires_approval = true;
       this.imageFile = null;
       this.showModal = true;
     },
@@ -174,6 +184,9 @@ export default {
         observations: record.observations || "",
         notes: record.notes || "",
         calendar_color: record.calendar_color || "#34c38f",
+        is_reservable: Boolean(record.is_reservable),
+        is_inventory_auditable: record.is_inventory_auditable !== false,
+        is_maintenance_location: record.is_maintenance_location !== false,
         requires_approval: Boolean(record.requires_approval),
         approver_user_ids: (record.approvers || []).map((approver) => approver.id),
         active: Boolean(record.active),
@@ -192,9 +205,37 @@ export default {
     onImage(event) {
       this.imageFile = event?.target?.files?.[0] || null;
     },
+    suggestCode() {
+      const base = this.slugCode(
+        this.form.dependency_code ||
+        this.form.name ||
+        this.form.usage ||
+        "DEP"
+      ).slice(0, 6) || "DEP";
+      const floor = this.slugCode(this.form.floor_code || this.form.floor_sector || this.form.sector).slice(0, 3);
+      const distribution = this.slugCode(this.form.distribution_code || this.form.location || this.form.distribution).slice(0, 3);
+      const number = this.form.numbering
+        ? String(this.form.numbering).padStart(2, "0")
+        : String((this.pagination.total || 0) + 1).padStart(3, "0");
+
+      this.form.code = [distribution, floor, `${base}${number}`].filter(Boolean).join("-");
+    },
+    slugCode(value) {
+      return String(value || "")
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .replace(/[^a-zA-Z0-9]+/g, "")
+        .toUpperCase();
+    },
     buildFormData() {
       const fd = new FormData();
-      Object.entries(this.form).forEach(([key, value]) => {
+      const payload = {
+        ...this.form,
+        requires_approval: this.form.is_reservable ? this.form.requires_approval : false,
+        approver_user_ids: this.form.is_reservable ? this.form.approver_user_ids : [],
+      };
+
+      Object.entries(payload).forEach(([key, value]) => {
         if (Array.isArray(value)) {
           value.forEach((entry) => fd.append(`${key}[]`, entry));
           return;
@@ -281,7 +322,7 @@ export default {
     <div class="d-sm-flex justify-content-between align-items-center mb-4">
       <div class="mb-3 mb-sm-0">
         <h4 class="mb-0">Dependencias</h4>
-        <div class="text-muted">Catálogo de salas, recintos y espacios reservables del colegio.</div>
+        <div class="text-muted">Catálogo de salas, oficinas, recintos y espacios físicos del colegio.</div>
       </div>
       <div class="d-flex gap-2">
         <router-link v-if="canManageTypes" to="/spaces/dependency-types" class="btn btn-outline-secondary">Tipos</router-link>
@@ -319,6 +360,7 @@ export default {
         :fields="[
           { key: 'name', label: 'Dependencia' },
           { key: 'type', label: 'Tipo' },
+          { key: 'operational_flags', label: 'Uso operativo' },
           { key: 'availability_status', label: 'Estado' },
           { key: 'responsibleStaff', label: 'Responsable' },
           { key: 'upcoming_reservations_count', label: 'Próximas reservas' },
@@ -349,6 +391,19 @@ export default {
         <template #cell(type)="{ item }">
           {{ item.type?.name || "-" }}
         </template>
+        <template #cell(operational_flags)="{ item }">
+          <div class="d-flex flex-wrap gap-1">
+            <BBadge :variant="item.is_reservable ? 'primary' : 'secondary'">
+              {{ item.is_reservable ? "Reservable" : "No reservable" }}
+            </BBadge>
+            <BBadge :variant="item.is_inventory_auditable ? 'success' : 'light'">
+              Inventario
+            </BBadge>
+            <BBadge :variant="item.is_maintenance_location ? 'warning' : 'light'">
+              Mantención
+            </BBadge>
+          </div>
+        </template>
         <template #cell(availability_status)="{ item }">
           <BBadge :variant="statusVariant(item.availability_status)">
             {{ statusLabel(item.availability_status) }}
@@ -356,6 +411,9 @@ export default {
         </template>
         <template #cell(responsibleStaff)="{ item }">
           {{ item.responsible_staff?.full_name || "-" }}
+        </template>
+        <template #cell(upcoming_reservations_count)="{ item }">
+          {{ item.is_reservable ? item.upcoming_reservations_count : "-" }}
         </template>
         <template #cell(actions)="{ item }">
           <div class="d-flex flex-wrap gap-2">
@@ -372,7 +430,10 @@ export default {
       <div class="row g-3">
         <div class="col-md-4">
           <label class="form-label">Código</label>
-          <BFormInput v-model="form.code" />
+          <div class="input-group">
+            <BFormInput v-model="form.code" />
+            <BButton variant="outline-secondary" @click="suggestCode">Sugerir</BButton>
+          </div>
         </div>
         <div class="col-md-4">
           <label class="form-label">Tipo</label>
@@ -402,20 +463,62 @@ export default {
           <label class="form-label">Capacidad máxima</label>
           <BFormInput v-model="form.capacity_max" type="number" min="0" />
         </div>
+        <div class="col-12">
+          <div class="border rounded-3 p-3 bg-light-subtle">
+            <div class="fw-semibold mb-2">Codificación interna</div>
+            <div class="row g-3">
+              <div class="col-md-3">
+                <label class="form-label">Cod. distribución</label>
+                <BFormInput v-model="form.distribution_code" placeholder="Ej: AD1" />
+              </div>
+              <div class="col-md-3">
+                <label class="form-label">Cod. piso</label>
+                <BFormInput v-model="form.floor_code" placeholder="Ej: P1" />
+              </div>
+              <div class="col-md-3">
+                <label class="form-label">Cod. dependencia</label>
+                <BFormInput v-model="form.dependency_code" placeholder="Ej: OF" />
+              </div>
+              <div class="col-md-3">
+                <label class="form-label">Numeración</label>
+                <BFormInput v-model="form.numbering" type="number" min="0" />
+              </div>
+            </div>
+          </div>
+        </div>
         <div class="col-md-6">
           <label class="form-label">Color calendario</label>
-          <input v-model="form.calendar_color" type="color" class="form-control form-control-color" />
+          <input v-model="form.calendar_color" type="color" class="form-control form-control-color" :disabled="!form.is_reservable" />
         </div>
         <div class="col-md-6 d-flex align-items-end gap-4">
-          <BFormCheckbox :model-value="true" disabled>Requiere aprobación</BFormCheckbox>
           <BFormCheckbox v-model="form.active">Activo</BFormCheckbox>
         </div>
         <div class="col-12">
-          <div class="text-muted small">
-            Todas las dependencias reservables exigen autorización previa para sus reservas.
+          <div class="border rounded-3 p-3 bg-light-subtle">
+            <div class="fw-semibold mb-2">Uso operativo</div>
+            <div class="row g-3">
+              <div class="col-md-3">
+                <BFormCheckbox v-model="form.is_reservable">Reservable</BFormCheckbox>
+                <div class="text-muted small">Aparece en el módulo de reservas.</div>
+              </div>
+              <div class="col-md-3">
+                <BFormCheckbox v-model="form.is_inventory_auditable">Revisar en inventario</BFormCheckbox>
+                <div class="text-muted small">Aparece en gestión de inventario.</div>
+              </div>
+              <div class="col-md-3">
+                <BFormCheckbox v-model="form.is_maintenance_location">Usar en mantención</BFormCheckbox>
+                <div class="text-muted small">Aparece como ubicación física.</div>
+              </div>
+              <div class="col-md-3">
+                <BFormCheckbox v-model="form.requires_approval" :disabled="!form.is_reservable">
+                  Requiere aprobación
+                </BFormCheckbox>
+                <div class="text-muted small">Solo aplica si es reservable.</div>
+              </div>
+            </div>
           </div>
         </div>
-        <div class="col-12">
+        <div v-if="form.is_reservable" class="col-12">
           <div class="border rounded-3 p-3 bg-light-subtle">
             <div class="d-flex justify-content-between align-items-center mb-2">
               <div>

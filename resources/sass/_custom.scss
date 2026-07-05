@@ -53,6 +53,106 @@
     }
 }
 
+.cnsc-action-btn {
+    width: 42px !important;
+    min-width: 42px !important;
+    max-width: 42px !important;
+    height: 42px !important;
+    min-height: 42px !important;
+    padding: 0 !important;
+    border-radius: 12px !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    border-width: 1px !important;
+    border-style: solid !important;
+    box-shadow: none !important;
+    line-height: 1 !important;
+    font-size: 0 !important;
+    vertical-align: middle !important;
+    transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease, transform 0.15s ease !important;
+
+    i {
+        font-size: 22px !important;
+        line-height: 1 !important;
+        pointer-events: none;
+    }
+
+    &:hover {
+        transform: translateY(-1px);
+    }
+
+    &:focus-visible {
+        outline: 0;
+        box-shadow: 0 0 0 3px rgba(91, 116, 223, 0.18) !important;
+    }
+}
+
+.cnsc-action-btn + .cnsc-action-btn {
+    margin-left: 10px !important;
+}
+
+.cnsc-action-btn--view {
+    color: #66738d !important;
+    background: #fff !important;
+    border-color: #cbd6ea !important;
+
+    &:hover {
+        color: #3f4b61 !important;
+        background: #f8fafc !important;
+        border-color: #aebbd1 !important;
+    }
+}
+
+.cnsc-action-btn--edit,
+.cnsc-action-btn--warning {
+    color: #c0560a !important;
+    background: #fffdf0 !important;
+    border-color: #f6b73c !important;
+
+    &:hover {
+        color: #9a3f04 !important;
+        background: #fff7d6 !important;
+        border-color: #e9a820 !important;
+    }
+}
+
+.cnsc-action-btn--delete {
+    color: #dc2626 !important;
+    background: #fff7f7 !important;
+    border-color: #fecaca !important;
+
+    &:hover {
+        color: #b91c1c !important;
+        background: #fef2f2 !important;
+        border-color: #fca5a5 !important;
+    }
+}
+
+.cnsc-action-btn--activate {
+    color: #3152c9 !important;
+    background: #fff !important;
+    border-color: #637cff !important;
+
+    &:hover {
+        color: #2640a3 !important;
+        background: #eef4ff !important;
+        border-color: #4f66ca !important;
+    }
+}
+
+.cnsc-action-btn--success {
+    color: #047857 !important;
+    background: #ecfdf5 !important;
+    border-color: #a7f3d0 !important;
+
+    &:hover {
+        color: #065f46 !important;
+        background: #d1fae5 !important;
+        border-color: #6ee7b7 !important;
+    }
+}
+
 .vue-simple-drawer {
     background: $gray-100 !important;
     color: $gray-800 !important;

@@ -9,6 +9,87 @@ import logoMark from "@/assets/images/logo.svg";
 import logoWordmark from "@/assets/images/logo-dark.png";
 import avatar1 from "@/assets/images/users/avatar-1.jpg";
 
+const MENU_ICON_BY_SLUG = {
+  dashboard: "bx-home-circle",
+  students: "bx-user",
+  schedule: "bx-calendar-event",
+  porter: "bx-building-house",
+  guardians: "bx-group",
+  staff: "bx-id-card",
+  staff_permissions: "bx-calendar-minus",
+  tasks: "bx-list-check",
+  contracts: "bx-file",
+  infirmary: "bx-plus-medical",
+  convivencia: "bx-happy",
+  risk_prevention: "bx-shield-alt-2",
+  biblioteca: "bx-book-open",
+  remuneration: "bx-money",
+  remuneraciones: "bx-money",
+  accounting: "bx-wallet-alt",
+  contabilidad: "bx-wallet-alt",
+  informatica: "bx-laptop",
+  inventory: "bx-box",
+  maintenance: "bx-wrench",
+  spaces: "bx-calendar-event",
+  security: "bx-shield-quarter",
+  relevant_calendar: "bx-calendar-event",
+  settings: "bx-cog",
+};
+
+const MENU_ICON_BY_LABEL = {
+  dashboard: "bx-home-circle",
+  estudiantes: "bx-user",
+  "horarios docentes": "bx-calendar-event",
+  porteria: "bx-building-house",
+  apoderados: "bx-group",
+  funcionarios: "bx-id-card",
+  permisos: "bx-calendar-minus",
+  tareas: "bx-list-check",
+  contratos: "bx-file",
+  enfermeria: "bx-plus-medical",
+  "convivencia escolar": "bx-happy",
+  "prevencion de riesgos": "bx-shield-alt-2",
+  remuneraciones: "bx-money",
+  "biblioteca escolar": "bx-book-open",
+  contabilidad: "bx-wallet-alt",
+  informatica: "bx-laptop",
+  inventario: "bx-box",
+  mantencion: "bx-wrench",
+  espacios: "bx-calendar-event",
+  "dependencias y reservas": "bx-calendar-event",
+  "control de nochero": "bx-shield-quarter",
+  "calendario y fechas relevantes": "bx-calendar-event",
+  configuracion: "bx-cog",
+};
+
+const MENU_ICON_BY_ROUTE = {
+  "/": "bx-home-circle",
+  "/inicio": "bx-home-circle",
+  "/guardians": "bx-group",
+  "/infirmary": "bx-plus-medical",
+  "/convivencia": "bx-happy",
+  "/risk-prevention": "bx-shield-alt-2",
+  "/biblioteca": "bx-book-open",
+  "/remuneraciones": "bx-money",
+  "/contabilidad": "bx-wallet-alt",
+  "/informatica": "bx-laptop",
+  "/inventory/items": "bx-box",
+  "/inventory/management": "bx-box",
+};
+
+const DEPRECATED_MENU_ICONS = {
+  "bx-door-open": "bx-building-house",
+  "bx-calendar-week": "bx-calendar-event",
+  "bx-book-reader": "bx-book-open",
+};
+
+const normalizeMenuKey = (value) =>
+  String(value || "")
+    .trim()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
+
 /**
  * Side-nav component
  */
@@ -131,7 +212,7 @@ export default {
       return {
         id: "fallback-porter",
         label: "Portería",
-        icon: "bx-door-open",
+        icon: "bx-building-house",
         subItems: [
           {
             id: "fallback-porter-dashboard",
@@ -334,8 +415,9 @@ export default {
       }
     },
     normalizeMenuLinks(items = []) {
-      return items.map((item) => {
+      return items.filter((item) => !this.shouldHideMenuItem(item)).map((item) => {
         const normalized = { ...item };
+        const icon = this.resolveMenuIcon(normalized);
 
         if (Array.isArray(item.subItems) && item.subItems.length > 0) {
           normalized.subItems = this.normalizeMenuLinks(item.subItems);
@@ -343,6 +425,10 @@ export default {
 
         if (normalized.link) {
           normalized.link = this.resolveMenuLink(normalized.link);
+        }
+
+        if (icon) {
+          normalized.icon = icon;
         }
 
         return normalized;
@@ -362,7 +448,7 @@ export default {
     },
     buildMenuFromModules(modules) {
       const byParent = new Map();
-      modules.forEach((mod) => {
+      modules.filter((mod) => !this.shouldHideMenuItem(mod)).forEach((mod) => {
         const parentId = mod.parent_id ?? null;
         if (!byParent.has(parentId)) byParent.set(parentId, []);
         byParent.get(parentId).push(mod);
@@ -383,7 +469,7 @@ export default {
           const item = {
             id: mod.id,
             label: mod.name,
-            icon: mod.icon || undefined,
+            icon: this.resolveMenuIcon(mod),
           };
 
           if (subItems.length > 0) {
@@ -397,6 +483,21 @@ export default {
       };
 
       return buildItems(null);
+    },
+    shouldHideMenuItem(item) {
+      const label = normalizeMenuKey(item.name || item.label);
+      const slug = normalizeMenuKey(item.slug);
+      const route = item.frontend_route || item.link;
+
+      return slug === "psychology" || slug === "psicologia" || label === "psicologia" || route === "/psychology";
+    },
+    resolveMenuIcon(item) {
+      const slug = normalizeMenuKey(item.slug);
+      const label = normalizeMenuKey(item.name || item.label);
+      const route = item.frontend_route || item.link;
+      const currentIcon = item.icon ? DEPRECATED_MENU_ICONS[item.icon] || item.icon : undefined;
+
+      return MENU_ICON_BY_SLUG[slug] || MENU_ICON_BY_LABEL[label] || MENU_ICON_BY_ROUTE[route] || currentIcon;
     },
     normalizeStudentsSection(items) {
       const fallbackStudents = this.studentsFallbackSection();

@@ -28,6 +28,8 @@ export default {
       selectedAcademicYearId: null,
       courseSections: [],
       selectedCourse: null,
+      selectedCourseLoading: false,
+      showCourseModal: false,
       showModal: false,
       form: emptyForm(),
     };
@@ -70,6 +72,7 @@ export default {
         });
         this.courseSections = response.data.data || [];
         this.selectedCourse = null;
+        this.showCourseModal = false;
       } catch (error) {
         this.error = this.formatError(error);
       } finally {
@@ -77,8 +80,21 @@ export default {
       }
     },
     async showCourse(course) {
-      const response = await axios.get(`/api/students/courses/${course.id}`);
-      this.selectedCourse = response.data.data;
+      this.selectedCourse = null;
+      this.selectedCourseLoading = true;
+      this.showCourseModal = true;
+      this.error = null;
+
+      try {
+        const response = await axios.get(`/api/students/courses/${course.id}`);
+        this.selectedCourse = response.data.data;
+      } catch (error) {
+        this.error = this.formatError(error);
+        this.showCourseModal = false;
+        this.showErrorAlert(this.error);
+      } finally {
+        this.selectedCourseLoading = false;
+      }
     },
     openCreate() {
       this.form = {
@@ -162,73 +178,85 @@ export default {
       </div>
     </BCard>
 
-    <div class="row g-3">
-      <div class="col-lg-7">
-        <BCard>
-          <BTable
-            :items="courseSections"
-            :busy="loading"
-            responsive
-            :fields="[
-              { key: 'display_name', label: 'Curso' },
-              { key: 'capacity', label: 'Capacidad' },
-              { key: 'enrollments_count', label: 'Matriculadas' },
-              { key: 'active', label: 'Activo' },
-              { key: 'actions', label: 'Acciones' },
-            ]"
-          >
-            <template #table-busy>
-              <LoadingState message="Cargando cursos..." compact />
-            </template>
-            <template #cell(active)="{ item }">
-              <BBadge :variant="item.active ? 'success' : 'secondary'">{{ item.active ? "Sí" : "No" }}</BBadge>
-            </template>
-            <template #cell(actions)="{ item }">
-              <div class="d-flex gap-2">
-                <BButton size="sm" variant="outline-primary" @click="showCourse(item)">Ver curso</BButton>
-                <BButton size="sm" variant="outline-secondary" @click="openEdit(item)">Editar</BButton>
-              </div>
-            </template>
-          </BTable>
-        </BCard>
-      </div>
-
-      <div class="col-lg-5">
-        <BCard>
-          <div class="d-flex justify-content-between align-items-center mb-3">
-            <h5 class="mb-0">Curso seleccionado</h5>
-            <span class="text-muted small">{{ selectedCourse?.display_name || "Sin selección" }}</span>
+    <BCard class="students-courses-card">
+      <BTable
+        class="students-courses-table"
+        :items="courseSections"
+        :busy="loading"
+        responsive
+        :fields="[
+          { key: 'display_name', label: 'Curso' },
+          { key: 'capacity', label: 'Capacidad' },
+          { key: 'enrollments_count', label: 'Matriculadas' },
+          { key: 'active', label: 'Activo' },
+          { key: 'actions', label: 'Acciones' },
+        ]"
+      >
+        <template #table-busy>
+          <LoadingState message="Cargando cursos..." compact />
+        </template>
+        <template #cell(active)="{ item }">
+          <BBadge :variant="item.active ? 'success' : 'secondary'">{{ item.active ? "Sí" : "No" }}</BBadge>
+        </template>
+        <template #cell(actions)="{ item }">
+          <div class="students-courses-actions">
+            <BButton size="sm" variant="outline-primary" @click="showCourse(item)">Ver curso</BButton>
+            <BButton size="sm" variant="warning" @click="openEdit(item)">Editar</BButton>
           </div>
+        </template>
+      </BTable>
+    </BCard>
 
-          <div v-if="!selectedCourse" class="text-muted">Selecciona un curso para revisar a sus estudiantes matriculadas.</div>
+    <BModal
+      v-model="showCourseModal"
+      :title="selectedCourse?.display_name || 'Curso seleccionado'"
+      size="xl"
+      hide-footer
+      @hidden="selectedCourse = null"
+    >
+      <LoadingState v-if="selectedCourseLoading" message="Cargando curso..." compact />
 
-          <template v-else>
-            <div class="mb-3">
-              <div><span class="text-muted">Nivel:</span> {{ selectedCourse.education_level?.name }}</div>
-              <div><span class="text-muted">Capacidad:</span> {{ selectedCourse.capacity || "-" }}</div>
-              <div><span class="text-muted">Matrículas:</span> {{ (selectedCourse.enrollments || []).length }}</div>
-            </div>
+      <template v-else-if="selectedCourse">
+        <div class="course-detail-summary">
+          <div class="course-detail-summary__item">
+            <span>Nivel</span>
+            <strong>{{ selectedCourse.education_level?.name || "-" }}</strong>
+          </div>
+          <div class="course-detail-summary__item">
+            <span>Capacidad</span>
+            <strong>{{ selectedCourse.capacity || "-" }}</strong>
+          </div>
+          <div class="course-detail-summary__item">
+            <span>Matrículas</span>
+            <strong>{{ (selectedCourse.enrollments || []).length }}</strong>
+          </div>
+          <div class="course-detail-summary__item">
+            <span>Estado</span>
+            <strong>{{ selectedCourse.active ? "Activo" : "Inactivo" }}</strong>
+          </div>
+        </div>
 
-            <BTable
-              :items="selectedCourse.enrollments || []"
-              small
-              responsive
-              :fields="[
-                { key: 'student', label: 'Estudiante' },
-                { key: 'enrollment_status', label: 'Estado' },
-                { key: 'enrolled_at', label: 'Matrícula' },
-              ]"
-            >
-              <template #cell(student)="{ item }">
-                <router-link :to="`/students/${item.student_profile?.id}`">
-                  {{ item.student_profile?.full_name || "-" }}
-                </router-link>
-              </template>
-            </BTable>
+        <BTable
+          class="course-detail-enrollments-table"
+          :items="selectedCourse.enrollments || []"
+          responsive
+          :fields="[
+            { key: 'student', label: 'Estudiante' },
+            { key: 'enrollment_status', label: 'Estado' },
+            { key: 'enrolled_at', label: 'Matrícula' },
+          ]"
+        >
+          <template #cell(student)="{ item }">
+            <router-link :to="`/students/${item.student_profile?.id}`">
+              {{ item.student_profile?.full_name || "-" }}
+            </router-link>
           </template>
-        </BCard>
-      </div>
-    </div>
+          <template #empty>
+            <div class="text-center text-muted py-3">Este curso no tiene estudiantes matriculadas.</div>
+          </template>
+        </BTable>
+      </template>
+    </BModal>
 
     <BModal v-model="showModal" :title="isEditing ? 'Editar curso' : 'Nuevo curso'" hide-footer>
       <div class="row g-3">
@@ -261,3 +289,84 @@ export default {
     </BModal>
   </Layout>
 </template>
+
+<style scoped>
+.students-courses-card {
+  width: 100%;
+}
+
+.students-courses-table {
+  margin-bottom: 0;
+}
+
+.students-courses-table :deep(th),
+.students-courses-table :deep(td),
+.course-detail-enrollments-table :deep(th),
+.course-detail-enrollments-table :deep(td) {
+  text-align: center;
+  vertical-align: middle;
+}
+
+.students-courses-actions {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.course-detail-summary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.course-detail-summary__item {
+  min-width: 0;
+  padding: 0.75rem 0.9rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: #f8fafc;
+}
+
+.course-detail-summary__item span {
+  display: block;
+  margin-bottom: 0.25rem;
+  color: #64748b;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.course-detail-summary__item strong {
+  display: block;
+  overflow-wrap: anywhere;
+  color: #334155;
+  font-size: 1rem;
+  font-weight: 700;
+  line-height: 1.25;
+}
+
+.course-detail-enrollments-table {
+  margin-bottom: 0;
+}
+
+@media (max-width: 991.98px) {
+  .course-detail-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 575.98px) {
+  .students-courses-actions {
+    justify-content: center;
+  }
+
+  .course-detail-summary {
+    grid-template-columns: 1fr;
+  }
+}
+</style>

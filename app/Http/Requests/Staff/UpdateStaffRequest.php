@@ -46,6 +46,18 @@ class UpdateStaffRequest extends FormRequest
             $data['active'] = filter_var($this->input('active'), FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE);
         }
 
+        if ($this->exists('can_receive_maintenance_orders')) {
+            $data['can_receive_maintenance_orders'] = filter_var(
+                $this->input('can_receive_maintenance_orders'),
+                FILTER_VALIDATE_BOOLEAN,
+                FILTER_NULL_ON_FAILURE
+            );
+        }
+
+        if ($this->exists('maintenance_role')) {
+            $data['maintenance_role'] = $this->input('maintenance_role') ?: null;
+        }
+
         if (is_string($departmentIds)) {
             $decoded = json_decode($departmentIds, true);
             $data['department_ids'] = is_array($decoded) ? $decoded : [];
@@ -62,7 +74,11 @@ class UpdateStaffRequest extends FormRequest
 
     public function rules(): array
     {
-        $staffId = $this->route('staff')?->id;
+        $routeStaff = $this->route('staff');
+        $staffId = $routeStaff instanceof Staff ? $routeStaff->id : $routeStaff;
+        $currentRut = $routeStaff instanceof Staff
+            ? $routeStaff->rut
+            : Staff::query()->whereKey($staffId)->value('rut');
 
         return [
             'full_name' => ['sometimes', 'string', 'max:255'],
@@ -72,7 +88,11 @@ class UpdateStaffRequest extends FormRequest
                 'string',
                 'max:20',
                 Rule::unique('staff', 'rut')->ignore($staffId),
-                function ($attribute, $value, $fail) {
+                function ($attribute, $value, $fail) use ($currentRut) {
+                    if (Rut::normalize($value) === Rut::normalize($currentRut)) {
+                        return;
+                    }
+
                     if ($value !== null && $value !== '' && !Rut::isValid($value)) {
                         $fail('El RUT ingresado no es válido.');
                     }
@@ -118,6 +138,12 @@ class UpdateStaffRequest extends FormRequest
             'professional_registration' => ['nullable', 'string', 'max:255'],
             'internal_notes' => ['nullable', 'string'],
             'active' => ['sometimes', 'boolean'],
+            'can_receive_maintenance_orders' => ['sometimes', 'boolean'],
+            'maintenance_role' => [
+                'nullable',
+                'required_if:can_receive_maintenance_orders,true,1',
+                Rule::in(array_column(Staff::MAINTENANCE_ROLE_OPTIONS, 'value')),
+            ],
             'associated_user_id' => [
                 'nullable',
                 'integer',
