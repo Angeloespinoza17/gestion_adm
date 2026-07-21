@@ -3,6 +3,7 @@
 use App\Http\Controllers\APIController;
 use App\Http\Controllers\Admin\RoleImpersonationController;
 use App\Http\Controllers\Admin\SuperAdminDashboardController;
+use App\Http\Controllers\DeployController;
 use App\Http\Controllers\CargoController;
 use App\Http\Controllers\Accounting\AccountingModuleController;
 use App\Http\Controllers\Attendance\AttendanceController;
@@ -218,6 +219,9 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/inicio/overview', HomeDashboardController::class);
     Route::post('/logout', [APIController::class, 'logout']);
     Route::get('/logout', [APIController::class, 'logout']);
+
+    Route::get('/deploy/status', [DeployController::class, 'status'])->middleware('superadmin');
+    Route::post('/deploy', [DeployController::class, 'run'])->middleware(['superadmin', 'throttle:2,1']);
 
     Route::prefix('internal-communications')->group(function () {
         Route::post('/{internalAnnouncement}/read', [InternalAnnouncementController::class, 'markRead']);

@@ -13,7 +13,7 @@ class DeployController extends Controller
             'configured' => $this->isConfigured(),
             'target' => env('DEPLOY_HOST'),
             'path' => env('DEPLOY_REMOTE_PATH'),
-        ]);
+        ])->header('Cache-Control', 'no-store, no-cache, must-revalidate, private');
     }
 
     public function run(): JsonResponse

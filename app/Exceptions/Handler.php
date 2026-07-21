@@ -36,6 +36,10 @@ class Handler extends ExceptionHandler
      */
     public function register()
     {
+        $this->shouldRenderJsonWhen(
+            fn (Request $request, Throwable $exception): bool => $request->is('api/*') || $request->expectsJson(),
+        );
+
         $this->renderable(function (PostTooLargeException $exception, Request $request) {
             if (! $request->expectsJson()) {
                 return null;

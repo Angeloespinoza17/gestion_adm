@@ -629,9 +629,10 @@ export default {
 
         if (item.link && !isSuperAdmin) {
           const resolved = this.$router.resolve(item.link);
+          const superAdminOnly = resolved?.matched?.some((route) => route.meta.superAdminOnly);
           const requiredPermission = resolved?.meta?.permission;
 
-          if (requiredPermission && !granted.has(requiredPermission)) {
+          if (superAdminOnly || (requiredPermission && !granted.has(requiredPermission))) {
             return visibleItems;
           }
         }

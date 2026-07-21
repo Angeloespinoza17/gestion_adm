@@ -70,12 +70,25 @@ class RoleManagementSafetyTest extends TestCase
         ])->assertUnprocessable();
     }
 
-    public function test_public_registration_debug_and_deploy_endpoints_are_not_exposed(): void
+    public function test_sensitive_endpoints_are_not_public_and_deploy_is_superadmin_only(): void
     {
         $this->postJson('/api/register', [])->assertNotFound();
         $this->getJson('/api/_debug/auth')->assertNotFound();
-        $this->getJson('/api/deploy/status')->assertNotFound();
-        $this->postJson('/api/deploy')->assertNotFound();
+        $this->getJson('/api/deploy/status')->assertUnauthorized();
+        $this->get('/api/deploy/status')->assertUnauthorized();
+
+        Sanctum::actingAs(User::factory()->create(['active' => true]));
+        $this->getJson('/api/deploy/status')->assertForbidden();
+        $this->postJson('/api/deploy')->assertForbidden();
+
+        $superAdmin = User::factory()->create(['active' => true]);
+        $superAdminRole = Role::query()->create(['name' => 'Super Admin', 'slug' => 'super_admin', 'active' => true]);
+        $superAdmin->roles()->attach($superAdminRole);
+        Sanctum::actingAs($superAdmin);
+
+        $this->getJson('/api/deploy/status')
+            ->assertOk()
+            ->assertJsonStructure(['enabled', 'configured', 'target', 'path']);
     }
 
     private function authenticateRoleAdministrator(): User

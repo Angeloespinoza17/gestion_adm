@@ -545,6 +545,12 @@ export const menuItems = [
                 label: "Organigrama",
                 link: "/admin/organigram",
                 parentId: 940
+            },
+            {
+                id: 947,
+                label: "Deploy",
+                link: "/deploy",
+                parentId: 940
             }
         ]
     },

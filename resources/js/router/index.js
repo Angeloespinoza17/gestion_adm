@@ -268,6 +268,12 @@ const routes = [
         component: () => import('../views/admin/organigram.vue'),
     },
     {
+        path: '/deploy',
+        name: 'deploy',
+        meta: { authRequired: true, title: 'Deploy', superAdminOnly: true },
+        component: () => import('../views/dashboard/deploy.vue'),
+    },
+    {
         path: '/admin/noticias',
         meta: { authRequired: true, title: 'Noticias del sitio web', permission: 'ver_noticias' },
         component: () => import('../views/admin/news.vue'),
@@ -1410,7 +1416,8 @@ router.beforeEach(async (routeTo, routeFrom, next) => {
     axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
 
     const requiredPermission = routeTo.meta.permission;
-    if (!requiredPermission) {
+    const superAdminOnly = routeTo.matched.some((route) => route.meta.superAdminOnly);
+    if (!requiredPermission && !superAdminOnly) {
         return next();
     }
 
@@ -1436,12 +1443,16 @@ router.beforeEach(async (routeTo, routeFrom, next) => {
         permissions = await fetchPermissions();
     }
 
-    if (permissions.includes('__superadmin__') || permissions.includes(requiredPermission)) {
+    const isAuthorized = (grantedPermissions) => superAdminOnly
+        ? grantedPermissions.includes('__superadmin__')
+        : grantedPermissions.includes('__superadmin__') || grantedPermissions.includes(requiredPermission);
+
+    if (isAuthorized(permissions)) {
         return next();
     }
 
     permissions = await fetchPermissions();
-    if (permissions.includes('__superadmin__') || permissions.includes(requiredPermission)) {
+    if (isAuthorized(permissions)) {
         return next();
     }
 
