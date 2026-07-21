@@ -11,6 +11,7 @@ import esLocale from "@fullcalendar/core/locales/es";
 import { getPdfMake } from "../../utils/pdfmake";
 import ReservationFormModal from "../../components/spaces/reservation-form-modal.vue";
 import ReservationPreviewModal from "../../components/spaces/reservation-preview-modal.vue";
+import "./shared.css";
 
 export default {
   components: {
@@ -43,6 +44,7 @@ export default {
       viewMode: "calendar",
       exporting: false,
       tableLoading: false,
+      visibleApprovedEventsTotal: 0,
       tableReservations: [],
       tablePagination: {
         current_page: 1,
@@ -69,7 +71,10 @@ export default {
         selectable: true,
         editable: false,
         firstDay: 1,
+        buttonIcons: false,
         buttonText: {
+          prev: "‹",
+          next: "›",
           today: "Hoy",
           month: "Mes",
           week: "Semana",
@@ -157,10 +162,47 @@ export default {
         ? `${this.resolvedDateFrom} a ${this.resolvedDateTo}`
         : "rango actual";
     },
+    summaryCards() {
+      return [
+        {
+          label: "Eventos",
+          value: this.formatInteger(this.visibleApprovedEventsTotal),
+          detail: "aprobados en rango visible",
+          icon: "bx-calendar",
+          tone: "blue",
+        },
+        {
+          label: "Vista",
+          value: this.viewMode === "calendar" ? "Calendario" : "Tabla",
+          detail: this.exportRangeLabel,
+          icon: this.viewMode === "calendar" ? "bx-calendar-event" : "bx-table",
+          tone: "slate",
+        },
+        {
+          label: "Dependencias",
+          value: this.formatInteger(this.catalogs.dependencies.length),
+          detail: "disponibles para filtrar",
+          icon: "bx-buildings",
+          tone: "green",
+        },
+      ];
+    },
+    hasActiveFilters() {
+      return Boolean(
+        this.filters.dependency_id ||
+        this.filters.dependency_type_id ||
+        this.filters.staff_id ||
+        this.filters.department_id ||
+        this.filters.status ||
+        this.filters.date_from ||
+        this.filters.date_to
+      );
+    },
   },
   mounted() {
     this.loadCatalogs();
     this.initCalendar();
+    this.$nextTick(() => this.ensureInitialVisibleRange());
   },
   methods: {
     async loadCatalogs() {
@@ -185,7 +227,9 @@ export default {
             ...this.filters,
           },
         });
-        successCallback(response.data.data || []);
+        const events = response.data.data || [];
+        this.visibleApprovedEventsTotal = events.length;
+        successCallback(events);
       } catch (error) {
         this.error = this.formatError(error);
         failureCallback(error);
@@ -208,6 +252,25 @@ export default {
       this.visibleRange = {
         date_from: this.formatRangeDate(info.startStr),
         date_to: this.formatRangeDate(info.endStr, true),
+      };
+      this.loadTable(1);
+    },
+    ensureInitialVisibleRange() {
+      if (this.visibleRange.date_from && this.visibleRange.date_to) {
+        return;
+      }
+
+      const calendarApi = this.$refs.fullCalendar?.getApi?.();
+      const view = calendarApi?.view;
+
+      if (!view?.activeStart || !view?.activeEnd) {
+        this.loadTable(1);
+        return;
+      }
+
+      this.visibleRange = {
+        date_from: this.formatRangeDate(view.activeStart.toISOString()),
+        date_to: this.formatRangeDate(view.activeEnd.toISOString(), true),
       };
       this.loadTable(1);
     },
@@ -270,6 +333,18 @@ export default {
     applyFilters() {
       this.loadTable(1);
       this.refreshCalendar();
+    },
+    resetFilters() {
+      this.filters = {
+        dependency_id: null,
+        dependency_type_id: null,
+        staff_id: null,
+        department_id: null,
+        status: null,
+        date_from: "",
+        date_to: "",
+      };
+      this.applyFilters();
     },
     setViewMode(mode) {
       this.viewMode = mode;
@@ -404,6 +479,9 @@ export default {
       try {
         const rows = await this.fetchReservationsForExport();
         const pdfMake = getPdfMake();
+        const pdfHeader = ["Evento", "Dependencia", "Funcionario", "Departamento", "Estado", "Inicio", "Término"].map(
+          (text) => ({ text, style: "tableHeader" })
+        );
         const docDefinition = {
           pageOrientation: "landscape",
           content: [
@@ -414,15 +492,15 @@ export default {
                 headerRows: 1,
                 widths: [120, 100, 100, 90, 70, 80, "*"],
                 body: [
-                  ["Evento", "Dependencia", "Funcionario", "Departamento", "Estado", "Inicio", "Término"],
+                  pdfHeader,
                   ...rows.map((item) => [
                     item.title || "-",
                     item.dependency?.name || "-",
                     item.staff?.full_name || "-",
                     item.department?.name || "-",
-                    item.status || "-",
-                    `${item.start_date} ${item.start_time}`,
-                    `${item.end_date} ${item.end_time}`,
+                    this.statusPdfCell(item.status),
+                    this.formatPdfDateTime(item.start_date, item.start_time),
+                    this.formatPdfDateTime(item.end_date, item.end_time),
                   ]),
                 ],
               },
@@ -433,6 +511,10 @@ export default {
             header: {
               fontSize: 16,
               bold: true,
+            },
+            tableHeader: {
+              bold: true,
+              color: "#111827",
             },
           },
           defaultStyle: {
@@ -446,12 +528,41 @@ export default {
         this.exporting = false;
       }
     },
-    statusVariant(status) {
-      if (status === "aprobada") return "success";
-      if (status === "pendiente") return "warning";
-      if (status === "rechazada") return "danger";
-      if (status === "cancelada") return "secondary";
-      return "info";
+    statusClass(status) {
+      return `spaces-status-pill--${status || "secondary"}`;
+    },
+    statusPdfCell(status) {
+      const normalized = String(status || "").toLowerCase();
+      const palette = {
+        pendiente: { fillColor: "#fef3c7", color: "#92400e" },
+        aprobada: { fillColor: "#d1fae5", color: "#065f46" },
+        rechazada: { fillColor: "#fee2e2", color: "#991b1b" },
+        cancelada: { fillColor: "#e5e7eb", color: "#374151" },
+        finalizada: { fillColor: "#dbeafe", color: "#1d4ed8" },
+      };
+      const style = palette[normalized] || { fillColor: "#f3f4f6", color: "#374151" };
+
+      return {
+        text: normalized ? normalized.charAt(0).toUpperCase() + normalized.slice(1) : "-",
+        alignment: "center",
+        bold: true,
+        margin: [0, 2, 0, 2],
+        ...style,
+      };
+    },
+    formatPdfDateTime(date, time) {
+      const [year, month, day] = String(date || "").slice(0, 10).split("-");
+
+      if (!year || !month || !day) {
+        return "-";
+      }
+
+      return `${day}-${month}-${year}${time ? ` ${String(time).slice(0, 5)}` : ""}`;
+    },
+    formatInteger(value) {
+      return Number(value || 0).toLocaleString("es-CL", {
+        maximumFractionDigits: 0,
+      });
     },
     formatError(error) {
       const errors = error?.response?.data?.errors || null;
@@ -468,132 +579,197 @@ export default {
 
 <template>
   <Layout>
-    <div class="d-sm-flex justify-content-between align-items-center mb-4">
-      <div class="mb-3 mb-sm-0">
-        <h4 class="mb-0">Calendario de reservas</h4>
-        <div class="text-muted">Vista diaria, semanal y mensual con filtros operativos.</div>
+    <div class="spaces-shell">
+      <section class="spaces-hero">
+        <div class="spaces-hero__body">
+          <div class="spaces-eyebrow">Dependencias y reservas</div>
+          <h4>Calendario de reservas</h4>
+          <p>Vista diaria, semanal y mensual con filtros operativos y exportación de eventos.</p>
+        </div>
+        <div class="spaces-actions">
+          <router-link to="/spaces/reservations" class="btn btn-outline-secondary">
+            <i class="bx bx-list-ul"></i>
+            <span>Reservas</span>
+          </router-link>
+          <BButton v-if="canExport" variant="outline-success" :disabled="exporting" @click="exportExcel">
+            <i class="bx bx-spreadsheet"></i>
+            <span>Excel</span>
+          </BButton>
+          <BButton v-if="canExport" variant="outline-danger" :disabled="exporting" @click="exportPdf">
+            <i class="bx bx-file"></i>
+            <span>PDF</span>
+          </BButton>
+          <BButton v-if="canCreate" variant="primary" @click="showFormModal = true">
+            <i class="bx bx-plus"></i>
+            <span>Nueva reserva</span>
+          </BButton>
+        </div>
+      </section>
+
+      <div class="spaces-summary-grid">
+        <div
+          v-for="card in summaryCards"
+          :key="card.label"
+          class="spaces-summary-card"
+          :class="`spaces-summary-card--${card.tone}`"
+        >
+          <div class="spaces-summary-icon">
+            <i :class="`bx ${card.icon}`"></i>
+          </div>
+          <div>
+            <span>{{ card.label }}</span>
+            <strong>{{ card.value }}</strong>
+            <small>{{ card.detail }}</small>
+          </div>
+        </div>
       </div>
-      <div class="d-flex gap-2">
-        <router-link to="/spaces/reservations" class="btn btn-outline-secondary">Reservas</router-link>
-        <BButton v-if="canExport" variant="outline-success" :disabled="exporting" @click="exportExcel">Exportar Excel</BButton>
-        <BButton v-if="canExport" variant="outline-danger" :disabled="exporting" @click="exportPdf">Exportar PDF</BButton>
-        <BButton v-if="canCreate" variant="primary" @click="showFormModal = true">Nueva reserva</BButton>
-      </div>
+
+      <section class="spaces-panel">
+        <div class="spaces-panel-header">
+          <div>
+            <div class="spaces-eyebrow">Vista</div>
+            <h5 class="spaces-panel-title">Modo de revisión</h5>
+          </div>
+          <div class="spaces-mode-switch">
+            <BButton :variant="viewMode === 'calendar' ? 'primary' : 'outline-primary'" @click="setViewMode('calendar')">
+              <i class="bx bx-calendar-event"></i>
+              <span>Calendario</span>
+            </BButton>
+            <BButton :variant="viewMode === 'table' ? 'primary' : 'outline-primary'" @click="setViewMode('table')">
+              <i class="bx bx-table"></i>
+              <span>Tabla</span>
+            </BButton>
+          </div>
+        </div>
+
+        <div class="spaces-filter-grid spaces-filter-grid--wide">
+          <label class="spaces-field">
+            <span>Dependencia</span>
+            <Multiselect v-model="filters.dependency_id" :options="dependencyOptions" :searchable="true" />
+          </label>
+          <label class="spaces-field">
+            <span>Tipo</span>
+            <Multiselect v-model="filters.dependency_type_id" :options="typeOptions" :searchable="true" />
+          </label>
+          <label class="spaces-field">
+            <span>Funcionario</span>
+            <Multiselect v-model="filters.staff_id" :options="staffOptions" :searchable="true" />
+          </label>
+          <label class="spaces-field">
+            <span>Departamento</span>
+            <Multiselect v-model="filters.department_id" :options="departmentOptions" :searchable="true" />
+          </label>
+          <label class="spaces-field">
+            <span>Estado</span>
+            <Multiselect v-model="filters.status" :options="statusOptions" :searchable="false" />
+          </label>
+          <label class="spaces-field">
+            <span>Desde</span>
+            <BFormInput v-model="filters.date_from" type="date" />
+          </label>
+          <label class="spaces-field">
+            <span>Hasta</span>
+            <BFormInput v-model="filters.date_to" type="date" />
+          </label>
+          <div class="spaces-filter-actions">
+            <BButton variant="primary" @click="applyFilters">
+              <i class="bx bx-filter-alt"></i>
+              <span>Aplicar</span>
+            </BButton>
+            <BButton variant="outline-secondary" :disabled="!hasActiveFilters" @click="resetFilters">
+              <i class="bx bx-x"></i>
+              <span>Limpiar</span>
+            </BButton>
+          </div>
+        </div>
+      </section>
+
+      <BAlert v-if="error" variant="danger" show class="mb-0">{{ error }}</BAlert>
+
+      <section v-if="viewMode === 'calendar'" class="spaces-panel spaces-calendar-host">
+        <FullCalendar ref="fullCalendar" :options="calendarOptions" />
+      </section>
+
+      <section v-else class="spaces-panel">
+        <div class="spaces-panel-header">
+          <div>
+            <div class="spaces-eyebrow">Tabla</div>
+            <h5 class="spaces-panel-title">Eventos por dependencia</h5>
+            <p class="spaces-panel-subtitle">{{ tableRangeText }}</p>
+          </div>
+          <div class="spaces-panel-meta">Total: {{ formatInteger(tablePagination.total) }}</div>
+        </div>
+
+        <div v-if="tableLoading && tableReservations.length === 0" class="spaces-empty-state">
+          <span>Cargando eventos...</span>
+        </div>
+        <div v-else class="spaces-table-wrap">
+          <table class="table spaces-data-table spaces-data-table--wide">
+            <thead>
+              <tr>
+                <th style="width: 22%">Evento</th>
+                <th style="width: 18%">Dependencia</th>
+                <th style="width: 17%">Funcionario</th>
+                <th style="width: 15%">Departamento</th>
+                <th style="width: 14%">Horario</th>
+                <th style="width: 8%" class="text-center">Estado</th>
+                <th style="width: 6%" class="text-center">Acciones</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="item in tableReservations" :key="item.id">
+                <td>
+                  <div class="spaces-table-title">{{ item.title }}</div>
+                  <span class="spaces-table-subtitle">{{ item.activity || "Sin actividad" }}</span>
+                </td>
+                <td>
+                  <div class="spaces-table-title">{{ item.dependency?.name || "-" }}</div>
+                  <span class="spaces-table-subtitle">{{ item.dependency?.type?.name || "Sin tipo" }}</span>
+                </td>
+                <td>{{ item.staff?.full_name || "-" }}</td>
+                <td>{{ item.department?.name || "-" }}</td>
+                <td>
+                  <div>{{ item.start_date }} {{ item.start_time }}</div>
+                  <span class="spaces-table-subtitle">{{ item.end_date }} {{ item.end_time }}</span>
+                </td>
+                <td class="text-center">
+                  <span class="spaces-status-pill" :class="statusClass(item.status)">{{ item.status }}</span>
+                </td>
+                <td>
+                  <div class="spaces-row-actions">
+                    <BButton size="sm" variant="outline-primary" title="Ver" aria-label="Ver evento" @click="openPreview(item)">
+                      <i class="bx bx-show"></i>
+                      <span>Ver</span>
+                    </BButton>
+                  </div>
+                </td>
+              </tr>
+              <tr v-if="tableReservations.length === 0">
+                <td colspan="7">
+                  <div class="spaces-empty-state">
+                    <i class="bx bx-calendar-x"></i>
+                    <strong>No hay eventos para mostrar</strong>
+                    <span>Revisa el rango visible o cambia los filtros aplicados.</span>
+                  </div>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="d-flex justify-content-end mt-3">
+          <BPagination
+            v-if="tablePagination.last_page > 1"
+            v-model="tablePagination.current_page"
+            :total-rows="tablePagination.total"
+            :per-page="tablePagination.per_page"
+            pills
+            align="end"
+            @update:model-value="loadTable"
+          />
+        </div>
+      </section>
     </div>
-
-    <div class="d-flex flex-wrap gap-2 mb-3">
-      <BButton :variant="viewMode === 'calendar' ? 'primary' : 'outline-primary'" @click="setViewMode('calendar')">
-        Vista calendario
-      </BButton>
-      <BButton :variant="viewMode === 'table' ? 'primary' : 'outline-primary'" @click="setViewMode('table')">
-        Vista tabla
-      </BButton>
-    </div>
-
-    <BCard class="mb-3">
-      <div class="row g-3 align-items-end">
-        <div class="col-md-3">
-          <label class="form-label">Dependencia</label>
-          <Multiselect v-model="filters.dependency_id" :options="dependencyOptions" :searchable="true" />
-        </div>
-        <div class="col-md-2">
-          <label class="form-label">Tipo</label>
-          <Multiselect v-model="filters.dependency_type_id" :options="typeOptions" :searchable="true" />
-        </div>
-        <div class="col-md-2">
-          <label class="form-label">Funcionario</label>
-          <Multiselect v-model="filters.staff_id" :options="staffOptions" :searchable="true" />
-        </div>
-        <div class="col-md-2">
-          <label class="form-label">Departamento</label>
-          <Multiselect v-model="filters.department_id" :options="departmentOptions" :searchable="true" />
-        </div>
-        <div class="col-md-2">
-          <label class="form-label">Estado</label>
-          <Multiselect v-model="filters.status" :options="statusOptions" :searchable="false" />
-        </div>
-        <div class="col-md-2">
-          <label class="form-label">Desde</label>
-          <BFormInput v-model="filters.date_from" type="date" />
-        </div>
-        <div class="col-md-2">
-          <label class="form-label">Hasta</label>
-          <BFormInput v-model="filters.date_to" type="date" />
-        </div>
-        <div class="col-md-1">
-          <BButton variant="secondary" @click="applyFilters">Aplicar</BButton>
-        </div>
-      </div>
-    </BCard>
-
-    <BAlert v-if="error" variant="danger" show class="mb-3">{{ error }}</BAlert>
-
-    <BCard v-if="viewMode === 'calendar'">
-      <FullCalendar ref="fullCalendar" :options="calendarOptions" />
-    </BCard>
-
-    <BCard v-else>
-      <div class="d-flex justify-content-between align-items-center mb-3">
-        <div>
-          <h5 class="mb-1">Tabla de eventos por dependencia</h5>
-          <div class="text-muted small">{{ tableRangeText }}</div>
-        </div>
-        <div class="text-muted small">Total: {{ tablePagination.total }}</div>
-      </div>
-
-      <BTable
-        :items="tableReservations"
-        :busy="tableLoading"
-        :fields="[
-          { key: 'title', label: 'Evento' },
-          { key: 'dependency', label: 'Dependencia' },
-          { key: 'staff', label: 'Funcionario' },
-          { key: 'department', label: 'Departamento' },
-          { key: 'schedule', label: 'Horario' },
-          { key: 'status', label: 'Estado' },
-          { key: 'actions', label: 'Acciones' },
-        ]"
-        responsive
-        small
-      >
-        <template #cell(title)="{ item }">
-          <div class="fw-semibold">{{ item.title }}</div>
-          <div class="text-muted small">{{ item.activity || "-" }}</div>
-        </template>
-        <template #cell(dependency)="{ item }">
-          <div class="fw-semibold">{{ item.dependency?.name || "-" }}</div>
-          <div class="text-muted small">{{ item.dependency?.type?.name || "Sin tipo" }}</div>
-        </template>
-        <template #cell(staff)="{ item }">
-          {{ item.staff?.full_name || "-" }}
-        </template>
-        <template #cell(department)="{ item }">
-          {{ item.department?.name || "-" }}
-        </template>
-        <template #cell(schedule)="{ item }">
-          <div>{{ item.start_date }} {{ item.start_time }}</div>
-          <div class="text-muted small">{{ item.end_date }} {{ item.end_time }}</div>
-        </template>
-        <template #cell(status)="{ item }">
-          <BBadge :variant="statusVariant(item.status)">{{ item.status }}</BBadge>
-        </template>
-        <template #cell(actions)="{ item }">
-          <BButton size="sm" variant="outline-primary" @click="openPreview(item)">Ver</BButton>
-        </template>
-      </BTable>
-
-      <div class="d-flex justify-content-end mt-3">
-        <BPagination
-          v-if="tablePagination.last_page > 1"
-          v-model="tablePagination.current_page"
-          :total-rows="tablePagination.total"
-          :per-page="tablePagination.per_page"
-          pills
-          align="end"
-          @update:model-value="loadTable"
-        />
-      </div>
-    </BCard>
 
     <ReservationFormModal
       v-model="showFormModal"

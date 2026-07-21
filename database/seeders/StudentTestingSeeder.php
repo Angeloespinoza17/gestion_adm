@@ -10,13 +10,17 @@ use App\Models\StudentProfile;
 use App\Services\Students\StudentAccountService;
 use App\Services\Students\StudentEnrollmentLifecycleService;
 use Carbon\Carbon;
+use Database\Seeders\Support\PreventsProductionSeeding;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Collection;
 
 class StudentTestingSeeder extends Seeder
 {
+    use PreventsProductionSeeding;
+
     public function run(): void
     {
+        $this->preventProductionSeeding();
         $this->call([
             RbacSeeder::class,
             EducationLevelSeeder::class,

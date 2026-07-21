@@ -282,15 +282,18 @@ body[data-sidebar="dark"] .premium-sidebar .menu-title {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 0.75rem;
-    padding: 1.25rem 1.25rem 0.85rem;
+    gap: 0.65rem;
+    padding: 1.15rem 1rem 0.85rem;
 }
 
 .sidebar-brand {
     display: inline-flex;
     align-items: center;
-    gap: 0.75rem;
+    flex: 1 1 auto;
+    gap: 0.6rem;
+    min-width: 0;
     color: inherit;
+    text-decoration: none;
 }
 
 .sidebar-brand:hover {
@@ -298,24 +301,56 @@ body[data-sidebar="dark"] .premium-sidebar .menu-title {
 }
 
 .sidebar-brand__mark {
-    width: 2.5rem;
-    height: 2.5rem;
+    width: 3rem;
+    height: 3rem;
     display: inline-flex;
+    flex: 0 0 3rem;
     align-items: center;
     justify-content: center;
-    border-radius: 0.95rem;
-    background: rgba($white, 0.85);
-    box-shadow: 0 10px 22px rgba($gray-900, 0.08);
+    border: 1px solid rgba($white, 0.95);
+    border-radius: 1.05rem;
+    background: rgba($white, 0.94);
+    box-shadow: 0 12px 26px rgba($gray-900, 0.09);
 }
 
-.sidebar-brand__wordmark img {
+.sidebar-brand__mark img {
     display: block;
+    width: 2.25rem;
+    height: 2.25rem;
+    object-fit: contain;
+}
+
+.sidebar-brand__wordmark {
+    color: $gray-900;
+    display: inline-flex;
+    align-items: baseline;
+    min-width: 0;
+    overflow: hidden;
+    font-size: 0.9rem;
+    font-weight: 700;
+    letter-spacing: 0;
+    line-height: 1;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.sidebar-brand__wordmark strong {
+    font-size: 0.95rem;
+    font-weight: 800;
+}
+
+.sidebar-brand__wordmark span {
+    color: $gray-700;
+    font-size: 0.85rem;
+    font-weight: 700;
+    margin-left: 0.24rem;
 }
 
 .sidebar-shell__toggle {
     width: 2.4rem;
     height: 2.4rem;
     display: inline-flex;
+    flex: 0 0 2.4rem;
     align-items: center;
     justify-content: center;
     border: 1px solid rgba($white, 0.7);
@@ -326,6 +361,44 @@ body[data-sidebar="dark"] .premium-sidebar .menu-title {
 
 .sidebar-shell__menu {
     min-height: 0;
+}
+
+// Keep the expandable indicator aligned even when a menu label wraps.
+.premium-sidebar #sidebar-menu > ul > li > a {
+    display: flex;
+    align-items: center;
+    gap: 0.55rem;
+    min-width: 0;
+}
+
+.premium-sidebar #sidebar-menu > ul > li > a.has-arrow {
+    padding-right: 3rem;
+}
+
+.premium-sidebar #sidebar-menu > ul > li > a > i {
+    flex: 0 0 1.75rem;
+    min-width: 1.75rem;
+}
+
+.premium-sidebar #sidebar-menu > ul > li > a > span:not(.badge) {
+    flex: 1 1 auto;
+    min-width: 0;
+    line-height: 1.25;
+}
+
+.premium-sidebar #sidebar-menu > ul > li > a.has-arrow::after {
+    position: absolute;
+    top: 50%;
+    right: 1.25rem;
+    float: none;
+    margin: 0;
+    line-height: 1;
+    transform: translateY(-50%);
+    transform-origin: center;
+}
+
+.premium-sidebar #sidebar-menu > ul > li.mm-active > a.has-arrow::after {
+    transform: translateY(-50%) rotate(-180deg);
 }
 
 .sidebar-shell__footer {
@@ -343,6 +416,13 @@ body[data-sidebar="dark"] .premium-sidebar .menu-title {
     display: flex;
     align-items: center;
     gap: 0.8rem;
+    color: inherit;
+    text-decoration: none;
+    border-radius: 1rem;
+}
+
+.sidebar-account__user:hover {
+    color: inherit;
 }
 
 .sidebar-account__avatar {
@@ -414,6 +494,7 @@ body[data-sidebar="dark"] .premium-sidebar .menu-title {
     background: rgba($white, 0.72);
     color: $gray-700;
     box-shadow: 0 8px 18px rgba($gray-900, 0.04);
+    text-decoration: none;
 }
 
 .sidebar-account__action:hover {

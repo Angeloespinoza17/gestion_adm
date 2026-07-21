@@ -31,6 +31,8 @@ use App\Models\Convivencia\ConvivenciaMeasure;
 use App\Models\Convivencia\ConvivenciaPlan as ConvivenciaPlanModel;
 use App\Models\Convivencia\ConvivenciaProtocol;
 use App\Models\Convivencia\ConvivenciaSociogram;
+use App\Models\Attendance\AttendanceGoal;
+use App\Models\Attendance\AttendanceIntervention;
 use App\Models\CalendarEvent;
 use App\Models\Library\BibliotecaEjemplar;
 use App\Models\Library\BibliotecaEspacio;
@@ -91,6 +93,8 @@ use App\Policies\ConvivenciaMeasurePolicy;
 use App\Policies\ConvivenciaPlanPolicy;
 use App\Policies\ConvivenciaProtocolPolicy;
 use App\Policies\ConvivenciaSociogramPolicy;
+use App\Policies\AttendanceGoalPolicy;
+use App\Policies\AttendanceInterventionPolicy;
 use App\Policies\InfirmaryAccidentPolicy;
 use App\Policies\InfirmaryAttentionPolicy;
 use App\Policies\InfirmaryMedicationAuthorizationPolicy;
@@ -118,6 +122,8 @@ class AuthServiceProvider extends ServiceProvider
      * @var array<class-string, class-string>
      */
     protected $policies = [
+        AttendanceGoal::class => AttendanceGoalPolicy::class,
+        AttendanceIntervention::class => AttendanceInterventionPolicy::class,
         CalendarEvent::class => CalendarEventPolicy::class,
         PermissionRequest::class => PermissionRequestPolicy::class,
         ApoyoAtencion::class => ApoyoAtencionPolicy::class,

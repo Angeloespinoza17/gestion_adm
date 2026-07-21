@@ -25,5 +25,14 @@ export default {
 </script>
 
 <template>
-  <BBadge pill :variant="variant">{{ label }}</BBadge>
+  <BBadge pill :variant="variant" class="convivencia-criticality-badge"><i class="bx bx-pulse"></i>{{ label }}</BBadge>
 </template>
+
+<style scoped>
+.convivencia-criticality-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  line-height: 1;
+}
+</style>

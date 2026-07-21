@@ -16,22 +16,28 @@ DATA;
             ->map(fn (array $row) => array_merge($row, [
                 'created_at' => $now,
                 'updated_at' => $now,
-            ]))
+            ]));
+
+        $existingKeys = DB::table('maintenance_checklist_items')
+            ->get(['system', 'subdimension', 'review'])
+            ->mapWithKeys(fn ($row) => [
+                $this->rowKey((array) $row) => true,
+            ]);
+
+        $rows = $rows
+            ->reject(fn (array $row) => $existingKeys->has($this->rowKey($row)))
+            ->unique(fn (array $row) => $this->rowKey($row))
             ->all();
 
-        // No existe un índice único para upsert; evitamos duplicados con insertOrIgnore.
         foreach (array_chunk($rows, 100) as $chunk) {
-            DB::table('maintenance_checklist_items')->insertOrIgnore($chunk);
+            DB::table('maintenance_checklist_items')->insert($chunk);
         }
     }
 
     public function down(): void
     {
-        $systems = collect($this->rows())->pluck('system')->unique()->values()->all();
-
-        foreach (array_chunk($systems, 20) as $chunk) {
-            DB::table('maintenance_checklist_items')->whereIn('system', $chunk)->delete();
-        }
+        // No eliminamos por sistema porque el criterio también alcanzaría ítems
+        // creados o modificados posteriormente en producción.
     }
 
     private function rows(): array
@@ -40,5 +46,13 @@ DATA;
 
         return json_decode(gzdecode(base64_decode($payload)), true, flags: JSON_THROW_ON_ERROR);
     }
-};
 
+    private function rowKey(array $row): string
+    {
+        return hash('sha256', implode("\0", [
+            (string) ($row['system'] ?? ''),
+            (string) ($row['subdimension'] ?? ''),
+            (string) ($row['review'] ?? ''),
+        ]));
+    }
+};

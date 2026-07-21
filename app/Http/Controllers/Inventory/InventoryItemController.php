@@ -18,6 +18,10 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
+use Illuminate\Validation\ValidationException;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class InventoryItemController extends Controller
 {
@@ -29,6 +33,7 @@ class InventoryItemController extends Controller
                 ->orderBy('name')
                 ->get(['id', 'name', 'slug', 'code_prefix']),
             'subcategories' => InventorySubcategory::query()
+                ->with('category:id,name')
                 ->where('active', true)
                 ->orderBy('name')
                 ->get(['id', 'category_id', 'name', 'slug']),
@@ -146,6 +151,37 @@ class InventoryItemController extends Controller
         return response()->json($items);
     }
 
+    public function similar(Request $request): JsonResponse
+    {
+        $search = trim((string) $request->query('search'));
+
+        if (mb_strlen($search) < 2) {
+            return response()->json(['data' => []]);
+        }
+
+        $items = InventoryItem::query()
+            ->with([
+                'category:id,name,slug,code_prefix',
+                'subcategory:id,category_id,name,slug',
+                'dependency:id,code,name,distribution,sector,zone,usage',
+                'responsibleUser:id,name,email',
+                'supplier:id,name,business_name,rut',
+            ])
+            ->where(function ($query) use ($search) {
+                $query
+                    ->where('code', 'like', "%{$search}%")
+                    ->orWhere('name', 'like', "%{$search}%")
+                    ->orWhere('brand', 'like', "%{$search}%")
+                    ->orWhere('model', 'like', "%{$search}%")
+                    ->orWhere('serial_number', 'like', "%{$search}%");
+            })
+            ->orderByDesc('updated_at')
+            ->limit(6)
+            ->get();
+
+        return response()->json(['data' => $items]);
+    }
+
     public function store(
         StoreInventoryItemRequest $request,
         InventoryCodeService $codeService,
@@ -153,38 +189,71 @@ class InventoryItemController extends Controller
     ): JsonResponse {
         $payload = $request->validated();
         $photo = $request->file('photo');
-        unset($payload['photo']);
+        $createQuantity = (int) ($payload['create_quantity'] ?? 1);
+        $createMode = $payload['create_mode'] ?? 'single';
+        unset($payload['photo'], $payload['create_quantity'], $payload['create_mode']);
 
-        $category = InventoryCategory::query()->findOrFail($payload['category_id']);
-        $code = $codeService->nextCode($category);
-
-        $payload['code'] = $code;
-        $payload['qr_code'] = $qrValueService->forCode($code);
+        $category = !empty($payload['category_id'])
+            ? InventoryCategory::query()->findOrFail($payload['category_id'])
+            : null;
 
         $userId = $request->user()?->id;
-        $payload['created_by'] = $userId;
-        $payload['updated_by'] = $userId;
-        $payload = $this->normalizeWarrantyPayload($payload);
+        $itemType = $payload['item_type'] ?? 'asset';
+        $createIndividualUnits = $itemType === 'asset'
+            && $createMode === 'units'
+            && $createQuantity > 1;
+        $totalToCreate = $createIndividualUnits ? $createQuantity : 1;
+        $items = [];
 
-        if (($payload['item_type'] ?? 'asset') === 'consumable' && !isset($payload['stock_quantity'])) {
-            $payload['stock_quantity'] = 0;
+        for ($index = 1; $index <= $totalToCreate; $index++) {
+            $itemPayload = $payload;
+            $code = $codeService->nextCode($category);
+
+            $itemPayload['code'] = $code;
+            $itemPayload['qr_code'] = $qrValueService->forCode($code);
+            $itemPayload['created_by'] = $userId;
+            $itemPayload['updated_by'] = $userId;
+            $itemPayload = $this->normalizeWarrantyPayload($itemPayload);
+
+            if (($itemPayload['item_type'] ?? 'asset') === 'consumable' && !isset($itemPayload['stock_quantity'])) {
+                $itemPayload['stock_quantity'] = 0;
+            }
+
+            if ($createIndividualUnits) {
+                $itemPayload['stock_quantity'] = 1;
+                $itemPayload['minimum_stock'] = null;
+                $itemPayload['unit_of_measure'] = $itemPayload['unit_of_measure'] ?: 'un';
+                $itemPayload['serial_number'] = $this->generatedFallbackSerialNumber();
+            }
+
+            $item = InventoryItem::create($itemPayload);
+
+            if ($photo instanceof UploadedFile) {
+                $this->storeMainPhoto($item, $photo, $userId);
+            }
+
+            $items[] = $item;
         }
 
-        $item = InventoryItem::create($payload);
-
-        if ($photo instanceof UploadedFile) {
-            $this->storeMainPhoto($item, $photo, $userId);
-        }
+        $relations = [
+            'category:id,name,slug,code_prefix',
+            'subcategory:id,category_id,name,slug',
+            'dependency:id,code,name,distribution,sector,zone,usage',
+            'responsibleUser:id,name,email',
+            'supplier:id,name,business_name,rut',
+        ];
+        $createdItems = InventoryItem::query()
+            ->with($relations)
+            ->whereIn('id', collect($items)->pluck('id'))
+            ->orderBy('id')
+            ->get();
 
         return response()->json([
-            'message' => 'Bien creado correctamente.',
-            'data' => $item->fresh()->load([
-                'category:id,name,slug,code_prefix',
-                'subcategory:id,category_id,name,slug',
-                'dependency:id,code,name,distribution,sector,zone,usage',
-                'responsibleUser:id,name,email',
-                'supplier:id,name,business_name,rut',
-            ]),
+            'message' => $createdItems->count() > 1
+                ? "{$createdItems->count()} bienes creados correctamente."
+                : 'Bien creado correctamente.',
+            'data' => $createdItems->count() === 1 ? $createdItems->first() : $createdItems,
+            'created_count' => $createdItems->count(),
         ], 201);
     }
 
@@ -207,6 +276,14 @@ class InventoryItemController extends Controller
                 'stockMovements.createdBy:id,name',
             ]),
         ]);
+    }
+
+    public function image(InventoryItem $item): StreamedResponse
+    {
+        abort_unless($item->image_path, 404);
+        abort_unless(Storage::disk('public')->exists($item->image_path), 404);
+
+        return Storage::disk('public')->response($item->image_path);
     }
 
     public function update(UpdateInventoryItemRequest $request, InventoryItem $item): JsonResponse
@@ -245,13 +322,31 @@ class InventoryItemController extends Controller
         ]);
     }
 
+    private function generatedFallbackSerialNumber(): string
+    {
+        return sprintf(
+            'SS-%s-%s-%s',
+            now()->format('Ymd'),
+            now()->format('His'),
+            Str::upper(Str::random(4))
+        );
+    }
+
     private function storeMainPhoto(InventoryItem $item, UploadedFile $photo, ?int $uploadedBy): void
     {
-        $path = $photo->storePubliclyAs(
+        $extension = $photo->extension() ?: $photo->getClientOriginalExtension() ?: 'jpg';
+        $path = Storage::disk('public')->putFileAs(
             sprintf('inventory/items/%d', $item->id),
-            'main_' . now()->format('Ymd_His') . '.' . $photo->getClientOriginalExtension(),
-            ['disk' => 'public']
+            $photo,
+            'main_' . now()->format('Ymd_His') . '_' . uniqid() . '.' . $extension,
+            ['visibility' => 'public']
         );
+
+        if (!$path) {
+            throw ValidationException::withMessages([
+                'photo' => 'No se pudo guardar la foto del bien. Revisa permisos de storage en producción.',
+            ]);
+        }
 
         $item->image_path = $path;
         $item->save();

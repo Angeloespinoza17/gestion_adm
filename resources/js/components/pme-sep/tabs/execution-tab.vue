@@ -1,6 +1,7 @@
 <script>
 import axios from "axios";
 import PmeHelpButton from "../help-button.vue";
+import PmePagination from "../pagination.vue";
 import PmeStatusBadge from "../status-badge.vue";
 import {
   confirmPmeAction,
@@ -9,6 +10,7 @@ import {
   formatPmeDate,
   formatPmeError,
   normalizeOptions,
+  normalizePagination,
   showPmeError,
   showPmeSuccess,
 } from "../module-utils";
@@ -83,7 +85,7 @@ const progressForm = () => ({
 });
 
 export default {
-  components: { PmeHelpButton, PmeStatusBadge },
+  components: { PmeHelpButton, PmePagination, PmeStatusBadge },
   props: {
     catalogs: {
       type: Object,
@@ -100,6 +102,7 @@ export default {
       saving: false,
       error: null,
       items: [],
+      pagination: normalizePagination(),
       selectedActionDetail: null,
       actionForm: actionForm(),
       activityForm: activityForm(),
@@ -158,6 +161,33 @@ export default {
     evidenceStateOptions() {
       return normalizeOptions(this.catalogs.options?.evidence_states || [], true);
     },
+    executionSummary() {
+      if (this.section === "acciones") {
+        const planned = this.items.reduce((sum, item) => sum + Number(item.planned_budget || 0), 0);
+        const executed = this.items.reduce((sum, item) => sum + Number(item.executed_budget || 0), 0);
+        const average = this.items.length ? Math.round(this.items.reduce((sum, item) => sum + Number(item.progress_percentage || 0), 0) / this.items.length) : 0;
+        return [
+          { label: "Acciones", value: this.items.length, icon: "bx-task" },
+          { label: "Avance promedio", value: `${average}%`, icon: "bx-trending-up" },
+          { label: "Presupuesto", value: formatCurrency(planned), icon: "bx-wallet" },
+          { label: "Ejecutado", value: formatCurrency(executed), icon: "bx-check-circle", tone: "success" },
+        ];
+      }
+      if (this.section === "hitos") {
+        return [
+          { label: "Hitos", value: this.items.length, icon: "bx-flag" },
+          { label: "Cumplidos", value: this.items.filter((item) => ["cumplido", "finalizado"].includes(item.state)).length, icon: "bx-check-circle", tone: "success" },
+          { label: "Pendientes", value: this.items.filter((item) => item.state === "pendiente").length, icon: "bx-time-five", tone: "warning" },
+          { label: "Atrasados", value: this.items.filter((item) => ["atrasado", "atrasada"].includes(item.state)).length, icon: "bx-error-circle", tone: "danger" },
+        ];
+      }
+      return [
+        { label: "Evidencias", value: this.items.length, icon: "bx-file" },
+        { label: "Aprobadas", value: this.items.filter((item) => item.review_status === "aprobada").length, icon: "bx-check-shield", tone: "success" },
+        { label: "En revisión", value: this.items.filter((item) => ["cargada", "en_revision"].includes(item.review_status)).length, icon: "bx-time-five", tone: "warning" },
+        { label: "Observadas", value: this.items.filter((item) => item.review_status === "observada").length, icon: "bx-comment-error", tone: "danger" },
+      ];
+    },
   },
   watch: {
     section: {
@@ -185,19 +215,34 @@ export default {
     startEvidenceCreate() {
       this.evidenceForm = evidenceForm();
     },
-    async loadItems() {
+    resetFilters() {
+      this.filters = {
+        pme_plan_id: null,
+        state: null,
+        responsible_user_id: null,
+        funding_source: null,
+        review_status: null,
+        evidence_type: null,
+      };
+      this.loadItems();
+    },
+    async loadItems(page = 1) {
+      const requestedPage = Number.isInteger(page) ? page : 1;
       this.loading = true;
       this.error = null;
       try {
         if (this.section === "acciones") {
-          const response = await axios.get("/api/pme-sep/actions", { params: this.filters });
+          const response = await axios.get("/api/pme-sep/actions", { params: { ...this.filters, page: requestedPage } });
           this.items = response.data.data || [];
+          this.pagination = normalizePagination(response.data);
         } else if (this.section === "hitos") {
-          const response = await axios.get("/api/pme-sep/milestones", { params: this.filters });
+          const response = await axios.get("/api/pme-sep/milestones", { params: { ...this.filters, page: requestedPage } });
           this.items = response.data.data || [];
+          this.pagination = normalizePagination(response.data);
         } else {
-          const response = await axios.get("/api/pme-sep/evidences", { params: this.filters });
+          const response = await axios.get("/api/pme-sep/evidences", { params: { ...this.filters, page: requestedPage } });
           this.items = response.data.data || [];
+          this.pagination = normalizePagination(response.data);
         }
       } catch (error) {
         this.error = formatPmeError(error, "No se pudo cargar la información de ejecución PME.");
@@ -359,7 +404,7 @@ export default {
       await axios.post(`/api/pme-sep/actions/${this.selectedActionDetail.id}/close`, { state: "cerrada", notes: "Cierre desde interfaz." });
       showPmeSuccess("Acción cerrada correctamente.");
       this.loadActionDetail(this.selectedActionDetail.id);
-      this.loadItems();
+      this.loadItems(1);
     },
     async reopenAction() {
       if (!this.selectedActionDetail?.id) return;
@@ -397,9 +442,7 @@ export default {
     <BCard class="border-0 shadow-sm">
       <template #header>
         <div class="d-flex justify-content-between align-items-center gap-2 flex-wrap">
-          <div class="fw-semibold">
-            {{ section === "acciones" ? "Gestión de acciones PME" : section === "hitos" ? "Gestión de hitos" : "Gestión de evidencias" }}
-          </div>
+          <div><div class="fw-semibold">{{ section === "acciones" ? (editingAction ? 'Editar acción PME' : 'Nueva acción PME') : section === "hitos" ? (editingMilestone ? 'Editar hito' : 'Nuevo hito') : "Cargar nueva evidencia" }}</div><div class="small text-muted">{{ section === 'acciones' ? 'Definición operativa, presupuesto y responsables' : section === 'hitos' ? 'Compromiso, fecha y avance esperado' : 'Respaldo documental del cumplimiento' }}</div></div>
           <PmeHelpButton :title="section === 'acciones' ? 'Ayuda: acciones PME' : section === 'hitos' ? 'Ayuda: hitos PME' : 'Ayuda: evidencias PME'" :text="section === 'acciones' ? 'Aquí se administran acciones PME, responsables, presupuesto, indicadores, actividades y avance.' : section === 'hitos' ? 'Aquí se administran hitos por acción y su línea de tiempo de cumplimiento.' : 'Aquí se cargan, revisan, aprueban o rechazan evidencias vinculadas al PME.'" />
         </div>
       </template>
@@ -428,7 +471,7 @@ export default {
           <BFormSelect v-model="actionForm.indicator_ids" multiple :options="indicatorOptions.map((item) => ({ value: item.value, text: item.label }))" />
         </div>
         <div class="col-12"><label class="form-label">Observaciones</label><BFormTextarea v-model="actionForm.observations" rows="2" /></div>
-        <div class="col-12 d-flex gap-2"><BButton variant="primary" @click="saveAction">Guardar acción</BButton><BButton variant="outline-secondary" @click="startActionCreate">Limpiar</BButton></div>
+        <div class="col-12 d-flex gap-2"><BButton variant="primary" :disabled="saving" @click="saveAction"><span v-if="saving" class="spinner-border spinner-border-sm"></span>{{ editingAction ? 'Actualizar acción' : 'Guardar acción' }}</BButton><BButton variant="outline-secondary" :disabled="saving" @click="startActionCreate">Cancelar</BButton></div>
       </div>
 
       <div v-else-if="section === 'hitos'" class="row g-3">
@@ -441,7 +484,7 @@ export default {
         <div class="col-md-4"><label class="form-label">Avance %</label><BFormInput v-model="milestoneForm.progress_percentage" type="number" /></div>
         <div class="col-md-8"><label class="form-label">Descripción</label><BFormTextarea v-model="milestoneForm.description" rows="2" /></div>
         <div class="col-12"><label class="form-label">Observaciones</label><BFormTextarea v-model="milestoneForm.observations" rows="2" /></div>
-        <div class="col-12 d-flex gap-2"><BButton variant="primary" @click="saveMilestone">Guardar hito</BButton><BButton variant="outline-secondary" @click="startMilestoneCreate">Limpiar</BButton></div>
+        <div class="col-12 d-flex gap-2"><BButton variant="primary" :disabled="saving" @click="saveMilestone"><span v-if="saving" class="spinner-border spinner-border-sm"></span>{{ editingMilestone ? 'Actualizar hito' : 'Guardar hito' }}</BButton><BButton variant="outline-secondary" :disabled="saving" @click="startMilestoneCreate">Cancelar</BButton></div>
       </div>
 
       <div v-else class="row g-3">
@@ -451,12 +494,12 @@ export default {
         <div class="col-12"><label class="form-label">Descripción</label><BFormTextarea v-model="evidenceForm.description" rows="2" /></div>
         <div class="col-md-6"><label class="form-label">Archivo</label><BFormFile @change="evidenceForm.document = $event.target.files[0]" /></div>
         <div class="col-md-6"><label class="form-label">Observaciones</label><BFormTextarea v-model="evidenceForm.observations" rows="2" /></div>
-        <div class="col-12"><BButton variant="primary" @click="saveEvidence">Cargar evidencia</BButton></div>
+        <div class="col-12"><BButton variant="primary" :disabled="saving" @click="saveEvidence"><span v-if="saving" class="spinner-border spinner-border-sm"></span>Cargar evidencia</BButton></div>
       </div>
     </BCard>
 
     <BCard v-if="section === 'acciones' && selectedActionDetail" class="border-0 shadow-sm">
-      <template #header><div class="d-flex justify-content-between align-items-center"><div class="fw-semibold">Detalle de acción y actividades</div><PmeHelpButton title="Ayuda: detalle de acción" text="Desde aquí se registran actividades, avances, evidencias y cierre de la acción seleccionada." /></div></template>
+      <template #header><div class="d-flex justify-content-between align-items-center"><div><div class="fw-semibold">{{ selectedActionDetail.name }}</div><div class="small text-muted">Avance, actividades y evidencias de la acción seleccionada</div></div><PmeHelpButton title="Ayuda: detalle de acción" text="Desde aquí se registran actividades, avances, evidencias y cierre de la acción seleccionada." /></div></template>
       <div class="row g-3">
         <div class="col-md-4"><label class="form-label">Avance %</label><BFormInput v-model="progressForm.progress_percentage" type="number" /></div>
         <div class="col-md-4"><label class="form-label">Ejecutado</label><BFormInput v-model="progressForm.executed_budget" type="number" /></div>
@@ -485,6 +528,7 @@ export default {
               </div>
               <PmeStatusBadge :status="activity.state" />
             </li>
+            <li v-if="!selectedActionDetail.activities?.length" class="list-group-item text-center text-muted py-4">Sin actividades registradas.</li>
           </ul>
         </div>
         <div class="col-xl-6">
@@ -497,6 +541,7 @@ export default {
               </div>
               <PmeStatusBadge :status="evidence.review_status" />
             </li>
+            <li v-if="!selectedActionDetail.evidences?.length" class="list-group-item text-center text-muted py-4">Sin evidencias vinculadas.</li>
           </ul>
         </div>
       </div>
@@ -505,10 +550,22 @@ export default {
     <BCard class="border-0 shadow-sm">
       <template #header>
         <div class="d-flex justify-content-between align-items-center gap-2 flex-wrap">
-          <div class="fw-semibold">{{ section === "acciones" ? "Acciones registradas" : section === "hitos" ? "Hitos registrados" : "Evidencias registradas" }}</div>
+          <div><div class="fw-semibold">{{ section === "acciones" ? "Acciones registradas" : section === "hitos" ? "Hitos registrados" : "Evidencias registradas" }}</div><div class="small text-muted">{{ items.length }} resultados en la vista actual</div></div>
           <PmeHelpButton :title="section === 'acciones' ? 'Ayuda: tabla de acciones' : section === 'hitos' ? 'Ayuda: tabla de hitos' : 'Ayuda: tabla de evidencias'" :text="section === 'acciones' ? 'La tabla muestra acciones con presupuesto, estado, responsable y cantidad de hitos, actividades y evidencias.' : section === 'hitos' ? 'La tabla muestra hitos por acción con fecha planificada, avance y estado.' : 'La tabla muestra evidencias, tipo, acción asociada y estado de revisión.'" />
         </div>
       </template>
+      <div class="execution-summary mb-3">
+        <div v-for="metric in executionSummary" :key="metric.label" :class="metric.tone ? `is-${metric.tone}` : ''"><i class="bx" :class="metric.icon"></i><span>{{ metric.label }}</span><strong>{{ metric.value }}</strong></div>
+      </div>
+      <div class="pme-filter-bar row g-2 mb-3">
+        <div class="col-md-3"><label class="form-label">Plan</label><BFormSelect v-model="filters.pme_plan_id" :options="planOptions.map((item) => ({ value: item.value, text: item.label }))" /></div>
+        <div v-if="section !== 'evidencias'" class="col-md-3"><label class="form-label">Estado</label><BFormSelect v-model="filters.state" :options="(section === 'acciones' ? actionStateOptions : milestoneStateOptions).map((item) => ({ value: item.value, text: item.label }))" /></div>
+        <div v-if="section !== 'evidencias'" class="col-md-3"><label class="form-label">Responsable</label><BFormSelect v-model="filters.responsible_user_id" :options="responsibleOptions.map((item) => ({ value: item.value, text: item.label }))" /></div>
+        <div v-if="section === 'acciones'" class="col-md-3"><label class="form-label">Financiamiento</label><BFormSelect v-model="filters.funding_source" :options="fundingOptions.map((item) => ({ value: item.value, text: item.label }))" /></div>
+        <div v-if="section === 'evidencias'" class="col-md-3"><label class="form-label">Tipo</label><BFormSelect v-model="filters.evidence_type" :options="evidenceTypeOptions.map((item) => ({ value: item.value, text: item.label }))" /></div>
+        <div v-if="section === 'evidencias'" class="col-md-3"><label class="form-label">Revisión</label><BFormSelect v-model="filters.review_status" :options="evidenceStateOptions.map((item) => ({ value: item.value, text: item.label }))" /></div>
+        <div class="col-md-3 d-flex align-items-end gap-2"><BButton variant="outline-secondary" class="flex-grow-1" @click="resetFilters"><i class="bx bx-reset"></i>Limpiar</BButton><BButton variant="primary" class="flex-grow-1" :disabled="loading" @click="loadItems(1)"><i class="bx bx-filter-alt"></i>Aplicar</BButton></div>
+      </div>
       <div class="table-responsive">
         <table class="table align-middle">
           <thead>
@@ -521,7 +578,7 @@ export default {
             <tr v-else-if="!items.length"><td :colspan="section === 'acciones' ? 7 : 6" class="text-center text-muted">Sin registros.</td></tr>
             <tr v-for="item in items" :key="item.id">
               <template v-if="section === 'acciones'">
-                <td>{{ item.name }}</td><td>{{ item.responsible_user?.name || '-' }}</td><td><PmeStatusBadge :status="item.state" /></td><td>{{ formatCurrency(item.planned_budget) }}</td><td>{{ formatCurrency(item.executed_budget) }}</td><td>{{ item.evidences_count }}</td>
+                <td><div class="fw-semibold">{{ item.name }}</div><div class="progress-inline"><span>{{ item.progress_percentage || 0 }}%</span><div class="pme-progress"><div class="pme-progress__bar" :style="{ width: `${Math.min(100, Number(item.progress_percentage || 0))}%` }"></div></div></div></td><td>{{ item.responsible_user?.name || '-' }}</td><td><PmeStatusBadge :status="item.state" /></td><td>{{ formatCurrency(item.planned_budget) }}</td><td>{{ formatCurrency(item.executed_budget) }}</td><td>{{ item.evidences_count }}</td>
                 <td class="text-end"><BButton size="sm" variant="outline-info" @click="loadActionDetail(item.id)">Detalle</BButton> <BButton size="sm" variant="outline-primary" @click="editAction(item)">Editar</BButton></td>
               </template>
               <template v-else-if="section === 'hitos'">
@@ -541,6 +598,11 @@ export default {
           </tbody>
         </table>
       </div>
+      <PmePagination :pagination="pagination" :loading="loading" @change="loadItems" />
     </BCard>
   </div>
 </template>
+
+<style scoped>
+.execution-summary{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));overflow:hidden;border:1px solid var(--pme-border);border-radius:9px}.execution-summary>div{display:grid;grid-template-columns:auto 1fr;align-items:center;gap:.08rem .45rem;padding:.68rem;border-right:1px solid #e7ebf1}.execution-summary>div:last-child{border:0}.execution-summary i{grid-row:1/3;color:#6680b1;font-size:1rem}.execution-summary span{color:#7b8798;font-size:.57rem}.execution-summary strong{overflow:hidden;color:#273449;font-size:.75rem;text-overflow:ellipsis;white-space:nowrap}.execution-summary .is-success i,.execution-summary .is-success strong{color:#16866f}.execution-summary .is-warning i,.execution-summary .is-warning strong{color:#bd7010}.execution-summary .is-danger i,.execution-summary .is-danger strong{color:#c24654}.progress-inline{display:flex;align-items:center;gap:.4rem;margin-top:.3rem;color:#7b8798;font-size:.58rem}.progress-inline .pme-progress{width:84px;height:4px}@media(max-width:767px){.execution-summary{grid-template-columns:1fr 1fr}.execution-summary>div:nth-child(2){border-right:0}.execution-summary>div:nth-child(-n+2){border-bottom:1px solid #e7ebf1}}
+</style>

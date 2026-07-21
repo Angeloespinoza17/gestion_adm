@@ -19,6 +19,9 @@ import {
 
 const emptyForm = () => ({
   id: null,
+  source_mode: "inventory",
+  inventory_item_id: null,
+  create_inventory_item: false,
   internal_code: "",
   equipment_type: "notebook",
   brand: "",
@@ -109,6 +112,14 @@ export default {
         }))
       );
     },
+    inventoryAssetOptions() {
+      return [{ value: null, text: "Selecciona un activo tecnológico" }].concat(
+        (this.catalogs.inventory_assets || []).map((item) => ({
+          value: item.id,
+          text: `${item.code} · ${item.name}${item.serial_number ? ` · S/N ${item.serial_number}` : ""}`,
+        }))
+      );
+    },
     summaryCards() {
       return [
         { label: "Total", value: this.summary.total, help: "Cantidad total de equipos encontrados con el filtro actual." },
@@ -167,9 +178,41 @@ export default {
       };
       this.load();
     },
-    openCreate() {
+    openCreate(mode = "inventory") {
       this.form = emptyForm();
+      this.form.source_mode = mode;
+      this.form.create_inventory_item = mode === "new";
       this.showModal = true;
+    },
+    selectSourceMode(mode) {
+      this.form.source_mode = mode;
+      this.form.create_inventory_item = mode === "new";
+      this.form.inventory_item_id = null;
+      if (mode === "new") {
+        this.form.internal_code = "";
+      }
+    },
+    applyInventoryAsset() {
+      const item = (this.catalogs.inventory_assets || []).find((asset) => asset.id === this.form.inventory_item_id);
+      if (!item) return;
+
+      const typeMap = {
+        computadores: "desktop", notebooks: "notebook", tablets: "tablet", impresoras: "printer",
+        proyectores: "projector", routers: "router", camaras: "camera", monitores: "monitor",
+        perifericos: "other", amplificacion: "audio_equipment", microfonos: "audio_equipment",
+        parlantes: "speaker", pantallas: "monitor",
+      };
+      this.form.internal_code = item.code || "";
+      this.form.equipment_type = typeMap[item.subcategory?.slug] || "other";
+      this.form.brand = item.brand || "";
+      this.form.model = item.model || "";
+      this.form.serial_number = item.serial_number || "";
+      this.form.acquisition_date = String(item.purchase_date || "").slice(0, 10);
+      this.form.reference_value = item.purchase_value || "";
+      this.form.responsible_user_id = item.responsible_user_id || null;
+      this.form.responsible_name = item.responsible_user?.name || "";
+      this.form.location_name = item.dependency?.name || "";
+      this.form.photo_url = item.image_url || null;
     },
     async openEdit(item) {
       try {
@@ -194,6 +237,8 @@ export default {
       this.form = {
         ...emptyForm(),
         id: item.id,
+        source_mode: item.inventory_item_id ? "linked" : "legacy",
+        inventory_item_id: item.inventory_item_id || null,
         internal_code: item.internal_code || "",
         equipment_type: item.equipment_type || "notebook",
         brand: item.brand || "",
@@ -220,6 +265,8 @@ export default {
     buildFormData() {
       const formData = new FormData();
       Object.entries({
+        inventory_item_id: this.form.inventory_item_id || null,
+        create_inventory_item: this.form.create_inventory_item ? 1 : 0,
         internal_code: this.form.internal_code,
         equipment_type: this.form.equipment_type,
         brand: this.form.brand || null,
@@ -250,7 +297,9 @@ export default {
         title: this.form.id ? "Confirmar edición del equipo" : "Confirmar alta del equipo",
         text: this.form.id
           ? "Se actualizará la ficha del equipo y su trazabilidad."
-          : "Se registrará un nuevo equipo en el módulo Informática.",
+          : this.form.create_inventory_item
+            ? "Se creará el activo en Inventario y su ficha operativa en Informática."
+            : "El activo del Inventario quedará vinculado a Informática.",
         confirmButtonText: this.form.id ? "Sí, actualizar" : "Sí, crear",
       });
 
@@ -406,7 +455,8 @@ export default {
           title="Ayuda: gestión de equipos"
           text="Aquí se administran los equipos informáticos con alta, edición, estado, baja lógica, responsables, fotografía, filtros y trazabilidad completa."
         />
-        <BButton v-if="capabilities.can_create_equipment" variant="primary" @click="openCreate">Nuevo equipo</BButton>
+        <BButton v-if="capabilities.can_create_equipment" variant="outline-primary" @click="openCreate('inventory')"><i class="bx bx-link me-1"></i>Agregar desde inventario</BButton>
+        <BButton v-if="capabilities.can_create_equipment" variant="primary" @click="openCreate('new')"><i class="bx bx-plus me-1"></i>Crear activo tecnológico</BButton>
       </div>
     </div>
 
@@ -493,7 +543,7 @@ export default {
       </div>
     </BCard>
 
-    <BModal v-model="showModal" size="xl" :title="form.id ? 'Editar equipo informático' : 'Nuevo equipo informático'" hide-footer>
+    <BModal v-model="showModal" size="xl" :title="form.id ? 'Editar equipo informático' : 'Incorporar equipo informático'" hide-footer>
       <div class="d-flex justify-content-between align-items-center mb-3 gap-2">
         <div class="text-muted small">Completa la ficha técnica, responsable, estado y datos de identificación del equipo.</div>
         <InformaticaHelpButton
@@ -501,8 +551,31 @@ export default {
           text="El código interno debe ser único. También puedes registrar número de serie, responsable habitual, ubicación, fotografía y dejar el equipo activo o inactivo."
         />
       </div>
+      <div v-if="!form.id" class="equipment-source-picker mb-4">
+        <button type="button" class="equipment-source-option" :class="{ 'is-active': form.source_mode === 'inventory' }" @click="selectSourceMode('inventory')">
+          <span class="equipment-source-option__icon"><i class="bx bx-package"></i></span>
+          <span><strong>Usar activo del inventario</strong><small>Vincula un equipo tecnológico ya registrado, sin duplicarlo.</small></span>
+          <i class="bx bx-check-circle equipment-source-option__check"></i>
+        </button>
+        <button type="button" class="equipment-source-option" :class="{ 'is-active': form.source_mode === 'new' }" @click="selectSourceMode('new')">
+          <span class="equipment-source-option__icon"><i class="bx bx-plus-circle"></i></span>
+          <span><strong>Crear activo nuevo</strong><small>Lo registra simultáneamente en Inventario e Informática.</small></span>
+          <i class="bx bx-check-circle equipment-source-option__check"></i>
+        </button>
+      </div>
+
+      <div v-if="!form.id && form.source_mode === 'inventory'" class="inventory-asset-selector mb-4">
+        <label class="form-label">Activo tecnológico del inventario</label>
+        <BFormSelect v-model="form.inventory_item_id" :options="inventoryAssetOptions" @update:model-value="applyInventoryAsset" />
+        <div v-if="!catalogs.inventory_assets?.length" class="small text-warning mt-2"><i class="bx bx-info-circle me-1"></i>No hay activos tecnológicos disponibles para vincular. Puedes crear uno nuevo desde esta misma ventana.</div>
+      </div>
+
+      <div v-if="form.id && form.inventory_item_id" class="linked-inventory-notice mb-4">
+        <i class="bx bx-link-alt"></i><div><strong>Vinculado con Inventario</strong><small>Los datos principales y el estado se mantienen sincronizados con el activo institucional.</small></div>
+      </div>
+
       <div class="row g-3">
-        <div class="col-md-3"><label class="form-label">Código interno</label><BFormInput v-model="form.internal_code" /></div>
+        <div class="col-md-3"><label class="form-label">Código institucional</label><BFormInput v-model="form.internal_code" :disabled="form.create_inventory_item || Boolean(form.inventory_item_id)" :placeholder="form.create_inventory_item ? 'Se generará automáticamente' : ''" /></div>
         <div class="col-md-3"><label class="form-label">Tipo de equipo</label><BFormSelect v-model="form.equipment_type" :options="normalizeOptions(catalogs.equipment_types || []).map((item) => ({ value: item.value, text: item.label }))" /></div>
         <div class="col-md-3"><label class="form-label">Marca</label><BFormInput v-model="form.brand" /></div>
         <div class="col-md-3"><label class="form-label">Modelo</label><BFormInput v-model="form.model" /></div>
@@ -525,7 +598,7 @@ export default {
       </div>
       <div class="d-flex justify-content-end gap-2 mt-4">
         <BButton variant="light" @click="closeModal">Cancelar</BButton>
-        <BButton variant="primary" :disabled="saving" @click="save">{{ saving ? "Guardando..." : form.id ? "Actualizar equipo" : "Crear equipo" }}</BButton>
+        <BButton variant="primary" :disabled="saving || (!form.id && form.source_mode === 'inventory' && !form.inventory_item_id)" @click="save">{{ saving ? "Guardando..." : form.id ? "Actualizar equipo" : form.create_inventory_item ? "Crear activo y ficha" : "Vincular activo" }}</BButton>
       </div>
     </BModal>
 
@@ -669,3 +742,15 @@ export default {
     </BModal>
   </div>
 </template>
+
+<style scoped>
+.equipment-source-picker { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .8rem; }
+.equipment-source-option { position: relative; display: flex; align-items: center; gap: .8rem; padding: 1rem; color: #616b7d; text-align: left; border: 1px solid #e1e5ee; border-radius: 13px; background: #fff; transition: .18s ease; }
+.equipment-source-option:hover { border-color: #b8c2f4; background: #f8f9ff; }
+.equipment-source-option.is-active { color: #4057d6; border-color: #8fa0f1; background: rgba(85,110,230,.07); box-shadow: inset 0 0 0 1px rgba(85,110,230,.12); }
+.equipment-source-option__icon { display: grid; flex: 0 0 42px; height: 42px; place-items: center; border-radius: 11px; background: #f0f2f8; font-size: 1.35rem; }.equipment-source-option.is-active .equipment-source-option__icon { color: #fff; background: #556ee6; }
+.equipment-source-option strong, .equipment-source-option small { display: block; }.equipment-source-option strong { color: #273047; font-size: .86rem; }.equipment-source-option small { margin-top: .2rem; font-size: .72rem; }.equipment-source-option__check { margin-left: auto; opacity: 0; font-size: 1.25rem; }.equipment-source-option.is-active .equipment-source-option__check { opacity: 1; }
+.inventory-asset-selector { padding: 1rem; border: 1px solid #dce2fa; border-radius: 12px; background: #f8f9ff; }
+.linked-inventory-notice { display: flex; align-items: center; gap: .8rem; padding: .85rem 1rem; color: #286a55; border-radius: 11px; background: rgba(52,195,143,.1); }.linked-inventory-notice > i { font-size: 1.45rem; }.linked-inventory-notice strong, .linked-inventory-notice small { display: block; }.linked-inventory-notice small { margin-top: .15rem; color: #648076; }
+@media (max-width: 767.98px) { .equipment-source-picker { grid-template-columns: 1fr; } }
+</style>

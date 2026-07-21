@@ -3,27 +3,31 @@
 namespace App\Http\Controllers\Students;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Students\ImportStudentPdfChunkRequest;
+use App\Http\Requests\Students\ImportStudentPdfRequest;
 use App\Http\Requests\Students\StoreStudentRequest;
 use App\Http\Requests\Students\UpdateStudentRequest;
 use App\Models\AcademicYear;
-use App\Models\CourseSection;
 use App\Models\EducationLevel;
 use App\Models\StudentEnrollment;
 use App\Models\StudentEnrollmentMovement;
 use App\Models\StudentProfile;
 use App\Models\StudentPromotion;
 use App\Services\Students\StudentAccountService;
+use App\Services\Students\StudentPdfChunkUploadService;
+use App\Services\Students\StudentPdfImportService;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
+use Illuminate\Validation\ValidationException;
+use RuntimeException;
 
 class StudentController extends Controller
 {
     public function __construct(
         private readonly StudentAccountService $studentAccountService,
-    ) {
-    }
+    ) {}
 
     public function catalogs(): JsonResponse
     {
@@ -65,6 +69,70 @@ class StudentController extends Controller
 
         return response()->json([
             'data' => $this->decorateStudentList($students, $filters)->values(),
+        ]);
+    }
+
+    public function importPdf(ImportStudentPdfRequest $request, StudentPdfImportService $importService): JsonResponse
+    {
+        return $this->studentPdfImportResponse(
+            fn () => $importService->import(
+                $request->file('pdf'),
+                $request->user(),
+                $request->integer('course_section_id') ?: null,
+            ),
+        );
+    }
+
+    public function importPdfChunk(
+        ImportStudentPdfChunkRequest $request,
+        StudentPdfChunkUploadService $chunkUploadService,
+        StudentPdfImportService $importService,
+    ): JsonResponse {
+        try {
+            $chunk = $chunkUploadService->receive(
+                (int) $request->user()->id,
+                $request->validated(),
+                $request->getContent(),
+            );
+        } catch (RuntimeException $exception) {
+            throw ValidationException::withMessages([
+                'pdf' => [$exception->getMessage()],
+            ]);
+        }
+
+        if (! $chunk['completed']) {
+            return response()->json([
+                'message' => 'Fragmento recibido.',
+                'data' => $chunk,
+            ]);
+        }
+
+        try {
+            return $this->studentPdfImportResponse(
+                fn () => $importService->importPath(
+                    $chunk['path'],
+                    $request->user(),
+                    $request->integer('course_section_id') ?: null,
+                ),
+            );
+        } finally {
+            $chunkUploadService->cleanup($chunk['directory']);
+        }
+    }
+
+    private function studentPdfImportResponse(callable $import): JsonResponse
+    {
+        try {
+            $result = $import();
+        } catch (RuntimeException $exception) {
+            throw ValidationException::withMessages([
+                'pdf' => [$exception->getMessage()],
+            ]);
+        }
+
+        return response()->json([
+            'message' => 'Importación de estudiantes finalizada.',
+            'data' => $result,
         ]);
     }
 
@@ -122,7 +190,7 @@ class StudentController extends Controller
         $student->load([
             'user:id,student_id,name,email,active',
             'user.roles:id,name,slug',
-            'enrollments:id,student_profile_id,academic_year_id,course_section_id,enrollment_status,enrolled_at,withdrawn_at,observations,snapshot_year_name,snapshot_level_name,snapshot_section_name,snapshot_course_display_name,created_by,updated_by,created_at,updated_at',
+            'enrollments:id,student_profile_id,academic_year_id,course_section_id,enrollment_status,registration_number,enrolled_at,withdrawn_at,observations,snapshot_year_name,snapshot_level_name,snapshot_section_name,snapshot_course_display_name,created_by,updated_by,created_at,updated_at',
             'enrollments.academicYear:id,name,year,is_active,is_closed',
             'enrollments.courseSection:id,academic_year_id,education_level_id,section_name,display_name',
             'enrollments.courseSection.educationLevel:id,name,order,type',

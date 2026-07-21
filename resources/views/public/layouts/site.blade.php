@@ -15,12 +15,32 @@
   <link href="https://fonts.gstatic.com" rel="preconnect" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&family=Poppins:wght@400;500;600;700;800&family=Raleway:wght@500;600;700&display=swap" rel="stylesheet">
 
-  <link href="{{ asset('niceschool/assets/vendor/bootstrap/css/bootstrap.min.css') }}" rel="stylesheet">
+  @php
+    $siteCssPath = 'niceschool/assets/css/main.css';
+    $bootstrapCssPath = 'niceschool/assets/vendor/bootstrap/css/bootstrap.min.css';
+    $bootstrapJsPath = 'niceschool/assets/vendor/bootstrap/js/bootstrap.bundle.min.js';
+
+    $siteAssetVersion = file_exists(public_path($siteCssPath))
+      ? filemtime(public_path($siteCssPath))
+      : time();
+    $bootstrapAssetVersion = file_exists(public_path($bootstrapCssPath))
+      ? filemtime(public_path($bootstrapCssPath))
+      : $siteAssetVersion;
+    $bootstrapJsAssetVersion = file_exists(public_path($bootstrapJsPath))
+      ? filemtime(public_path($bootstrapJsPath))
+      : $siteAssetVersion;
+  @endphp
+
+  @if(file_exists(public_path($bootstrapCssPath)))
+    <link href="{{ asset($bootstrapCssPath) }}?v={{ $bootstrapAssetVersion }}" rel="stylesheet">
+  @else
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.6/dist/css/bootstrap.min.css" rel="stylesheet">
+  @endif
   <link href="{{ asset('niceschool/assets/vendor/bootstrap-icons/bootstrap-icons.css') }}" rel="stylesheet">
   <link href="{{ asset('niceschool/assets/vendor/aos/aos.css') }}" rel="stylesheet">
   <link href="{{ asset('niceschool/assets/vendor/swiper/swiper-bundle.min.css') }}" rel="stylesheet">
   <link href="{{ asset('niceschool/assets/vendor/glightbox/css/glightbox.min.css') }}" rel="stylesheet">
-  <link href="{{ asset('niceschool/assets/css/main.css') }}" rel="stylesheet">
+  <link href="{{ asset($siteCssPath) }}?v={{ $siteAssetVersion }}" rel="stylesheet">
 
   <style>
     :root {
@@ -39,6 +59,165 @@
 
     body {
       color: var(--default-color);
+    }
+
+    .fixed-top {
+      left: 0;
+      position: fixed;
+      right: 0;
+      top: 0;
+      z-index: 1030;
+    }
+
+    .position-relative {
+      position: relative !important;
+    }
+
+    .d-flex {
+      display: flex !important;
+    }
+
+    .align-items-center {
+      align-items: center !important;
+    }
+
+    .align-items-stretch {
+      align-items: stretch !important;
+    }
+
+    .justify-content-between {
+      justify-content: space-between !important;
+    }
+
+    .text-center {
+      text-align: center !important;
+    }
+
+    .container,
+    .container-fluid,
+    .container-xl {
+      margin-left: auto;
+      margin-right: auto;
+      padding-left: 12px;
+      padding-right: 12px;
+      width: 100%;
+    }
+
+    @media (min-width: 576px) {
+      .container {
+        max-width: 540px;
+      }
+    }
+
+    @media (min-width: 768px) {
+      .container {
+        max-width: 720px;
+      }
+    }
+
+    @media (min-width: 992px) {
+      .container {
+        max-width: 960px;
+      }
+    }
+
+    @media (min-width: 1200px) {
+      .container,
+      .container-xl {
+        max-width: 1140px;
+      }
+    }
+
+    @media (min-width: 1400px) {
+      .container,
+      .container-xl {
+        max-width: 1320px;
+      }
+    }
+
+    .row {
+      display: flex;
+      flex-wrap: wrap;
+      margin-left: -12px;
+      margin-right: -12px;
+    }
+
+    .row > * {
+      box-sizing: border-box;
+      flex-shrink: 0;
+      max-width: 100%;
+      padding-left: 12px;
+      padding-right: 12px;
+      width: 100%;
+    }
+
+    @media (min-width: 768px) {
+      .col-md-4 {
+        flex: 0 0 auto;
+        width: 33.33333333%;
+      }
+
+      .col-md-6 {
+        flex: 0 0 auto;
+        width: 50%;
+      }
+    }
+
+    @media (min-width: 992px) {
+      .col-lg-5 {
+        flex: 0 0 auto;
+        width: 41.66666667%;
+      }
+
+      .col-lg-6 {
+        flex: 0 0 auto;
+        width: 50%;
+      }
+
+      .col-lg-7 {
+        flex: 0 0 auto;
+        width: 58.33333333%;
+      }
+    }
+
+    @media (min-width: 1200px) {
+      .col-xl-4 {
+        flex: 0 0 auto;
+        width: 33.33333333%;
+      }
+    }
+
+    .img-fluid {
+      height: auto;
+      max-width: 100%;
+    }
+
+    body.index-page .header {
+      background: transparent;
+      position: fixed !important;
+    }
+
+    body.index-page.scrolled .header {
+      background: rgba(0, 0, 0, 0.8);
+    }
+
+    body.index-page .header > .container-fluid {
+      display: flex;
+    }
+
+    body.index-page .hero {
+      margin-top: 0;
+    }
+
+    body.index-page .hero .hero-container {
+      min-height: 90vh;
+      padding-bottom: 80px;
+      padding-top: 180px;
+    }
+
+    body.index-page .hero .hero-container .container {
+      position: relative;
+      z-index: 3;
     }
 
     .header .logo {
@@ -508,13 +687,20 @@
       position: relative;
     }
 
-    .photo-shell img {
+    .photo-shell img,
+    .team-empty-photo {
       aspect-ratio: 4 / 4.9;
       background: #dcecf7;
       border-radius: 20px;
       display: block;
       object-fit: cover;
       width: 100%;
+    }
+
+    .team-empty-photo {
+      background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.42), rgba(255, 255, 255, 0.1)),
+        #dcecf7;
     }
 
     .overlay-layer {
@@ -1024,6 +1210,313 @@
       text-transform: uppercase;
     }
 
+    .event-card-link {
+      color: inherit;
+      display: block;
+      height: 100%;
+    }
+
+    .event-card-link:hover {
+      color: inherit;
+    }
+
+    .event-card-link .event-card {
+      height: 100%;
+    }
+
+    .event-card-link .event-content h3 {
+      transition: color 0.2s ease;
+    }
+
+    .event-card-link:hover .event-content h3 {
+      color: var(--cnsc-gold);
+    }
+
+    .news-card h3 a {
+      color: inherit;
+    }
+
+    .news-card .read-more {
+      color: var(--primary-color);
+      display: inline-flex;
+      font-weight: 800;
+      margin-top: 8px;
+    }
+
+    .recent-news-carousel {
+      padding-bottom: 44px;
+    }
+
+    .recent-news-slide {
+      background: #ffffff;
+      border: 1px solid color-mix(in srgb, var(--default-color), transparent 88%);
+      border-radius: 8px;
+      overflow: hidden;
+    }
+
+    .recent-news-image-link {
+      display: block;
+      height: 100%;
+      min-height: 360px;
+    }
+
+    .recent-news-slide-image {
+      display: block;
+      height: 100%;
+      min-height: 360px;
+      object-fit: cover;
+      width: 100%;
+    }
+
+    .recent-news-slide-content {
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      min-height: 360px;
+      padding: 42px;
+    }
+
+    .recent-news-slide h3 {
+      color: var(--primary-color);
+      font-size: clamp(1.75rem, 3vw, 2.7rem);
+      line-height: 1.14;
+      margin-bottom: 18px;
+    }
+
+    .recent-news-slide h3 a {
+      color: inherit;
+    }
+
+    .recent-news-summary {
+      color: color-mix(in srgb, var(--default-color), transparent 12%);
+      font-size: 1.05rem;
+      line-height: 1.65;
+      margin-bottom: 24px;
+    }
+
+    .recent-news-meta {
+      align-items: center;
+      display: flex;
+      gap: 14px;
+    }
+
+    .recent-news-meta img {
+      border-radius: 50%;
+      height: 48px;
+      object-fit: contain;
+      width: 48px;
+    }
+
+    .recent-news-meta p,
+    .recent-news-meta time {
+      display: block;
+      margin: 0;
+    }
+
+    .recent-news-meta p {
+      color: var(--primary-color);
+      font-weight: 800;
+    }
+
+    .recent-news-meta time {
+      color: color-mix(in srgb, var(--default-color), transparent 30%);
+      font-size: 0.92rem;
+    }
+
+    .recent-news-carousel .carousel-control-prev,
+    .recent-news-carousel .carousel-control-next {
+      background: var(--primary-color);
+      border-radius: 50%;
+      height: 44px;
+      opacity: 1;
+      top: calc(50% - 22px);
+      width: 44px;
+    }
+
+    .recent-news-carousel .carousel-control-prev {
+      left: 18px;
+    }
+
+    .recent-news-carousel .carousel-control-next {
+      right: 18px;
+    }
+
+    .recent-news-carousel .carousel-indicators {
+      bottom: 0;
+      margin-bottom: 0;
+    }
+
+    .recent-news-carousel .carousel-indicators [data-bs-target] {
+      background-color: var(--primary-color);
+      height: 10px;
+      width: 10px;
+    }
+
+    .news-back-link {
+      align-items: center;
+      color: rgba(255, 255, 255, 0.82);
+      display: inline-flex;
+      font-weight: 800;
+      gap: 8px;
+      margin-bottom: 20px;
+    }
+
+    .news-back-link:hover {
+      color: #ffffff;
+    }
+
+    .news-detail-title .eyebrow {
+      color: rgba(255, 255, 255, 0.72);
+    }
+
+    .news-detail-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px 24px;
+      font-weight: 700;
+      margin-top: 20px;
+      opacity: 0.92;
+    }
+
+    .news-detail-image {
+      border-radius: 8px;
+      display: block;
+      max-height: 560px;
+      object-fit: cover;
+      width: 100%;
+    }
+
+    .news-detail-lead {
+      color: var(--primary-color);
+      font-family: var(--heading-font);
+      font-size: clamp(1.25rem, 2vw, 1.65rem);
+      font-weight: 700;
+      line-height: 1.45;
+      margin: 34px 0 24px;
+    }
+
+    .news-detail-body {
+      color: color-mix(in srgb, var(--default-color), #111827 16%);
+      font-size: 1.05rem;
+      line-height: 1.8;
+      margin-top: 28px;
+    }
+
+    .news-detail-body h2,
+    .news-detail-body h3,
+    .news-detail-body h4 {
+      color: var(--primary-color);
+      margin: 32px 0 14px;
+    }
+
+    .news-detail-body p,
+    .news-detail-body ul,
+    .news-detail-body ol,
+    .news-detail-body blockquote {
+      margin-bottom: 20px;
+    }
+
+    .news-detail-body blockquote {
+      border-left: 4px solid var(--cnsc-gold);
+      color: var(--primary-color);
+      font-family: var(--heading-font);
+      font-size: 1.2rem;
+      font-weight: 700;
+      padding-left: 20px;
+    }
+
+    .news-detail-body a {
+      color: var(--primary-color);
+      font-weight: 800;
+      text-decoration: underline;
+    }
+
+    .event-detail-card {
+      display: grid;
+      gap: 28px;
+      grid-template-columns: 140px minmax(0, 1fr);
+    }
+
+    .event-detail-date {
+      align-items: center;
+      background: color-mix(in srgb, var(--primary-color), #ffffff 92%);
+      border-radius: 8px;
+      color: var(--primary-color);
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      min-height: 140px;
+      padding: 18px;
+      text-align: center;
+    }
+
+    .event-detail-date .month,
+    .event-detail-date .year {
+      font-weight: 800;
+      text-transform: uppercase;
+    }
+
+    .event-detail-date .day {
+      font-family: var(--heading-font);
+      font-size: 3rem;
+      font-weight: 800;
+      line-height: 1;
+    }
+
+    .event-detail-meta-list {
+      display: grid;
+      gap: 12px;
+      margin: 24px 0;
+    }
+
+    .event-detail-meta-list div {
+      align-items: center;
+      display: flex;
+      gap: 10px;
+    }
+
+    .event-detail-meta-list i {
+      color: var(--cnsc-gold);
+      font-size: 1.2rem;
+    }
+
+    @media (max-width: 991px) {
+      .recent-news-image-link,
+      .recent-news-slide-image,
+      .recent-news-slide-content {
+        min-height: 300px;
+      }
+
+      .recent-news-slide-content {
+        padding: 28px;
+      }
+    }
+
+    @media (max-width: 575px) {
+      .recent-news-carousel .carousel-control-prev,
+      .recent-news-carousel .carousel-control-next {
+        height: 38px;
+        top: 128px;
+        width: 38px;
+      }
+
+      .recent-news-carousel .carousel-control-prev {
+        left: 10px;
+      }
+
+      .recent-news-carousel .carousel-control-next {
+        right: 10px;
+      }
+
+      .recent-news-slide h3 {
+        font-size: 1.55rem;
+      }
+
+      .event-detail-card {
+        grid-template-columns: 1fr;
+      }
+    }
+
     .page-title {
       background: linear-gradient(135deg, rgba(23, 72, 102, 0.95), rgba(79, 155, 177, 0.9)), url("{{ asset('niceschool/assets/img/education/showcase-2.webp') }}") center/cover;
       color: #ffffff;
@@ -1143,7 +1636,8 @@
         min-height: 390px;
       }
 
-      .photo-shell img {
+      .photo-shell img,
+      .team-empty-photo {
         aspect-ratio: 4 / 4.5;
       }
 
@@ -1176,8 +1670,8 @@
             </ul>
           </li>
           <li><a href="{{ route('public.students-life') }}" class="{{ request()->routeIs('public.students-life') ? 'active' : '' }}">Vida estudiantil</a></li>
-          <li><a href="{{ route('public.news') }}" class="{{ request()->routeIs('public.news') ? 'active' : '' }}">Noticias</a></li>
-          <li><a href="{{ route('public.events') }}" class="{{ request()->routeIs('public.events') ? 'active' : '' }}">Eventos</a></li>
+          <li><a href="{{ route('public.news') }}" class="{{ request()->routeIs('public.news*') ? 'active' : '' }}">Noticias</a></li>
+          <li><a href="{{ route('public.events') }}" class="{{ request()->routeIs('public.events*') ? 'active' : '' }}">Eventos</a></li>
           <li><a href="{{ route('public.contact') }}" class="{{ request()->routeIs('public.contact') ? 'active' : '' }}">Contacto</a></li>
           <li><a href="{{ url('/login') }}" class="home-login-link">Sistema interno</a></li>
         </ul>
@@ -1239,7 +1733,11 @@
   <a href="#" id="scroll-top" class="scroll-top d-flex align-items-center justify-content-center"><i class="bi bi-arrow-up-short"></i></a>
   <div id="preloader"></div>
 
-  <script src="{{ asset('niceschool/assets/vendor/bootstrap/js/bootstrap.bundle.min.js') }}"></script>
+  @if(file_exists(public_path($bootstrapJsPath)))
+    <script src="{{ asset($bootstrapJsPath) }}?v={{ $bootstrapJsAssetVersion }}"></script>
+  @else
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.6/dist/js/bootstrap.bundle.min.js"></script>
+  @endif
   <script src="{{ asset('niceschool/assets/vendor/aos/aos.js') }}"></script>
   <script src="{{ asset('niceschool/assets/vendor/purecounter/purecounter_vanilla.js') }}"></script>
   <script src="{{ asset('niceschool/assets/vendor/imagesloaded/imagesloaded.pkgd.min.js') }}"></script>

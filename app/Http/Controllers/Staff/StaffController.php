@@ -17,6 +17,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\ValidationException;
 
@@ -122,7 +123,11 @@ class StaffController extends Controller
                 $this->storeProfilePhoto($staff, $profilePhoto);
             }
 
-            $this->syncAssociatedUser($staff, $associatedUserId, $payload['cargo_id'] ?? null);
+            if ($associatedUserId) {
+                $this->syncAssociatedUser($staff, $associatedUserId, $payload['cargo_id'] ?? null);
+            } else {
+                $this->createUserForStaff($staff);
+            }
 
             return $staff;
         });
@@ -240,6 +245,44 @@ class StaffController extends Controller
         }
 
         $user->save();
+    }
+
+    private function createUserForStaff(Staff $staff): User
+    {
+        $email = mb_strtolower(trim((string) $staff->institutional_email));
+        $rut = Rut::normalize((string) $staff->rut);
+
+        if ($email === '') {
+            throw ValidationException::withMessages([
+                'institutional_email' => 'El correo institucional es obligatorio para crear el usuario del funcionario.',
+            ]);
+        }
+
+        if (!$rut) {
+            throw ValidationException::withMessages([
+                'rut' => 'El RUT es obligatorio para crear la clave inicial del usuario.',
+            ]);
+        }
+
+        if (User::query()->where('email', $email)->exists()) {
+            throw ValidationException::withMessages([
+                'institutional_email' => 'Ya existe un usuario con ese correo institucional.',
+            ]);
+        }
+
+        $user = new User([
+            'name' => $staff->full_name,
+            'email' => $email,
+            'password' => Hash::make($rut),
+            'user_type' => 'staff',
+            'active' => (bool) $staff->active,
+            'staff_id' => $staff->id,
+            'cargo_id' => $staff->cargo_id,
+        ]);
+        $user->email_verified_at = now();
+        $user->save();
+
+        return $user;
     }
 
     private function storeProfilePhoto(Staff $staff, UploadedFile $photo): void

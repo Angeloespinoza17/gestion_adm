@@ -26,6 +26,7 @@ use Carbon\Carbon;
 use Database\Seeders\Modules\StaffModuleSeeder;
 use Database\Seeders\Modules\StudentModuleSeeder;
 use Database\Seeders\Support\ModuleSeeder;
+use Database\Seeders\Support\PreventsProductionSeeding;
 use Faker\Factory as Faker;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Collection;
@@ -34,12 +35,15 @@ use Illuminate\Support\Str;
 
 class AtencionesProfesionalesSeeder extends ModuleSeeder
 {
+    use PreventsProductionSeeding;
+
     private \Faker\Generator $faker;
 
     private User $actor;
 
     public function run(): void
     {
+        $this->preventProductionSeeding();
         $this->faker = Faker::create('es_CL');
         $this->faker->seed(20260629);
 

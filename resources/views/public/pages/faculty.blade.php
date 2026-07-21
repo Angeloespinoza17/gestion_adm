@@ -4,7 +4,7 @@
 @section('description', 'Equipo directivo, docentes, asistentes y estamentos de apoyo del Colegio Nuestra Señora del Carmen.')
 
 @php
-  $teamFilters = [
+  $teamFilters = $teamFilters ?? [
       ['key' => 'all', 'label' => 'Todos'],
       ['key' => 'directivo', 'label' => 'Equipo Directivo'],
       ['key' => 'administrativo', 'label' => 'Equipo Administrativo'],
@@ -16,7 +16,7 @@
       ['key' => 'docentes', 'label' => 'Equipo Docente'],
   ];
 
-  $teamGroups = [
+  $teamGroups = $teamGroups ?? [
       [
           'key' => 'directivo',
           'label' => 'Equipo Directivo',
@@ -421,7 +421,13 @@
         <span class="line"></span>
       </div>
       <h1>Nuestro Equipo</h1>
-      <p>Personas comprometidas con la formación integral de nuestros estudiantes.</p>
+      <p>
+        @if (!empty($staffCount) && !empty($departmentCount))
+          {{ $staffCount }} funcionarios organizados en {{ $departmentCount }} departamentos al servicio de la comunidad educativa.
+        @else
+          Personas comprometidas con la formación integral de nuestros estudiantes.
+        @endif
+      </p>
     </div>
   </section>
 
@@ -442,7 +448,7 @@
         </div>
       </div>
 
-      @foreach ($teamGroups as $group)
+      @forelse ($teamGroups as $group)
         <section class="team-group" data-group="{{ $group['key'] }}">
           <div class="team-group-header">
             <span class="eyebrow">{{ $group['eyebrow'] }}</span>
@@ -455,7 +461,11 @@
               <div class="col-12 col-md-6 col-lg-4">
                 <article class="team-card" data-estamento="{{ $group['key'] }}" tabindex="0" role="button" aria-label="{{ $person['name'] }}, {{ $person['role'] }}">
                   <div class="photo-shell">
-                    <img src="{{ $person['image'] }}" alt="{{ $person['name'] }}">
+                    @if (!empty($person['image']))
+                      <img src="{{ $person['image'] }}" alt="{{ $person['name'] }}">
+                    @else
+                      <div class="team-empty-photo" aria-hidden="true"></div>
+                    @endif
                     <div class="overlay-layer" aria-hidden="true">
                       <div class="overlay-box">
                         <div class="overlay-kicker">{{ $group['label'] }}</div>
@@ -464,12 +474,14 @@
                         @if (!empty($person['department']))
                           <p class="overlay-department">{{ $person['department'] }}</p>
                         @endif
-                        <div class="overlay-contact">
-                          <a href="mailto:{{ $person['email'] }}">
-                            <i class="bi bi-envelope"></i>
-                            <span>{{ $person['email'] }}</span>
-                          </a>
-                        </div>
+                        @if (!empty($person['email']))
+                          <div class="overlay-contact">
+                            <a href="mailto:{{ $person['email'] }}">
+                              <i class="bi bi-envelope"></i>
+                              <span>{{ $person['email'] }}</span>
+                            </a>
+                          </div>
+                        @endif
                       </div>
                     </div>
                   </div>
@@ -491,7 +503,15 @@
             @endforeach
           </div>
         </section>
-      @endforeach
+      @empty
+        <section class="team-group">
+          <div class="team-group-header">
+            <span class="eyebrow">Equipo</span>
+            <h2>Sin funcionarios publicados</h2>
+            <p>Cuando existan funcionarios activos asociados a departamentos, se mostrarán en esta sección.</p>
+          </div>
+        </section>
+      @endforelse
     </div>
   </div>
 

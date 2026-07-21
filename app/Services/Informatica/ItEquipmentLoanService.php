@@ -31,15 +31,15 @@ class ItEquipmentLoanService
             $loan = ItEquipmentLoan::query()->create([
                 'loan_code' => $payload['loan_code'] ?? $this->generateLoanCode(),
                 'it_equipment_id' => $equipment->id,
-                'requester_type' => $payload['requester_type'],
+                'requester_type' => $payload['requester_type'] ?? 'otro',
                 'requester_user_id' => $requester['requester_user_id'],
                 'requester_staff_id' => $requester['requester_staff_id'],
                 'requester_student_profile_id' => $requester['requester_student_profile_id'],
                 'requester_name_snapshot' => $requester['name'],
                 'requester_rut_snapshot' => $requester['rut'],
                 'requester_contact_snapshot' => $requester['contact'],
-                'borrowed_at' => Carbon::parse($payload['borrowed_at']),
-                'due_at' => Carbon::parse($payload['due_at']),
+                'borrowed_at' => !empty($payload['borrowed_at']) ? Carbon::parse($payload['borrowed_at']) : now(),
+                'due_at' => !empty($payload['due_at']) ? Carbon::parse($payload['due_at']) : null,
                 'purpose' => $payload['purpose'] ?? null,
                 'location_name' => $payload['location_name'] ?? null,
                 'delivered_by_user_id' => $payload['delivered_by_user_id'] ?? $actor->id,
@@ -186,7 +186,7 @@ class ItEquipmentLoanService
      */
     private function resolveRequester(array $payload): array
     {
-        return match ($payload['requester_type']) {
+        return match ($payload['requester_type'] ?? 'otro') {
             'funcionario' => $this->resolveStaffRequester($payload),
             'estudiante' => $this->resolveStudentRequester($payload),
             'apoderado', 'externo', 'otro' => $this->resolveManualRequester($payload),
@@ -267,17 +267,11 @@ class ItEquipmentLoanService
     {
         $name = trim((string) ($payload['requester_name'] ?? ''));
 
-        if ($name === '') {
-            throw ValidationException::withMessages([
-                'requester_name' => 'Debes indicar el nombre del solicitante o vincularlo a un registro del sistema.',
-            ]);
-        }
-
         return [
             'requester_user_id' => null,
             'requester_staff_id' => null,
             'requester_student_profile_id' => null,
-            'name' => $name,
+            'name' => $name ?: 'Sin especificar',
             'rut' => trim((string) ($payload['requester_rut'] ?? '')) ?: null,
             'contact' => trim((string) ($payload['requester_contact'] ?? '')) ?: null,
         ];

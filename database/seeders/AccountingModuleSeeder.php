@@ -2,6 +2,8 @@
 
 namespace Database\Seeders;
 
+use Database\Seeders\Support\PreventsProductionSeeding;
+
 use App\Models\Accounting\AccountingBankAccount;
 use App\Models\Accounting\AccountingBankMovement;
 use App\Models\Accounting\AccountingBudget;
@@ -35,6 +37,8 @@ use Database\Seeders\Support\ModuleSeeder;
 
 class AccountingModuleSeeder extends ModuleSeeder
 {
+    use PreventsProductionSeeding;
+
     private User $actor;
 
     public function __construct(
@@ -45,6 +49,7 @@ class AccountingModuleSeeder extends ModuleSeeder
 
     public function run(): void
     {
+        $this->preventProductionSeeding();
         $this->call([RbacSeeder::class]);
         $this->actor = $this->creator();
 

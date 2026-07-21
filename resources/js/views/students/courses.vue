@@ -19,6 +19,7 @@ export default {
     return {
       loading: false,
       saving: false,
+      deletingCourseId: null,
       error: null,
       catalogs: {
         academic_years: [],
@@ -132,6 +133,39 @@ export default {
         this.saving = false;
       }
     },
+    async deleteCourse(course) {
+      const confirmation = await Swal.fire({
+        title: `Eliminar ${course.display_name}`,
+        text: "Esta acción solo se realizará si el curso no tiene información académica asociada.",
+        icon: "warning",
+        showCancelButton: true,
+        confirmButtonText: "Sí, eliminar",
+        cancelButtonText: "Cancelar",
+        confirmButtonColor: "#dc3545",
+        reverseButtons: true,
+      });
+
+      if (!confirmation.isConfirmed) return;
+
+      this.deletingCourseId = course.id;
+      this.error = null;
+      try {
+        const response = await axios.delete(`/api/students/courses/${course.id}`);
+        if (this.selectedCourse?.id === course.id) this.showCourseModal = false;
+        await this.loadCourses();
+        await Swal.fire({
+          title: "Curso eliminado",
+          text: response.data?.message || "El curso fue eliminado correctamente.",
+          icon: "success",
+          confirmButtonText: "Aceptar",
+        });
+      } catch (error) {
+        this.error = error?.response?.data?.message || this.formatError(error);
+        await this.showErrorAlert(this.error);
+      } finally {
+        this.deletingCourseId = null;
+      }
+    },
     showErrorAlert(text) {
       return Swal.fire({ title: "Error", text, icon: "error" });
     },
@@ -202,6 +236,10 @@ export default {
           <div class="students-courses-actions">
             <BButton size="sm" variant="outline-primary" @click="showCourse(item)">Ver curso</BButton>
             <BButton size="sm" variant="warning" @click="openEdit(item)">Editar</BButton>
+            <BButton size="sm" variant="outline-danger" :disabled="deletingCourseId === item.id" @click="deleteCourse(item)">
+              <i class="bx" :class="deletingCourseId === item.id ? 'bx-loader-alt bx-spin' : 'bx-trash'"></i>
+              <span>{{ deletingCourseId === item.id ? "Eliminando" : "Eliminar" }}</span>
+            </BButton>
           </div>
         </template>
       </BTable>
@@ -313,6 +351,13 @@ export default {
   justify-content: center;
   gap: 0.5rem;
   flex-wrap: wrap;
+}
+
+.students-courses-actions :deep(.btn) {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.3rem;
 }
 
 .course-detail-summary {

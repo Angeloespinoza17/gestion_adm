@@ -26,7 +26,7 @@ export default {
 </script>
 
 <template>
-  <BButton variant="outline-info" size="sm" @click="openHelp">
-    <i class="bx bx-question-mark me-1"></i> ?
+  <BButton class="pme-help-button" variant="outline-info" size="sm" :title="title" :aria-label="title" @click="openHelp">
+    <i class="bx bx-help-circle"></i>
   </BButton>
 </template>

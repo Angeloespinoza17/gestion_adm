@@ -16,6 +16,7 @@ class InfirmaryAccessService
     public const MEDICATION_PERMISSION = 'administrar_medicamentos_enfermeria';
     public const ACCIDENT_PERMISSION = 'gestionar_accidentes_enfermeria';
     public const REPORT_PERMISSION = 'ver_reportes_enfermeria';
+    public const CATALOG_PERMISSION = 'administrar_catalogos_enfermeria';
 
     /**
      * @return array<int, string>
@@ -26,6 +27,7 @@ class InfirmaryAccessService
             'infirmary_medications',
             'infirmary_medication_movements',
             'infirmary_medication_authorizations',
+            'infirmary_medication_schedules',
             'infirmary_attentions',
             'infirmary_attention_treatments',
             'infirmary_attention_referrals',
@@ -68,6 +70,7 @@ class InfirmaryAccessService
             self::ACCIDENT_PERMISSION,
             self::REPORT_PERMISSION,
             self::EXPORT_PERMISSION,
+            self::CATALOG_PERMISSION,
         ] as $permission) {
             if ($user->hasPermission($permission)) {
                 return true;
@@ -119,5 +122,10 @@ class InfirmaryAccessService
     public function canExport(?User $user): bool
     {
         return (bool) $user && ($user->isSuperAdmin() || $user->hasPermission(self::EXPORT_PERMISSION));
+    }
+
+    public function canManageCatalogs(?User $user): bool
+    {
+        return (bool) $user && ($user->isSuperAdmin() || $user->hasPermission(self::CATALOG_PERMISSION));
     }
 }

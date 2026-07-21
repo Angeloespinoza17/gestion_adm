@@ -34,6 +34,7 @@ export default {
           if (token) {
             localStorage.setItem('token', token);
             localStorage.removeItem('permissions');
+            localStorage.removeItem('impersonator_token');
             axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
             document.cookie = `cnsc_token=${encodeURIComponent(token)}; path=/; samesite=lax`;
           }
@@ -43,6 +44,7 @@ export default {
             user_id: user.id,
             name: user.name,
             email: user.email,
+            profile_photo_url: user.profile_photo_url || null,
           }
           localStorage.setItem('user', JSON.stringify(logged_user));
           this.$router.push('/inicio');

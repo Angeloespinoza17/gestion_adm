@@ -7,7 +7,7 @@ import AccountingHelpButton from "../../components/accounting/help-button.vue";
 import { formatAccountingError, money, shortDate } from "../../components/accounting/module-utils";
 
 const navItems = [
-  { route: "/contabilidad", key: "dashboard", label: "Dashboard" },
+  { route: "/contabilidad", key: "dashboard", label: "Dashboard", group: "Resumen", icon: "bx-grid-alt" },
   { route: "/contabilidad/rendiciones", key: "renderings", label: "Rendiciones" },
   { route: "/contabilidad/presupuesto", key: "budget-lines", label: "Presupuesto" },
   { route: "/contabilidad/centros-costo", key: "cost-centers", label: "Centros de costo" },
@@ -29,6 +29,15 @@ const navItems = [
   { route: "/contabilidad/dj-arriendo", key: "dj-rental", label: "DJ Arriendo" },
   { route: "/contabilidad/declaracion-renta", key: "income-tax", label: "Renta" },
   { route: "/contabilidad/reportes", key: "reports", label: "Reportes" },
+];
+
+const navGroups = [
+  { label: "Resumen", icon: "bx-grid-alt", keys: ["dashboard", "cashflow", "reports"] },
+  { label: "Operaciones", icon: "bx-transfer-alt", keys: ["incomes", "expenses", "invoices", "honoraries", "payables", "cheques"] },
+  { label: "Presupuesto y fondos", icon: "bx-wallet", keys: ["budget-lines", "cost-centers", "funding-sources", "cash-funds", "funds-to-render", "renderings"] },
+  { label: "Tesorería", icon: "bx-building-house", keys: ["bank-movements"] },
+  { label: "Contabilidad", icon: "bx-book-open", keys: ["manual-accounts", "balance"] },
+  { label: "Tributario", icon: "bx-receipt", keys: ["f29", "dj-income", "dj-rental", "income-tax"] },
 ];
 
 const statusSelect = (statusKey) => ({ type: "select", statusKey });
@@ -594,6 +603,7 @@ export default {
   data() {
     return {
       navItems,
+      navGroups,
       metricCards,
       panels: panelDefinitions,
       catalogs: {
@@ -616,6 +626,9 @@ export default {
       loadingPanel: false,
       saving: false,
       search: "",
+      searchDraft: "",
+      formModalVisible: false,
+      searchTimer: null,
     };
   },
   computed: {
@@ -640,9 +653,29 @@ export default {
     secondaryItems() {
       return this.resourceItems(this.activePanel.secondaryResource);
     },
+    groupedNavigation() {
+      return this.navGroups.map((group) => ({
+        ...group,
+        items: group.keys.map((key) => this.navItems.find((item) => item.key === key)).filter(Boolean),
+      }));
+    },
+    activeGroupLabel() {
+      return this.groupedNavigation.find((group) => group.items.some((item) => item.key === this.activePanelKey))?.label || "Contabilidad";
+    },
+    activePanelKey() {
+      return Object.entries(this.panels).find(([, panel]) => panel === this.activePanel)?.[0] || "dashboard";
+    },
+    activeAmountTotal() {
+      const currencyColumn = (this.activePanel.columns || []).find((column) => column.format === "currency");
+      if (!currencyColumn) return null;
+      return this.activeItems.reduce((total, item) => total + Number(this.valueAtPath(item, currencyColumn.key) || 0), 0);
+    },
   },
   watch: {
     "$route.path"() {
+      this.search = "";
+      this.searchDraft = "";
+      this.formModalVisible = false;
       this.resetForm();
       this.refreshCurrent();
     },
@@ -657,6 +690,26 @@ export default {
     shortDate,
     isNavActive(route) {
       return this.$route.path === route;
+    },
+    openCreateModal() {
+      this.resetForm();
+      this.formModalVisible = true;
+    },
+    closeFormModal() {
+      this.formModalVisible = false;
+      this.resetForm();
+    },
+    applySearch() {
+      window.clearTimeout(this.searchTimer);
+      this.searchTimer = window.setTimeout(() => {
+        this.search = this.searchDraft.trim();
+        this.refreshCurrent();
+      }, 350);
+    },
+    clearSearch() {
+      this.searchDraft = "";
+      this.search = "";
+      this.refreshCurrent();
     },
     async loadCatalogs() {
       this.loadingCatalogs = true;
@@ -795,6 +848,7 @@ export default {
         }
 
         await Swal.fire("Guardado", "La información fue registrada correctamente.", "success");
+        this.formModalVisible = false;
         this.resetForm();
         await this.refreshCurrent();
       } catch (error) {
@@ -812,7 +866,7 @@ export default {
       });
       Object.assign(nextForm, this.activePanel.preset || {});
       this.form = nextForm;
-      window.scrollTo({ top: 0, behavior: "smooth" });
+      this.formModalVisible = true;
     },
     async removeItem(item) {
       const result = await Swal.fire({
@@ -888,106 +942,76 @@ export default {
 
 <template>
   <Layout>
-    <div class="d-flex flex-column gap-3">
-      <div class="d-flex flex-wrap justify-content-between align-items-start gap-3">
-        <div>
-          <h4 class="mb-1">{{ activePanel.title }}</h4>
-          <div class="text-muted">{{ activePanel.subtitle }}</div>
+    <div class="accounting-shell">
+      <header class="accounting-hero">
+        <div class="hero-copy">
+          <div class="eyebrow"><i class="bx bx-calculator"></i> Gestión financiera · {{ activeGroupLabel }}</div>
+          <h1>{{ activePanel.title }}</h1>
+          <p>{{ activePanel.subtitle }}</p>
         </div>
-        <AccountingHelpButton :title="`Ayuda: ${activePanel.title}`" :text="activePanel.help" />
-      </div>
+        <div class="hero-actions">
+          <AccountingHelpButton :title="`Ayuda: ${activePanel.title}`" :text="activePanel.help" />
+          <BButton v-if="activePanel.fields" variant="primary" @click="openCreateModal">
+            <i class="bx bx-plus"></i> Nuevo registro
+          </BButton>
+        </div>
+      </header>
 
-      <BAlert show variant="warning" class="mb-0">
-        Este módulo permite preparar, ordenar y controlar información interna. La presentación oficial debe realizarse en las plataformas correspondientes cuando aplique.
-      </BAlert>
+      <nav class="accounting-nav" aria-label="Secciones de contabilidad">
+        <div v-for="group in groupedNavigation" :key="group.label" class="nav-group">
+          <div class="nav-group-title"><i class="bx" :class="group.icon"></i>{{ group.label }}</div>
+          <div class="nav-group-links">
+            <router-link v-for="item in group.items" :key="item.route" :to="item.route" :class="{ active: isNavActive(item.route) }">
+              {{ item.label }}
+            </router-link>
+          </div>
+        </div>
+      </nav>
 
-      <div class="d-flex flex-wrap gap-2">
-        <router-link
-          v-for="item in navItems"
-          :key="item.route"
-          :to="item.route"
-          class="btn btn-sm"
-          :class="isNavActive(item.route) ? 'btn-primary' : 'btn-outline-secondary'"
-        >
-          {{ item.label }}
-        </router-link>
-      </div>
+      <div class="scope-notice"><i class="bx bx-info-circle"></i><span><strong>Control interno.</strong> La presentación oficial se realiza en las plataformas correspondientes cuando aplica.</span></div>
 
       <BCard v-if="loadingCatalogs || loadingPanel" class="border-0 shadow-sm">
         <LoadingState message="Cargando módulo de Contabilidad..." compact />
       </BCard>
 
       <template v-else-if="isDashboard">
-        <div class="row g-3">
-          <div v-for="metric in metricCards" :key="metric.key" class="col-md-6 col-xl-4">
-            <BCard class="border-0 shadow-sm h-100">
-              <div class="text-muted small">{{ metric.label }}</div>
-              <div class="h4 mt-2 mb-0">{{ money(dashboard.metrics[metric.key]) }}</div>
-            </BCard>
-          </div>
-          <div class="col-md-6 col-xl-4">
-            <BCard class="border-0 shadow-sm h-100">
-              <div class="text-muted small">Ejecución presupuestaria</div>
-              <div class="h4 mt-2 mb-0">{{ dashboard.metrics.budget_execution_percentage || 0 }}%</div>
-            </BCard>
-          </div>
+        <div class="metric-grid">
+          <article v-for="(metric, index) in metricCards" :key="metric.key" class="metric-card">
+            <div class="metric-icon" :class="`metric-icon-${index + 1}`"><i class="bx" :class="index === 0 ? 'bx-trending-up' : index === 1 ? 'bx-trending-down' : index === 2 ? 'bx-wallet' : 'bx-bar-chart-square'"></i></div>
+            <div><span>{{ metric.label }}</span><strong>{{ money(dashboard.metrics[metric.key]) }}</strong></div>
+          </article>
+          <article class="metric-card metric-card-accent">
+            <div class="metric-icon"><i class="bx bx-pie-chart-alt-2"></i></div>
+            <div><span>Ejecución presupuestaria</span><strong>{{ dashboard.metrics.budget_execution_percentage || 0 }}%</strong></div>
+            <div class="metric-progress"><span :style="{ width: `${Math.min(Number(dashboard.metrics.budget_execution_percentage || 0), 100)}%` }"></span></div>
+          </article>
         </div>
 
-        <div class="row g-3">
-          <div class="col-xl-4">
-            <BCard class="border-0 shadow-sm h-100">
-              <div class="fw-semibold mb-2">Alertas</div>
-              <ul class="list-unstyled mb-0 small">
-                <li class="py-1">Vencimientos próximos: {{ dashboard.alerts.payables_due_soon || 0 }}</li>
-                <li class="py-1">Cuentas vencidas: {{ dashboard.alerts.overdue_payables || 0 }}</li>
-                <li class="py-1">Fondos por rendir: {{ dashboard.alerts.funds_expiring || 0 }}</li>
-                <li class="py-1">Movimientos sin conciliar: {{ dashboard.alerts.reconciliation_pending || 0 }}</li>
-                <li class="py-1">Facturas pendientes: {{ dashboard.alerts.invoices_pending_payment || 0 }}</li>
-              </ul>
-            </BCard>
-          </div>
-          <div class="col-xl-4">
-            <BCard class="border-0 shadow-sm h-100">
-              <div class="fw-semibold mb-2">Resumen por subvención</div>
-              <div class="table-responsive">
-                <table class="table table-sm align-middle mb-0">
-                  <thead>
-                    <tr>
-                      <th>Fuente</th>
-                      <th>Saldo</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr v-for="item in dashboard.summaries.funding_sources" :key="item.label">
-                      <td>{{ item.label }}</td>
-                      <td>{{ money(item.balance) }}</td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-            </BCard>
-          </div>
-          <div class="col-xl-4">
-            <BCard class="border-0 shadow-sm h-100">
-              <div class="fw-semibold mb-2">Resumen por centro de costo</div>
-              <div class="table-responsive">
-                <table class="table table-sm align-middle mb-0">
-                  <thead>
-                    <tr>
-                      <th>Centro</th>
-                      <th>Diferencia</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr v-for="item in dashboard.summaries.cost_centers" :key="item.label">
-                      <td>{{ item.label }}</td>
-                      <td>{{ money(item.variance) }}</td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-            </BCard>
-          </div>
+        <div class="dashboard-grid">
+          <section class="content-card alert-panel">
+            <div class="card-heading"><div><span>ATENCIÓN REQUERIDA</span><h2>Alertas operativas</h2></div><i class="bx bx-bell"></i></div>
+            <div class="alert-list">
+              <div><i class="bx bx-calendar-exclamation"></i><span>Vencimientos próximos</span><strong>{{ dashboard.alerts.payables_due_soon || 0 }}</strong></div>
+              <div class="danger"><i class="bx bx-error-circle"></i><span>Cuentas vencidas</span><strong>{{ dashboard.alerts.overdue_payables || 0 }}</strong></div>
+              <div><i class="bx bx-time-five"></i><span>Fondos por rendir</span><strong>{{ dashboard.alerts.funds_expiring || 0 }}</strong></div>
+              <div><i class="bx bx-transfer"></i><span>Sin conciliar</span><strong>{{ dashboard.alerts.reconciliation_pending || 0 }}</strong></div>
+              <div><i class="bx bx-file"></i><span>Facturas pendientes</span><strong>{{ dashboard.alerts.invoices_pending_payment || 0 }}</strong></div>
+            </div>
+          </section>
+          <section class="content-card summary-panel">
+            <div class="card-heading"><div><span>DISTRIBUCIÓN</span><h2>Saldo por subvención</h2></div></div>
+            <div class="summary-list">
+              <div v-for="item in dashboard.summaries.funding_sources" :key="item.label"><span>{{ item.label }}</span><strong>{{ money(item.balance) }}</strong></div>
+              <div v-if="!dashboard.summaries.funding_sources.length" class="mini-empty">Sin datos para el período.</div>
+            </div>
+          </section>
+          <section class="content-card summary-panel">
+            <div class="card-heading"><div><span>GESTIÓN</span><h2>Variación por centro</h2></div></div>
+            <div class="summary-list">
+              <div v-for="item in dashboard.summaries.cost_centers" :key="item.label"><span>{{ item.label }}</span><strong>{{ money(item.variance) }}</strong></div>
+              <div v-if="!dashboard.summaries.cost_centers.length" class="mini-empty">Sin datos para el período.</div>
+            </div>
+          </section>
         </div>
       </template>
 
@@ -1136,58 +1160,25 @@ export default {
           </div>
         </BCard>
 
-        <BCard v-if="activePanel.fields" class="border-0 shadow-sm">
-          <div class="d-flex justify-content-between align-items-center mb-3">
-            <div class="fw-semibold">{{ editingId ? 'Editar registro' : 'Nuevo registro' }}</div>
-            <div class="d-flex gap-2">
-              <BButton variant="outline-secondary" size="sm" @click="resetForm">Limpiar</BButton>
-              <BButton variant="primary" size="sm" :disabled="saving" @click="submitForm">{{ saving ? 'Guardando...' : editingId ? 'Actualizar' : 'Guardar' }}</BButton>
+        <section class="content-card records-card">
+          <div class="records-toolbar">
+            <div>
+              <span class="toolbar-kicker">BASE DE DATOS</span>
+              <h2>Registros <span class="record-count">{{ activeItems.length }}</span></h2>
+            </div>
+            <div class="toolbar-actions">
+              <div class="search-box">
+                <i class="bx bx-search"></i>
+                <input v-model="searchDraft" type="search" placeholder="Buscar en registros..." aria-label="Buscar registros" @input="applySearch" />
+                <button v-if="searchDraft" type="button" aria-label="Limpiar búsqueda" @click="clearSearch"><i class="bx bx-x"></i></button>
+              </div>
+              <BButton variant="light" class="icon-action" title="Actualizar" @click="refreshCurrent"><i class="bx bx-refresh"></i></BButton>
+              <BButton v-if="activePanel.fields" variant="primary" @click="openCreateModal"><i class="bx bx-plus"></i> Agregar</BButton>
             </div>
           </div>
-          <div class="row g-3">
-            <div v-for="field in activePanel.fields" :key="field.key" class="col-md-6">
-              <label class="form-label">{{ field.label }}</label>
-              <BFormTextarea
-                v-if="field.type === 'textarea'"
-                v-model="form[field.key]"
-                rows="3"
-              />
-              <BFormCheckbox
-                v-else-if="field.type === 'checkbox'"
-                v-model="form[field.key]"
-                switch
-              >
-                {{ field.label }}
-              </BFormCheckbox>
-              <BFormSelect
-                v-else-if="field.type === 'select'"
-                v-model="form[field.key]"
-              >
-                <option value="">Seleccionar...</option>
-                <option
-                  v-for="option in resolveOptions(field)"
-                  :key="`${field.key}-${optionValue(option)}`"
-                  :value="optionValue(option)"
-                >
-                  {{ optionLabel(field, option) }}
-                </option>
-              </BFormSelect>
-              <BFormInput
-                v-else
-                v-model="form[field.key]"
-                :type="field.type || 'text'"
-              />
-            </div>
-          </div>
-        </BCard>
-
-        <BCard class="border-0 shadow-sm">
-          <div class="d-flex justify-content-between align-items-center mb-3">
-            <div class="fw-semibold">Registros</div>
-            <BButton variant="outline-primary" size="sm" @click="refreshCurrent">Actualizar</BButton>
-          </div>
+          <div v-if="activeAmountTotal !== null" class="table-summary"><span>Total visible</span><strong>{{ money(activeAmountTotal) }}</strong></div>
           <div class="table-responsive">
-            <table class="table table-sm align-middle mb-0">
+            <table class="table accounting-table align-middle mb-0">
               <thead>
                 <tr>
                   <th v-for="column in activePanel.columns" :key="column.key">{{ column.label }}</th>
@@ -1203,17 +1194,50 @@ export default {
                     <span v-else>{{ formatCell(item, column) }}</span>
                   </td>
                   <td class="text-end">
-                    <div class="d-flex justify-content-end gap-2">
-                      <BButton variant="outline-secondary" size="sm" @click="editItem(item)">Editar</BButton>
-                      <BButton variant="outline-danger" size="sm" @click="removeItem(item)">Eliminar</BButton>
+                    <div class="row-actions">
+                      <button type="button" title="Editar" @click="editItem(item)"><i class="bx bx-edit-alt"></i></button>
+                      <button type="button" class="danger" title="Eliminar" @click="removeItem(item)"><i class="bx bx-trash"></i></button>
                     </div>
+                  </td>
+                </tr>
+                <tr v-if="!activeItems.length">
+                  <td :colspan="(activePanel.columns?.length || 0) + 1">
+                    <div class="empty-state"><i class="bx bx-folder-open"></i><strong>{{ search ? 'No encontramos coincidencias' : 'Aún no hay registros' }}</strong><span>{{ search ? 'Prueba con otro término de búsqueda.' : 'Crea el primer registro para comenzar.' }}</span><BButton v-if="activePanel.fields && !search" variant="primary" size="sm" @click="openCreateModal">Crear registro</BButton></div>
                   </td>
                 </tr>
               </tbody>
             </table>
           </div>
-        </BCard>
+        </section>
       </template>
+
+      <BModal v-model="formModalVisible" size="lg" centered scrollable hide-footer modal-class="accounting-form-modal" @hidden="resetForm">
+        <template #title>
+          <div class="modal-title-block"><span>{{ activeGroupLabel }}</span><strong>{{ editingId ? 'Editar registro' : 'Nuevo registro' }}</strong></div>
+        </template>
+        <form @submit.prevent="submitForm">
+          <div class="modal-intro"><i class="bx bx-info-circle"></i><span>Completa la información de <strong>{{ activePanel.title.toLowerCase() }}</strong>. Los campos marcados con * son obligatorios.</span></div>
+          <div class="accounting-form-grid">
+            <label v-for="field in activePanel.fields || []" :key="field.key" :class="{ full: field.type === 'textarea', switch: field.type === 'checkbox' }">
+              <span v-if="field.type !== 'checkbox'">{{ field.label }}<b v-if="field.required"> *</b></span>
+              <BFormTextarea v-if="field.type === 'textarea'" v-model="form[field.key]" rows="3" :required="field.required" :placeholder="`Ingresa ${field.label.toLowerCase()}`" />
+              <BFormCheckbox v-else-if="field.type === 'checkbox'" v-model="form[field.key]" switch>{{ field.label }}</BFormCheckbox>
+              <BFormSelect v-else-if="field.type === 'select'" v-model="form[field.key]" :required="field.required">
+                <option value="">Seleccionar...</option>
+                <option v-for="option in resolveOptions(field)" :key="`${field.key}-${optionValue(option)}`" :value="optionValue(option)">{{ optionLabel(field, option) }}</option>
+              </BFormSelect>
+              <BFormInput v-else v-model="form[field.key]" :type="field.type || 'text'" :required="field.required" :min="field.type === 'number' ? 0 : undefined" :placeholder="field.type === 'date' || field.type === 'number' ? '' : `Ingresa ${field.label.toLowerCase()}`" />
+            </label>
+          </div>
+          <footer class="modal-actions"><BButton variant="light" type="button" @click="closeFormModal">Cancelar</BButton><BButton variant="primary" type="submit" :disabled="saving"><span v-if="saving" class="spinner-border spinner-border-sm"></span><i v-else class="bx bx-check"></i>{{ saving ? 'Guardando...' : editingId ? 'Guardar cambios' : 'Crear registro' }}</BButton></footer>
+        </form>
+      </BModal>
     </div>
   </Layout>
 </template>
+
+<style scoped>
+.accounting-shell{--acc-primary:#405189;--acc-ink:#263043;--acc-muted:#758095;--acc-border:#e2e7ee;display:flex;flex-direction:column;gap:1rem;padding-bottom:1.5rem}.accounting-hero{display:flex;align-items:center;justify-content:space-between;gap:2rem;padding:1.35rem 1.5rem;border:1px solid #dfe5ed;border-radius:12px;background:linear-gradient(125deg,#fff 0%,#f6f8fc 68%,#eef2fa 100%);box-shadow:0 5px 18px rgba(42,55,80,.05)}.hero-copy{max-width:850px}.eyebrow{display:flex;align-items:center;gap:.4rem;margin-bottom:.38rem;color:var(--acc-primary);font-size:.68rem;font-weight:750;letter-spacing:.075em;text-transform:uppercase}.eyebrow i{font-size:1rem}.accounting-hero h1{margin:0;color:var(--acc-ink);font-size:1.55rem;font-weight:700}.accounting-hero p{margin:.4rem 0 0;color:var(--acc-muted);font-size:.82rem}.hero-actions{display:flex;align-items:center;gap:.55rem;white-space:nowrap}.hero-actions .btn,.toolbar-actions .btn,.modal-actions .btn{display:inline-flex;align-items:center;justify-content:center;gap:.35rem}.accounting-nav{display:flex;gap:.5rem;overflow-x:auto;padding:.55rem;border:1px solid var(--acc-border);border-radius:10px;background:#fff;scrollbar-width:thin}.nav-group{flex:0 0 auto;min-width:130px;padding:.4rem .45rem;border-right:1px solid #edf0f4}.nav-group:last-child{border-right:0}.nav-group-title{display:flex;align-items:center;gap:.35rem;padding:0 .35rem .3rem;color:#8a94a4;font-size:.59rem;font-weight:750;letter-spacing:.065em;text-transform:uppercase}.nav-group-links{display:flex;flex-wrap:wrap;gap:.2rem}.nav-group-links a{padding:.34rem .52rem;border-radius:5px;color:#5f6b7c;font-size:.67rem;white-space:nowrap;transition:.15s ease}.nav-group-links a:hover{background:#f2f5fa;color:var(--acc-primary)}.nav-group-links a.active{background:#e9edf7;color:var(--acc-primary);font-weight:700}.scope-notice{display:flex;align-items:center;gap:.55rem;padding:.62rem .8rem;border:1px solid #f1dfb8;border-radius:8px;background:#fff9ec;color:#806326;font-size:.68rem}.scope-notice i{font-size:1.05rem}.metric-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:.8rem}.metric-card{position:relative;display:flex;align-items:center;gap:.75rem;min-height:96px;padding:1rem;border:1px solid var(--acc-border);border-radius:10px;background:#fff;box-shadow:0 4px 14px rgba(35,48,70,.04);overflow:hidden}.metric-card span,.metric-card strong{display:block}.metric-card span{color:var(--acc-muted);font-size:.67rem}.metric-card strong{margin-top:.2rem;color:var(--acc-ink);font-size:1.25rem}.metric-icon{display:grid;place-items:center;flex:0 0 42px;width:42px;height:42px;border-radius:9px;background:#eaf4ee;color:#25845f;font-size:1.35rem}.metric-icon-2{background:#fbecee;color:#c34b59}.metric-icon-3{background:#eaf0fb;color:#456ea9}.metric-icon-4,.metric-icon-5{background:#f8f0dd;color:#a67a1f}.metric-card-accent{background:linear-gradient(135deg,#405189,#5266a2);border-color:transparent}.metric-card-accent span,.metric-card-accent strong,.metric-card-accent .metric-icon{color:#fff}.metric-card-accent .metric-icon{background:rgba(255,255,255,.14)}.metric-progress{position:absolute;right:1rem;bottom:.75rem;left:1rem;height:3px;border-radius:2px;background:rgba(255,255,255,.2)}.metric-progress span{height:100%;border-radius:2px;background:#fff}.dashboard-grid{display:grid;grid-template-columns:1.05fr 1fr 1fr;gap:.8rem}.content-card{border:1px solid var(--acc-border);border-radius:10px;background:#fff;box-shadow:0 4px 14px rgba(35,48,70,.035)}.card-heading{display:flex;align-items:center;justify-content:space-between;padding:.9rem 1rem;border-bottom:1px solid #edf0f4}.card-heading span,.toolbar-kicker{color:#8b95a5;font-size:.58rem;font-weight:750;letter-spacing:.07em}.card-heading h2,.records-toolbar h2{margin:.15rem 0 0;color:var(--acc-ink);font-size:.88rem}.card-heading>i{color:#9aa4b3;font-size:1.2rem}.alert-list>div,.summary-list>div{display:grid;grid-template-columns:27px 1fr auto;align-items:center;gap:.5rem;padding:.64rem 1rem;border-bottom:1px solid #eff2f5;color:#5d6879;font-size:.68rem}.alert-list>div:last-child,.summary-list>div:last-child{border-bottom:0}.alert-list i{display:grid;place-items:center;width:25px;height:25px;border-radius:6px;background:#fff5df;color:#ad791b;font-size:.9rem}.alert-list .danger i{background:#fdecee;color:#c04454}.alert-list strong{display:grid;place-items:center;min-width:25px;height:23px;border-radius:12px;background:#f0f3f7;color:#465366}.summary-list>div{grid-template-columns:1fr auto;min-height:43px}.summary-list strong{color:#334055}.mini-empty{display:block!important;color:#919baa!important;text-align:center}.records-card{overflow:hidden}.records-toolbar{display:flex;align-items:center;justify-content:space-between;gap:1rem;padding:.9rem 1rem}.record-count{display:inline-grid;place-items:center;min-width:23px;height:20px;margin-left:.25rem;border-radius:10px;background:#eef1f6;color:#637087;font-size:.62rem}.toolbar-actions{display:flex;align-items:center;gap:.4rem}.search-box{display:flex;align-items:center;min-width:250px;height:35px;border:1px solid #dce2e9;border-radius:7px;background:#f9fafc}.search-box>i{margin-left:.65rem;color:#8691a1}.search-box input{width:100%;padding:0 .5rem;border:0;outline:0;background:transparent;color:#3d495b;font-size:.7rem}.search-box button{border:0;background:transparent;color:#7b8696}.icon-action{width:36px;padding:0}.table-summary{display:flex;align-items:center;justify-content:flex-end;gap:.6rem;padding:.45rem 1rem;border-top:1px solid #edf0f4;background:#f8fafc;color:#7b8697;font-size:.64rem}.table-summary strong{color:#334055;font-size:.75rem}.accounting-table{font-size:.68rem}.accounting-table thead th{padding:.65rem .8rem;border-color:#e7ebf0;background:#f5f7fa;color:#626f82;font-size:.6rem;font-weight:750;letter-spacing:.035em;text-transform:uppercase;white-space:nowrap}.accounting-table tbody td{padding:.66rem .8rem;border-color:#edf0f4;color:#4f5b6d}.accounting-table tbody tr:hover{background:#fafbfd}.accounting-table .badge{text-transform:capitalize}.row-actions{display:flex;justify-content:flex-end;gap:.25rem}.row-actions button{display:grid;place-items:center;width:29px;height:29px;border:1px solid #dce2e9;border-radius:6px;background:#fff;color:#59677b;font-size:.9rem}.row-actions button:hover{border-color:#aeb9c9;color:var(--acc-primary)}.row-actions .danger:hover{border-color:#e5aab2;background:#fff7f8;color:#bd3b4b}.empty-state{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:220px;color:#8994a4;text-align:center}.empty-state>i{margin-bottom:.5rem;color:#b1bac7;font-size:2.25rem}.empty-state strong{color:#566275;font-size:.8rem}.empty-state span{margin:.2rem 0 .65rem;font-size:.66rem}.modal-title-block span,.modal-title-block strong{display:block}.modal-title-block span{color:#8a94a4;font-size:.57rem;font-weight:750;letter-spacing:.07em;text-transform:uppercase}.modal-title-block strong{margin-top:.1rem;color:#293448;font-size:.95rem}.modal-intro{display:flex;gap:.5rem;margin-bottom:1rem;padding:.65rem .75rem;border-radius:7px;background:#f1f4fa;color:#657185;font-size:.67rem}.modal-intro i{color:var(--acc-primary);font-size:1rem}.accounting-form-grid{display:grid;grid-template-columns:1fr 1fr;gap:.8rem}.accounting-form-grid label>span{display:block;margin-bottom:.28rem;color:#566275;font-size:.67rem;font-weight:650}.accounting-form-grid label>span b{color:#c04454}.accounting-form-grid .form-control,.accounting-form-grid .form-select{min-height:38px;border-color:#dce2e9;font-size:.72rem}.accounting-form-grid .full{grid-column:1/-1}.accounting-form-grid .switch{display:flex;align-items:center;min-height:38px;padding-top:.9rem}.modal-actions{display:flex;justify-content:flex-end;gap:.45rem;margin:1.1rem -1rem -1rem;padding:.8rem 1rem;border-top:1px solid #e5e9ef;background:#f9fafb}:deep(.accounting-form-modal .modal-content){border:0;border-radius:10px;box-shadow:0 24px 70px rgba(25,35,50,.25)}:deep(.accounting-form-modal .modal-header){padding:.8rem 1rem;border-bottom-color:#e5e9ef}:deep(.accounting-form-modal .modal-body){padding:1rem}:deep(.card){border:1px solid var(--acc-border)!important;border-radius:10px;box-shadow:0 4px 14px rgba(35,48,70,.035)!important}:deep(.table){font-size:.68rem}
+@media(max-width:1100px){.metric-grid{grid-template-columns:repeat(2,1fr)}.dashboard-grid{grid-template-columns:1fr 1fr}.alert-panel{grid-column:1/-1}.accounting-nav{padding:.45rem}.nav-group{min-width:auto}.nav-group-title{display:none}}
+@media(max-width:720px){.accounting-hero{align-items:flex-start;padding:1rem}.accounting-hero,.records-toolbar{flex-direction:column}.hero-actions,.toolbar-actions{width:100%}.hero-actions .btn{flex:1}.accounting-hero h1{font-size:1.25rem}.metric-grid,.dashboard-grid{grid-template-columns:1fr}.alert-panel{grid-column:auto}.records-toolbar{align-items:stretch}.toolbar-actions{flex-wrap:wrap}.search-box{flex:1;min-width:200px}.accounting-form-grid{grid-template-columns:1fr}.accounting-form-grid .full{grid-column:auto}.accounting-nav{display:block}.nav-group{padding:.3rem;border-right:0;border-bottom:1px solid #edf0f4}.nav-group-links{flex-wrap:nowrap;overflow-x:auto}.scope-notice{align-items:flex-start}}
+</style>

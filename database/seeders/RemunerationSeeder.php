@@ -36,9 +36,12 @@ use Carbon\Carbon;
 use Database\Seeders\Modules\ContractsModuleSeeder;
 use Database\Seeders\Modules\StaffModuleSeeder;
 use Database\Seeders\Support\ModuleSeeder;
+use Database\Seeders\Support\PreventsProductionSeeding;
 
 class RemunerationSeeder extends ModuleSeeder
 {
+    use PreventsProductionSeeding;
+
     public function __construct(
         private readonly RemunerationAccessService $accessService,
         private readonly PayrollCalculationService $calculationService,
@@ -48,9 +51,11 @@ class RemunerationSeeder extends ModuleSeeder
 
     public function run(): void
     {
+        $this->preventProductionSeeding();
         $this->ensureDependencies();
         $this->seedPermissionsAndModules();
         $this->seedRoles();
+        $this->call(RemunerationDepartmentsAndFunctionsSeeder::class);
         $this->seedAccountingComplements();
         $this->seedPeriods();
         $this->seedLegalParameters();
@@ -108,23 +113,28 @@ class RemunerationSeeder extends ModuleSeeder
             ['slug' => 'remuneration_concepts', 'name' => 'Haberes y descuentos', 'route' => '/remuneraciones/conceptos', 'sort' => 6],
             ['slug' => 'remuneration_movements', 'name' => 'Movimientos', 'route' => '/remuneraciones/movimientos', 'sort' => 7],
             ['slug' => 'remuneration_payrolls', 'name' => 'Liquidaciones', 'route' => '/remuneraciones/liquidaciones', 'sort' => 8],
-            ['slug' => 'remuneration_payments', 'name' => 'Pagos', 'route' => '/remuneraciones/pagos', 'sort' => 9],
-            ['slug' => 'remuneration_accounting', 'name' => 'Centralización', 'route' => '/remuneraciones/centralizacion', 'sort' => 10],
-            ['slug' => 'remuneration_reports', 'name' => 'Reportes', 'route' => '/remuneraciones/reportes', 'sort' => 11],
-            ['slug' => 'remuneration_medical_leaves', 'name' => 'Licencias médicas', 'route' => '/remuneraciones/licencias-medicas', 'sort' => 12],
-            ['slug' => 'remuneration_birthdays', 'name' => 'Cumpleaños', 'route' => '/remuneraciones/cumpleanos', 'sort' => 13],
-            ['slug' => 'remuneration_permissions', 'name' => 'Permisos', 'route' => '/remuneraciones/permisos', 'sort' => 14],
-            ['slug' => 'remuneration_staff_management', 'name' => 'Gestión funcionarios', 'route' => '/remuneraciones/gestion-funcionarios', 'sort' => 15],
-            ['slug' => 'remuneration_documents', 'name' => 'Control documental', 'route' => '/remuneraciones/control-documental', 'sort' => 16],
-            ['slug' => 'remuneration_onboarding', 'name' => 'Inducción', 'route' => '/remuneraciones/induccion', 'sort' => 17],
-            ['slug' => 'remuneration_climate', 'name' => 'Clima laboral', 'route' => '/remuneraciones/clima-laboral', 'sort' => 18],
-            ['slug' => 'remuneration_climate_plans', 'name' => 'Planes clima', 'route' => '/remuneraciones/planes-clima', 'sort' => 19],
-            ['slug' => 'remuneration_workload', 'name' => 'Dotación y carga', 'route' => '/remuneraciones/dotacion-carga', 'sort' => 20],
-            ['slug' => 'remuneration_cv_bank', 'name' => 'Banco CV', 'route' => '/remuneraciones/banco-cv', 'sort' => 21],
-            ['slug' => 'remuneration_replacements', 'name' => 'Buenos reemplazos', 'route' => '/remuneraciones/reemplazos', 'sort' => 22],
-            ['slug' => 'remuneration_job_profiles', 'name' => 'Perfiles de cargo', 'route' => '/remuneraciones/perfiles-cargo', 'sort' => 23],
-            ['slug' => 'remuneration_certificates', 'name' => 'Certificados laborales', 'route' => '/remuneraciones/certificados', 'sort' => 24],
-            ['slug' => 'remuneration_audit', 'name' => 'Auditoría', 'route' => '/remuneraciones/auditoria', 'sort' => 25],
+            ['slug' => 'remuneration_imports', 'name' => 'Importaciones', 'route' => '/remuneraciones/importaciones', 'sort' => 9],
+            ['slug' => 'remuneration_import_rows', 'name' => 'Libro importado', 'route' => '/remuneraciones/libro-importado', 'sort' => 10],
+            ['slug' => 'remuneration_book_analytics', 'name' => 'Datos y estadísticas', 'route' => '/remuneraciones/estadisticas-libro', 'sort' => 11],
+            ['slug' => 'remuneration_payments', 'name' => 'Pagos', 'route' => '/remuneraciones/pagos', 'sort' => 12],
+            ['slug' => 'remuneration_accounting', 'name' => 'Centralización', 'route' => '/remuneraciones/centralizacion', 'sort' => 13],
+            ['slug' => 'remuneration_reports', 'name' => 'Reportes', 'route' => '/remuneraciones/reportes', 'sort' => 14],
+            ['slug' => 'remuneration_medical_leaves', 'name' => 'Licencias médicas', 'route' => '/remuneraciones/licencias-medicas', 'sort' => 15],
+            ['slug' => 'remuneration_birthdays', 'name' => 'Cumpleaños', 'route' => '/remuneraciones/cumpleanos', 'sort' => 16],
+            ['slug' => 'remuneration_permissions', 'name' => 'Permisos', 'route' => '/remuneraciones/permisos', 'sort' => 17],
+            ['slug' => 'remuneration_staff_management', 'name' => 'Gestión funcionarios', 'route' => '/remuneraciones/gestion-funcionarios', 'sort' => 18],
+            ['slug' => 'remuneration_departments', 'name' => 'Departamentos', 'route' => '/remuneraciones/departamentos', 'sort' => 19],
+            ['slug' => 'remuneration_functions', 'name' => 'Funciones', 'route' => '/remuneraciones/funciones', 'sort' => 20],
+            ['slug' => 'remuneration_documents', 'name' => 'Control documental', 'route' => '/remuneraciones/control-documental', 'sort' => 21],
+            ['slug' => 'remuneration_onboarding', 'name' => 'Inducción', 'route' => '/remuneraciones/induccion', 'sort' => 22],
+            ['slug' => 'remuneration_climate', 'name' => 'Clima laboral', 'route' => '/remuneraciones/clima-laboral', 'sort' => 23],
+            ['slug' => 'remuneration_climate_plans', 'name' => 'Planes clima', 'route' => '/remuneraciones/planes-clima', 'sort' => 24],
+            ['slug' => 'remuneration_workload', 'name' => 'Dotación y carga', 'route' => '/remuneraciones/dotacion-carga', 'sort' => 25],
+            ['slug' => 'remuneration_cv_bank', 'name' => 'Banco CV', 'route' => '/remuneraciones/banco-cv', 'sort' => 26],
+            ['slug' => 'remuneration_replacements', 'name' => 'Buenos reemplazos', 'route' => '/remuneraciones/reemplazos', 'sort' => 27],
+            ['slug' => 'remuneration_job_profiles', 'name' => 'Perfiles de cargo', 'route' => '/remuneraciones/perfiles-cargo', 'sort' => 28],
+            ['slug' => 'remuneration_certificates', 'name' => 'Certificados laborales', 'route' => '/remuneraciones/certificados', 'sort' => 29],
+            ['slug' => 'remuneration_audit', 'name' => 'Auditoría', 'route' => '/remuneraciones/auditoria', 'sort' => 30],
         ];
 
         foreach ($children as $child) {
@@ -192,6 +202,7 @@ class RemunerationSeeder extends ModuleSeeder
                 RemunerationAccessService::CONCEPTS_PERMISSION,
                 RemunerationAccessService::MOVEMENTS_PERMISSION,
                 RemunerationAccessService::CALCULATE_PERMISSION,
+                RemunerationAccessService::IMPORT_PERMISSION,
                 RemunerationAccessService::PAYMENTS_PERMISSION,
                 RemunerationAccessService::EXPORT_PERMISSION,
                 RemunerationAccessService::HR_MANAGEMENT_PERMISSION,
@@ -204,7 +215,7 @@ class RemunerationSeeder extends ModuleSeeder
             'super_admin' => $allModules,
             'administrador' => $allModules,
             'rrhh' => $allModules,
-            'direccion' => ['remuneration', 'remuneration_dashboard', 'remuneration_payrolls', 'remuneration_reports'],
+            'direccion' => ['remuneration', 'remuneration_dashboard', 'remuneration_payrolls', 'remuneration_book_analytics', 'remuneration_reports'],
             'remuneraciones_admin' => $allModules,
             'remuneraciones_analista' => [
                 'remuneration',
@@ -214,12 +225,17 @@ class RemunerationSeeder extends ModuleSeeder
                 'remuneration_concepts',
                 'remuneration_movements',
                 'remuneration_payrolls',
+                'remuneration_imports',
+                'remuneration_import_rows',
+                'remuneration_book_analytics',
                 'remuneration_payments',
                 'remuneration_reports',
                 'remuneration_medical_leaves',
                 'remuneration_birthdays',
                 'remuneration_permissions',
                 'remuneration_staff_management',
+                'remuneration_departments',
+                'remuneration_functions',
                 'remuneration_documents',
                 'remuneration_onboarding',
                 'remuneration_climate',
@@ -230,7 +246,7 @@ class RemunerationSeeder extends ModuleSeeder
                 'remuneration_job_profiles',
                 'remuneration_certificates',
             ],
-            'remuneraciones_solo_lectura' => ['remuneration', 'remuneration_dashboard', 'remuneration_reports'],
+            'remuneraciones_solo_lectura' => ['remuneration', 'remuneration_dashboard', 'remuneration_book_analytics', 'remuneration_reports'],
         ];
 
         foreach ($rolePermissions as $roleSlug => $permissionSlugs) {

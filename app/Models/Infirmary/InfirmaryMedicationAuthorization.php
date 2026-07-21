@@ -15,9 +15,52 @@ class InfirmaryMedicationAuthorization extends Model
     use HasFactory;
 
     public const STATUS_VIGENTE = 'vigente';
+
     public const STATUS_PROXIMA_A_VENCER = 'proxima_a_vencer';
+
     public const STATUS_VENCIDA = 'vencida';
+
     public const STATUS_TERMINADA = 'terminada';
+
+    public const REGIMEN_PERMANENTE = 'permanente';
+
+    public const REGIMEN_MESES = 'meses';
+
+    public const REGIMEN_SEMANAS = 'semanas';
+
+    public const REGIMEN_DIAS = 'dias';
+
+    public const REGIMEN_FECHA_ESPECIFICA = 'fecha_especifica';
+
+    public const REGIMEN_SOS = 'sos';
+
+    public const SCHEDULE_FIXED_TIME = 'fixed_time';
+
+    public const SCHEDULE_FLEXIBLE = 'flexible';
+
+    public const REGIMEN_OPTIONS = [
+        ['value' => self::REGIMEN_PERMANENTE, 'label' => 'Uso permanente'],
+        ['value' => self::REGIMEN_MESES, 'label' => 'Por meses'],
+        ['value' => self::REGIMEN_SEMANAS, 'label' => 'Por semanas'],
+        ['value' => self::REGIMEN_DIAS, 'label' => 'Por días'],
+        ['value' => self::REGIMEN_FECHA_ESPECIFICA, 'label' => 'Fecha específica'],
+        ['value' => self::REGIMEN_SOS, 'label' => 'S.O.S.'],
+    ];
+
+    public const DOSE_UNIT_OPTIONS = [
+        ['value' => 'mg', 'label' => 'Miligramos'],
+        ['value' => 'cc', 'label' => 'cc'],
+    ];
+
+    public const ADMINISTRATION_ROUTE_OPTIONS = [
+        ['value' => 'oral', 'label' => 'Vía oral'],
+        ['value' => 'topica', 'label' => 'Vía tópica'],
+    ];
+
+    public const SCHEDULE_MODE_OPTIONS = [
+        ['value' => self::SCHEDULE_FIXED_TIME, 'label' => 'Con horario definido'],
+        ['value' => self::SCHEDULE_FLEXIBLE, 'label' => 'Sin horario fijo'],
+    ];
 
     protected $table = 'infirmary_medication_authorizations';
 
@@ -26,8 +69,15 @@ class InfirmaryMedicationAuthorization extends Model
         'medication_id',
         'diagnosis',
         'dose',
+        'dose_amount',
+        'dose_unit',
+        'administration_route',
         'frequency',
+        'daily_dose_count',
+        'schedule_mode',
         'schedule_text',
+        'regimen_type',
+        'duration_quantity',
         'start_date',
         'end_date',
         'physician_name',
@@ -42,6 +92,9 @@ class InfirmaryMedicationAuthorization extends Model
     protected $casts = [
         'start_date' => 'date:Y-m-d',
         'end_date' => 'date:Y-m-d',
+        'dose_amount' => 'decimal:2',
+        'daily_dose_count' => 'integer',
+        'duration_quantity' => 'integer',
         'medical_authorization_expires_at' => 'date:Y-m-d',
         'guardian_authorization_expires_at' => 'date:Y-m-d',
     ];
@@ -69,6 +122,11 @@ class InfirmaryMedicationAuthorization extends Model
     public function administrations(): HasMany
     {
         return $this->hasMany(InfirmaryMedicationAdministration::class, 'authorization_id')->latest('administered_at')->latest('id');
+    }
+
+    public function schedules(): HasMany
+    {
+        return $this->hasMany(InfirmaryMedicationSchedule::class, 'authorization_id')->orderBy('dose_order');
     }
 
     public function documents(): MorphMany

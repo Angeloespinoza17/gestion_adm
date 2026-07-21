@@ -6,6 +6,7 @@ use App\Models\It\ItEquipment;
 use App\Models\It\ItEquipmentLoan;
 use App\Models\It\ItEquipmentMaintenanceReport;
 use Carbon\Carbon;
+use Illuminate\Support\Facades\DB;
 
 class InformaticaDashboardService
 {
@@ -81,8 +82,9 @@ class InformaticaDashboardService
 
     private function groupByMonth($query, string $column, Carbon $from): array
     {
+        $monthExpression = $this->monthExpression($column);
         $items = $query
-            ->selectRaw("DATE_FORMAT({$column}, '%Y-%m') as label, count(*) as total")
+            ->selectRaw("{$monthExpression} as label, count(*) as total")
             ->whereDate($column, '>=', $from)
             ->groupBy('label')
             ->orderBy('label')
@@ -96,8 +98,9 @@ class InformaticaDashboardService
 
     private function maintenanceByMonth(Carbon $from): array
     {
+        $monthExpression = $this->monthExpression('maintenance_date');
         $items = ItEquipmentMaintenanceReport::query()
-            ->selectRaw("DATE_FORMAT(maintenance_date, '%Y-%m') as label, count(*) as total, coalesce(sum(cost_amount), 0) as cost")
+            ->selectRaw("{$monthExpression} as label, count(*) as total")
             ->whereDate('maintenance_date', '>=', $from)
             ->groupBy('label')
             ->orderBy('label')
@@ -106,7 +109,16 @@ class InformaticaDashboardService
         return [
             'labels' => $items->pluck('label')->all(),
             'series' => $items->pluck('total')->map(fn ($value) => (int) $value)->all(),
-            'costs' => $items->pluck('cost')->map(fn ($value) => (float) $value)->all(),
         ];
+    }
+
+    private function monthExpression(string $column): string
+    {
+        return match (DB::connection()->getDriverName()) {
+            'sqlite' => "strftime('%Y-%m', {$column})",
+            'pgsql' => "to_char({$column}, 'YYYY-MM')",
+            'sqlsrv' => "format({$column}, 'yyyy-MM')",
+            default => "DATE_FORMAT({$column}, '%Y-%m')",
+        };
     }
 }

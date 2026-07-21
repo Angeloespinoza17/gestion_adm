@@ -21,9 +21,9 @@ window.axios.interceptors.request.use((config) => {
     if (token) {
         config.headers = config.headers || {};
         const value = `Bearer ${token}`;
-        config.headers.Authorization = value;
-        config.headers['X-Authorization'] = value;
-        config.headers['X-Api-Token'] = token;
+        config.headers.Authorization = config.headers.Authorization || value;
+        config.headers['X-Authorization'] = config.headers['X-Authorization'] || value;
+        config.headers['X-Api-Token'] = config.headers['X-Api-Token'] || token;
     }
     return config;
 });
@@ -35,6 +35,7 @@ window.axios.interceptors.response.use(
             localStorage.removeItem('token');
             localStorage.removeItem('user');
             localStorage.removeItem('permissions');
+            localStorage.removeItem('impersonator_token');
         }
         return Promise.reject(error);
     }

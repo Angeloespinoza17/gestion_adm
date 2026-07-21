@@ -41,5 +41,9 @@ class SystemModule extends Model
     {
         return $this->hasMany(SystemModule::class, 'parent_id')->orderBy('sort_order');
     }
-}
 
+    public function permissionGroups(): HasMany
+    {
+        return $this->hasMany(PermissionGroup::class)->orderBy('sort_order');
+    }
+}

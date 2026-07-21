@@ -71,7 +71,8 @@ export function confirmPmeCancel(subject = "los cambios no guardados") {
 
 export function formatPmeDate(value) {
   if (!value) return "-";
-  return new Date(value).toLocaleDateString("es-CL", {
+  const normalized = /^\d{4}-\d{2}-\d{2}$/.test(String(value)) ? `${value}T12:00:00` : value;
+  return new Date(normalized).toLocaleDateString("es-CL", {
     year: "numeric",
     month: "2-digit",
     day: "2-digit",
@@ -149,6 +150,12 @@ export function statusVariant(status) {
     activa: "primary",
     activo: "primary",
     no_vigente: "secondary",
+    inactivo: "secondary",
+    inactiva: "secondary",
+    sin_medicion: "secondary",
+    en_avance: "info",
+    cerrada: "dark",
+    finalizado: "success",
   };
 
   return map[status] || "light";
@@ -169,29 +176,59 @@ export function normalizeOptions(options, includeEmpty = false, emptyLabel = "To
   return includeEmpty ? [{ value: null, label: emptyLabel }].concat(items) : items;
 }
 
+export function normalizePagination(payload = {}) {
+  const total = Number(payload.total ?? payload.data?.length ?? 0);
+  const perPage = Number(payload.per_page ?? (total || 1));
+  return {
+    current_page: Number(payload.current_page || 1),
+    last_page: Number(payload.last_page || 1),
+    per_page: perPage,
+    total,
+    from: payload.from ?? (total ? 1 : 0),
+    to: payload.to ?? total,
+  };
+}
+
 export function basicApexOptions({ categories = [], colors = ["#556ee6"], horizontal = false } = {}) {
   return {
     chart: {
       toolbar: { show: false },
       fontFamily: "inherit",
+      foreColor: "#738095",
+      animations: { speed: 420 },
     },
     colors,
     dataLabels: { enabled: false },
-    stroke: { curve: "smooth", width: 3 },
-    xaxis: { categories },
+    stroke: { curve: "smooth", width: 2.5 },
+    xaxis: {
+      categories,
+      labels: { style: { fontSize: "10px", colors: "#738095" }, trim: true, hideOverlappingLabels: true },
+      axisBorder: { show: false },
+      axisTicks: { show: false },
+    },
+    yaxis: { labels: { style: { fontSize: "10px", colors: "#738095" } } },
     plotOptions: {
       bar: {
         horizontal,
-        borderRadius: 6,
+        borderRadius: 5,
+        borderRadiusApplication: "end",
         columnWidth: "45%",
       },
     },
     grid: {
-      borderColor: "#eff2f7",
+      borderColor: "#e8edf3",
+      strokeDashArray: 4,
+      padding: { left: 4, right: 8 },
     },
     legend: {
       position: "top",
+      horizontalAlign: "right",
+      fontSize: "11px",
+      markers: { size: 5 },
     },
+    tooltip: { theme: "light" },
+    noData: { text: "Sin datos para visualizar", align: "center", verticalAlign: "middle", style: { color: "#7b8798", fontSize: "12px" } },
+    responsive: [{ breakpoint: 768, options: { legend: { position: "bottom", horizontalAlign: "center" } } }],
   };
 }
 

@@ -70,13 +70,13 @@ export default {
     staffOptions() {
       return (this.catalogs.staff || []).map((item) => ({
         value: item.id,
-        label: `${item.full_name}${item.rut ? ` (${item.rut})` : ""}`,
+        label: item.full_name,
       }));
     },
     collaboratorStaffOptions() {
       return (this.catalogs.staff || []).map((item) => ({
         value: item.id,
-        label: `${item.full_name}${item.rut ? ` (${item.rut})` : ""}`,
+        label: item.full_name,
       }));
     },
     departmentOptions() {

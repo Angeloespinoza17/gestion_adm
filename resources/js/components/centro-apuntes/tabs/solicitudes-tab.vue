@@ -74,6 +74,9 @@ export default {
     };
   },
   computed: {
+    capabilities() {
+      return this.catalogs.capabilities || {};
+    },
     userOptions() {
       return normalizeOptions(this.catalogs.users || []);
     },
@@ -377,7 +380,7 @@ export default {
           title="Ayuda: solicitudes de impresión"
           text="Aquí se crean, actualizan, priorizan y entregan las tareas de impresión del establecimiento, dejando trazabilidad completa del estado y de quién recibió el material."
         />
-        <BButton variant="primary" @click="openCreate">Nueva solicitud</BButton>
+        <BButton v-if="capabilities.can_create_request" variant="primary" @click="openCreate"><i class="bx bx-plus me-1"></i>Nueva solicitud</BButton>
       </div>
     </div>
 
@@ -433,6 +436,8 @@ export default {
       <BTable
         v-else
         responsive
+        show-empty
+        empty-text="No hay solicitudes que coincidan con los filtros."
         :items="items"
         :fields="[
           { key: 'request_code', label: 'Solicitud' },
@@ -470,10 +475,10 @@ export default {
         <template #cell(actions)="{ item }">
           <div class="d-flex flex-wrap gap-2">
             <BButton size="sm" variant="outline-primary" @click="openDetail(item)">Ver</BButton>
-            <BButton size="sm" variant="outline-secondary" @click="openEdit(item)">Editar</BButton>
-            <BButton size="sm" variant="outline-warning" @click="promptStatus(item)">Estado</BButton>
-            <BButton size="sm" variant="outline-success" @click="promptDelivery(item)">Entregar</BButton>
-            <BButton size="sm" variant="outline-danger" @click="destroy(item)">Eliminar</BButton>
+            <BButton v-if="capabilities.can_edit_request" size="sm" variant="outline-secondary" @click="openEdit(item)">Editar</BButton>
+            <BButton v-if="capabilities.can_change_request_status" size="sm" variant="outline-warning" @click="promptStatus(item)">Estado</BButton>
+            <BButton v-if="capabilities.can_register_request_delivery" size="sm" variant="outline-success" @click="promptDelivery(item)">Entregar</BButton>
+            <BButton v-if="capabilities.can_delete_request" size="sm" variant="outline-danger" @click="destroy(item)">Eliminar</BButton>
           </div>
         </template>
       </BTable>

@@ -2,6 +2,8 @@
 
 namespace Database\Seeders\Modules;
 
+use Database\Seeders\Support\PreventsProductionSeeding;
+
 use App\Models\PermissionRequest;
 use App\Models\PermissionRequestApproval;
 use App\Models\PermissionRequestLog;
@@ -16,8 +18,11 @@ use Database\Seeders\Support\ModuleSeeder;
 
 class StaffPermissionModuleSeeder extends ModuleSeeder
 {
+    use PreventsProductionSeeding;
+
     public function run(): void
     {
+        $this->preventProductionSeeding();
         $this->seedTypeWatchers();
         $this->seedStaffWatchers();
         $this->seedRequests();

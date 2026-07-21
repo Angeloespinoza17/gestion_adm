@@ -34,6 +34,7 @@ class UpdateStudentEnrollmentRequest extends FormRequest
         return [
             'course_section_id' => ['sometimes', 'integer', 'exists:course_sections,id'],
             'enrollment_status' => ['sometimes', Rule::in(array_column(StudentEnrollment::STATUS_OPTIONS, 'value'))],
+            'registration_number' => ['nullable', 'string', 'max:50'],
             'enrolled_at' => ['nullable', 'date'],
             'withdrawn_at' => ['nullable', 'date', 'after_or_equal:enrolled_at'],
             'observations' => ['nullable', 'string'],

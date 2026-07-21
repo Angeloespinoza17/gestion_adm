@@ -31,6 +31,7 @@ use Carbon\Carbon;
 use Database\Seeders\Modules\StaffModuleSeeder;
 use Database\Seeders\Modules\StudentModuleSeeder;
 use Database\Seeders\Support\ModuleSeeder;
+use Database\Seeders\Support\PreventsProductionSeeding;
 use Faker\Factory as Faker;
 use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Support\Collection;
@@ -38,6 +39,8 @@ use Illuminate\Support\Facades\DB;
 
 class ConvivenciaSeeder extends ModuleSeeder
 {
+    use PreventsProductionSeeding;
+
     private \Faker\Generator $faker;
 
     private User $actor;
@@ -56,6 +59,7 @@ class ConvivenciaSeeder extends ModuleSeeder
 
     public function run(): void
     {
+        $this->preventProductionSeeding();
         $this->faker = Faker::create('es_CL');
         $this->faker->seed(20260629);
         $this->now = Carbon::parse('2026-06-29 09:30:00');

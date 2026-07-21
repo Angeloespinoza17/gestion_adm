@@ -15,6 +15,7 @@ class PorterKey extends Model
     protected $fillable = [
         'maintenance_dependency_id',
         'department_id',
+        'porter_key_group_id',
         'code',
         'name',
         'observations',
@@ -33,6 +34,11 @@ class PorterKey extends Model
     public function department(): BelongsTo
     {
         return $this->belongsTo(Department::class);
+    }
+
+    public function group(): BelongsTo
+    {
+        return $this->belongsTo(PorterKeyGroup::class, 'porter_key_group_id');
     }
 
     public function loans(): HasMany

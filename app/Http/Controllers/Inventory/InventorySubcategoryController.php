@@ -20,6 +20,7 @@ class InventorySubcategoryController extends Controller
 
         $query = InventorySubcategory::query()
             ->with('category:id,name,slug,code_prefix')
+            ->withCount('items')
             ->when($categoryId, fn ($query) => $query->where('category_id', $categoryId))
             ->when($search !== '', function ($query) use ($search) {
                 $query->where(function ($query) use ($search) {
@@ -89,4 +90,3 @@ class InventorySubcategoryController extends Controller
         ]);
     }
 }
-

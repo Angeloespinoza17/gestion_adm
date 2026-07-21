@@ -2,6 +2,8 @@
 
 namespace Database\Seeders;
 
+use Database\Seeders\Support\PreventsProductionSeeding;
+
 use App\Models\RiskPrevention\RiskPreventionAccident;
 use App\Models\RiskPrevention\RiskPreventionDocument;
 use App\Models\RiskPrevention\RiskPreventionEppDelivery;
@@ -19,8 +21,11 @@ use Illuminate\Support\Facades\Storage;
 
 class PrevencionRiesgosSeeder extends Seeder
 {
+    use PreventsProductionSeeding;
+
     public function run(): void
     {
+        $this->preventProductionSeeding();
         $this->call(PrevencionRiesgosModuleSeeder::class);
         $accessService = app(RiskPreventionAccessService::class);
 

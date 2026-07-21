@@ -18,6 +18,10 @@ class InfirmaryAttention extends Model
 {
     use HasFactory;
 
+    public const SUBJECT_STUDENT = 'student';
+
+    public const SUBJECT_STAFF = 'staff';
+
     public const PRIORITY_OPTIONS = [
         ['value' => 'baja', 'label' => 'Baja'],
         ['value' => 'media', 'label' => 'Media'],
@@ -31,18 +35,31 @@ class InfirmaryAttention extends Model
         ['value' => 'finalizada', 'label' => 'Finalizada'],
     ];
 
+    public const ACCIDENT_LOCATION_OPTIONS = [
+        ['value' => 'colegio', 'label' => 'En colegio'],
+        ['value' => 'trayecto', 'label' => 'Trayecto'],
+    ];
+
     public const COMPANION_OPTIONS = [
         ['value' => 'sin_acompanante', 'label' => 'Sin acompañante'],
         ['value' => 'inspectora', 'label' => 'Inspectora'],
-        ['value' => 'profesor', 'label' => 'Profesor'],
+        ['value' => 'asistente_aula', 'label' => 'Asistente de aula'],
         ['value' => 'apoderado', 'label' => 'Apoderado'],
         ['value' => 'otro', 'label' => 'Otro'],
+    ];
+
+    public const STAFF_COMPANION_CARGO_SLUGS = [
+        'inspectora' => ['inspectoria'],
+        'asistente_aula' => ['asistente-de-aula'],
     ];
 
     protected $table = 'infirmary_attentions';
 
     protected $fillable = [
+        'subject_type',
+        'correlative_number',
         'student_profile_id',
+        'staff_id',
         'academic_year_id',
         'course_section_id',
         'teacher_staff_id',
@@ -50,15 +67,23 @@ class InfirmaryAttention extends Model
         'dependency_id',
         'attended_by_user_id',
         'attention_category',
+        'accident_location_type',
+        'occurred_at',
         'attended_at',
         'student_full_name_snapshot',
         'student_rut_snapshot',
+        'staff_full_name_snapshot',
+        'staff_rut_snapshot',
+        'staff_cargo_snapshot',
         'course_name_snapshot',
         'teacher_name_snapshot',
         'age_snapshot',
         'accompanied_by_type',
+        'accompanied_by_staff_id',
         'accompanied_by_name',
         'consultation_reason',
+        'accident_circumstance',
+        'logbook',
         'initial_description',
         'observations',
         'attention_duration_minutes',
@@ -70,6 +95,8 @@ class InfirmaryAttention extends Model
     ];
 
     protected $casts = [
+        'correlative_number' => 'integer',
+        'occurred_at' => 'datetime:Y-m-d H:i:s',
         'attended_at' => 'datetime:Y-m-d H:i:s',
         'finalized_at' => 'datetime:Y-m-d H:i:s',
     ];
@@ -77,6 +104,11 @@ class InfirmaryAttention extends Model
     public function student(): BelongsTo
     {
         return $this->belongsTo(StudentProfile::class, 'student_profile_id');
+    }
+
+    public function staff(): BelongsTo
+    {
+        return $this->belongsTo(Staff::class, 'staff_id');
     }
 
     public function academicYear(): BelongsTo
@@ -97,6 +129,11 @@ class InfirmaryAttention extends Model
     public function referredBy(): BelongsTo
     {
         return $this->belongsTo(Staff::class, 'referred_by_staff_id');
+    }
+
+    public function accompaniedByStaff(): BelongsTo
+    {
+        return $this->belongsTo(Staff::class, 'accompanied_by_staff_id');
     }
 
     public function dependency(): BelongsTo

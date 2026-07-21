@@ -73,80 +73,149 @@ export default {
           }
         }
 
-        const colsPerRow = 3;
-        const rows = [];
-        for (let i = 0; i < labels.length; i += colsPerRow) {
-          const slice = labels.slice(i, i + colsPerRow);
-          while (slice.length < colsPerRow) slice.push(null);
-          rows.push(slice);
-        }
-
-        const labelCell = (item) => {
-          if (!item) return { text: "" };
-
-          const qrValue = item.qr_code || item.code;
-          const name = String(item.name || "").slice(0, 40);
+        const mmToPt = (mm) => Number(((mm * 72) / 25.4).toFixed(2));
+        const labelWidth = mmToPt(50);
+        const labelHeight = mmToPt(30);
+        const labelMargin = mmToPt(1.2);
+        const contentWidth = labelWidth - labelMargin * 2;
+        const truncate = (value, max) => {
+          const text = String(value || "").trim();
+          return text.length > max ? `${text.slice(0, max - 3)}...` : text;
+        };
+        const labelContent = (item, index) => {
+          const code = item.code || "-";
+          const type = item.item_type === "consumable" ? "CONSUMIBLE" : "ACTIVO";
+          const name = truncate(item.name || "Bien sin nombre", 44).toUpperCase();
+          const serial = truncate(item.serial_number || "SS", 22);
+          const dependency = item.dependency
+            ? truncate(`${item.dependency.code} · ${item.dependency.name}`, 30)
+            : truncate(item.category?.name || "Sin ubicación", 30);
 
           return {
             margin: [0, 0, 0, 0],
             table: {
-              widths: ["*", "*"],
+              widths: ["*"],
               body: [
                 [
                   {
-                    qr: qrValue,
-                    fit: 70,
-                    margin: [2, 2, 2, 2],
-                  },
-                  {
+                    margin: [0, 0, 0, 0],
                     stack: [
-                      { text: item.code, bold: true, fontSize: 10 },
-                      { text: name, fontSize: 9, margin: [0, 2, 0, 0] },
                       {
-                        text: item.category?.name || "",
-                        fontSize: 8,
-                        color: "#666666",
-                        margin: [0, 2, 0, 0],
+                        table: {
+                          widths: ["*", "auto"],
+                          body: [
+                            [
+                              {
+                                text: "INVENTARIO",
+                                bold: true,
+                                color: "#ffffff",
+                                fontSize: 5.4,
+                                margin: [2, 1, 2, 1],
+                                fillColor: "#111111",
+                              },
+                              {
+                                text: type,
+                                bold: true,
+                                color: "#ffffff",
+                                fontSize: 5.4,
+                                alignment: "right",
+                                margin: [2, 1, 2, 1],
+                                fillColor: "#111111",
+                              },
+                            ],
+                          ],
+                        },
+                        layout: "noBorders",
+                        margin: [0, 0, 0, 2],
+                      },
+                      {
+                        text: code,
+                        bold: true,
+                        fontSize: 13.2,
+                        alignment: "center",
+                        lineHeight: 0.85,
+                        margin: [2, 1, 2, 0],
+                      },
+                      {
+                        canvas: [
+                          {
+                            type: "line",
+                            x1: 0,
+                            y1: 0,
+                            x2: contentWidth - mmToPt(2.2),
+                            y2: 0,
+                            lineWidth: 0.7,
+                            lineColor: "#111111",
+                          },
+                        ],
+                        margin: [mmToPt(1.1), 2, mmToPt(1.1), 1],
+                      },
+                      {
+                        text: name,
+                        bold: true,
+                        fontSize: 6.4,
+                        alignment: "center",
+                        lineHeight: 0.9,
+                        margin: [2, 0, 2, 1],
+                      },
+                      {
+                        columns: [
+                          {
+                            width: "42%",
+                            stack: [
+                              { text: "SERIE", bold: true, fontSize: 4.2, color: "#444444" },
+                              { text: serial, fontSize: 5.2, lineHeight: 0.95 },
+                            ],
+                          },
+                          {
+                            width: "*",
+                            stack: [
+                              {
+                                text: "UBICACION",
+                                bold: true,
+                                fontSize: 4.2,
+                                color: "#444444",
+                                alignment: "right",
+                              },
+                              {
+                                text: dependency,
+                                fontSize: 5.2,
+                                lineHeight: 0.95,
+                                alignment: "right",
+                              },
+                            ],
+                          },
+                        ],
+                        columnGap: 4,
+                        margin: [2, 1, 2, 0],
                       },
                     ],
-                    margin: [2, 2, 2, 2],
                   },
                 ],
               ],
             },
             layout: {
-              hLineWidth: () => 0.5,
-              vLineWidth: () => 0.5,
-              hLineColor: () => "#cccccc",
-              vLineColor: () => "#cccccc",
-              paddingLeft: () => 2,
-              paddingRight: () => 2,
-              paddingTop: () => 2,
-              paddingBottom: () => 2,
+              hLineWidth: () => 0.7,
+              vLineWidth: () => 0.7,
+              hLineColor: () => "#111111",
+              vLineColor: () => "#111111",
+              paddingLeft: () => 0,
+              paddingRight: () => 0,
+              paddingTop: () => 0,
+              paddingBottom: () => 0,
             },
+            pageBreak: index > 0 ? "before" : undefined,
           };
         };
 
         const docDefinition = {
-          pageSize: "A4",
-          pageMargins: [18, 20, 18, 20],
-          content: rows.flatMap((r, idx) => {
-            const table = {
-              table: {
-                widths: ["*", "*", "*"],
-                body: [[labelCell(r[0]), labelCell(r[1]), labelCell(r[2])]],
-              },
-              layout: "noBorders",
-              margin: [0, 0, 0, 10],
-            };
-
-            // Cada ~9 filas cortar página para mantener consistencia
-            if ((idx + 1) % 9 === 0 && idx !== rows.length - 1) {
-              return [table, { text: "", pageBreak: "after" }];
-            }
-            return [table];
-          }),
-          defaultStyle: { fontSize: 10 },
+          pageSize: {
+            width: labelWidth,
+            height: labelHeight,
+          },
+          pageMargins: [labelMargin, labelMargin, labelMargin, labelMargin],
+          content: labels.map(labelContent),
+          defaultStyle: { fontSize: 6 },
         };
 
         pdfMake.createPdf(docDefinition).open();
@@ -166,7 +235,7 @@ export default {
 <template>
   <Layout>
     <div class="d-flex justify-content-between align-items-center mb-3">
-      <h4 class="mb-0">Inventario · Etiquetas (QR)</h4>
+      <h4 class="mb-0">Inventario · Etiquetas Zebra 50 x 30 mm</h4>
       <BButton
         variant="primary"
         :disabled="printing || selected.length === 0"

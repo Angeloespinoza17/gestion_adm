@@ -2,330 +2,224 @@
 import axios from "axios";
 import Layout from "../../layouts/main.vue";
 import LoadingState from "../../components/ui/loading-state.vue";
-import InfirmaryDocumentPanel from "../../components/infirmary/document-panel.vue";
 import InfirmaryHelpButton from "../../components/infirmary/help-button.vue";
-import InfirmaryStatusBadge from "../../components/infirmary/status-badge.vue";
-import InfirmaryStudentSearch from "../../components/infirmary/student-search.vue";
 import {
-  confirmInfirmaryAction,
-  confirmInfirmaryCancel,
-  formatInfirmaryDateTime,
   formatInfirmaryError,
   normalizeOptions,
   showInfirmaryError,
-  showInfirmarySuccess,
   showInfirmaryWarning,
-  toInputDateTime,
 } from "../../components/infirmary/module-utils";
 import { getPdfMake } from "../../utils/pdfmake";
+import {
+  buildSchoolInsuranceCertificateDefinition,
+  createSchoolInsuranceCertificateForm,
+  schoolInsuranceCertificateFileName,
+} from "../../utils/school-insurance-certificate";
 
 export default {
   components: {
     Layout,
     LoadingState,
-    InfirmaryDocumentPanel,
     InfirmaryHelpButton,
-    InfirmaryStatusBadge,
-    InfirmaryStudentSearch,
   },
   data() {
     return {
       loading: false,
-      saving: false,
       error: null,
       catalogs: {
-        dependencies: [],
-        staff: [],
-        accident_severity_options: [],
-        accident_status_options: [],
-        call_status_options: [],
+        attention_categories: [],
+        accident_location_options: [],
+        school_insurance_certificate: {},
+        capabilities: {},
       },
       filters: {
         search: "",
-        student_profile_id: null,
-        accident_type: "",
-        case_status: null,
+        accident_location_type: "",
         from: "",
         to: "",
       },
-      accidents: [],
-      pagination: { current_page: 1, total: 0, per_page: 12 },
-      selectedAccident: null,
-      showModal: false,
-      form: this.emptyForm(),
+      records: [],
+      pagination: {
+        current_page: 1,
+        total: 0,
+        per_page: 12,
+      },
+      certificateLogoDataUrl: null,
+      exportingAttentionId: null,
     };
   },
   computed: {
-    severityOptions() {
-      return normalizeOptions(this.catalogs.accident_severity_options);
+    canExport() {
+      return Boolean(this.catalogs.capabilities?.can_export);
     },
-    statusOptions() {
-      return normalizeOptions(this.catalogs.accident_status_options, true);
+    categoryLabels() {
+      return normalizeOptions(this.catalogs.attention_categories).reduce((labels, option) => {
+        labels[option.value] = option.text;
+        return labels;
+      }, {});
     },
-    callStatusOptions() {
-      return normalizeOptions(this.catalogs.call_status_options, true);
-    },
-    dependencyOptions() {
-      return [{ value: null, text: "Sin dependencia" }].concat(
-        (this.catalogs.dependencies || []).map((item) => ({
-          value: item.id,
-          text: item.name,
-        }))
-      );
-    },
-    staffOptions() {
-      return [{ value: null, text: "Sin funcionario" }].concat(
-        (this.catalogs.staff || []).map((item) => ({
-          value: item.id,
-          text: item.full_name,
-        }))
-      );
-    },
-    isEditing() {
-      return Boolean(this.form.id);
+    locationOptions() {
+      const options = this.catalogs.accident_location_options?.length
+        ? normalizeOptions(this.catalogs.accident_location_options)
+        : [
+          { value: "colegio", text: "En el colegio" },
+          { value: "trayecto", text: "En trayecto" },
+        ];
+
+      return [{ value: "", text: "Todos los tipos" }, ...options];
     },
   },
   async mounted() {
-    await this.loadCatalogs();
-    await this.loadAccidents();
-    this.applyRoutePrefill();
+    await Promise.all([
+      this.loadCatalogs(),
+      this.loadRecords(),
+    ]);
   },
   methods: {
-    formatInfirmaryDateTime,
-    normalizeOptions,
-    emptyForm() {
-      return {
-        id: null,
-        attention_id: null,
-        student_profile_id: null,
-        student_label: "",
-        occurred_at: toInputDateTime(new Date().toISOString()),
-        dependency_id: null,
-        accident_type: "",
-        place: "",
-        activity: "",
-        description: "",
-        witnesses: "",
-        present_staff_id: null,
-        severity: "leve",
-        observed_injuries: "",
-        first_aid: "",
-        guardian_call_status: "pendiente",
-        referral_destination: "",
-        school_insurance: true,
-        diat_number: "",
-        diat_generated_at: "",
-        observations: "",
-        case_status: "abierto",
-      };
-    },
     async loadCatalogs() {
-      const response = await axios.get("/api/infirmary/catalogs");
-      this.catalogs = response.data;
+      try {
+        const response = await axios.get("/api/infirmary/catalogs");
+        this.catalogs = response.data;
+      } catch (error) {
+        this.error = formatInfirmaryError(error, "No se pudieron cargar los datos de seguro escolar.");
+      }
     },
-    async loadAccidents(page = 1) {
+    async loadRecords(page = 1) {
       this.loading = true;
       this.error = null;
+
       try {
-        const response = await axios.get("/api/infirmary/accidents", {
+        const response = await axios.get("/api/infirmary/attentions", {
           params: {
             page,
+            per_page: this.pagination.per_page,
+            school_insurance: 1,
             ...this.filters,
           },
         });
-        this.accidents = response.data.data || [];
+
+        this.records = response.data.data || [];
         this.pagination = {
           current_page: response.data.current_page || 1,
           total: response.data.total || 0,
           per_page: response.data.per_page || 12,
         };
-
-        if (this.accidents[0]) {
-          await this.openAccident(this.accidents[0]);
-        } else {
-          this.selectedAccident = null;
-        }
       } catch (error) {
-        this.error = formatInfirmaryError(error, "No se pudo cargar el registro de accidentes.");
+        this.error = formatInfirmaryError(error, "No se pudieron cargar los registros de seguro escolar.");
       } finally {
         this.loading = false;
-      }
-    },
-    async openAccident(accident) {
-      try {
-        const response = await axios.get(`/api/infirmary/accidents/${accident.id}`);
-        this.selectedAccident = response.data.data;
-      } catch (error) {
-        this.error = formatInfirmaryError(error, "No se pudo cargar el detalle del accidente.");
-      }
-    },
-    selectStudent(student) {
-      this.filters.student_profile_id = student.id;
-      this.loadAccidents(1);
-    },
-    selectFormStudent(student) {
-      this.form.student_profile_id = student.id;
-      this.form.student_label = student.full_name;
-    },
-    applyRoutePrefill() {
-      const query = this.$route.query || {};
-      if (query.student_id || query.attention_id) {
-        this.form = {
-          ...this.emptyForm(),
-          student_profile_id: query.student_id ? Number(query.student_id) : null,
-          attention_id: query.attention_id ? Number(query.attention_id) : null,
-        };
-        this.showModal = true;
       }
     },
     resetFilters() {
       this.filters = {
         search: "",
-        student_profile_id: null,
-        accident_type: "",
-        case_status: null,
+        accident_location_type: "",
         from: "",
         to: "",
       };
-      this.loadAccidents(1);
+      this.loadRecords(1);
     },
-    openCreate() {
-      this.form = this.emptyForm();
-      this.showModal = true;
+    parseDate(value) {
+      if (!value) return null;
+      const date = new Date(String(value).replace(" ", "T"));
+      return Number.isNaN(date.getTime()) ? null : date;
     },
-    openEdit(accident) {
-      this.form = {
-        id: accident.id,
-        attention_id: accident.attention_id,
-        student_profile_id: accident.student_profile_id,
-        student_label: accident.student ? `${accident.student.first_name} ${accident.student.last_name}` : "",
-        occurred_at: toInputDateTime(accident.occurred_at),
-        dependency_id: accident.dependency_id,
-        accident_type: accident.accident_type || "",
-        place: accident.place || "",
-        activity: accident.activity || "",
-        description: accident.description || "",
-        witnesses: accident.witnesses || "",
-        present_staff_id: accident.present_staff_id,
-        severity: accident.severity || "leve",
-        observed_injuries: accident.observed_injuries || "",
-        first_aid: accident.first_aid || "",
-        guardian_call_status: accident.guardian_call_status || "pendiente",
-        referral_destination: accident.referral_destination || "",
-        school_insurance: Boolean(accident.school_insurance),
-        diat_number: accident.diat_number || "",
-        diat_generated_at: toInputDateTime(accident.diat_generated_at),
-        observations: accident.observations || "",
-        case_status: accident.case_status || "abierto",
-      };
-      this.showModal = true;
+    formatDate(value) {
+      const date = this.parseDate(value);
+      return date
+        ? new Intl.DateTimeFormat("es-CL", {
+          day: "2-digit",
+          month: "2-digit",
+          year: "numeric",
+        }).format(date)
+        : "-";
     },
-    async cancelModal() {
-      const result = await confirmInfirmaryCancel("los cambios del accidente");
-      if (result.isConfirmed) {
-        this.showModal = false;
-      }
+    formatTime(value) {
+      const date = this.parseDate(value);
+      return date
+        ? new Intl.DateTimeFormat("es-CL", {
+          hour: "2-digit",
+          minute: "2-digit",
+          hour12: false,
+        }).format(date)
+        : "-";
     },
-    async save() {
-      if (!this.form.student_profile_id) {
-        await showInfirmaryWarning("Debes seleccionar una estudiante.");
-        return;
+    certificateReference(record) {
+      return `Nº ${String(record?.correlative_number || record?.id || "").padStart(5, "0")}`;
+    },
+    studentName(record) {
+      const relatedName = record?.student?.registered_name
+        || [record?.student?.first_name, record?.student?.last_name].filter(Boolean).join(" ");
+
+      return record?.student_full_name_snapshot || relatedName || "Sin estudiante";
+    },
+    categoryLabel(value) {
+      return this.categoryLabels[value] || value || "-";
+    },
+    locationLabel(record) {
+      if (record?.accident_location_type === "trayecto") {
+        return "En trayecto";
       }
 
-      this.saving = true;
+      return record?.dependency?.name || "En el colegio";
+    },
+    blobToDataUrl(blob) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
+      });
+    },
+    async loadCertificateLogo() {
+      if (this.certificateLogoDataUrl) return;
+
+      const logoUrl = this.catalogs.school_insurance_certificate?.logo_url || "/brand/logo-cnsc.png";
+      const response = await fetch(logoUrl);
+      if (!response.ok) return;
+
+      this.certificateLogoDataUrl = await this.blobToDataUrl(await response.blob());
+    },
+    async exportCertificate(record) {
+      if (!record?.id || this.exportingAttentionId) return;
+
+      this.exportingAttentionId = record.id;
+
       try {
-        const payload = {
-          attention_id: this.form.attention_id || null,
-          student_profile_id: this.form.student_profile_id,
-          dependency_id: this.form.dependency_id || null,
-          occurred_at: this.form.occurred_at,
-          accident_type: this.form.accident_type,
-          place: this.form.place || null,
-          activity: this.form.activity || null,
-          description: this.form.description,
-          witnesses: this.form.witnesses || null,
-          present_staff_id: this.form.present_staff_id || null,
-          severity: this.form.severity,
-          observed_injuries: this.form.observed_injuries || null,
-          first_aid: this.form.first_aid || null,
-          guardian_call_status: this.form.guardian_call_status || null,
-          referral_destination: this.form.referral_destination || null,
-          school_insurance: this.form.school_insurance,
-          diat_number: this.form.diat_number || null,
-          diat_generated_at: this.form.diat_generated_at || null,
-          observations: this.form.observations || null,
-          case_status: this.form.case_status,
-        };
+        const response = await axios.get(`/api/infirmary/attentions/${record.id}`);
+        const form = createSchoolInsuranceCertificateForm(
+          response.data.data,
+          this.catalogs.school_insurance_certificate || {}
+        );
+        const requiredFields = [
+          [form.registration_date, "fecha de registro"],
+          [form.rbd, "RBD"],
+          [form.establishment_name, "nombre del establecimiento"],
+          [form.given_names, "nombres de la estudiante"],
+          [form.paternal_surname, "apellido paterno"],
+          [form.rut, "RUT de la estudiante"],
+          [form.occurred_at, "fecha y hora del accidente"],
+          [form.circumstance, "circunstancia del accidente"],
+        ];
+        const missing = requiredFields
+          .filter(([value]) => !String(value || "").trim())
+          .map(([, label]) => label);
 
-        if (this.isEditing) {
-          await axios.put(`/api/infirmary/accidents/${this.form.id}`, payload);
-        } else {
-          await axios.post("/api/infirmary/accidents", payload);
+        if (missing.length) {
+          await showInfirmaryWarning(`No se puede exportar. Completa en la ficha: ${missing.join(", ")}.`);
+          return;
         }
 
-        this.showModal = false;
-        await this.loadAccidents(this.pagination.current_page || 1);
-        await showInfirmarySuccess(this.isEditing ? "Accidente actualizado correctamente." : "Accidente registrado correctamente.");
+        await this.loadCertificateLogo();
+
+        const pdfMake = getPdfMake();
+        const definition = buildSchoolInsuranceCertificateDefinition(form, this.certificateLogoDataUrl);
+        pdfMake.createPdf(definition).download(schoolInsuranceCertificateFileName(form));
       } catch (error) {
-        await showInfirmaryError(formatInfirmaryError(error, "No se pudo guardar el accidente."));
+        await showInfirmaryError(formatInfirmaryError(error, "No se pudo exportar el certificado de seguro escolar."));
       } finally {
-        this.saving = false;
+        this.exportingAttentionId = null;
       }
-    },
-    async remove(accident) {
-      const confirmation = await confirmInfirmaryAction({
-        title: "Eliminar accidente",
-        text: `Se eliminará el accidente ${accident.accident_type}.`,
-        confirmButtonText: "Eliminar",
-      });
-
-      if (!confirmation.isConfirmed) return;
-
-      try {
-        await axios.delete(`/api/infirmary/accidents/${accident.id}`);
-        await this.loadAccidents(this.pagination.current_page || 1);
-        await showInfirmarySuccess("Accidente eliminado correctamente.");
-      } catch (error) {
-        await showInfirmaryError(formatInfirmaryError(error, "No se pudo eliminar el accidente."));
-      }
-    },
-    generateDiatPdf(accident = this.selectedAccident) {
-      if (!accident) return;
-
-      const pdfMake = getPdfMake();
-      pdfMake.createPdf({
-        content: [
-          { text: "Formulario DIAT Escolar", style: "title" },
-          { text: `Generado el ${formatInfirmaryDateTime(new Date())}`, style: "muted" },
-          {
-            table: {
-              widths: ["35%", "*"],
-              body: [
-                ["Estudiante", `${accident.student?.first_name || ""} ${accident.student?.last_name || ""}`.trim()],
-                ["RUT", accident.student?.rut || "-"],
-                ["Fecha del accidente", formatInfirmaryDateTime(accident.occurred_at)],
-                ["Tipo", accident.accident_type || "-"],
-                ["Lugar", accident.place || accident.dependency?.name || "-"],
-                ["Actividad", accident.activity || "-"],
-                ["Severidad", accident.severity || "-"],
-                ["Lesiones observadas", accident.observed_injuries || "-"],
-                ["Primeros auxilios", accident.first_aid || "-"],
-                ["Derivación", accident.referral_destination || "-"],
-                ["Seguro escolar", accident.school_insurance ? "Sí" : "No"],
-                ["DIAT", accident.diat_number || "Pendiente"],
-                ["Observaciones", accident.observations || "-"],
-              ],
-            },
-            layout: "lightHorizontalLines",
-            margin: [0, 12, 0, 0],
-          },
-        ],
-        styles: {
-          title: { fontSize: 18, bold: true },
-          muted: { fontSize: 10, color: "#74788d" },
-        },
-        defaultStyle: { fontSize: 10 },
-      }).download(`diat_${accident.id}.pdf`);
     },
   },
 };
@@ -333,278 +227,248 @@ export default {
 
 <template>
   <Layout>
-    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+    <div class="school-insurance-header">
       <div>
-        <h4 class="mb-0">Accidentes escolares</h4>
-        <div class="text-muted">
-          Registro de accidentes, primeros auxilios, seguro escolar, DIAT y respaldos asociados.
-        </div>
+        <h4 class="mb-1">Seguros escolares</h4>
+        <p class="text-muted mb-0">Certificados asociados a los accidentes registrados en las fichas de atención.</p>
       </div>
-      <div class="d-flex gap-2">
-        <InfirmaryHelpButton
-          title="Ayuda: accidentes escolares"
-          text="En esta pantalla se registran accidentes escolares, su gravedad, atención inicial, derivación, seguro escolar y la generación posterior del DIAT en PDF."
-        />
-        <BButton variant="primary" @click="openCreate">Registrar accidente</BButton>
-      </div>
+      <InfirmaryHelpButton
+        title="Ayuda: seguros escolares"
+        text="La tabla muestra las atenciones clasificadas como accidente. Usa la acción PDF para generar el certificado con los datos precargados."
+      />
     </div>
 
-    <BCard class="mb-3">
-      <div class="row g-3">
-        <div class="col-xl-7">
-          <InfirmaryStudentSearch @selected="selectStudent" />
+    <BCard class="school-insurance-filters mb-3">
+      <div class="row g-3 align-items-end">
+        <div class="col-lg-5">
+          <label class="form-label">Buscar estudiante</label>
+          <BFormInput
+            v-model="filters.search"
+            placeholder="Nombre, RUT o N° correlativo"
+            @keyup.enter="loadRecords(1)"
+          />
         </div>
-        <div class="col-xl-5 d-flex align-items-center">
-          <div class="text-muted small">Puedes iniciar el registro de accidente desde una atención o buscar a la estudiante directamente.</div>
+        <div class="col-sm-6 col-lg-3">
+          <label class="form-label">Tipo</label>
+          <BFormSelect v-model="filters.accident_location_type" :options="locationOptions" />
+        </div>
+        <div class="col-sm-6 col-lg-2">
+          <label class="form-label">Desde</label>
+          <BFormInput v-model="filters.from" type="date" />
+        </div>
+        <div class="col-sm-6 col-lg-2">
+          <label class="form-label">Hasta</label>
+          <BFormInput v-model="filters.to" type="date" />
+        </div>
+        <div class="col-12 d-flex flex-wrap gap-2">
+          <BButton variant="primary" @click="loadRecords(1)">
+            <i class="mdi mdi-filter-outline me-1"></i>
+            Filtrar
+          </BButton>
+          <BButton variant="outline-secondary" @click="resetFilters">
+            Limpiar
+          </BButton>
         </div>
       </div>
     </BCard>
 
     <BAlert v-if="error" show variant="danger" class="mb-3">{{ error }}</BAlert>
 
-    <div class="row g-3">
-      <div class="col-xl-8">
-        <BCard class="mb-3">
-          <template #header>
-            <div class="d-flex justify-content-between align-items-center gap-2 flex-wrap">
-              <div class="fw-semibold">Filtros</div>
-              <InfirmaryHelpButton
-                title="Ayuda: filtros de accidentes"
-                text="Filtra accidentes por estudiante, tipo, estado o rango de fechas para facilitar el seguimiento."
-              />
-            </div>
-          </template>
-          <div class="row g-3">
-            <div class="col-md-4">
-              <label class="form-label">Buscar</label>
-              <BFormInput v-model="filters.search" placeholder="Tipo, lugar o estudiante" @keyup.enter="loadAccidents(1)" />
-            </div>
-            <div class="col-md-3">
-              <label class="form-label">Tipo de accidente</label>
-              <BFormInput v-model="filters.accident_type" placeholder="Caída, golpe..." />
-            </div>
-            <div class="col-md-2">
-              <label class="form-label">Estado</label>
-              <BFormSelect v-model="filters.case_status" :options="statusOptions" />
-            </div>
-            <div class="col-md-2">
-              <label class="form-label">Desde</label>
-              <BFormInput v-model="filters.from" type="date" />
-            </div>
-            <div class="col-md-1 d-flex align-items-end">
-              <BButton variant="primary" class="w-100" @click="loadAccidents(1)">Ir</BButton>
-            </div>
-            <div class="col-md-2">
-              <label class="form-label">Hasta</label>
-              <BFormInput v-model="filters.to" type="date" />
-            </div>
-            <div class="col-12 d-flex gap-2">
-              <BButton variant="outline-secondary" @click="resetFilters">Limpiar</BButton>
-            </div>
+    <BCard class="school-insurance-records">
+      <template #header>
+        <div class="d-flex align-items-center justify-content-between gap-3 flex-wrap">
+          <div>
+            <div class="fw-semibold">Registros de seguro escolar</div>
+            <div class="small text-muted">{{ pagination.total }} registros encontrados</div>
           </div>
-        </BCard>
+        </div>
+      </template>
 
-        <BCard>
-          <template #header>
-            <div class="d-flex justify-content-between align-items-center gap-2 flex-wrap">
-              <div class="fw-semibold">Registro de accidentes</div>
-              <InfirmaryHelpButton
-                title="Ayuda: registro de accidentes"
-                text="La tabla centraliza el detalle de accidentes escolares con su severidad, lugar, estado y acceso rápido al DIAT."
-              />
-            </div>
-          </template>
+      <LoadingState v-if="loading" message="Cargando seguros escolares..." compact />
 
-          <LoadingState v-if="loading" message="Cargando accidentes..." compact />
-
-          <div v-else class="table-responsive">
-            <table class="table table-sm align-middle mb-0">
-              <thead>
-                <tr>
-                  <th>Fecha</th>
-                  <th>Estudiante</th>
-                  <th>Tipo</th>
-                  <th>Severidad</th>
-                  <th>Estado</th>
-                  <th class="text-end">Acciones</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr
-                  v-for="accident in accidents"
-                  :key="accident.id"
-                  :class="{ 'table-active': selectedAccident?.id === accident.id }"
-                  role="button"
-                  @click="openAccident(accident)"
+      <div v-else class="table-responsive">
+        <table class="table table-sm align-middle mb-0 school-insurance-table">
+          <thead>
+            <tr>
+              <th>N° correlativo / certificado</th>
+              <th>Estudiante</th>
+              <th>Fecha del accidente</th>
+              <th>Fecha de registro</th>
+              <th>Categoría</th>
+              <th>Lugar</th>
+              <th>Circunstancia</th>
+              <th class="text-center">Acciones</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-if="!records.length">
+              <td colspan="8" class="text-center text-muted py-5">
+                No hay registros de seguro escolar para los filtros seleccionados.
+              </td>
+            </tr>
+            <tr v-for="record in records" :key="record.id">
+              <td>
+                <span class="school-insurance-reference">{{ certificateReference(record) }}</span>
+              </td>
+              <td>
+                <div class="fw-semibold">{{ studentName(record) }}</div>
+                <div class="small text-muted">{{ record.student?.rut || record.student_rut_snapshot || "Sin RUT" }}</div>
+                <div class="small text-muted">{{ record.course_name_snapshot || "Sin curso" }}</div>
+              </td>
+              <td class="school-insurance-date">
+                <div>{{ formatDate(record.occurred_at || record.attended_at) }}</div>
+                <div class="small text-muted">{{ formatTime(record.occurred_at || record.attended_at) }}</div>
+              </td>
+              <td class="school-insurance-date">
+                <div>{{ formatDate(record.attended_at) }}</div>
+                <div class="small text-muted">{{ formatTime(record.attended_at) }}</div>
+              </td>
+              <td>
+                <div>{{ categoryLabel(record.attention_category) }}</div>
+                <div class="small text-muted">
+                  {{ record.accident_location_type === "trayecto" ? "Trayecto" : "Colegio" }}
+                </div>
+              </td>
+              <td>{{ locationLabel(record) }}</td>
+              <td class="school-insurance-circumstance">
+                {{ record.accident_circumstance || record.consultation_reason || "-" }}
+              </td>
+              <td class="text-center">
+                <button
+                  v-if="canExport"
+                  type="button"
+                  class="cnsc-action-btn cnsc-action-btn--delete"
+                  :disabled="Boolean(exportingAttentionId)"
+                  title="Exportar certificado de seguro escolar"
+                  aria-label="Exportar certificado de seguro escolar"
+                  @click="exportCertificate(record)"
                 >
-                  <td>{{ formatInfirmaryDateTime(accident.occurred_at) }}</td>
-                  <td>{{ accident.student?.first_name }} {{ accident.student?.last_name }}</td>
-                  <td>{{ accident.accident_type }}</td>
-                  <td><InfirmaryStatusBadge :status="accident.severity" /></td>
-                  <td><InfirmaryStatusBadge :status="accident.case_status" /></td>
-                  <td class="text-end">
-                    <div class="btn-group btn-group-sm">
-                      <BButton variant="outline-primary" @click.stop="openEdit(accident)">Editar</BButton>
-                      <BButton variant="outline-secondary" @click.stop="generateDiatPdf(accident)">DIAT PDF</BButton>
-                      <BButton variant="outline-danger" @click.stop="remove(accident)">Eliminar</BButton>
-                    </div>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-
-          <div class="d-flex justify-content-end mt-3">
-            <BPagination
-              v-model="pagination.current_page"
-              :total-rows="pagination.total"
-              :per-page="pagination.per_page"
-              @update:model-value="loadAccidents"
-            />
-          </div>
-        </BCard>
+                  <i
+                    class="mdi"
+                    :class="exportingAttentionId === record.id ? 'mdi-loading mdi-spin' : 'mdi-file-pdf-box'"
+                  ></i>
+                  <span class="visually-hidden">Exportar PDF</span>
+                </button>
+                <span v-else class="small text-muted">Sin permiso</span>
+              </td>
+            </tr>
+          </tbody>
+        </table>
       </div>
 
-      <div class="col-xl-4">
-        <BCard class="mb-3">
-          <template #header>
-            <div class="d-flex justify-content-between align-items-center gap-2 flex-wrap">
-              <div class="fw-semibold">Detalle del accidente</div>
-              <InfirmaryHelpButton
-                title="Ayuda: detalle del accidente"
-                text="Aquí se visualiza el accidente seleccionado con severidad, primeros auxilios, derivación, datos del apoderado y trazabilidad del caso."
-              />
-            </div>
-          </template>
-
-          <div v-if="!selectedAccident" class="text-muted">Selecciona un accidente para ver su detalle.</div>
-          <div v-else>
-            <div class="fw-semibold fs-5">{{ selectedAccident.accident_type }}</div>
-            <div class="text-muted small mb-3">
-              {{ selectedAccident.student?.first_name }} {{ selectedAccident.student?.last_name }} · {{ selectedAccident.student?.rut || "Sin RUT" }}
-            </div>
-            <div class="mb-2"><span class="text-muted">Fecha:</span> {{ formatInfirmaryDateTime(selectedAccident.occurred_at) }}</div>
-            <div class="mb-2"><span class="text-muted">Lugar:</span> {{ selectedAccident.place || selectedAccident.dependency?.name || "-" }}</div>
-            <div class="mb-2"><span class="text-muted">Actividad:</span> {{ selectedAccident.activity || "-" }}</div>
-            <div class="mb-2"><span class="text-muted">Severidad:</span> <InfirmaryStatusBadge :status="selectedAccident.severity" /></div>
-            <div class="mb-2"><span class="text-muted">Estado:</span> <InfirmaryStatusBadge :status="selectedAccident.case_status" /></div>
-            <div class="mb-2"><span class="text-muted">Lesiones:</span> {{ selectedAccident.observed_injuries || "-" }}</div>
-            <div class="mb-2"><span class="text-muted">Primeros auxilios:</span> {{ selectedAccident.first_aid || "-" }}</div>
-            <div class="mb-2"><span class="text-muted">Derivación:</span> {{ selectedAccident.referral_destination || "-" }}</div>
-            <div class="mb-2"><span class="text-muted">Seguro escolar:</span> {{ selectedAccident.school_insurance ? "Sí" : "No" }}</div>
-            <div class="mb-2"><span class="text-muted">DIAT:</span> {{ selectedAccident.diat_number || "Pendiente" }}</div>
-            <div class="mb-2"><span class="text-muted">Llamado apoderado:</span> <InfirmaryStatusBadge :status="selectedAccident.guardian_call_status" /></div>
-            <div class="mb-2"><span class="text-muted">Apoderado:</span> {{ selectedAccident.student?.guardian_name || "-" }}</div>
-            <div class="mb-2"><span class="text-muted">Teléfono:</span> {{ selectedAccident.student?.guardian_phone || "-" }}</div>
-            <div><span class="text-muted">Observaciones:</span> {{ selectedAccident.observations || "Sin observaciones." }}</div>
-          </div>
-        </BCard>
-
-        <InfirmaryDocumentPanel
-          v-if="selectedAccident"
-          :documents="selectedAccident.documents || []"
-          :upload-url="`/api/infirmary/accidents/${selectedAccident.id}/documents`"
-          :student-id="selectedAccident.student_profile_id"
-          :categories="catalogs.document_categories || []"
-          title="Archivos del accidente"
-          help-text="Adjunta fotografías, órdenes de atención, certificados o respaldos del accidente escolar."
-          @refresh="openAccident(selectedAccident)"
+      <div v-if="pagination.total > pagination.per_page" class="d-flex justify-content-end mt-3">
+        <BPagination
+          v-model="pagination.current_page"
+          :total-rows="pagination.total"
+          :per-page="pagination.per_page"
+          @update:model-value="loadRecords"
         />
       </div>
-    </div>
-
-    <BModal v-model="showModal" :title="isEditing ? 'Editar accidente' : 'Registrar accidente'" size="xl" hide-footer>
-      <div class="row g-3">
-        <div class="col-12">
-          <label class="form-label">Buscar estudiante</label>
-          <InfirmaryStudentSearch button-label="Seleccionar" @selected="selectFormStudent" />
-          <div v-if="form.student_label" class="small text-muted mt-2">Seleccionada: {{ form.student_label }}</div>
-        </div>
-        <div class="col-md-4">
-          <label class="form-label">Fecha y hora</label>
-          <BFormInput v-model="form.occurred_at" type="datetime-local" />
-        </div>
-        <div class="col-md-4">
-          <label class="form-label">Tipo de accidente</label>
-          <BFormInput v-model="form.accident_type" />
-        </div>
-        <div class="col-md-4">
-          <label class="form-label">Gravedad</label>
-          <BFormSelect v-model="form.severity" :options="severityOptions" />
-        </div>
-        <div class="col-md-4">
-          <label class="form-label">Dependencia</label>
-          <BFormSelect v-model="form.dependency_id" :options="dependencyOptions" />
-        </div>
-        <div class="col-md-4">
-          <label class="form-label">Lugar</label>
-          <BFormInput v-model="form.place" />
-        </div>
-        <div class="col-md-4">
-          <label class="form-label">Actividad</label>
-          <BFormInput v-model="form.activity" />
-        </div>
-        <div class="col-md-4">
-          <label class="form-label">Funcionario presente</label>
-          <BFormSelect v-model="form.present_staff_id" :options="staffOptions" />
-        </div>
-        <div class="col-md-4">
-          <label class="form-label">Estado del caso</label>
-          <BFormSelect v-model="form.case_status" :options="normalizeOptions(catalogs.accident_status_options)" />
-        </div>
-        <div class="col-md-4">
-          <label class="form-label">Llamado al apoderado</label>
-          <BFormSelect v-model="form.guardian_call_status" :options="callStatusOptions" />
-        </div>
-        <div class="col-md-6">
-          <label class="form-label">Atención asociada</label>
-          <BFormInput v-model="form.attention_id" type="number" min="1" placeholder="Opcional" />
-        </div>
-        <div class="col-md-6">
-          <label class="form-label">Derivación</label>
-          <BFormInput v-model="form.referral_destination" placeholder="SAPU, CESFAM, hospital..." />
-        </div>
-        <div class="col-12">
-          <label class="form-label">Descripción</label>
-          <BFormTextarea v-model="form.description" rows="3" />
-        </div>
-        <div class="col-md-6">
-          <label class="form-label">Testigos</label>
-          <BFormTextarea v-model="form.witnesses" rows="2" />
-        </div>
-        <div class="col-md-6">
-          <label class="form-label">Lesiones observadas</label>
-          <BFormTextarea v-model="form.observed_injuries" rows="2" />
-        </div>
-        <div class="col-md-6">
-          <label class="form-label">Primeros auxilios aplicados</label>
-          <BFormTextarea v-model="form.first_aid" rows="2" />
-        </div>
-        <div class="col-md-6">
-          <label class="form-label">Observaciones</label>
-          <BFormTextarea v-model="form.observations" rows="2" />
-        </div>
-        <div class="col-md-4">
-          <label class="form-label">Número DIAT</label>
-          <BFormInput v-model="form.diat_number" placeholder="Opcional" />
-        </div>
-        <div class="col-md-4">
-          <label class="form-label">DIAT generado</label>
-          <BFormInput v-model="form.diat_generated_at" type="datetime-local" />
-        </div>
-        <div class="col-md-4 d-flex align-items-end">
-          <div class="form-check">
-            <input id="school_insurance" v-model="form.school_insurance" class="form-check-input" type="checkbox" />
-            <label class="form-check-label" for="school_insurance">Aplica seguro escolar</label>
-          </div>
-        </div>
-        <div class="col-12 d-flex justify-content-end gap-2">
-          <BButton variant="outline-secondary" @click="cancelModal">Cancelar</BButton>
-          <BButton variant="primary" :disabled="saving" @click="save">
-            {{ saving ? "Guardando..." : isEditing ? "Guardar cambios" : "Registrar accidente" }}
-          </BButton>
-        </div>
-      </div>
-    </BModal>
+    </BCard>
   </Layout>
 </template>
+
+<style scoped>
+.school-insurance-header {
+  align-items: flex-start;
+  display: flex;
+  gap: 1rem;
+  justify-content: space-between;
+  margin-bottom: 1rem;
+}
+
+.school-insurance-header h4 {
+  color: #303846;
+  font-size: 1.35rem;
+  font-weight: 700;
+}
+
+.school-insurance-filters,
+.school-insurance-records {
+  border: 1px solid #e2e8f3;
+  border-radius: 8px;
+  box-shadow: none;
+}
+
+.school-insurance-filters .form-label {
+  color: #4b5565;
+  font-size: 0.85rem;
+  font-weight: 600;
+  margin-bottom: 0.35rem;
+}
+
+.school-insurance-table {
+  min-width: 1120px;
+}
+
+.school-insurance-table thead th {
+  color: #68738a;
+  font-size: 0.75rem;
+  font-weight: 700;
+  padding-bottom: 0.85rem;
+  padding-top: 0.85rem;
+  text-transform: uppercase;
+  vertical-align: middle;
+}
+
+.school-insurance-table tbody td {
+  color: #3e4756;
+  padding-bottom: 0.85rem;
+  padding-top: 0.85rem;
+  vertical-align: middle;
+}
+
+.school-insurance-table th:last-child,
+.school-insurance-table td:last-child {
+  box-shadow: -10px 0 12px -14px rgba(45, 55, 72, 0.65);
+  min-width: 82px;
+  position: sticky;
+  right: 0;
+  z-index: 2;
+}
+
+.school-insurance-table tbody td:last-child {
+  background: rgba(238, 246, 255, 0.96);
+}
+
+.school-insurance-table thead th:last-child {
+  background: #f8fafc;
+  z-index: 3;
+}
+
+.school-insurance-reference {
+  color: #344054;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.school-insurance-date {
+  min-width: 115px;
+}
+
+.school-insurance-circumstance {
+  max-width: 300px;
+  min-width: 230px;
+  overflow-wrap: anywhere;
+}
+
+.school-insurance-table .cnsc-action-btn {
+  height: 2.7rem;
+  width: 2.7rem;
+}
+
+.school-insurance-table .cnsc-action-btn:disabled {
+  cursor: wait;
+  opacity: 0.55;
+}
+
+@media (max-width: 767.98px) {
+  .school-insurance-header {
+    align-items: stretch;
+  }
+
+  .school-insurance-header p {
+    font-size: 0.85rem;
+  }
+}
+</style>

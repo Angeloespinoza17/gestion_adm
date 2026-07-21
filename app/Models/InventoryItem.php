@@ -7,7 +7,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
-use Illuminate\Support\Facades\Storage;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class InventoryItem extends Model
 {
@@ -67,13 +67,9 @@ class InventoryItem extends Model
             return null;
         }
 
-        $url = Storage::disk('public')->url($this->image_path);
-        $parts = parse_url((string) $url);
-        if (is_array($parts) && isset($parts['path'])) {
-            return $parts['path'] . (isset($parts['query']) ? '?' . $parts['query'] : '');
-        }
+        $version = $this->updated_at?->timestamp ?: time();
 
-        return $url;
+        return "/api/inventory/items/{$this->id}/image?v={$version}";
     }
 
     public function category(): BelongsTo
@@ -129,5 +125,10 @@ class InventoryItem extends Model
     public function securityIncidents(): HasMany
     {
         return $this->hasMany(SecurityIncident::class, 'inventory_item_id');
+    }
+
+    public function itEquipment(): HasOne
+    {
+        return $this->hasOne(\App\Models\It\ItEquipment::class, 'inventory_item_id');
     }
 }

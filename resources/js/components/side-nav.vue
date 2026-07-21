@@ -5,9 +5,77 @@ const axios = window.axios;
 import { menuItems } from "./menu";
 import { useAuthStore } from "@/state/pinia";
 import LoadingState from "@/components/ui/loading-state.vue";
-import logoMark from "@/assets/images/logo.svg";
-import logoWordmark from "@/assets/images/logo-dark.png";
 import avatar1 from "@/assets/images/users/avatar-1.jpg";
+
+const cnscLogo = "/brand/logo-cnsc.png";
+
+const modulesCache = new Map();
+const modulesRequests = new Map();
+const permissionsCache = new Map();
+const permissionsRequests = new Map();
+
+const fetchMenuModules = (token) => {
+  if (modulesCache.has(token)) {
+    return Promise.resolve(modulesCache.get(token));
+  }
+
+  if (modulesRequests.has(token)) {
+    return modulesRequests.get(token);
+  }
+
+  const auth = `Bearer ${token}`;
+  const request = axios
+    .get("/api/me/modules", {
+      headers: {
+        Authorization: auth,
+        "X-Authorization": auth,
+        "X-Api-Token": token,
+      },
+    })
+    .then((response) => {
+      const modules = response.data.data || [];
+      modulesCache.set(token, modules);
+      return modules;
+    })
+    .finally(() => {
+      modulesRequests.delete(token);
+    });
+  modulesRequests.set(token, request);
+
+  return request;
+};
+
+const fetchMenuPermissions = (token) => {
+  if (permissionsCache.has(token)) {
+    return Promise.resolve(permissionsCache.get(token));
+  }
+
+  if (permissionsRequests.has(token)) {
+    return permissionsRequests.get(token);
+  }
+
+  const auth = `Bearer ${token}`;
+  const request = axios
+    .get("/api/me/permissions", {
+      headers: {
+        Authorization: auth,
+        "X-Authorization": auth,
+        "X-Api-Token": token,
+      },
+    })
+    .then((response) => {
+      const permissions = response.data.data || [];
+      permissionsCache.set(token, permissions);
+      localStorage.setItem("permissions", JSON.stringify(permissions));
+      return permissions;
+    })
+    .finally(() => {
+      permissionsRequests.delete(token);
+    });
+
+  permissionsRequests.set(token, request);
+  return request;
+};
 
 const MENU_ICON_BY_SLUG = {
   dashboard: "bx-home-circle",
@@ -83,6 +151,54 @@ const DEPRECATED_MENU_ICONS = {
   "bx-book-reader": "bx-book-open",
 };
 
+const PINNED_TOP_MENU_PRIORITIES = [
+  {
+    labels: ["espacios", "dependencias y reservas"],
+    slugs: ["spaces"],
+    routePrefixes: ["/spaces/"],
+  },
+  {
+    labels: ["mantencion"],
+    slugs: ["maintenance", "mantencion"],
+    routePrefixes: ["/maintenance/"],
+  },
+  {
+    labels: ["inventario"],
+    slugs: ["inventory", "inventario"],
+    routePrefixes: ["/inventory/"],
+  },
+  {
+    labels: ["estudiantes"],
+    slugs: ["students", "estudiantes"],
+    routePrefixes: ["/students"],
+  },
+  {
+    labels: ["porteria"],
+    slugs: ["porter", "porteria"],
+    routePrefixes: ["/porter/"],
+  },
+  {
+    labels: ["permisos"],
+    slugs: ["staff_permissions", "permisos"],
+    routePrefixes: ["/staff/permissions"],
+  },
+  {
+    labels: ["tareas"],
+    slugs: ["tasks", "tareas"],
+    routePrefixes: ["/tasks/"],
+  },
+  {
+    labels: ["control de nochero"],
+    slugs: ["security"],
+    routePrefixes: ["/security/"],
+  },
+  {
+    labels: ["calendario y fechas relevantes"],
+    slugs: ["relevant_calendar"],
+    routePrefixes: ["/relevant-calendar"],
+  },
+];
+
 const normalizeMenuKey = (value) =>
   String(value || "")
     .trim()
@@ -100,8 +216,7 @@ export default {
     return {
       menuItems: [],
       isLoadingMenu: true,
-      logoMark,
-      logoWordmark,
+      cnscLogo,
       avatar1,
       auth: useAuthStore(),
     };
@@ -160,6 +275,18 @@ export default {
             link: "/students/movements",
             parentId: "fallback-students",
           },
+          {
+            id: "fallback-students-reports",
+            label: "Reportes",
+            link: "/students/reports",
+            parentId: "fallback-students",
+          },
+          {
+            id: "fallback-students-attendance-statistics",
+            label: "Estadísticas de asistencia",
+            link: "/students/attendance-statistics",
+            parentId: "fallback-students",
+          },
         ],
       };
     },
@@ -171,7 +298,7 @@ export default {
         subItems: [
           {
             id: "fallback-spaces-dependencies",
-            label: "Dependencias",
+            label: "Salas",
             link: "/spaces/dependencies",
             parentId: "fallback-spaces",
           },
@@ -388,31 +515,168 @@ export default {
         ],
       };
     },
+    infirmaryFallbackSection() {
+      return {
+        id: "fallback-infirmary",
+        label: "Enfermería",
+        icon: "bx-plus-medical",
+        subItems: [
+          {
+            id: "fallback-infirmary-dashboard",
+            label: "Dashboard",
+            link: "/infirmary",
+            parentId: "fallback-infirmary",
+          },
+          {
+            id: "fallback-infirmary-attention",
+            label: "Atención a estudiantes",
+            link: "/infirmary/attentions",
+            parentId: "fallback-infirmary",
+          },
+          {
+            id: "fallback-infirmary-staff-attention",
+            label: "Atención a funcionarios",
+            link: "/infirmary/staff-attentions",
+            parentId: "fallback-infirmary",
+          },
+          {
+            id: "fallback-infirmary-categories",
+            label: "Categorías",
+            link: "/infirmary/categories",
+            parentId: "fallback-infirmary",
+          },
+          {
+            id: "fallback-infirmary-inventory",
+            label: "Inventario",
+            link: "/infirmary/inventory",
+            parentId: "fallback-infirmary",
+          },
+          {
+            id: "fallback-infirmary-school-insurance",
+            label: "Seguro escolar",
+            link: "/infirmary/accidents",
+            parentId: "fallback-infirmary",
+          },
+          {
+            id: "fallback-infirmary-medications",
+            label: "Medicamentos",
+            link: "/infirmary/medications",
+            parentId: "fallback-infirmary",
+          },
+        ],
+      };
+    },
+    convivenciaFallbackSection() {
+      const parentId = "fallback-convivencia";
+
+      return {
+        id: parentId,
+        label: "Convivencia Escolar",
+        icon: "bx-happy",
+        subItems: [
+          {
+            id: "fallback-convivencia-overview",
+            label: "Resumen",
+            parentId,
+            subItems: [
+              { id: "fallback-convivencia-dashboard", label: "Panel general", link: "/convivencia", parentId: "fallback-convivencia-overview" },
+              { id: "fallback-convivencia-reports", label: "Reportes por curso", link: "/convivencia/reportes", parentId: "fallback-convivencia-overview" },
+            ],
+          },
+          {
+            id: "fallback-convivencia-management",
+            label: "Gestión de casos",
+            parentId,
+            subItems: [
+              { id: "fallback-convivencia-cases", label: "Casos", link: "/convivencia/casos", parentId: "fallback-convivencia-management" },
+              { id: "fallback-convivencia-complaints", label: "Denuncias", link: "/convivencia/denuncias", parentId: "fallback-convivencia-management" },
+              { id: "fallback-convivencia-derivations", label: "Derivaciones", link: "/convivencia/derivaciones", parentId: "fallback-convivencia-management" },
+            ],
+          },
+          {
+            id: "fallback-convivencia-follow-up",
+            label: "Intervención y seguimiento",
+            parentId,
+            subItems: [
+              { id: "fallback-convivencia-protocols", label: "Protocolos", link: "/convivencia/protocolos", parentId: "fallback-convivencia-follow-up" },
+              { id: "fallback-convivencia-interviews", label: "Entrevistas", link: "/convivencia/entrevistas", parentId: "fallback-convivencia-follow-up" },
+              { id: "fallback-convivencia-measures", label: "Medidas formativas", link: "/convivencia/medidas", parentId: "fallback-convivencia-follow-up" },
+              { id: "fallback-convivencia-daily-log", label: "Bitácora", link: "/convivencia/bitacora", parentId: "fallback-convivencia-follow-up" },
+            ],
+          },
+          {
+            id: "fallback-convivencia-prevention",
+            label: "Prevención y análisis",
+            parentId,
+            subItems: [
+              { id: "fallback-convivencia-plan", label: "Plan de gestión", link: "/convivencia/planes", parentId: "fallback-convivencia-prevention" },
+              { id: "fallback-convivencia-sociograms", label: "Sociogramas", link: "/convivencia/sociogramas", parentId: "fallback-convivencia-prevention" },
+              { id: "fallback-convivencia-idps", label: "Indicadores IDPS", link: "/convivencia/idps", parentId: "fallback-convivencia-prevention" },
+            ],
+          },
+        ],
+      };
+    },
     async loadMenu() {
       this.isLoadingMenu = true;
       const token = localStorage.getItem("token");
       if (!token) {
-        this.menuItems = this.normalizeMenuLinks(menuItems);
+        this.menuItems = this.prepareMenuItems(menuItems);
         this.isLoadingMenu = false;
         return;
       }
 
       try {
-        const auth = `Bearer ${token}`;
-        const response = await axios.get("/api/me/modules", {
-          headers: {
-            Authorization: auth,
-            "X-Authorization": auth,
-            "X-Api-Token": token,
-          },
-        });
-        const dynamicMenu = this.buildMenuFromModules(response.data.data || []);
-        this.menuItems = this.normalizeMenuLinks(this.mergeFallbackSections(dynamicMenu));
+        const [modules, permissions] = await Promise.all([
+          fetchMenuModules(token),
+          fetchMenuPermissions(token),
+        ]);
+        const dynamicMenu = this.buildMenuFromModules(modules);
+        this.menuItems = this.filterMenuByPermissions(
+          this.prepareMenuItems(dynamicMenu),
+          permissions
+        );
       } catch (error) {
-        this.menuItems = this.normalizeMenuLinks(menuItems);
+        this.menuItems = [];
       } finally {
         this.isLoadingMenu = false;
       }
+    },
+    prepareMenuItems(items = []) {
+      return this.reorderTopMenuSections(
+        this.normalizeMenuLinks(
+          this.normalizeConvivenciaSection(
+            this.normalizeInfirmarySection(this.normalizeStudentsSection(items))
+          )
+        )
+      );
+    },
+    filterMenuByPermissions(items = [], permissions = []) {
+      const granted = new Set(permissions || []);
+      const isSuperAdmin = granted.has("__superadmin__");
+
+      return items.reduce((visibleItems, item) => {
+        const visibleItem = { ...item };
+
+        if (Array.isArray(item.subItems)) {
+          visibleItem.subItems = this.filterMenuByPermissions(item.subItems, permissions);
+          if (!visibleItem.subItems.length && !item.link) {
+            return visibleItems;
+          }
+        }
+
+        if (item.link && !isSuperAdmin) {
+          const resolved = this.$router.resolve(item.link);
+          const requiredPermission = resolved?.meta?.permission;
+
+          if (requiredPermission && !granted.has(requiredPermission)) {
+            return visibleItems;
+          }
+        }
+
+        visibleItems.push(visibleItem);
+        return visibleItems;
+      }, []);
     },
     normalizeMenuLinks(items = []) {
       return items.filter((item) => !this.shouldHideMenuItem(item)).map((item) => {
@@ -429,6 +693,13 @@ export default {
 
         if (icon) {
           normalized.icon = icon;
+        }
+
+        if (!normalized.isTitle && !normalized.isLayout && this.isDashboardMenuItem(normalized)) {
+          normalized.label = "Inicio";
+          normalized.link = "/inicio";
+          normalized.icon = normalized.icon || "bx-home-circle";
+          delete normalized.subItems;
         }
 
         return normalized;
@@ -469,6 +740,7 @@ export default {
           const item = {
             id: mod.id,
             label: mod.name,
+            slug: mod.slug,
             icon: this.resolveMenuIcon(mod),
           };
 
@@ -509,7 +781,7 @@ export default {
           item.label === "Estudiantes" ||
           item.link === "/students" ||
           childLinks.some((link) =>
-            ["/students", "/students/levels", "/students/academic-years", "/students/courses", "/students/promotions", "/students/movements"].includes(link)
+            ["/students", "/students/levels", "/students/academic-years", "/students/courses", "/students/promotions", "/students/movements", "/students/reports"].includes(link)
           );
 
         if (!isStudentsSection) {
@@ -616,11 +888,75 @@ export default {
 
       return normalized;
     },
+    normalizeInfirmarySection(items) {
+      const fallbackInfirmary = this.infirmaryFallbackSection();
+
+      return items.map((item) => {
+        const label = normalizeMenuKey(item.name || item.label);
+        const slug = normalizeMenuKey(item.slug);
+        const routes = this.collectMenuRoutes(item);
+        const isInfirmarySection =
+          label === "enfermeria" ||
+          slug === "infirmary" ||
+          routes.some((route) => String(route || "").startsWith("/infirmary"));
+
+        if (!isInfirmarySection) {
+          return item;
+        }
+
+        const parentId = item.id || fallbackInfirmary.id;
+        const existingIdsByRoute = new Map((item.subItems || []).map((subitem) => [subitem.link, subitem.id]));
+
+        return {
+          ...fallbackInfirmary,
+          id: parentId,
+          icon: item.icon || fallbackInfirmary.icon,
+          subItems: fallbackInfirmary.subItems.map((subitem) => ({
+            ...subitem,
+            id: existingIdsByRoute.get(subitem.link) || subitem.id,
+            parentId,
+          })),
+        };
+      });
+    },
+    normalizeConvivenciaSection(items) {
+      const fallbackConvivencia = this.convivenciaFallbackSection();
+      let foundConvivencia = false;
+
+      const normalized = items.map((item) => {
+        const label = normalizeMenuKey(item.name || item.label);
+        const slug = normalizeMenuKey(item.slug);
+        const routes = this.collectMenuRoutes(item);
+        const isConvivenciaSection =
+          label === "convivencia escolar" ||
+          slug === "convivencia" ||
+          routes.some((route) => String(route || "").startsWith("/convivencia"));
+
+        if (!isConvivenciaSection) {
+          return item;
+        }
+
+        foundConvivencia = true;
+        const parentId = item.id || fallbackConvivencia.id;
+
+        return {
+          ...fallbackConvivencia,
+          id: parentId,
+          icon: item.icon || fallbackConvivencia.icon,
+          subItems: fallbackConvivencia.subItems.map((group) => ({
+            ...group,
+            parentId,
+          })),
+        };
+      });
+
+      return foundConvivencia ? normalized : [...normalized, fallbackConvivencia];
+    },
     mergeFallbackSections(items) {
       const hasStudentsSection = items.some((item) => {
         if (item.link === "/students") return true;
         return (item.subItems || []).some((subitem) =>
-          ["/students", "/students/levels", "/students/academic-years", "/students/courses", "/students/promotions", "/students/movements"].includes(subitem.link)
+          ["/students", "/students/levels", "/students/academic-years", "/students/courses", "/students/promotions", "/students/movements", "/students/reports"].includes(subitem.link)
         );
       });
       const hasStaffSection = items.some((item) => {
@@ -842,6 +1178,72 @@ export default {
 
       return [...normalizedItems, ...fallbacks];
     },
+    collectMenuRoutes(item) {
+      const routes = [];
+
+      if (item.link || item.frontend_route) {
+        routes.push(item.frontend_route || item.link);
+      }
+
+      (item.subItems || []).forEach((subitem) => {
+        routes.push(...this.collectMenuRoutes(subitem));
+      });
+
+      return routes.filter(Boolean);
+    },
+    isDashboardMenuItem(item) {
+      const slug = normalizeMenuKey(item.slug);
+      const routes = this.collectMenuRoutes(item);
+
+      return (
+        slug === "dashboard" ||
+        routes.some((route) => route === "/" || route === "/inicio")
+      );
+    },
+    getPinnedTopMenuPriority(item) {
+      const label = normalizeMenuKey(item.name || item.label);
+      const slug = normalizeMenuKey(item.slug);
+      const routes = this.collectMenuRoutes(item);
+
+      return PINNED_TOP_MENU_PRIORITIES.findIndex((priority) => {
+        const matchesLabel = priority.labels.includes(label);
+        const matchesSlug = priority.slugs.includes(slug);
+        const matchesRoute = routes.some((route) =>
+          priority.routePrefixes.some((prefix) => String(route || "").startsWith(prefix))
+        );
+
+        return matchesLabel || matchesSlug || matchesRoute;
+      });
+    },
+    reorderTopMenuSections(items = []) {
+      const intro = [];
+      const pinned = [];
+      const rest = [];
+      let readingIntro = true;
+
+      items.forEach((item, index) => {
+        if (readingIntro && (item.isTitle || item.isLayout || this.isDashboardMenuItem(item))) {
+          intro.push(item);
+          return;
+        }
+
+        readingIntro = false;
+        const priority = this.getPinnedTopMenuPriority(item);
+
+        if (priority >= 0) {
+          pinned.push({ item, priority, index });
+          return;
+        }
+
+        rest.push(item);
+      });
+
+      const sortedPinned = pinned
+        .sort((a, b) => (a.priority === b.priority ? a.index - b.index : a.priority - b.priority))
+        .map((entry) => entry.item);
+
+      return [...intro, ...sortedPinned, ...rest];
+    },
     initMenu() {
       if (document.getElementById("side-menu")) new MetisMenu("#side-menu");
     },
@@ -923,6 +1325,7 @@ export default {
           localStorage.removeItem("user");
           localStorage.removeItem("token");
           localStorage.removeItem("permissions");
+          localStorage.removeItem("impersonator_token");
           document.cookie = "cnsc_token=; Max-Age=0; path=/; samesite=lax";
           delete axios.defaults.headers.common["Authorization"];
           this.$router.push("/login");
@@ -936,6 +1339,7 @@ export default {
         return {
           name: storedUser.name || "Usuario",
           email: storedUser.email || "",
+          profile_photo_url: storedUser.profile_photo_url || null,
         };
       }
 
@@ -944,13 +1348,18 @@ export default {
         return {
           name: user.name || "Usuario",
           email: user.email || "",
+          profile_photo_url: user.profile_photo_url || null,
         };
       } catch (error) {
         return {
           name: "Usuario",
           email: "",
+          profile_photo_url: null,
         };
       }
+    },
+    sidebarAvatar() {
+      return this.sidebarUser.profile_photo_url || this.avatar1;
     },
     userInitial() {
       return (this.sidebarUser.name || "U").trim().charAt(0).toUpperCase();
@@ -967,10 +1376,11 @@ export default {
     <div class="sidebar-shell__header">
       <router-link to="/inicio" class="sidebar-brand">
         <span class="sidebar-brand__mark">
-          <img :src="logoMark" alt="Skote" height="22" />
+          <img :src="cnscLogo" alt="Colegio Nuestra Señora del Carmen" />
         </span>
-        <span class="sidebar-brand__wordmark">
-          <img :src="logoWordmark" alt="Skote" height="18" />
+        <span class="sidebar-brand__wordmark" aria-label="CNSC Gestión">
+          <strong>CNSC</strong>
+          <span>Gestión</span>
         </span>
       </router-link>
 
@@ -1029,9 +1439,9 @@ export default {
 
     <div class="sidebar-shell__footer">
       <div class="sidebar-account">
-        <div class="sidebar-account__user">
+        <router-link to="/account/profile" class="sidebar-account__user" @click="onLeafNavigation">
           <div class="sidebar-account__avatar">
-            <img :src="avatar1" alt="" />
+            <img :src="sidebarAvatar" alt="" />
             <span>{{ userInitial }}</span>
           </div>
           <div class="sidebar-account__meta">
@@ -1039,9 +1449,13 @@ export default {
             <strong class="sidebar-account__name">{{ sidebarUser.name }}</strong>
             <span class="sidebar-account__email">{{ sidebarUser.email }}</span>
           </div>
-        </div>
+        </router-link>
 
         <div class="sidebar-account__actions">
+          <router-link to="/account/profile" class="sidebar-account__action" @click="onLeafNavigation">
+            <i class="bx bx-user-circle"></i>
+            <span>Mi ficha</span>
+          </router-link>
           <button type="button" class="sidebar-account__action sidebar-account__action--logout" @click="logoutUser">
             <i class="bx bx-log-out"></i>
             <span>Cerrar sesión</span>

@@ -177,10 +177,20 @@ export function basicApexOptions({ categories = [], colors = ["#2f7cf6"], horizo
       },
     },
     grid: {
-      borderColor: "#eff2f7",
+      borderColor: "rgba(148, 163, 184, .2)",
+      strokeDashArray: 4,
     },
     legend: {
       position: "top",
+    },
+    noData: {
+      text: "Sin datos para mostrar",
+      align: "center",
+      verticalAlign: "middle",
+    },
+    tooltip: {
+      shared: true,
+      intersect: false,
     },
   };
 }
@@ -205,8 +215,15 @@ export function downloadExcelWorkbook(fileName, sections) {
     rows.push([]);
   });
 
+  const escapeHtml = (value) => String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+
   const html = `<table>${rows
-    .map((row) => `<tr>${row.map((cell) => `<td>${cell ?? ""}</td>`).join("")}</tr>`)
+    .map((row) => `<tr>${row.map((cell) => `<td>${escapeHtml(cell)}</td>`).join("")}</tr>`)
     .join("")}</table>`;
 
   const blob = new Blob([`\uFEFF<html><body>${html}</body></html>`], {

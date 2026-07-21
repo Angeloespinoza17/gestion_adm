@@ -1,52 +1,9 @@
 export const menuItems = [
     {
         id: 1,
-        label: 'menuitems.dashboards.text',
+        label: 'Inicio',
         icon: 'bx-home-circle',
-        subItems: [
-            {
-                id: 2,
-                label: 'menuitems.dashboards.list.default',
-                link: '/inicio',
-                parentId: 1
-            },
-            {
-                id: 3,
-                label: 'menuitems.dashboards.list.saas',
-                link: '/dashboard/saas',
-                parentId: 1
-            },
-            {
-                id: 131,
-                label: 'test',
-                link: '/test',
-                parentId: 1
-            },
-            {
-                id: 132,
-                label: 'Deploy',
-                link: '/deploy',
-                parentId: 1
-            },
-            {
-                id: 4,
-                label: 'menuitems.dashboards.list.crypto',
-                link: '/dashboard/crypto',
-                parentId: 1
-            },
-            {
-                id: 5,
-                label: 'menuitems.dashboards.list.blog',
-                link: '/dashboard/blog',
-                parentId: 1
-            },
-            {
-                id: 6,
-                label: "menuitems.dashboards.list.jobs.text",
-                link: "/dashboard/job",
-                parentId: 2,
-            }
-        ]
+        link: '/inicio'
     },
     {
         id: 900,

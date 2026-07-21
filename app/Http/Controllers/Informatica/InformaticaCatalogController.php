@@ -7,6 +7,7 @@ use App\Models\It\ItEquipment;
 use App\Models\It\ItEquipmentAttachment;
 use App\Models\It\ItEquipmentLoan;
 use App\Models\It\ItEquipmentMaintenanceReport;
+use App\Models\InventoryItem;
 use App\Models\Staff;
 use App\Models\StudentProfile;
 use App\Models\User;
@@ -55,6 +56,14 @@ class InformaticaCatalogController extends Controller
             'staff' => Staff::query()->orderBy('full_name')->get(['id', 'full_name', 'rut', 'institutional_email', 'phone']),
             'students' => $students,
             'equipment' => ItEquipment::query()->orderBy('internal_code')->get(['id', 'internal_code', 'equipment_type', 'brand', 'model', 'status', 'active']),
+            'inventory_assets' => InventoryItem::query()
+                ->with(['category:id,name,slug', 'subcategory:id,category_id,name,slug', 'dependency:id,code,name', 'responsibleUser:id,name,email'])
+                ->where('item_type', 'asset')
+                ->where('active', true)
+                ->whereHas('category', fn ($query) => $query->whereIn('slug', ['tecnologia', 'audiovisual']))
+                ->whereDoesntHave('itEquipment')
+                ->orderBy('code')
+                ->get(),
             'brands' => ItEquipment::query()->whereNotNull('brand')->distinct()->orderBy('brand')->pluck('brand'),
             'locations' => ItEquipment::query()->whereNotNull('location_name')->distinct()->orderBy('location_name')->pluck('location_name'),
             'capabilities' => $this->accessService->capabilities($request->user()),

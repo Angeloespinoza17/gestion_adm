@@ -7,13 +7,17 @@ use App\Models\Permission;
 use App\Models\Role;
 use App\Models\SystemModule;
 use App\Models\User;
+use Database\Seeders\Support\PreventsProductionSeeding;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\Hash;
 
 class RbacSeeder extends Seeder
 {
+    use PreventsProductionSeeding;
+
     public function run(): void
     {
+        $this->preventProductionSeeding();
         $this->seedCargos();
         $this->seedPermissions();
         $this->seedModules();
@@ -132,6 +136,14 @@ class RbacSeeder extends Seeder
             ['slug' => 'administrar_modulos', 'name' => 'Administrar Módulos'],
             ['slug' => 'administrar_cargos', 'name' => 'Administrar Cargos'],
             ['slug' => 'administrar_organigrama', 'name' => 'Administrar Organigrama'],
+            ['slug' => 'ver_noticias', 'name' => 'Ver Noticias del Sitio Web'],
+            ['slug' => 'gestionar_noticias', 'name' => 'Gestionar Noticias del Sitio Web'],
+            ['slug' => 'ver_eventos', 'name' => 'Ver Eventos del Sitio Web'],
+            ['slug' => 'gestionar_eventos', 'name' => 'Gestionar Eventos del Sitio Web'],
+            ['slug' => 'ver_contactos_sitio', 'name' => 'Ver Contactos del Sitio Web'],
+            ['slug' => 'gestionar_contactos_sitio', 'name' => 'Gestionar Contactos del Sitio Web'],
+            ['slug' => 'ver_comunicaciones_internas', 'name' => 'Ver Comunicaciones Internas'],
+            ['slug' => 'gestionar_comunicaciones_internas', 'name' => 'Gestionar Comunicaciones Internas'],
             ['slug' => 'ver_funcionarios', 'name' => 'Ver Funcionarios'],
             ['slug' => 'gestionar_funcionarios', 'name' => 'Gestionar Funcionarios'],
             ['slug' => 'eliminar_funcionarios', 'name' => 'Eliminar Funcionarios'],
@@ -196,7 +208,7 @@ class RbacSeeder extends Seeder
     private function seedModules(): void
     {
         $modules = [
-            ['slug' => 'dashboard', 'name' => 'Dashboard', 'frontend_route' => '/', 'icon' => 'bx-home-circle', 'sort' => 10],
+            ['slug' => 'dashboard', 'name' => 'Inicio', 'frontend_route' => '/inicio', 'icon' => 'bx-home-circle', 'sort' => 10],
             ['slug' => 'students', 'name' => 'Estudiantes', 'frontend_route' => null, 'icon' => 'bx-user', 'sort' => 20],
             ['slug' => 'students_directory', 'name' => 'Listado de estudiantes', 'frontend_route' => '/students', 'icon' => null, 'sort' => 1, 'parent' => 'students'],
             ['slug' => 'students_levels', 'name' => 'Niveles', 'frontend_route' => '/students/levels', 'icon' => null, 'sort' => 2, 'parent' => 'students'],
@@ -204,6 +216,8 @@ class RbacSeeder extends Seeder
             ['slug' => 'students_courses', 'name' => 'Cursos por año', 'frontend_route' => '/students/courses', 'icon' => null, 'sort' => 4, 'parent' => 'students'],
             ['slug' => 'students_promotions', 'name' => 'Promoción anual', 'frontend_route' => '/students/promotions', 'icon' => null, 'sort' => 5, 'parent' => 'students'],
             ['slug' => 'students_movements', 'name' => 'Cambios y retiros', 'frontend_route' => '/students/movements', 'icon' => null, 'sort' => 6, 'parent' => 'students'],
+            ['slug' => 'students_reports', 'name' => 'Reportes', 'frontend_route' => '/students/reports', 'icon' => null, 'sort' => 7, 'parent' => 'students'],
+            ['slug' => 'students_attendance_statistics', 'name' => 'Estadísticas de asistencia', 'frontend_route' => '/students/attendance-statistics', 'icon' => null, 'sort' => 8, 'parent' => 'students'],
             ['slug' => 'schedule', 'name' => 'Horarios docentes', 'frontend_route' => null, 'icon' => 'bx-calendar-event', 'sort' => 23],
             ['slug' => 'schedule_teacher', 'name' => 'Horario docente', 'frontend_route' => '/schedule/teacher', 'icon' => null, 'sort' => 1, 'parent' => 'schedule'],
             ['slug' => 'schedule_course', 'name' => 'Horario por curso', 'frontend_route' => '/schedule/course', 'icon' => null, 'sort' => 2, 'parent' => 'schedule'],
@@ -237,6 +251,7 @@ class RbacSeeder extends Seeder
             ['slug' => 'tasks', 'name' => 'Tareas', 'frontend_route' => null, 'icon' => 'bx-list-check', 'sort' => 43],
             ['slug' => 'tasks_backlog', 'name' => 'Mi backlog', 'frontend_route' => '/tasks/backlog', 'icon' => null, 'sort' => 1, 'parent' => 'tasks'],
             ['slug' => 'tasks_assigners', 'name' => 'Asignadores de tareas', 'frontend_route' => '/tasks/assigners', 'icon' => null, 'sort' => 2, 'parent' => 'tasks'],
+            ['slug' => 'internal_communications', 'name' => 'Comunicaciones internas', 'frontend_route' => '/comunicaciones', 'icon' => 'bx-message-square-detail', 'sort' => 44],
             ['slug' => 'contracts', 'name' => 'Contratos', 'frontend_route' => null, 'icon' => 'bx-file', 'sort' => 45],
             ['slug' => 'contracts_list', 'name' => 'Listado de contratos', 'frontend_route' => '/contracts', 'icon' => null, 'sort' => 1, 'parent' => 'contracts'],
             ['slug' => 'contracts_templates', 'name' => 'Plantillas', 'frontend_route' => '/contracts/templates', 'icon' => null, 'sort' => 2, 'parent' => 'contracts'],
@@ -264,6 +279,10 @@ class RbacSeeder extends Seeder
             ['slug' => 'inventory_reports', 'name' => 'Reportes', 'frontend_route' => '/inventory/reports', 'icon' => null, 'sort' => 5, 'parent' => 'inventory'],
             ['slug' => 'inventory_labels', 'name' => 'Etiquetas', 'frontend_route' => '/inventory/labels', 'icon' => null, 'sort' => 6, 'parent' => 'inventory'],
             ['slug' => 'reports', 'name' => 'Reportes', 'frontend_route' => '/reports', 'icon' => 'bx-bar-chart', 'sort' => 110],
+            ['slug' => 'public_site', 'name' => 'Sitio web', 'frontend_route' => null, 'icon' => 'bx-globe', 'sort' => 119],
+            ['slug' => 'public_site_news', 'name' => 'Noticias', 'frontend_route' => '/admin/noticias', 'icon' => null, 'sort' => 1, 'parent' => 'public_site'],
+            ['slug' => 'public_site_events', 'name' => 'Eventos', 'frontend_route' => '/admin/eventos', 'icon' => null, 'sort' => 2, 'parent' => 'public_site'],
+            ['slug' => 'public_site_contacts', 'name' => 'Contactos', 'frontend_route' => '/admin/contactos', 'icon' => null, 'sort' => 3, 'parent' => 'public_site'],
             ['slug' => 'spaces', 'name' => 'Dependencias y Reservas', 'frontend_route' => null, 'icon' => 'bx-calendar-event', 'sort' => 115],
             ['slug' => 'spaces_dependencies', 'name' => 'Dependencias', 'frontend_route' => '/spaces/dependencies', 'icon' => null, 'sort' => 1, 'parent' => 'spaces'],
             ['slug' => 'spaces_dependency_types', 'name' => 'Tipos de dependencia', 'frontend_route' => '/spaces/dependency-types', 'icon' => null, 'sort' => 2, 'parent' => 'spaces'],
@@ -278,6 +297,7 @@ class RbacSeeder extends Seeder
 
             // Configuración (padre + submódulos)
             ['slug' => 'settings', 'name' => 'Configuración', 'frontend_route' => null, 'icon' => 'bx-cog', 'sort' => 120],
+            ['slug' => 'settings_superadmin_dashboard', 'name' => 'Dashboard gestión', 'frontend_route' => '/admin/dashboard', 'icon' => null, 'sort' => 0, 'parent' => 'settings'],
             ['slug' => 'settings_users', 'name' => 'Usuarios', 'frontend_route' => '/admin/users', 'icon' => null, 'sort' => 1, 'parent' => 'settings'],
             ['slug' => 'settings_roles', 'name' => 'Roles', 'frontend_route' => '/admin/roles', 'icon' => null, 'sort' => 2, 'parent' => 'settings'],
             ['slug' => 'settings_permissions', 'name' => 'Permisos', 'frontend_route' => '/admin/permissions', 'icon' => null, 'sort' => 3, 'parent' => 'settings'],
@@ -415,6 +435,14 @@ class RbacSeeder extends Seeder
             'administrar_modulos',
             'administrar_cargos',
             'administrar_organigrama',
+            'ver_noticias',
+            'gestionar_noticias',
+            'ver_eventos',
+            'gestionar_eventos',
+            'ver_contactos_sitio',
+            'gestionar_contactos_sitio',
+            'ver_comunicaciones_internas',
+            'gestionar_comunicaciones_internas',
             'ver_funcionarios',
             'gestionar_funcionarios',
             'eliminar_funcionarios',
@@ -507,6 +535,7 @@ class RbacSeeder extends Seeder
             'tasks',
             'tasks_backlog',
             'tasks_assigners',
+            'internal_communications',
             'contracts',
             'contracts_list',
             'contracts_templates',
@@ -537,6 +566,10 @@ class RbacSeeder extends Seeder
             'security_shifts',
             'security_incidents',
             'reports',
+            'public_site',
+            'public_site_news',
+            'public_site_events',
+            'public_site_contacts',
             'settings',
             'settings_users',
             'settings_roles',
@@ -550,6 +583,14 @@ class RbacSeeder extends Seeder
         $rolesBySlug['direccion']->permissions()->sync($this->ids($permissionsBySlug, [
             'ver_dashboard',
             'ver_reportes',
+            'ver_noticias',
+            'gestionar_noticias',
+            'ver_eventos',
+            'gestionar_eventos',
+            'ver_contactos_sitio',
+            'gestionar_contactos_sitio',
+            'ver_comunicaciones_internas',
+            'gestionar_comunicaciones_internas',
             'ver_funcionarios',
             'ver_porteria',
             'registrar_visitas_porteria',
@@ -614,6 +655,7 @@ class RbacSeeder extends Seeder
             'tasks',
             'tasks_backlog',
             'tasks_assigners',
+            'internal_communications',
             'contracts',
             'contracts_list',
             'maintenance',
@@ -636,6 +678,10 @@ class RbacSeeder extends Seeder
             'security_dashboard',
             'security_incidents',
             'reports',
+            'public_site',
+            'public_site_news',
+            'public_site_events',
+            'public_site_contacts',
             'schedule',
             'schedule_teacher',
             'schedule_course',
@@ -645,6 +691,8 @@ class RbacSeeder extends Seeder
         // Coordinación académica
         $rolesBySlug['coordinador_academico']->permissions()->sync($this->ids($permissionsBySlug, [
             'ver_dashboard',
+            'ver_comunicaciones_internas',
+            'gestionar_comunicaciones_internas',
             'ver_funcionarios',
             'ver_estudiantes',
             'ver_ficha_estudiante',
@@ -702,6 +750,7 @@ class RbacSeeder extends Seeder
             'tasks',
             'tasks_backlog',
             'tasks_assigners',
+            'internal_communications',
             'spaces',
             'spaces_dependencies',
             'spaces_approvers',
@@ -721,6 +770,8 @@ class RbacSeeder extends Seeder
         // RRHH / Administración
         $rolesBySlug['rrhh']->permissions()->sync($this->ids($permissionsBySlug, [
             'ver_dashboard',
+            'ver_comunicaciones_internas',
+            'gestionar_comunicaciones_internas',
             'ver_estudiantes',
             'crear_estudiantes',
             'editar_estudiantes',
@@ -792,6 +843,7 @@ class RbacSeeder extends Seeder
             'tasks',
             'tasks_backlog',
             'tasks_assigners',
+            'internal_communications',
             'security',
             'security_dashboard',
             'security_shifts',
@@ -959,6 +1011,8 @@ class RbacSeeder extends Seeder
             'ver_estudiantes',
             'ver_ficha_estudiante',
             'ver_funcionarios',
+            'ver_comunicaciones_internas',
+            'gestionar_comunicaciones_internas',
             'ver_porteria',
             'registrar_retiro_porteria',
             'registrar_visitas_porteria',
@@ -1012,6 +1066,7 @@ class RbacSeeder extends Seeder
             'security_incidents',
             'tasks',
             'tasks_backlog',
+            'internal_communications',
             'schedule',
             'schedule_teacher',
             'schedule_course',

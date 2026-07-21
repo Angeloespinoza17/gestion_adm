@@ -2,7 +2,6 @@
 
 namespace App\Services\Permissions;
 
-use App\Models\Department;
 use App\Models\PermissionRequest;
 use App\Models\PermissionRequestWatcher;
 use App\Models\PermissionType;
@@ -14,9 +13,11 @@ use App\Notifications\PendingPermissionReviewNotification;
 use App\Notifications\PermissionRequestStatusNotification;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Collection;
 use Illuminate\Validation\ValidationException;
+use Throwable;
 
 class PermissionWorkflowService
 {
@@ -34,10 +35,8 @@ class PermissionWorkflowService
                 ->findOrFail($payload['staff_id']);
             $permissionType = PermissionType::query()->findOrFail($payload['permission_type_id']);
 
-            $departmentIds = array_values(array_unique($payload['department_ids'] ?? $staff->departments->pluck('id')->all()));
-            $departments = $departmentIds !== []
-                ? Department::query()->whereIn('id', $departmentIds)->get(['id', 'name', 'responsible_staff_id'])
-                : $staff->departments;
+            $departmentIds = $staff->departments->pluck('id')->all();
+            $departments = $staff->departments;
 
             $managerUser = $this->resolveManagerUser($payload['direct_manager_user_id'] ?? null, $departments, $staff);
             $duration = $this->calculateDuration($payload);
@@ -225,7 +224,7 @@ class PermissionWorkflowService
             $currentIndex = array_search($permissionRequest->current_step, $steps, true);
             $nextStep = $currentIndex === false ? null : ($steps[$currentIndex + 1] ?? null);
 
-            if ($nextStep) {
+            if ($nextStep && !$actor->isSuperAdmin()) {
                 $permissionRequest->current_step = $nextStep;
                 $permissionRequest->status = $this->statusForStep($nextStep);
             } else {
@@ -646,9 +645,12 @@ class PermissionWorkflowService
 
         $users = $this->usersForStep($permissionRequest);
 
-        if ($users->isNotEmpty()) {
-            Notification::send($users, new PendingPermissionReviewNotification($permissionRequest, $stepLabel));
-        }
+        $this->sendNotificationSafely(
+            $users,
+            new PendingPermissionReviewNotification($permissionRequest, $stepLabel),
+            'step_reviewers',
+            $permissionRequest,
+        );
     }
 
     private function notifyConfiguredWatchers(
@@ -674,11 +676,18 @@ class PermissionWorkflowService
             return;
         }
 
-        Notification::send($users, new PermissionRequestStatusNotification($permissionRequest, $subject, $headline));
+        $sent = $this->sendNotificationSafely(
+            $users,
+            new PermissionRequestStatusNotification($permissionRequest, $subject, $headline),
+            'configured_watchers',
+            $permissionRequest,
+        );
 
-        $permissionRequest->watchers()
-            ->whereIn('user_id', $users->pluck('id')->all())
-            ->update(['notified_at' => now()]);
+        if ($sent) {
+            $permissionRequest->watchers()
+                ->whereIn('user_id', $users->pluck('id')->all())
+                ->update(['notified_at' => now()]);
+        }
     }
 
     private function notifyStatus(PermissionRequest $permissionRequest, string $subject, string $headline, ?string $comment = null): void
@@ -686,7 +695,12 @@ class PermissionWorkflowService
         $recipient = $permissionRequest->requestedBy;
 
         if ($recipient) {
-            $recipient->notify(new PermissionRequestStatusNotification($permissionRequest, $subject, $headline, $comment));
+            $this->sendNotificationSafely(
+                collect([$recipient]),
+                new PermissionRequestStatusNotification($permissionRequest, $subject, $headline, $comment),
+                'request_status',
+                $permissionRequest,
+            );
         }
     }
 
@@ -694,8 +708,39 @@ class PermissionWorkflowService
     {
         $users = $this->usersByPermission('revisar_permisos_rrhh');
 
-        if ($users->isNotEmpty()) {
-            Notification::send($users, new PermissionRequestStatusNotification($permissionRequest, $subject, $headline));
+        $this->sendNotificationSafely(
+            $users,
+            new PermissionRequestStatusNotification($permissionRequest, $subject, $headline),
+            'payroll_review',
+            $permissionRequest,
+        );
+    }
+
+    private function sendNotificationSafely(Collection $users, object $notification, string $context, PermissionRequest $permissionRequest): bool
+    {
+        $users = $users
+            ->filter(fn (?User $user) => $user && !empty($user->email))
+            ->unique('id')
+            ->values();
+
+        if ($users->isEmpty()) {
+            return false;
+        }
+
+        try {
+            Notification::send($users, $notification);
+
+            return true;
+        } catch (Throwable $exception) {
+            Log::warning('No se pudo enviar una notificacion del modulo de permisos.', [
+                'context' => $context,
+                'permission_request_id' => $permissionRequest->id,
+                'notification' => get_class($notification),
+                'recipients' => $users->pluck('email')->all(),
+                'error' => $exception->getMessage(),
+            ]);
+
+            return false;
         }
     }
 

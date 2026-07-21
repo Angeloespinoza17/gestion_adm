@@ -27,6 +27,7 @@ use App\Services\Library\BibliotecaInventoryService;
 use Carbon\Carbon;
 use Database\Seeders\Modules\StaffModuleSeeder;
 use Database\Seeders\Modules\StudentModuleSeeder;
+use Database\Seeders\Support\PreventsProductionSeeding;
 use Faker\Factory as Faker;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Collection;
@@ -35,6 +36,8 @@ use Illuminate\Support\Str;
 
 class BibliotecaSeeder extends Seeder
 {
+    use PreventsProductionSeeding;
+
     private \Faker\Generator $faker;
 
     private User $actor;
@@ -43,6 +46,7 @@ class BibliotecaSeeder extends Seeder
 
     public function run(): void
     {
+        $this->preventProductionSeeding();
         $this->faker = Faker::create('es_CL');
         $this->faker->seed(20260628);
         $this->now = Carbon::parse('2026-06-28 10:00:00');

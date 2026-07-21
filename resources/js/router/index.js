@@ -46,6 +46,24 @@ const routes = [
         component: () => import('../views/home.vue'),
     },
     {
+        path: '/account/profile',
+        name: 'account-profile',
+        meta: { authRequired: true, title: 'Mi ficha' },
+        component: () => import('../views/account/profile.vue'),
+    },
+    {
+        path: '/comunicaciones',
+        name: 'internal-communications',
+        meta: { authRequired: true, title: 'Comunicaciones internas', permission: 'ver_comunicaciones_internas' },
+        component: () => import('../views/internal-communications/index.vue'),
+    },
+    {
+        path: '/superadmin_:roleSlug',
+        name: 'role-impersonate',
+        meta: { authRequired: true, title: 'Cambiar usuario' },
+        component: () => import('../views/admin/role-impersonate.vue'),
+    },
+    {
         path: '/dashboard',
         redirect: '/inicio',
     },
@@ -220,6 +238,11 @@ const routes = [
         component: () => import('../views/maintenance/annual-plan.vue'),
     },
     {
+        path: '/admin/dashboard',
+        meta: { authRequired: true, title: 'Dashboard gestión superadmin', permission: 'administrar_modulos' },
+        component: () => import('../views/admin/superadmin-dashboard.vue'),
+    },
+    {
         path: '/admin/users',
         meta: { authRequired: true, title: 'Usuarios', permission: 'administrar_usuarios' },
         component: () => import('../views/admin/users.vue'),
@@ -250,6 +273,21 @@ const routes = [
         component: () => import('../views/admin/organigram.vue'),
     },
     {
+        path: '/admin/noticias',
+        meta: { authRequired: true, title: 'Noticias del sitio web', permission: 'ver_noticias' },
+        component: () => import('../views/admin/news.vue'),
+    },
+    {
+        path: '/admin/eventos',
+        meta: { authRequired: true, title: 'Eventos del sitio web', permission: 'ver_eventos' },
+        component: () => import('../views/admin/events.vue'),
+    },
+    {
+        path: '/admin/contactos',
+        meta: { authRequired: true, title: 'Contactos del sitio web', permission: 'ver_contactos_sitio' },
+        component: () => import('../views/admin/contact-messages.vue'),
+    },
+    {
         path: '/students',
         meta: { authRequired: true, title: 'Estudiantes', permission: 'ver_estudiantes' },
         component: () => import('../views/students/index.vue'),
@@ -278,6 +316,16 @@ const routes = [
         path: '/students/movements',
         meta: { authRequired: true, title: 'Cambios y retiros', permission: 'gestionar_matriculas_estudiantes' },
         component: () => import('../views/students/movements.vue'),
+    },
+    {
+        path: '/students/reports',
+        meta: { authRequired: true, title: 'Reporte de estudiantes', permission: 'ver_estudiantes' },
+        component: () => import('../views/students/reports.vue'),
+    },
+    {
+        path: '/students/attendance-statistics',
+        meta: { authRequired: true, title: 'Estadísticas avanzadas de asistencia', permission: 'attendance_statistics.view' },
+        component: () => import('../views/students/attendance-statistics.vue'),
     },
     {
         path: '/schedule',
@@ -357,8 +405,18 @@ const routes = [
     },
     {
         path: '/infirmary/attentions',
-        meta: { authRequired: true, title: 'Atenciones de Enfermería', permission: 'ver_enfermeria' },
+        meta: { authRequired: true, title: 'Atención a estudiantes', permission: 'ver_enfermeria' },
         component: () => import('../views/infirmary/attentions.vue'),
+    },
+    {
+        path: '/infirmary/staff-attentions',
+        meta: { authRequired: true, title: 'Atención a funcionarios', permission: 'ver_enfermeria' },
+        component: () => import('../views/infirmary/staff-attentions.vue'),
+    },
+    {
+        path: '/infirmary/categories',
+        meta: { authRequired: true, title: 'Categorías de Enfermería', permission: 'ver_enfermeria' },
+        component: () => import('../views/infirmary/categories.vue'),
     },
     {
         path: '/infirmary/history',
@@ -443,12 +501,17 @@ const routes = [
     remunerationRoute('/remuneraciones/conceptos', 'Haberes y Descuentos', 'remuneraciones.conceptos.gestionar'),
     remunerationRoute('/remuneraciones/movimientos', 'Movimientos Remuneraciones', 'remuneraciones.movimientos.gestionar'),
     remunerationRoute('/remuneraciones/liquidaciones', 'Liquidaciones de Sueldo', 'remuneraciones.liquidaciones.calcular'),
+    remunerationRoute('/remuneraciones/importaciones', 'Importador Libro Remuneraciones', 'remuneraciones.importar'),
+    remunerationRoute('/remuneraciones/libro-importado', 'Libro Importado Remuneraciones'),
+    remunerationRoute('/remuneraciones/estadisticas-libro', 'Datos y Estadísticas Remuneraciones', 'remuneraciones.reportes.ver'),
     remunerationRoute('/remuneraciones/pagos', 'Pagos Remuneraciones', 'remuneraciones.pagos.gestionar'),
     remunerationRoute('/remuneraciones/centralizacion', 'Centralización Remuneraciones', 'remuneraciones.contabilidad.centralizar'),
     remunerationRoute('/remuneraciones/reportes', 'Reportes Remuneraciones', 'remuneraciones.reportes.ver'),
     remunerationRoute('/remuneraciones/licencias-medicas', 'Licencias Médicas RR.HH.', 'remuneraciones.rrhh.gestionar'),
     remunerationRoute('/remuneraciones/cumpleanos', 'Cumpleaños RR.HH.'),
     remunerationRoute('/remuneraciones/permisos', 'Permisos RR.HH.', 'remuneraciones.rrhh.gestionar'),
+    remunerationRoute('/remuneraciones/departamentos', 'Departamentos Remuneraciones', 'remuneraciones.rrhh.gestionar'),
+    remunerationRoute('/remuneraciones/funciones', 'Funciones Remuneraciones', 'remuneraciones.rrhh.gestionar'),
     remunerationRoute('/remuneraciones/gestion-funcionarios', 'Gestión Funcionarios', 'remuneraciones.trabajadores.gestionar'),
     remunerationRoute('/remuneraciones/control-documental', 'Control Documental RR.HH.', 'remuneraciones.rrhh.gestionar'),
     remunerationRoute('/remuneraciones/induccion', 'Inducción Funcionarios', 'remuneraciones.rrhh.gestionar'),
@@ -484,7 +547,7 @@ const routes = [
     accountingRoute('/contabilidad/reportes', 'Reportes Contables', 'contabilidad.balance.ver'),
     {
         path: '/convivencia',
-        meta: { authRequired: true, title: 'Dashboard de Convivencia', permission: 'ver_convivencia' },
+        meta: { authRequired: true, title: 'Panel general de Convivencia', permission: 'ver_convivencia' },
         component: () => import('../views/convivencia/index.vue'),
     },
     {

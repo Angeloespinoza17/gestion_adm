@@ -28,6 +28,7 @@ class UpdateStudentRequest extends FormRequest
 
         foreach ([
             'birthdate',
+            'school_admission_date',
             'father_birthdate',
             'mother_birthdate',
             'baptism_date',
@@ -54,6 +55,14 @@ class UpdateStudentRequest extends FormRequest
             'has_chronic_illness',
             'has_medication_allergies',
             'has_physical_restrictions',
+            'accepts_religion_classes',
+            'guardian_photo_authorization',
+            'guardian_pickup_authorization',
+            'guardian_backup_photo_authorization',
+            'guardian_backup_pickup_authorization',
+            'fit_for_physical_education',
+            'has_private_school_insurance',
+            'is_pie_participant',
         ] as $field) {
             if ($this->exists($field)) {
                 $value = $this->input($field);
@@ -117,19 +126,21 @@ class UpdateStudentRequest extends FormRequest
                 'max:20',
                 Rule::unique('student_profiles', 'rut')->ignore($studentId),
                 function ($attribute, $value, $fail) {
-                    if ($value !== null && $value !== '' && !Rut::isValid($value)) {
+                    if ($value !== null && $value !== '' && ! Rut::isValid($value)) {
                         $fail('El RUT ingresado no es válido.');
                     }
                 },
             ],
             'birthdate' => ['nullable', 'date'],
+            'gender' => ['nullable', 'string', 'max:50'],
+            'nationality' => ['nullable', 'string', 'max:100'],
             'email' => [
                 'nullable',
                 'email',
                 'max:255',
                 Rule::unique('student_profiles', 'email')->ignore($studentId),
                 function ($attribute, $value, $fail) use ($userId) {
-                    if (!$value) {
+                    if (! $value) {
                         return;
                     }
 
@@ -145,6 +156,14 @@ class UpdateStudentRequest extends FormRequest
             ],
             'phone' => ['nullable', 'string', 'max:50'],
             'address' => ['nullable', 'string', 'max:255'],
+            'commune' => ['nullable', 'string', 'max:100'],
+            'school_admission_date' => ['nullable', 'date'],
+            'previous_school' => ['nullable', 'string', 'max:255'],
+            'emergency_contact_name' => ['nullable', 'string', 'max:191'],
+            'emergency_contact_phone' => ['nullable', 'string', 'max:50'],
+            'religion' => ['nullable', 'string', 'max:100'],
+            'accepts_religion_classes' => ['nullable', 'boolean'],
+            'ethnicity' => ['nullable', 'string', 'max:100'],
             'general_status' => ['sometimes', Rule::in(array_column(StudentProfile::GENERAL_STATUS_OPTIONS, 'value'))],
             'observations' => ['nullable', 'string'],
             'pickup_restriction' => ['nullable', 'boolean'],
@@ -153,7 +172,7 @@ class UpdateStudentRequest extends FormRequest
             'authorized_pickup_people' => ['nullable', 'array'],
             'authorized_pickup_people.*.name' => ['required_with:authorized_pickup_people', 'string', 'max:191'],
             'authorized_pickup_people.*.rut' => ['nullable', 'string', 'max:20', function ($attribute, $value, $fail) {
-                if ($value !== null && $value !== '' && !Rut::isValid($value)) {
+                if ($value !== null && $value !== '' && ! Rut::isValid($value)) {
                     $fail('El RUT ingresado no es válido.');
                 }
             }],
@@ -165,29 +184,45 @@ class UpdateStudentRequest extends FormRequest
             'guardian_relationship' => ['nullable', 'string', 'max:100'],
             'guardian_role' => ['nullable', 'string', 'max:100'],
             'guardian_rut' => ['nullable', 'string', 'max:20', function ($attribute, $value, $fail) {
-                if ($value !== null && $value !== '' && !Rut::isValid($value)) {
+                if ($value !== null && $value !== '' && ! Rut::isValid($value)) {
                     $fail('El RUT ingresado no es válido.');
                 }
             }],
+            'guardian_passport' => ['nullable', 'string', 'max:50'],
             'guardian_phone' => ['nullable', 'string', 'max:50'],
             'guardian_address' => ['nullable', 'string', 'max:255'],
+            'guardian_commune' => ['nullable', 'string', 'max:100'],
+            'guardian_photo_authorization' => ['nullable', 'boolean'],
+            'guardian_pickup_authorization' => ['nullable', 'boolean'],
+            'guardian_marital_status' => ['nullable', 'string', 'max:100'],
+            'guardian_education_level' => ['nullable', 'string', 'max:150'],
+            'guardian_last_education_level' => ['nullable', 'string', 'max:255'],
+            'guardian_occupation' => ['nullable', 'string', 'max:150'],
             'guardian_email' => ['nullable', 'email', 'max:255'],
             'guardian_backup_name' => ['nullable', 'string', 'max:191'],
             'guardian_backup_relationship' => ['nullable', 'string', 'max:100'],
             'guardian_backup_role' => ['nullable', 'string', 'max:100'],
             'guardian_backup_rut' => ['nullable', 'string', 'max:20', function ($attribute, $value, $fail) {
-                if ($value !== null && $value !== '' && !Rut::isValid($value)) {
+                if ($value !== null && $value !== '' && ! Rut::isValid($value)) {
                     $fail('El RUT ingresado no es válido.');
                 }
             }],
+            'guardian_backup_passport' => ['nullable', 'string', 'max:50'],
             'guardian_backup_address' => ['nullable', 'string', 'max:255'],
+            'guardian_backup_commune' => ['nullable', 'string', 'max:100'],
+            'guardian_backup_photo_authorization' => ['nullable', 'boolean'],
+            'guardian_backup_pickup_authorization' => ['nullable', 'boolean'],
+            'guardian_backup_marital_status' => ['nullable', 'string', 'max:100'],
+            'guardian_backup_education_level' => ['nullable', 'string', 'max:150'],
+            'guardian_backup_last_education_level' => ['nullable', 'string', 'max:255'],
+            'guardian_backup_occupation' => ['nullable', 'string', 'max:150'],
             'guardian_backup_phone' => ['nullable', 'string', 'max:50'],
             'guardian_backup_email' => ['nullable', 'email', 'max:255'],
             'lives_with' => ['nullable', 'string', 'max:100'],
             'siblings_in_school' => ['nullable', 'integer', 'min:0', 'max:50'],
             'father_name' => ['nullable', 'string', 'max:191'],
             'father_rut' => ['nullable', 'string', 'max:20', function ($attribute, $value, $fail) {
-                if ($value !== null && $value !== '' && !Rut::isValid($value)) {
+                if ($value !== null && $value !== '' && ! Rut::isValid($value)) {
                     $fail('El RUT ingresado no es válido.');
                 }
             }],
@@ -200,7 +235,7 @@ class UpdateStudentRequest extends FormRequest
             'father_education_level' => ['nullable', 'string', 'max:150'],
             'mother_name' => ['nullable', 'string', 'max:191'],
             'mother_rut' => ['nullable', 'string', 'max:20', function ($attribute, $value, $fail) {
-                if ($value !== null && $value !== '' && !Rut::isValid($value)) {
+                if ($value !== null && $value !== '' && ! Rut::isValid($value)) {
                     $fail('El RUT ingresado no es válido.');
                 }
             }],
@@ -215,6 +250,10 @@ class UpdateStudentRequest extends FormRequest
             'has_internet' => ['nullable', 'boolean'],
             'has_computer' => ['nullable', 'boolean'],
             'health_insurance' => ['nullable', 'string', 'max:150'],
+            'height_cm' => ['nullable', 'numeric', 'min:0', 'max:999.99'],
+            'weight_kg' => ['nullable', 'numeric', 'min:0', 'max:999.99'],
+            'blood_type' => ['nullable', 'string', 'max:10'],
+            'food_allergies' => ['nullable', 'string'],
             'beneficiary_programs' => ['nullable', 'string'],
             'scholarships' => ['nullable', 'string'],
             'has_judicial_process' => ['nullable', 'boolean'],
@@ -222,6 +261,14 @@ class UpdateStudentRequest extends FormRequest
             'chronic_illness_details' => ['nullable', 'string'],
             'has_medication_allergies' => ['nullable', 'boolean'],
             'medication_allergies_details' => ['nullable', 'string'],
+            'contraindicated_medications' => ['nullable', 'string'],
+            'fit_for_physical_education' => ['nullable', 'boolean'],
+            'has_private_school_insurance' => ['nullable', 'boolean'],
+            'healthcare_provider' => ['nullable', 'string', 'max:255'],
+            'health_observations' => ['nullable', 'string'],
+            'is_pie_participant' => ['nullable', 'boolean'],
+            'pie_permanence_type' => ['nullable', 'string', 'max:100'],
+            'pie_diagnosis' => ['nullable', 'string'],
             'has_physical_restrictions' => ['nullable', 'boolean'],
             'physical_restrictions_details' => ['nullable', 'string'],
             'baptism_date' => ['nullable', 'date'],

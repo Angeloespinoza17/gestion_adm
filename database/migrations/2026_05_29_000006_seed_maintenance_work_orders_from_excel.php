@@ -226,37 +226,17 @@ DATA;
             })
             ->all();
 
-        DB::table('maintenance_work_orders')->upsert(
-            $rows,
-            ['source_key'],
-            [
-                'maintenance_dependency_id',
-                'location_code',
-                'location_distribution',
-                'location_sector',
-                'location_name',
-                'location_usage',
-                'reported_at',
-                'requested_by',
-                'assigned_to',
-                'priority',
-                'status',
-                'due_date',
-                'description',
-                'resolution_notes',
-                'photo_reference',
-                'updated_at',
-            ]
-        );
+        foreach (array_chunk($rows, 100) as $chunk) {
+            // source_key es único. Una orden ya existente puede contener cambios
+            // operacionales de producción y no se debe restaurar desde Excel.
+            DB::table('maintenance_work_orders')->insertOrIgnore($chunk);
+        }
     }
 
     public function down(): void
     {
-        $keys = collect($this->rows())->pluck('source_key')->all();
-
-        foreach (array_chunk($keys, 100) as $chunk) {
-            DB::table('maintenance_work_orders')->whereIn('source_key', $chunk)->delete();
-        }
+        // Las órdenes pueden haber continuado su ciclo de vida en producción.
+        // Un rollback de esquema no debe borrar registros por source_key.
     }
 
     private function rows(): array

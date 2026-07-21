@@ -38,6 +38,10 @@ class SavePermissionRequestRequest extends FormRequest
             }
         }
 
+        if (blank($this->input('staff_id')) && $this->user()?->staff_id) {
+            $data['staff_id'] = $this->user()->staff_id;
+        }
+
         $this->merge($data);
     }
 
@@ -70,6 +74,13 @@ class SavePermissionRequestRequest extends FormRequest
             'salary_discount_days' => ['nullable', 'numeric', 'min:0'],
             'requires_regularization' => ['sometimes', 'boolean'],
             'submit' => ['sometimes', 'boolean'],
+        ];
+    }
+
+    public function messages(): array
+    {
+        return [
+            'staff_id.required' => 'Tu usuario debe estar asociado a una ficha de funcionario para crear solicitudes.',
         ];
     }
 

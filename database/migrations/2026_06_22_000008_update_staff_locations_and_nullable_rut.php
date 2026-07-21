@@ -14,7 +14,9 @@ return new class extends Migration
             $table->foreignId('commune_id')->nullable()->after('region_id')->constrained('communes')->nullOnDelete();
         });
 
-        DB::statement('ALTER TABLE staff MODIFY rut VARCHAR(20) NULL');
+        if (DB::getDriverName() !== 'sqlite') {
+            DB::statement('ALTER TABLE staff MODIFY rut VARCHAR(20) NULL');
+        }
     }
 
     public function down(): void
@@ -24,6 +26,8 @@ return new class extends Migration
             $table->dropConstrainedForeignId('region_id');
         });
 
-        DB::statement('ALTER TABLE staff MODIFY rut VARCHAR(20) NOT NULL');
+        if (DB::getDriverName() !== 'sqlite') {
+            DB::statement('ALTER TABLE staff MODIFY rut VARCHAR(20) NOT NULL');
+        }
     }
 };

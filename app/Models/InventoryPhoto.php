@@ -5,7 +5,6 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
-use Illuminate\Support\Facades\Storage;
 
 class InventoryPhoto extends Model
 {
@@ -33,13 +32,9 @@ class InventoryPhoto extends Model
             return null;
         }
 
-        $url = Storage::disk('public')->url($this->image_path);
-        $parts = parse_url((string) $url);
-        if (is_array($parts) && isset($parts['path'])) {
-            return $parts['path'] . (isset($parts['query']) ? '?' . $parts['query'] : '');
-        }
+        $version = $this->updated_at?->timestamp ?: time();
 
-        return $url;
+        return "/api/inventory/photos/{$this->id}/image?v={$version}";
     }
 
     public function item(): BelongsTo
@@ -52,4 +47,3 @@ class InventoryPhoto extends Model
         return $this->belongsTo(User::class, 'uploaded_by');
     }
 }
-

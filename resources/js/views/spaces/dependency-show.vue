@@ -7,12 +7,15 @@ import timeGridPlugin from "@fullcalendar/timegrid";
 import interactionPlugin from "@fullcalendar/interaction";
 import bootstrap5Plugin from "@fullcalendar/bootstrap5";
 import esLocale from "@fullcalendar/core/locales/es";
+import LoadingState from "../../components/ui/loading-state.vue";
 import ReservationFormModal from "../../components/spaces/reservation-form-modal.vue";
 import ReservationPreviewModal from "../../components/spaces/reservation-preview-modal.vue";
+import "./shared.css";
 
 export default {
   components: {
     Layout,
+    LoadingState,
     FullCalendar,
     ReservationFormModal,
     ReservationPreviewModal,
@@ -85,6 +88,35 @@ export default {
       return (this.dependency?.reservations || []).filter((item) =>
         ["rechazada", "cancelada", "finalizada"].includes(item.status)
       );
+    },
+    summaryCards() {
+      if (!this.dependency) {
+        return [];
+      }
+
+      return [
+        {
+          label: "Capacidad",
+          value: this.dependency.capacity_max ? this.formatInteger(this.dependency.capacity_max) : "-",
+          detail: "personas informadas",
+          icon: "bx-group",
+          tone: "blue",
+        },
+        {
+          label: "Próximas reservas",
+          value: this.formatInteger(this.upcomingReservations.length),
+          detail: this.dependency.is_reservable ? "pendientes o aprobadas" : "no reservable",
+          icon: "bx-calendar-event",
+          tone: "amber",
+        },
+        {
+          label: "Gestores",
+          value: this.formatInteger((this.dependency.approvers || []).length),
+          detail: "asignados a aprobación",
+          icon: "bx-user-check",
+          tone: "green",
+        },
+      ];
     },
   },
   mounted() {
@@ -182,12 +214,13 @@ export default {
       this.$refs.fullCalendar?.getApi()?.refetchEvents();
       this.load();
     },
-    statusVariant(status) {
-      if (status === "aprobada") return "success";
-      if (status === "pendiente") return "warning";
-      if (status === "rechazada") return "danger";
-      if (status === "cancelada") return "secondary";
-      return "info";
+    statusClass(status) {
+      return `spaces-status-pill--${status || "secondary"}`;
+    },
+    formatInteger(value) {
+      return Number(value || 0).toLocaleString("es-CL", {
+        maximumFractionDigits: 0,
+      });
     },
   },
 };
@@ -195,94 +228,197 @@ export default {
 
 <template>
   <Layout>
-    <div v-if="dependency" class="d-sm-flex justify-content-between align-items-center mb-4">
-      <div class="mb-3 mb-sm-0">
-        <h4 class="mb-0">{{ dependency.name }}</h4>
-        <div class="text-muted">{{ dependency.type?.name || "Sin tipo" }} · {{ dependency.code }}</div>
-      </div>
-      <div class="d-flex gap-2">
-        <router-link to="/spaces/dependencies" class="btn btn-outline-secondary">Volver</router-link>
-        <BButton v-if="canReserveDependency" variant="primary" @click="showFormModal = true">Reservar</BButton>
+    <div v-if="loading && !dependency" class="spaces-panel">
+      <div class="spaces-empty-state">
+        <LoadingState message="Cargando dependencia..." compact />
       </div>
     </div>
 
-    <div v-if="dependency" class="row g-3">
-      <div class="col-lg-4">
-        <BCard title="Datos generales">
-          <div class="text-center mb-3" v-if="dependency.image_url">
-            <img :src="dependency.image_url" alt="Dependencia" class="img-fluid rounded border" style="max-height: 220px" />
-          </div>
-          <div class="mb-2"><span class="text-muted">Ubicación:</span> {{ dependency.location || "-" }}</div>
-          <div class="mb-2"><span class="text-muted">Piso o sector:</span> {{ dependency.floor_sector || "-" }}</div>
-          <div class="mb-2"><span class="text-muted">Capacidad:</span> {{ dependency.capacity_max || "-" }}</div>
-          <div class="mb-2"><span class="text-muted">Estado:</span> {{ dependency.availability_status }}</div>
-          <div class="mb-2"><span class="text-muted">Responsable:</span> {{ dependency.responsible_staff?.full_name || "-" }}</div>
-          <div class="mb-2"><span class="text-muted">Reservable:</span> {{ dependency.is_reservable ? "Sí" : "No" }}</div>
-          <div v-if="dependency.is_reservable" class="mb-2">
-            <span class="text-muted">Aprobación:</span> {{ dependency.requires_approval ? "Sí" : "No" }}
-          </div>
-          <div class="mb-2">
-            <span class="text-muted">Inventario:</span> {{ dependency.is_inventory_auditable ? "Se revisa" : "No aplica" }}
-          </div>
-          <div class="mb-2">
-            <span class="text-muted">Mantención:</span> {{ dependency.is_maintenance_location ? "Ubicación habilitada" : "No aplica" }}
-          </div>
-          <div class="mb-2"><span class="text-muted">Equipamiento:</span> {{ dependency.available_equipment || "-" }}</div>
-          <div><span class="text-muted">Observaciones:</span> {{ dependency.observations || "-" }}</div>
-        </BCard>
+    <div v-else-if="dependency" class="spaces-shell">
+      <section class="spaces-hero">
+        <div class="spaces-hero__body">
+          <div class="spaces-eyebrow">Ficha de dependencia</div>
+          <h4>{{ dependency.name }}</h4>
+          <p>{{ dependency.type?.name || "Sin tipo" }} · {{ dependency.code || "Sin código" }}</p>
+        </div>
+        <div class="spaces-actions">
+          <router-link to="/spaces/dependencies" class="btn btn-outline-secondary">
+            <i class="bx bx-arrow-back"></i>
+            <span>Volver</span>
+          </router-link>
+          <BButton v-if="canReserveDependency" variant="primary" @click="showFormModal = true">
+            <i class="bx bx-calendar-plus"></i>
+            <span>Reservar</span>
+          </BButton>
+        </div>
+      </section>
 
-        <BCard v-if="dependency.is_reservable" title="Próximas reservas">
-          <div v-if="upcomingReservations.length === 0" class="text-muted">
-            No hay reservas próximas.
+      <div class="spaces-summary-grid">
+        <div
+          v-for="card in summaryCards"
+          :key="card.label"
+          class="spaces-summary-card"
+          :class="`spaces-summary-card--${card.tone}`"
+        >
+          <div class="spaces-summary-icon">
+            <i :class="`bx ${card.icon}`"></i>
           </div>
-          <div v-for="item in upcomingReservations.slice(0, 5)" :key="item.id" class="border rounded p-2 mb-2">
-            <div class="fw-semibold">{{ item.title }}</div>
-            <div class="small text-muted">{{ item.start_date }} {{ item.start_time }} - {{ item.end_time }}</div>
-            <div class="small">{{ item.staff?.full_name || "-" }}</div>
+          <div>
+            <span>{{ card.label }}</span>
+            <strong>{{ card.value }}</strong>
+            <small>{{ card.detail }}</small>
           </div>
-        </BCard>
-
-        <BCard v-if="dependency.is_reservable" title="Gestores de aprobación">
-          <div v-if="!(dependency.approvers || []).length" class="text-muted">
-            No hay gestores asignados.
-          </div>
-          <div v-for="manager in dependency.approvers || []" :key="manager.id" class="border rounded p-2 mb-2">
-            <div class="fw-semibold">{{ manager.staff?.full_name || manager.name }}</div>
-            <div class="small text-muted">{{ manager.email || "-" }}</div>
-          </div>
-        </BCard>
+        </div>
       </div>
 
-      <div class="col-lg-8">
-        <BCard v-if="dependency.is_reservable" title="Calendario propio">
-          <FullCalendar ref="fullCalendar" :options="calendarOptions" />
-        </BCard>
-        <BCard v-else title="Reservas">
-          <div class="text-muted">Esta dependencia existe para inventario o mantención, pero no está habilitada para reservas.</div>
-        </BCard>
+      <div class="row g-3">
+        <div class="col-xl-4">
+          <section class="spaces-panel">
+            <div class="spaces-panel-header">
+              <div>
+                <div class="spaces-eyebrow">Datos</div>
+                <h5 class="spaces-panel-title">Información general</h5>
+              </div>
+            </div>
+            <div v-if="dependency.image_url" class="mb-3">
+              <img :src="dependency.image_url" alt="Dependencia" class="img-fluid rounded border" />
+            </div>
+            <div class="spaces-detail-grid">
+              <div class="spaces-detail-row">
+                <span>Ubicación</span>
+                <strong>{{ dependency.location || "-" }}</strong>
+              </div>
+              <div class="spaces-detail-row">
+                <span>Piso o sector</span>
+                <strong>{{ dependency.floor_sector || "-" }}</strong>
+              </div>
+              <div class="spaces-detail-row">
+                <span>Estado</span>
+                <strong>{{ dependency.availability_status || "-" }}</strong>
+              </div>
+              <div class="spaces-detail-row">
+                <span>Responsable</span>
+                <strong>{{ dependency.responsible_staff?.full_name || "-" }}</strong>
+              </div>
+              <div class="spaces-detail-row">
+                <span>Reservable</span>
+                <strong>{{ dependency.is_reservable ? "Sí" : "No" }}</strong>
+              </div>
+              <div v-if="dependency.is_reservable" class="spaces-detail-row">
+                <span>Aprobación</span>
+                <strong>{{ dependency.requires_approval ? "Sí" : "No" }}</strong>
+              </div>
+              <div class="spaces-detail-row">
+                <span>Inventario</span>
+                <strong>{{ dependency.is_inventory_auditable ? "Se revisa" : "No aplica" }}</strong>
+              </div>
+              <div class="spaces-detail-row">
+                <span>Mantención</span>
+                <strong>{{ dependency.is_maintenance_location ? "Habilitada" : "No aplica" }}</strong>
+              </div>
+            </div>
+            <p class="spaces-panel-subtitle mt-3">
+              <strong>Equipamiento:</strong> {{ dependency.available_equipment || "-" }}
+            </p>
+            <p class="spaces-panel-subtitle">
+              <strong>Observaciones:</strong> {{ dependency.observations || "-" }}
+            </p>
+          </section>
 
-        <BCard v-if="dependency.is_reservable" title="Historial de reservas" class="mt-3">
-          <BTable
-            :items="historyReservations"
-            :fields="[
-              { key: 'title', label: 'Reserva' },
-              { key: 'staff', label: 'Funcionario' },
-              { key: 'start_date', label: 'Fecha' },
-              { key: 'status', label: 'Estado' },
-            ]"
-            small
-          >
-            <template #cell(staff)="{ item }">
-              {{ item.staff?.full_name || "-" }}
-            </template>
-            <template #cell(start_date)="{ item }">
-              {{ item.start_date }} {{ item.start_time }}
-            </template>
-            <template #cell(status)="{ item }">
-              <BBadge :variant="statusVariant(item.status)">{{ item.status }}</BBadge>
-            </template>
-          </BTable>
-        </BCard>
+          <section v-if="dependency.is_reservable" class="spaces-panel">
+            <div class="spaces-panel-header">
+              <div>
+                <div class="spaces-eyebrow">Agenda</div>
+                <h5 class="spaces-panel-title">Próximas reservas</h5>
+              </div>
+            </div>
+            <div v-if="upcomingReservations.length === 0" class="spaces-muted">No hay reservas próximas.</div>
+            <div v-else class="spaces-simple-list">
+              <div v-for="item in upcomingReservations.slice(0, 5)" :key="item.id" class="spaces-list-item">
+                <div class="spaces-table-title">{{ item.title }}</div>
+                <span class="spaces-table-subtitle">{{ item.start_date }} {{ item.start_time }} - {{ item.end_time }}</span>
+                <span class="spaces-table-subtitle">{{ item.staff?.full_name || "-" }}</span>
+              </div>
+            </div>
+          </section>
+
+          <section v-if="dependency.is_reservable" class="spaces-panel">
+            <div class="spaces-panel-header">
+              <div>
+                <div class="spaces-eyebrow">Aprobación</div>
+                <h5 class="spaces-panel-title">Gestores</h5>
+              </div>
+            </div>
+            <div v-if="!(dependency.approvers || []).length" class="spaces-muted">No hay gestores asignados.</div>
+            <div v-else class="spaces-simple-list">
+              <div v-for="manager in dependency.approvers || []" :key="manager.id" class="spaces-list-item">
+                <div class="spaces-table-title">{{ manager.staff?.full_name || manager.name }}</div>
+                <span class="spaces-table-subtitle">{{ manager.email || "-" }}</span>
+              </div>
+            </div>
+          </section>
+        </div>
+
+        <div class="col-xl-8">
+          <section v-if="dependency.is_reservable" class="spaces-panel spaces-calendar-host">
+            <div class="spaces-panel-header">
+              <div>
+                <div class="spaces-eyebrow">Calendario</div>
+                <h5 class="spaces-panel-title">Reservas de la dependencia</h5>
+              </div>
+            </div>
+            <FullCalendar ref="fullCalendar" :options="calendarOptions" />
+          </section>
+          <section v-else class="spaces-panel">
+            <div class="spaces-empty-state">
+              <i class="bx bx-calendar-x"></i>
+              <strong>No habilitada para reservas</strong>
+              <span>Esta dependencia se usa para inventario o mantención.</span>
+            </div>
+          </section>
+
+          <section v-if="dependency.is_reservable" class="spaces-panel">
+            <div class="spaces-panel-header">
+              <div>
+                <div class="spaces-eyebrow">Historial</div>
+                <h5 class="spaces-panel-title">Reservas cerradas</h5>
+              </div>
+            </div>
+            <div class="spaces-table-wrap">
+              <table class="table spaces-data-table">
+                <thead>
+                  <tr>
+                    <th>Reserva</th>
+                    <th>Funcionario</th>
+                    <th>Fecha</th>
+                    <th class="text-center">Estado</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="item in historyReservations" :key="item.id">
+                    <td>
+                      <div class="spaces-table-title">{{ item.title }}</div>
+                    </td>
+                    <td>{{ item.staff?.full_name || "-" }}</td>
+                    <td>{{ item.start_date }} {{ item.start_time }}</td>
+                    <td class="text-center">
+                      <span class="spaces-status-pill" :class="statusClass(item.status)">{{ item.status }}</span>
+                    </td>
+                  </tr>
+                  <tr v-if="historyReservations.length === 0">
+                    <td colspan="4">
+                      <div class="spaces-empty-state">
+                        <i class="bx bx-history"></i>
+                        <strong>Sin historial</strong>
+                        <span>No hay reservas cerradas para esta dependencia.</span>
+                      </div>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+        </div>
       </div>
     </div>
 

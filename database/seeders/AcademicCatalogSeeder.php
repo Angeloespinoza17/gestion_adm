@@ -10,13 +10,17 @@ use App\Models\StudentEnrollment;
 use App\Models\StudentProfile;
 use App\Models\User;
 use App\Services\Students\StudentEnrollmentLifecycleService;
+use Database\Seeders\Support\PreventsProductionSeeding;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\Hash;
 
 class AcademicCatalogSeeder extends Seeder
 {
+    use PreventsProductionSeeding;
+
     public function run(): void
     {
+        $this->preventProductionSeeding();
         $this->call(EducationLevelSeeder::class);
         $levels = EducationLevel::query()->orderBy('order')->get()->keyBy('name');
         $years = $this->seedAcademicYears();

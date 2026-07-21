@@ -5,10 +5,12 @@ namespace Tests\Feature\Informatica;
 use App\Models\It\ItEquipment;
 use App\Models\It\ItEquipmentLoan;
 use App\Models\It\ItEquipmentMaintenanceReport;
+use App\Models\InventoryItem;
 use App\Models\Permission;
 use App\Models\SystemModule;
 use App\Models\User;
 use Database\Seeders\InformaticaSeeder;
+use Database\Seeders\InventoryCatalogSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Laravel\Sanctum\Sanctum;
 use Tests\TestCase;
@@ -73,6 +75,32 @@ class InformaticaModuleTest extends TestCase
         ]);
     }
 
+    public function test_can_create_inventory_asset_from_informatica(): void
+    {
+        $this->seedAndActAsSuperAdmin();
+        $this->seed(InventoryCatalogSeeder::class);
+
+        $response = $this->postJson('/api/informatica/equipos', [
+            'create_inventory_item' => true,
+            'equipment_type' => 'notebook',
+            'brand' => 'Lenovo',
+            'model' => 'ThinkPad E14',
+            'serial_number' => 'INV-IT-SYNC-001',
+            'status' => 'disponible',
+            'location_name' => 'Oficina de Informática',
+            'active' => true,
+        ]);
+
+        $response->assertCreated();
+
+        $equipment = ItEquipment::query()->where('serial_number', 'INV-IT-SYNC-001')->firstOrFail();
+        $inventoryItem = InventoryItem::query()->where('serial_number', 'INV-IT-SYNC-001')->firstOrFail();
+
+        $this->assertSame($inventoryItem->id, $equipment->inventory_item_id);
+        $this->assertSame($inventoryItem->code, $equipment->internal_code);
+        $this->assertSame('tecnologia', $inventoryItem->category->slug);
+    }
+
     public function test_cannot_create_loan_for_non_available_equipment(): void
     {
         $this->seedAndActAsSuperAdmin();
@@ -92,6 +120,29 @@ class InformaticaModuleTest extends TestCase
         $response
             ->assertStatus(422)
             ->assertJsonValidationErrors(['it_equipment_id']);
+    }
+
+    public function test_can_create_loan_with_only_equipment(): void
+    {
+        $this->seedAndActAsSuperAdmin();
+
+        $equipment = ItEquipment::query()->available()->firstOrFail();
+
+        $response = $this->postJson('/api/informatica/prestamos', [
+            'it_equipment_id' => $equipment->id,
+        ]);
+
+        $response
+            ->assertCreated()
+            ->assertJsonPath('data.requester_name_snapshot', 'Sin especificar')
+            ->assertJsonPath('data.due_at', null);
+
+        $this->assertDatabaseHas('it_equipment_loans', [
+            'it_equipment_id' => $equipment->id,
+            'requester_type' => 'otro',
+            'requester_name_snapshot' => 'Sin especificar',
+            'due_at' => null,
+        ]);
     }
 
     public function test_can_register_loan_return_and_restore_equipment_status(): void

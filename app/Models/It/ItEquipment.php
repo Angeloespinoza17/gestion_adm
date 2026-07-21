@@ -2,6 +2,7 @@
 
 namespace App\Models\It;
 
+use App\Models\InventoryItem;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -47,6 +48,7 @@ class ItEquipment extends Model
     ];
 
     protected $fillable = [
+        'inventory_item_id',
         'internal_code',
         'equipment_type',
         'brand',
@@ -138,6 +140,11 @@ class ItEquipment extends Model
     public function responsibleUser(): BelongsTo
     {
         return $this->belongsTo(User::class, 'responsible_user_id');
+    }
+
+    public function inventoryItem(): BelongsTo
+    {
+        return $this->belongsTo(InventoryItem::class, 'inventory_item_id');
     }
 
     public function createdBy(): BelongsTo

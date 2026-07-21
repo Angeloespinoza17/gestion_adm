@@ -20,5 +20,7 @@ export default {
 </script>
 
 <template>
-  <BBadge :variant="variant">{{ label }}</BBadge>
+  <BBadge class="pme-status-badge" :variant="variant">
+    <span class="pme-status-badge__dot" aria-hidden="true"></span>{{ label }}
+  </BBadge>
 </template>

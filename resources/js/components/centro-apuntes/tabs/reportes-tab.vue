@@ -59,6 +59,9 @@ export default {
     };
   },
   computed: {
+    canExport() {
+      return Boolean(this.catalogs.capabilities?.can_export_reports);
+    },
     periodOptions() {
       return normalizeOptions(this.catalogs.report_periods || []);
     },
@@ -168,12 +171,14 @@ export default {
       this.loadReport();
     },
     exportExcel() {
+      if (!this.canExport) return;
       downloadExcelWorkbook(
         `reporte-centro-apuntes-${this.report.range?.start || "periodo"}`,
         this.report.sections || []
       );
     },
     exportPdf() {
+      if (!this.canExport) return;
       downloadPdfReport(
         `reporte-centro-apuntes-${this.report.range?.start || "periodo"}`,
         "Reporte Centro de Apuntes y Pañol",
@@ -182,17 +187,26 @@ export default {
       );
     },
     printReport() {
+      if (!this.canExport) return;
       const html = (this.report.sections || [])
         .map((section) => `
-          <h2>${section.title}</h2>
+          <h2>${this.escapeHtml(section.title)}</h2>
           <table>
-            <thead><tr>${(section.headers || []).map((header) => `<th>${header}</th>`).join("")}</tr></thead>
-            <tbody>${(section.rows || []).map((row) => `<tr>${row.map((cell) => `<td>${cell ?? ""}</td>`).join("")}</tr>`).join("")}</tbody>
+            <thead><tr>${(section.headers || []).map((header) => `<th>${this.escapeHtml(header)}</th>`).join("")}</tr></thead>
+            <tbody>${(section.rows || []).map((row) => `<tr>${row.map((cell) => `<td>${this.escapeHtml(cell)}</td>`).join("")}</tr>`).join("")}</tbody>
           </table>
         `)
         .join("");
 
       printCentroApuntesHtml("Reporte Centro de Apuntes y Pañol", html);
+    },
+    escapeHtml(value) {
+      return String(value ?? "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
     },
     series(items, name = "Total") {
       return [{ name, data: extractChartTotals(items) }];
@@ -210,9 +224,9 @@ export default {
           title="Ayuda: reportes y costeo"
           text="Aquí se consolidan solicitudes, movimientos y entregas por período, con exportación a Excel, PDF e impresión para seguimiento y toma de decisiones."
         />
-        <BButton variant="outline-success" @click="exportExcel">Excel</BButton>
-        <BButton variant="outline-danger" @click="exportPdf">PDF</BButton>
-        <BButton variant="outline-dark" @click="printReport">Imprimir</BButton>
+        <BButton v-if="canExport" variant="outline-success" :disabled="loading" @click="exportExcel"><i class="bx bx-spreadsheet me-1"></i>Excel</BButton>
+        <BButton v-if="canExport" variant="outline-danger" :disabled="loading" @click="exportPdf"><i class="bx bxs-file-pdf me-1"></i>PDF</BButton>
+        <BButton v-if="canExport" variant="outline-dark" :disabled="loading" @click="printReport"><i class="bx bx-printer me-1"></i>Imprimir</BButton>
       </div>
     </div>
 

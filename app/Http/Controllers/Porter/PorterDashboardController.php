@@ -15,6 +15,7 @@ use App\Models\StudentProfile;
 use App\Services\Porter\PorterAccessService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 
 class PorterDashboardController extends Controller
 {
@@ -122,6 +123,20 @@ class PorterDashboardController extends Controller
             ->limit(10)
             ->get();
 
+        $activityTrend = collect(range(6, 0))->map(function (int $daysAgo) {
+            $date = now()->subDays($daysAgo);
+
+            return [
+                'date' => $date->toDateString(),
+                'label' => Carbon::parse($date)->locale('es')->isoFormat('ddd D'),
+                'withdrawals' => PorterStudentWithdrawal::query()->whereDate('withdrawn_at', $date)->count(),
+                'visits' => PorterVisit::query()->whereDate('entered_at', $date)->count(),
+                'external_services' => PorterExternalServiceEntry::query()->whereDate('entered_at', $date)->count(),
+                'received_items' => PorterReceivedItem::query()->whereDate('received_at', $date)->count(),
+                'goods' => PorterGoodsMovement::query()->whereDate('moved_at', $date)->count(),
+            ];
+        });
+
         $alerts = collect();
 
         foreach ($observedWithdrawals as $withdrawal) {
@@ -205,6 +220,10 @@ class PorterDashboardController extends Controller
         }
 
         return response()->json([
+            'generated_at' => now()->toIso8601String(),
+            'capabilities' => [
+                'can_export' => $this->accessService->canExport($request->user()),
+            ],
             'stats' => [
                 'withdrawals_today' => PorterStudentWithdrawal::query()->where('withdrawn_at', '>=', $today)->count(),
                 'pending_items' => PorterReceivedItem::query()->whereIn('status', $pendingItemStatuses)->count(),
@@ -232,6 +251,7 @@ class PorterDashboardController extends Controller
                 ->take(8)
                 ->all(),
             'recent_movements' => $recentMovements,
+            'activity_trend' => $activityTrend,
             'withdrawals_today' => PorterStudentWithdrawal::query()
                 ->with(['registeredBy:id,name', 'studentProfile:id,first_name,last_name'])
                 ->where('withdrawn_at', '>=', $today)

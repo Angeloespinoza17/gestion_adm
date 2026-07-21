@@ -35,6 +35,13 @@ const exportFormats = [
   { value: "pdf", text: "Documento PDF (.pdf)" },
 ];
 
+const perPageOptions = [
+  { value: 15, text: "15 por página" },
+  { value: 30, text: "30 por página" },
+  { value: 50, text: "50 por página" },
+  { value: 100, text: "100 por página" },
+];
+
 export default {
   components: { Layout, Multiselect },
   data() {
@@ -57,13 +64,14 @@ export default {
         department_id: null,
         status: null,
         contract_type: null,
+        active: null,
       },
       exportForm: {
         format: "excel",
         columns: ["full_name", "rut"],
       },
       staff: [],
-      pagination: { current_page: 1, last_page: 1, total: 0 },
+      pagination: { current_page: 1, last_page: 1, total: 0, per_page: 15 },
     };
   },
   computed: {
@@ -99,6 +107,16 @@ export default {
         }))
       );
     },
+    activeOptions() {
+      return [
+        { value: null, label: "Todos" },
+        { value: "1", label: "Solo activos" },
+        { value: "0", label: "Solo desactivados" },
+      ];
+    },
+    perPageSelectOptions() {
+      return perPageOptions;
+    },
     permissions() {
       try {
         return JSON.parse(localStorage.getItem("permissions") || "[]");
@@ -128,10 +146,88 @@ export default {
         this.filters.department_id,
         this.filters.status,
         this.filters.contract_type,
+        this.filters.active,
       ].filter((value) => value !== null && value !== "").length;
     },
     currentActiveCount() {
       return (this.staff || []).filter((item) => item.active).length;
+    },
+    currentInactiveCount() {
+      return Math.max((this.staff || []).length - this.currentActiveCount, 0);
+    },
+    linkedUsersCount() {
+      return (this.staff || []).filter((item) => item.user).length;
+    },
+    hasActiveFilters() {
+      return this.activeFilterCount > 0;
+    },
+    activeFilters() {
+      const filters = [];
+      const pushText = (key, label) => {
+        if (this.filters[key]) {
+          filters.push({ key, label, value: this.filters[key] });
+        }
+      };
+      const pushSelect = (key, label, options) => {
+        if (this.filters[key] !== null && this.filters[key] !== "") {
+          filters.push({ key, label, value: this.optionLabel(options, this.filters[key]) });
+        }
+      };
+
+      pushText("search", "Búsqueda");
+      pushText("name", "Nombre");
+      pushText("rut", "RUT");
+      pushSelect("cargo_id", "Cargo", this.cargoOptions);
+      pushSelect("department_id", "Departamento", this.departmentOptions);
+      pushSelect("status", "Estado", this.statusOptions);
+      pushSelect("contract_type", "Contrato", this.contractTypeOptions);
+      pushSelect("active", "Registro", this.activeOptions);
+
+      return filters;
+    },
+    paginationRange() {
+      if (!this.pagination.total) {
+        return "Sin resultados";
+      }
+
+      const perPage = Number(this.pagination.per_page || 15);
+      const currentPage = Number(this.pagination.current_page || 1);
+      const from = (currentPage - 1) * perPage + 1;
+      const to = Math.min(from + (this.staff || []).length - 1, Number(this.pagination.total || 0));
+
+      return `${this.formatInteger(from)}-${this.formatInteger(to)} de ${this.formatInteger(this.pagination.total)}`;
+    },
+    summaryCards() {
+      return [
+        {
+          label: "Resultados",
+          value: this.formatInteger(this.pagination.total),
+          detail: this.hasActiveFilters ? "según filtros aplicados" : "funcionarios registrados",
+          icon: "bx-list-ul",
+          tone: "primary",
+        },
+        {
+          label: "Página actual",
+          value: this.formatInteger((this.staff || []).length),
+          detail: `${this.formatInteger(this.currentActiveCount)} activos, ${this.formatInteger(this.currentInactiveCount)} desactivados`,
+          icon: "bx-id-card",
+          tone: "success",
+        },
+        {
+          label: "Usuarios asociados",
+          value: this.formatInteger(this.linkedUsersCount),
+          detail: "en los resultados visibles",
+          icon: "bx-user-check",
+          tone: "info",
+        },
+        {
+          label: "Filtros activos",
+          value: this.formatInteger(this.activeFilterCount),
+          detail: this.hasActiveFilters ? "refinando el listado" : "sin filtros",
+          icon: "bx-filter-alt",
+          tone: "warning",
+        },
+      ];
     },
     exportColumnOptions() {
       return exportableColumns;
@@ -145,6 +241,20 @@ export default {
     this.loadStaff();
   },
   methods: {
+    staffRequestParams(page = 1, perPage = this.pagination.per_page) {
+      return {
+        page,
+        per_page: perPage,
+        search: this.filters.search || null,
+        name: this.filters.name || null,
+        rut: this.filters.rut || null,
+        cargo_id: this.filters.cargo_id,
+        department_id: this.filters.department_id,
+        status: this.filters.status,
+        contract_type: this.filters.contract_type,
+        active: this.filters.active === null ? null : this.filters.active,
+      };
+    },
     async loadCatalogs() {
       const response = await axios.get("/api/staff/catalogs");
       this.catalogs = response.data;
@@ -154,16 +264,7 @@ export default {
       this.error = null;
       try {
         const response = await axios.get("/api/staff", {
-          params: {
-            page,
-            search: this.filters.search || null,
-            name: this.filters.name || null,
-            rut: this.filters.rut || null,
-            cargo_id: this.filters.cargo_id,
-            department_id: this.filters.department_id,
-            status: this.filters.status,
-            contract_type: this.filters.contract_type,
-          },
+          params: this.staffRequestParams(page),
         });
 
         this.staff = response.data.data;
@@ -171,6 +272,7 @@ export default {
           current_page: response.data.current_page,
           last_page: response.data.last_page,
           total: response.data.total,
+          per_page: response.data.per_page || this.pagination.per_page || 15,
         };
       } catch (error) {
         this.error = this.formatError(error);
@@ -188,7 +290,21 @@ export default {
         department_id: null,
         status: null,
         contract_type: null,
+        active: null,
       };
+      this.loadStaff(1);
+    },
+    removeFilter(key) {
+      if (["search", "name", "rut"].includes(key)) {
+        this.filters[key] = "";
+      } else {
+        this.filters[key] = null;
+      }
+
+      this.loadStaff(1);
+    },
+    changePerPage() {
+      this.pagination.per_page = Number(this.pagination.per_page || 15);
       this.loadStaff(1);
     },
     async toggleActive(item) {
@@ -257,17 +373,7 @@ export default {
 
         do {
           const response = await axios.get("/api/staff", {
-            params: {
-              page,
-              per_page: 200,
-              search: this.filters.search || null,
-              name: this.filters.name || null,
-              rut: this.filters.rut || null,
-              cargo_id: this.filters.cargo_id,
-              department_id: this.filters.department_id,
-              status: this.filters.status,
-              contract_type: this.filters.contract_type,
-            },
+            params: this.staffRequestParams(page, 200),
           });
 
           all.push(...(response.data.data || []));
@@ -452,27 +558,7 @@ export default {
         ...rows.map((row) => headers.map((header) => String(row[header] ?? "-"))),
       ];
 
-      const activeFilters = [
-        this.filters.search ? `Búsqueda: ${this.filters.search}` : null,
-        this.filters.name ? `Nombre: ${this.filters.name}` : null,
-        this.filters.rut ? `RUT: ${this.filters.rut}` : null,
-        this.filters.cargo_id
-          ? `Cargo: ${this.cargoOptions.find((item) => item.value === this.filters.cargo_id)?.label || "-"}`
-          : null,
-        this.filters.department_id
-          ? `Departamento: ${
-              this.departmentOptions.find((item) => item.value === this.filters.department_id)?.label || "-"
-            }`
-          : null,
-        this.filters.status
-          ? `Estado: ${this.statusOptions.find((item) => item.value === this.filters.status)?.label || "-"}`
-          : null,
-        this.filters.contract_type
-          ? `Tipo de contrato: ${
-              this.contractTypeOptions.find((item) => item.value === this.filters.contract_type)?.label || "-"
-            }`
-          : null,
-      ].filter(Boolean);
+      const activeFilters = this.activeFilters.map((filter) => `${filter.label}: ${filter.value}`);
 
       const docDefinition = {
         pageSize: "A4",
@@ -578,13 +664,12 @@ export default {
       ].find((item) => item.value === value);
       return found?.label || value || "-";
     },
-    initials(name) {
-      return String(name || "")
-        .split(" ")
-        .filter(Boolean)
-        .slice(0, 2)
-        .map((part) => part.charAt(0).toUpperCase())
-        .join("") || "?";
+    optionLabel(options, value) {
+      const found = (options || []).find((item) => String(item.value) === String(value));
+      return found?.label || found?.text || value || "-";
+    },
+    formatInteger(value) {
+      return new Intl.NumberFormat("es-CL").format(Number(value || 0));
     },
     formatError(error) {
       const errors = error?.response?.data?.errors || null;
@@ -617,80 +702,52 @@ export default {
 
 <template>
   <Layout>
-    <div class="d-sm-flex align-items-center justify-content-between mb-4">
-      <div class="mb-3 mb-sm-0">
-        <h4 class="mb-0">Gestión de Funcionarios</h4>
+    <div class="d-flex align-items-start justify-content-between flex-wrap gap-3 mb-4 staff-page-header">
+      <div>
+        <span class="staff-eyebrow">Funcionarios</span>
+        <h4 class="mb-1">Gestión de Funcionarios</h4>
         <div class="text-muted">Registro personal, laboral e institucional.</div>
       </div>
-      <router-link v-if="canEdit" to="/staff/new" class="btn btn-primary">
-        <i class="mdi mdi-account-plus-outline me-1"></i>
-        Nuevo funcionario
-      </router-link>
+      <div class="d-flex flex-wrap gap-2">
+        <router-link to="/staff/departments" class="btn btn-outline-secondary">
+          <i class="bx bx-buildings me-1"></i>
+          Departamentos
+        </router-link>
+        <router-link v-if="canEdit" to="/staff/new" class="btn btn-primary">
+          <i class="mdi mdi-account-plus-outline me-1"></i>
+          Nuevo funcionario
+        </router-link>
+      </div>
     </div>
 
     <BAlert v-if="error" variant="danger" show class="mb-3">{{ error }}</BAlert>
 
-    <div class="row">
-      <div class="col-xl-4 col-md-6">
-        <BCard no-body class="mini-stats-wid">
+    <div class="row g-3 mb-4">
+      <div v-for="card in summaryCards" :key="card.label" class="col-xl-3 col-md-6">
+        <BCard no-body class="staff-summary-card h-100">
           <BCardBody>
-            <div class="d-flex align-items-center">
-              <div class="flex-grow-1">
-                <p class="text-muted fw-medium mb-2">Total funcionarios</p>
-                <h4 class="mb-0">{{ pagination.total }}</h4>
+            <div class="d-flex align-items-start justify-content-between gap-3">
+              <div>
+                <span class="staff-summary-label">{{ card.label }}</span>
+                <h3 class="staff-summary-value">{{ card.value }}</h3>
+                <p class="text-muted mb-0">{{ card.detail }}</p>
               </div>
-              <div class="mini-stat-icon avatar-sm rounded-circle bg-primary align-self-center">
-                <span class="avatar-title">
-                  <i class="bx bx-user-circle font-size-24"></i>
-                </span>
-              </div>
-            </div>
-          </BCardBody>
-        </BCard>
-      </div>
-      <div class="col-xl-4 col-md-6">
-        <BCard no-body class="mini-stats-wid">
-          <BCardBody>
-            <div class="d-flex align-items-center">
-              <div class="flex-grow-1">
-                <p class="text-muted fw-medium mb-2">Activos en la página</p>
-                <h4 class="mb-0">{{ currentActiveCount }}</h4>
-              </div>
-              <div class="mini-stat-icon avatar-sm rounded-circle bg-success align-self-center">
-                <span class="avatar-title">
-                  <i class="bx bx-check-shield font-size-24"></i>
-                </span>
-              </div>
-            </div>
-          </BCardBody>
-        </BCard>
-      </div>
-      <div class="col-xl-4 col-md-12">
-        <BCard no-body class="mini-stats-wid">
-          <BCardBody>
-            <div class="d-flex align-items-center">
-              <div class="flex-grow-1">
-                <p class="text-muted fw-medium mb-2">Filtros aplicados</p>
-                <h4 class="mb-0">{{ activeFilterCount }}</h4>
-              </div>
-              <div class="mini-stat-icon avatar-sm rounded-circle bg-info align-self-center">
-                <span class="avatar-title">
-                  <i class="bx bx-slider-alt font-size-24"></i>
-                </span>
-              </div>
+              <span :class="`staff-summary-icon staff-summary-icon-${card.tone}`">
+                <i :class="`bx ${card.icon}`"></i>
+              </span>
             </div>
           </BCardBody>
         </BCard>
       </div>
     </div>
 
-    <BCard class="mb-4">
+    <BCard class="mb-4 staff-filter-card">
       <div class="d-flex flex-wrap align-items-center justify-content-between mb-3 gap-2">
         <div>
-          <h5 class="mb-1">Buscador y filtros</h5>
-          <p class="text-muted mb-0">Refina la búsqueda por nombre, RUT, cargo, estado o contrato.</p>
+          <h5 class="mb-1">Filtros</h5>
+          <p class="text-muted mb-0">Nombre, RUT, cargo, departamento, estado y contrato.</p>
         </div>
-        <span class="badge rounded-pill badge-soft-primary font-size-12">
+        <span :class="['badge rounded-pill font-size-12', hasActiveFilters ? 'badge-soft-primary' : 'badge-soft-secondary']">
           {{ activeFilterCount }} filtros activos
         </span>
       </div>
@@ -734,7 +791,11 @@ export default {
           <label class="form-label">Tipo de contrato</label>
           <Multiselect v-model="filters.contract_type" :options="contractTypeOptions" :searchable="true" />
         </div>
-        <div class="col-xl-6 col-lg-8">
+        <div class="col-xl-3 col-lg-4 col-md-6">
+          <label class="form-label">Registro</label>
+          <Multiselect v-model="filters.active" :options="activeOptions" :searchable="false" />
+        </div>
+        <div class="col-xl-3 col-lg-8">
           <div class="d-flex flex-wrap gap-2">
             <BButton variant="primary" @click="loadStaff(1)">
               <i class="bx bx-search-alt me-1"></i>
@@ -744,23 +805,42 @@ export default {
               <i class="bx bx-reset me-1"></i>
               Limpiar
             </BButton>
-            <router-link to="/staff/departments" class="btn btn-outline-secondary">
-              <i class="bx bx-buildings me-1"></i>
-              Departamentos
-            </router-link>
           </div>
         </div>
       </div>
+
+      <div v-if="activeFilters.length" class="active-filter-bar">
+        <span v-for="filter in activeFilters" :key="filter.key" class="active-filter-chip">
+          <span class="active-filter-label">{{ filter.label }}</span>
+          <span class="active-filter-value">{{ filter.value }}</span>
+          <button
+            type="button"
+            class="active-filter-remove"
+            :aria-label="`Quitar filtro ${filter.label}`"
+            @click="removeFilter(filter.key)"
+          >
+            <i class="bx bx-x"></i>
+          </button>
+        </span>
+        <BButton size="sm" variant="link" class="p-0 ms-1" @click="resetFilters">Limpiar todo</BButton>
+      </div>
     </BCard>
 
-    <BCard no-body>
+    <BCard no-body class="staff-list-card">
       <div class="card-header border-bottom">
         <div class="d-flex flex-wrap align-items-center justify-content-between gap-2">
           <div>
             <h5 class="mb-1">Listado de funcionarios</h5>
-            <p class="text-muted mb-0">Vista resumida con datos institucionales y acceso rápido a acciones.</p>
+            <p class="text-muted mb-0">{{ paginationRange }}</p>
           </div>
-          <div class="d-flex align-items-center gap-2">
+          <div class="d-flex align-items-center flex-wrap gap-2">
+            <BFormSelect
+              v-model="pagination.per_page"
+              :options="perPageSelectOptions"
+              size="sm"
+              class="staff-page-size"
+              @update:model-value="changePerPage"
+            />
             <BButton
               v-if="canExport"
               variant="outline-primary"
@@ -770,39 +850,31 @@ export default {
               <i class="mdi mdi-file-export-outline me-1"></i>
               {{ exporting ? "Exportando..." : "Exportar" }}
             </BButton>
-            <span class="badge rounded-pill badge-soft-success font-size-12">
-              {{ currentActiveCount }} activos en pantalla
-            </span>
-            <span class="badge rounded-pill badge-soft-secondary font-size-12">
-              Total {{ pagination.total }}
-            </span>
           </div>
         </div>
       </div>
 
       <div class="table-responsive">
-        <BTableSimple class="table table-centered align-middle table-nowrap mb-0">
+        <BTableSimple class="table table-centered align-middle staff-table mb-0">
           <BThead class="table-light">
             <BTr>
               <BTh>Funcionario</BTh>
-              <BTh>RUT</BTh>
+              <BTh>Contacto</BTh>
               <BTh>Cargo</BTh>
-              <BTh>Departamentos</BTh>
-              <BTh>Estado</BTh>
-              <BTh>Usuario</BTh>
-              <BTh class="text-end">Acciones</BTh>
+              <BTh class="staff-status-col">Estado</BTh>
+              <BTh class="text-end staff-actions-col">Acciones</BTh>
             </BTr>
           </BThead>
           <BTbody>
             <BTr v-if="loading">
-              <BTd colspan="7" class="text-center py-5">
+              <BTd colspan="5" class="text-center py-5">
                 <BSpinner small class="me-2"></BSpinner>
                 Cargando funcionarios...
               </BTd>
             </BTr>
 
             <BTr v-else-if="staff.length === 0">
-              <BTd colspan="7" class="text-center py-5">
+              <BTd colspan="5" class="text-center py-5">
                 <div class="avatar-sm mx-auto mb-3">
                   <span class="avatar-title rounded-circle bg-light text-primary font-size-24">
                     <i class="bx bx-search-alt"></i>
@@ -815,49 +887,36 @@ export default {
 
             <BTr v-for="item in staff" :key="item.id">
               <BTd>
-                <div class="d-flex align-items-center">
-                  <div class="avatar-sm me-3">
-                    <span class="avatar-title rounded-circle bg-soft-primary text-primary font-size-16 fw-semibold">
-                      {{ initials(item.full_name) }}
-                    </span>
-                  </div>
-                  <div>
-                    <h5 class="font-size-14 mb-1">{{ item.full_name }}</h5>
-                    <p class="text-muted mb-0">{{ item.institutional_email || item.personal_email || "Sin correo" }}</p>
+                <div class="staff-person-cell">
+                  <router-link :to="`/staff/${item.id}`" class="staff-name-link">
+                    {{ item.full_name }}
+                  </router-link>
+                  <div class="staff-meta">
+                    <span>{{ item.rut || "Sin RUT" }}</span>
+                    <span v-if="item.start_date">Ingreso {{ formatDate(item.start_date) }}</span>
                   </div>
                 </div>
               </BTd>
 
               <BTd>
-                <span class="fw-medium">{{ item.rut || "-" }}</span>
+                <div class="staff-contact">
+                  <div class="staff-contact-line">
+                    <i class="mdi mdi-email-outline"></i>
+                    <span>{{ item.institutional_email || item.personal_email || "Sin correo" }}</span>
+                  </div>
+                  <div v-if="item.phone" class="staff-contact-line text-muted">
+                    <i class="mdi mdi-phone-outline"></i>
+                    <span>{{ item.phone }}</span>
+                  </div>
+                </div>
               </BTd>
 
               <BTd>
                 <div class="fw-medium">{{ item.cargo?.name || "-" }}</div>
-                <span class="badge rounded-pill badge-soft-info mt-1">
-                  {{ contractTypeLabel(item.contract_type) }}
-                </span>
               </BTd>
 
-              <BTd>
-                <div v-if="(item.departments || []).length" class="d-flex flex-wrap gap-1">
-                  <span
-                    v-for="department in item.departments"
-                    :key="department.id"
-                    class="badge rounded-pill department-pill"
-                    :style="{
-                      backgroundColor: `${department.color || '#556ee6'}22`,
-                      color: department.color || '#556ee6',
-                    }"
-                  >
-                    {{ department.name }}
-                  </span>
-                </div>
-                <span v-else class="text-muted">Sin departamentos</span>
-              </BTd>
-
-              <BTd>
-                <div class="d-flex flex-column gap-1">
+              <BTd class="staff-status-col">
+                <div class="staff-status-stack">
                   <span :class="`badge rounded-pill badge-soft-${statusVariant(item)}`">
                     {{ statusLabel(item.status) }}
                   </span>
@@ -865,19 +924,11 @@ export default {
                 </div>
               </BTd>
 
-              <BTd>
-                <div v-if="item.user">
-                  <div class="fw-medium">{{ item.user.name }}</div>
-                  <div class="text-muted">{{ item.user.email }}</div>
-                </div>
-                <span v-else class="text-muted">Sin acceso al sistema</span>
-              </BTd>
-
-              <BTd class="text-end">
-                <div class="d-flex justify-content-end flex-wrap gap-2">
+              <BTd class="text-end staff-actions-col">
+                <div class="staff-actions">
                   <router-link :to="`/staff/${item.id}`" class="btn btn-sm btn-outline-primary">
                     <i class="mdi mdi-eye-outline me-1"></i>
-                    Ver ficha
+                    Ficha
                   </router-link>
                   <BButton
                     v-if="canEdit"
@@ -902,11 +953,11 @@ export default {
       <div class="card-footer border-top">
         <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3">
           <small class="text-muted">
-            Mostrando {{ staff.length }} de {{ pagination.total }} registros
+            {{ paginationRange }}
           </small>
           <BPagination
             v-model="pagination.current_page"
-            :per-page="15"
+            :per-page="pagination.per_page"
             :total-rows="pagination.total"
             pills
             align="end"
@@ -951,18 +1002,248 @@ export default {
 </template>
 
 <style scoped>
-.mini-stat-icon .avatar-title {
-  color: #fff;
-}
-
 .search-box .search-icon {
   left: 16px;
 }
 
-.department-pill {
-  font-size: 11px;
+.staff-eyebrow {
+  display: block;
+  margin-bottom: 0.25rem;
+  color: #556ee6;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.staff-summary-card,
+.staff-filter-card,
+.staff-list-card {
+  border: 1px solid #edf0f5;
+  border-radius: 8px;
+  box-shadow: 0 0.125rem 0.375rem rgba(15, 23, 42, 0.035);
+}
+
+.staff-summary-label {
+  display: block;
+  margin-bottom: 0.35rem;
+  color: #74788d;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.staff-summary-value {
+  margin-bottom: 0.2rem;
+  color: #2a3042;
+  font-size: 1.65rem;
+  font-weight: 700;
+  line-height: 1.15;
+}
+
+.staff-summary-icon {
+  display: inline-flex;
+  width: 42px;
+  height: 42px;
+  flex: 0 0 42px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  font-size: 1.4rem;
+}
+
+.staff-summary-icon-primary {
+  background: rgba(85, 110, 230, 0.12);
+  color: #556ee6;
+}
+
+.staff-summary-icon-success {
+  background: rgba(52, 195, 143, 0.14);
+  color: #2ca67a;
+}
+
+.staff-summary-icon-info {
+  background: rgba(80, 165, 241, 0.14);
+  color: #3577b8;
+}
+
+.staff-summary-icon-warning {
+  background: rgba(241, 180, 76, 0.16);
+  color: #b7791f;
+}
+
+.active-filter-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid #edf0f5;
+}
+
+.active-filter-chip {
+  display: inline-flex;
+  max-width: 100%;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.35rem 0.45rem 0.35rem 0.65rem;
+  border: 1px solid #dbe3f0;
+  border-radius: 999px;
+  background: #f8f9fb;
+  color: #495057;
+  font-size: 0.78rem;
+  line-height: 1.2;
+}
+
+.active-filter-label {
+  color: #74788d;
   font-weight: 600;
-  padding: 0.35rem 0.65rem;
+}
+
+.active-filter-value {
+  max-width: 220px;
+  overflow: hidden;
+  color: #2a3042;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.active-filter-remove {
+  display: inline-flex;
+  width: 20px;
+  height: 20px;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: #74788d;
+}
+
+.active-filter-remove:hover {
+  background: #e9edf5;
+  color: #2a3042;
+}
+
+.staff-page-size {
+  width: 150px;
+  min-width: 150px;
+}
+
+.staff-table {
+  min-width: 940px;
+}
+
+.staff-table th {
+  color: #74788d;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.staff-table td {
+  padding-top: 0.72rem;
+  padding-bottom: 0.72rem;
+}
+
+.staff-person-cell {
+  min-width: 190px;
+}
+
+.staff-name-link {
+  display: block;
+  max-width: 230px;
+  overflow: hidden;
+  color: #2a3042;
+  font-size: 0.92rem;
+  font-weight: 400;
+  text-decoration: none;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.staff-name-link:hover {
+  color: #556ee6;
+}
+
+.staff-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.32rem;
+  color: #74788d;
+  font-size: 0.78rem;
+}
+
+.staff-contact {
+  min-width: 205px;
+}
+
+.staff-contact-line {
+  display: flex;
+  max-width: 250px;
+  align-items: center;
+  gap: 0.4rem;
+  color: #495057;
+  font-size: 0.84rem;
+}
+
+.staff-contact-line span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.staff-status-col {
+  width: 128px;
+  min-width: 128px;
+}
+
+.staff-status-stack {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.18rem;
+}
+
+.staff-status-stack .badge {
+  display: inline-flex;
+  align-items: center;
+  min-width: 76px;
+  justify-content: center;
+  font-size: 0.74rem;
+  line-height: 1.15;
+}
+
+.staff-status-stack small {
+  white-space: nowrap;
+}
+
+.staff-actions-col {
+  width: 260px;
+  min-width: 260px;
+}
+
+.staff-actions {
+  display: inline-flex;
+  flex-wrap: nowrap;
+  justify-content: flex-end;
+  gap: 0.38rem;
+}
+
+.staff-actions .btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 30px;
+  padding-right: 0.52rem;
+  padding-left: 0.52rem;
+  white-space: nowrap;
 }
 
 .table > :not(caption) > * > * {
@@ -971,5 +1252,27 @@ export default {
 
 .avatar-title.bg-soft-primary {
   background-color: rgba(85, 110, 230, 0.18) !important;
+}
+
+@media (max-width: 575.98px) {
+  .staff-page-header .btn {
+    display: inline-flex;
+    flex: 1 1 100%;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .staff-summary-value {
+    font-size: 1.45rem;
+  }
+
+  .active-filter-value {
+    max-width: 145px;
+  }
+
+  .staff-page-size {
+    width: 100%;
+    min-width: 100%;
+  }
 }
 </style>

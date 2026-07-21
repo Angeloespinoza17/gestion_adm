@@ -14,14 +14,19 @@ use Database\Seeders\Modules\SpacesModuleSeeder;
 use Database\Seeders\Modules\StaffModuleSeeder;
 use Database\Seeders\Modules\StaffPermissionModuleSeeder;
 use Database\Seeders\Modules\StudentModuleSeeder;
+use Database\Seeders\Support\PreventsProductionSeeding;
 use Illuminate\Database\Seeder;
 
 class CompleteSoftwareSeeder extends Seeder
 {
+    use PreventsProductionSeeding;
+
     public function run(): void
     {
+        $this->preventProductionSeeding();
         $this->call([
             RbacSeeder::class,
+            InternalCommunicationsSeeder::class,
             TaskSeeder::class,
             ChileLocationSeeder::class,
             SchoolDepartmentSeeder::class,
@@ -31,6 +36,7 @@ class CompleteSoftwareSeeder extends Seeder
             InventoryCatalogSeeder::class,
             StudentModuleSeeder::class,
             StaffModuleSeeder::class,
+            UserSeeder::class,
             SpacesModuleSeeder::class,
             InventoryModuleSeeder::class,
             InventoryManagementSeeder::class,
@@ -46,6 +52,12 @@ class CompleteSoftwareSeeder extends Seeder
             AccountingModuleSeeder::class,
             RemunerationSeeder::class,
             InformaticaSeeder::class,
+            PermissionBackfillSeeder::class,
+            PermissionGroupSeeder::class,
+            AttendancePermissionSeeder::class,
+            NavigationModuleBackfillSeeder::class,
+            RoleModulePermissionSyncSeeder::class,
+            RoleSuperAdminUserSeeder::class,
         ]);
     }
 }

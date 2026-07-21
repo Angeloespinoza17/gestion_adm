@@ -2,6 +2,8 @@
 
 namespace Database\Seeders\Modules;
 
+use Database\Seeders\Support\PreventsProductionSeeding;
+
 use App\Models\AcademicYear;
 use App\Models\CourseSection;
 use App\Models\EducationLevel;
@@ -18,8 +20,11 @@ use Database\Seeders\Support\ModuleSeeder;
 
 class ScheduleModuleSeeder extends ModuleSeeder
 {
+    use PreventsProductionSeeding;
+
     public function run(): void
     {
+        $this->preventProductionSeeding();
         $year = AcademicYear::query()->where('is_active', true)->first()
             ?: AcademicYear::query()->orderByDesc('year')->first();
 

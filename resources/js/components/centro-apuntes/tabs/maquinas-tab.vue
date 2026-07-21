@@ -59,6 +59,9 @@ export default {
     };
   },
   computed: {
+    canManage() {
+      return Boolean(this.catalogs.capabilities?.can_manage_machines);
+    },
     typeOptions() {
       return normalizeOptions(this.catalogs.machine_types || []);
     },
@@ -203,7 +206,7 @@ export default {
           title="Ayuda: máquinas"
           text="Aquí se gestionan impresoras, fotocopiadoras y equipos del centro de apuntes, incluyendo su estado, responsable y costo estimado por hoja."
         />
-        <BButton variant="primary" @click="openCreate">Nueva máquina</BButton>
+        <BButton v-if="canManage" variant="primary" @click="openCreate"><i class="bx bx-plus me-1"></i>Nueva máquina</BButton>
       </div>
     </div>
 
@@ -235,6 +238,8 @@ export default {
       <BTable
         v-else
         responsive
+        show-empty
+        empty-text="No hay máquinas que coincidan con los filtros."
         :items="items"
         :fields="[
           { key: 'name', label: 'Máquina' },
@@ -266,8 +271,8 @@ export default {
         <template #cell(actions)="{ item }">
           <div class="d-flex flex-wrap gap-2">
             <BButton size="sm" variant="outline-info" @click="openUsage(item)">Uso</BButton>
-            <BButton size="sm" variant="outline-primary" @click="openEdit(item)">Editar</BButton>
-            <BButton size="sm" variant="outline-danger" @click="destroy(item)">Eliminar</BButton>
+            <BButton v-if="canManage" size="sm" variant="outline-primary" @click="openEdit(item)">Editar</BButton>
+            <BButton v-if="canManage" size="sm" variant="outline-danger" @click="destroy(item)">Eliminar</BButton>
           </div>
         </template>
       </BTable>

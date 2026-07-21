@@ -16,8 +16,11 @@ class StorePorterStudentWithdrawalRequest extends FormRequest
 
     protected function prepareForValidation(): void
     {
+        $personRut = $this->input('person_rut');
+        $personRut = is_string($personRut) ? trim($personRut) : null;
+
         $payload = [
-            'person_rut' => Rut::normalize($this->input('person_rut')),
+            'person_rut' => $personRut === '' ? null : (Rut::normalize($personRut) ?: $personRut),
             'force_duplicate_confirmation' => $this->boolean('force_duplicate_confirmation'),
             'approve_override' => $this->boolean('approve_override'),
         ];
@@ -30,11 +33,7 @@ class StorePorterStudentWithdrawalRequest extends FormRequest
         return [
             'student_profile_id' => ['required', 'integer', 'exists:student_profiles,id'],
             'person_name' => ['required', 'string', 'max:191'],
-            'person_rut' => ['nullable', 'string', 'max:20', function ($attribute, $value, $fail) {
-                if ($value !== null && $value !== '' && !Rut::isValid($value)) {
-                    $fail('El RUT ingresado no es válido.');
-                }
-            }],
+            'person_rut' => ['nullable', 'string', 'max:20'],
             'person_relationship' => ['required', Rule::in(array_column(PorterStudentWithdrawal::RELATIONSHIP_OPTIONS, 'value'))],
             'person_phone' => ['nullable', 'string', 'max:50'],
             'reason' => ['required', Rule::in(array_column(PorterStudentWithdrawal::REASON_OPTIONS, 'value'))],

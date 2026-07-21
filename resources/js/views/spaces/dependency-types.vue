@@ -3,6 +3,7 @@ import axios from "axios";
 import Layout from "../../layouts/main.vue";
 import LoadingState from "../../components/ui/loading-state.vue";
 import Swal from "sweetalert2";
+import "./shared.css";
 
 const emptyForm = () => ({
   id: null,
@@ -41,6 +42,36 @@ export default {
     },
     canDelete() {
       return this.permissions.includes("eliminar_dependencias");
+    },
+    summaryCards() {
+      return [
+        {
+          label: "Tipos",
+          value: this.formatInteger(this.types.length),
+          detail: "clasificaciones visibles",
+          icon: "bx-category",
+          tone: "blue",
+        },
+        {
+          label: "Activos",
+          value: this.formatInteger(this.types.filter((item) => item.active).length),
+          detail: "disponibles para catálogo",
+          icon: "bx-check-circle",
+          tone: "green",
+        },
+        {
+          label: "Dependencias",
+          value: this.formatInteger(
+            this.types.reduce((total, item) => total + Number(item.dependencies_count || 0), 0)
+          ),
+          detail: "asociadas a tipos",
+          icon: "bx-buildings",
+          tone: "slate",
+        },
+      ];
+    },
+    hasActiveSearch() {
+      return Boolean(this.search);
     },
   },
   mounted() {
@@ -135,6 +166,15 @@ export default {
         this.error = this.formatError(error);
       }
     },
+    resetFilters() {
+      this.search = "";
+      this.load();
+    },
+    formatInteger(value) {
+      return Number(value || 0).toLocaleString("es-CL", {
+        maximumFractionDigits: 0,
+      });
+    },
     formatError(error) {
       const errors = error?.response?.data?.errors || null;
       return (
@@ -150,65 +190,158 @@ export default {
 
 <template>
   <Layout>
-    <div class="d-flex justify-content-between align-items-center mb-4">
-      <div>
-        <h4 class="mb-0">Tipos de dependencia</h4>
-        <div class="text-muted">Catálogo editable para clasificar salas, laboratorios y recintos.</div>
-      </div>
-      <BButton v-if="canCreate" variant="primary" @click="openCreate">Nuevo tipo</BButton>
-    </div>
-
-    <BCard class="mb-3">
-      <div class="row g-3 align-items-end">
-        <div class="col-md-4">
-          <label class="form-label">Buscar</label>
-          <BFormInput v-model="search" placeholder="Nombre o descripción" @keyup.enter="load" />
+    <div class="spaces-shell">
+      <section class="spaces-hero">
+        <div class="spaces-hero__body">
+          <div class="spaces-eyebrow">Dependencias y reservas</div>
+          <h4>Tipos de dependencia</h4>
+          <p>Catálogo editable para clasificar salas, laboratorios, oficinas y recintos operativos.</p>
         </div>
-        <div class="col-md-3">
-          <BButton variant="secondary" @click="load">Buscar</BButton>
+        <div class="spaces-actions">
+          <router-link to="/spaces/dependencies" class="btn btn-outline-secondary">
+            <i class="bx bx-arrow-back"></i>
+            <span>Dependencias</span>
+          </router-link>
+          <BButton v-if="canCreate" variant="primary" @click="openCreate">
+            <i class="bx bx-plus"></i>
+            <span>Nuevo tipo</span>
+          </BButton>
+        </div>
+      </section>
+
+      <div class="spaces-summary-grid">
+        <div
+          v-for="card in summaryCards"
+          :key="card.label"
+          class="spaces-summary-card"
+          :class="`spaces-summary-card--${card.tone}`"
+        >
+          <div class="spaces-summary-icon">
+            <i :class="`bx ${card.icon}`"></i>
+          </div>
+          <div>
+            <span>{{ card.label }}</span>
+            <strong>{{ card.value }}</strong>
+            <small>{{ card.detail }}</small>
+          </div>
         </div>
       </div>
-    </BCard>
 
-    <BAlert v-if="error" variant="danger" show class="mb-3">{{ error }}</BAlert>
+      <section class="spaces-panel">
+        <div class="spaces-panel-header">
+          <div>
+            <div class="spaces-eyebrow">Filtros</div>
+            <h5 class="spaces-panel-title">Buscar clasificación</h5>
+          </div>
+        </div>
+        <div class="spaces-filter-grid">
+          <label class="spaces-field">
+            <span>Buscar</span>
+            <BFormInput v-model="search" placeholder="Nombre o descripción" @keyup.enter="load" />
+          </label>
+          <div class="spaces-filter-actions">
+            <BButton variant="primary" :disabled="loading" @click="load">
+              <i class="bx bx-search"></i>
+              <span>Buscar</span>
+            </BButton>
+            <BButton variant="outline-secondary" :disabled="loading || !hasActiveSearch" @click="resetFilters">
+              <i class="bx bx-x"></i>
+              <span>Limpiar</span>
+            </BButton>
+          </div>
+        </div>
+      </section>
 
-    <BCard>
-      <BTable
-        :items="types"
-        :busy="loading"
-        :fields="[
-          { key: 'name', label: 'Tipo' },
-          { key: 'dependencies_count', label: 'Dependencias' },
-          { key: 'active', label: 'Activo' },
-          { key: 'actions', label: 'Acciones' },
-        ]"
-        small
-      >
-        <template #table-busy>
+      <BAlert v-if="error" variant="danger" show class="mb-0">{{ error }}</BAlert>
+
+      <section class="spaces-panel">
+        <div class="spaces-panel-header">
+          <div>
+            <div class="spaces-eyebrow">Listado</div>
+            <h5 class="spaces-panel-title">Tipos registrados</h5>
+          </div>
+          <div class="spaces-panel-meta">{{ formatInteger(types.length) }} resultados</div>
+        </div>
+
+        <div v-if="loading" class="spaces-empty-state">
           <LoadingState message="Cargando tipos de dependencia..." compact />
-        </template>
-        <template #cell(name)="{ item }">
-          <div class="d-flex align-items-center gap-2">
-            <span class="rounded-circle border" :style="{ width: '14px', height: '14px', backgroundColor: item.color || '#adb5bd' }"></span>
-            <div>
-              <div class="fw-semibold">{{ item.name }}</div>
-              <div class="text-muted small">{{ item.description || "-" }}</div>
-            </div>
-          </div>
-        </template>
-        <template #cell(active)="{ item }">
-          <BBadge :variant="item.active ? 'success' : 'secondary'">
-            {{ item.active ? "Sí" : "No" }}
-          </BBadge>
-        </template>
-        <template #cell(actions)="{ item }">
-          <div class="d-flex gap-2">
-            <BButton v-if="canEdit" size="sm" variant="info" @click="openEdit(item)">Editar</BButton>
-            <BButton v-if="canDelete" size="sm" variant="danger" @click="remove(item)">Eliminar</BButton>
-          </div>
-        </template>
-      </BTable>
-    </BCard>
+        </div>
+        <div v-else class="spaces-table-wrap">
+          <table class="table spaces-data-table spaces-data-table--compact">
+            <thead>
+              <tr>
+                <th>Tipo</th>
+                <th class="text-center">Dependencias</th>
+                <th class="text-center">Estado</th>
+                <th class="text-center">Acciones</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="item in types" :key="item.id">
+                <td>
+                  <div class="d-flex align-items-center gap-2">
+                    <span
+                      class="rounded-circle border"
+                      :style="{ width: '0.75rem', height: '0.75rem', backgroundColor: item.color || '#adb5bd' }"
+                    ></span>
+                    <div>
+                      <div class="spaces-table-title">{{ item.name }}</div>
+                      <span class="spaces-table-subtitle">{{ item.description || "Sin descripción" }}</span>
+                    </div>
+                  </div>
+                </td>
+                <td class="text-center">
+                  <span class="spaces-count-pill">{{ formatInteger(item.dependencies_count) }}</span>
+                </td>
+                <td class="text-center">
+                  <span
+                    class="spaces-status-pill"
+                    :class="item.active ? 'spaces-status-pill--active' : 'spaces-status-pill--inactive'"
+                  >
+                    {{ item.active ? "Activo" : "Inactivo" }}
+                  </span>
+                </td>
+                <td>
+                  <div class="spaces-row-actions">
+                    <BButton
+                      v-if="canEdit"
+                      size="sm"
+                      variant="outline-info"
+                      title="Editar"
+                      aria-label="Editar tipo"
+                      @click="openEdit(item)"
+                    >
+                      <i class="bx bx-edit"></i>
+                      <span>Editar</span>
+                    </BButton>
+                    <BButton
+                      v-if="canDelete"
+                      size="sm"
+                      variant="outline-danger"
+                      title="Eliminar"
+                      aria-label="Eliminar tipo"
+                      @click="remove(item)"
+                    >
+                      <i class="bx bx-trash"></i>
+                      <span>Eliminar</span>
+                    </BButton>
+                  </div>
+                </td>
+              </tr>
+              <tr v-if="types.length === 0">
+                <td colspan="4">
+                  <div class="spaces-empty-state">
+                    <i class="bx bx-category"></i>
+                    <strong>No hay tipos para mostrar</strong>
+                    <span>Registra una clasificación o limpia la búsqueda.</span>
+                  </div>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </div>
 
     <BModal v-model="showModal" :title="isEditing ? 'Editar tipo' : 'Nuevo tipo'" hide-footer>
       <BAlert v-if="error" variant="danger" show class="mb-3">{{ error }}</BAlert>

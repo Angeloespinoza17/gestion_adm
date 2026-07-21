@@ -24,7 +24,7 @@ class ItEquipmentController extends Controller
         $search = trim((string) $request->query('search'));
 
         $query = ItEquipment::query()
-            ->with(['responsibleUser:id,name,email', 'createdBy:id,name', 'updatedBy:id,name'])
+            ->with(['inventoryItem:id,code,name,image_path', 'responsibleUser:id,name,email', 'createdBy:id,name', 'updatedBy:id,name'])
             ->withCount(['loans', 'maintenanceReports'])
             ->when($search !== '', function ($builder) use ($search) {
                 $builder->where(function ($inner) use ($search) {
@@ -66,6 +66,9 @@ class ItEquipmentController extends Controller
         return response()->json([
             'data' => $equipment->load([
                 'responsibleUser:id,name,email',
+                'inventoryItem.category:id,name,slug',
+                'inventoryItem.subcategory:id,category_id,name,slug',
+                'inventoryItem.dependency:id,code,name',
                 'attachments.uploadedBy:id,name',
                 'loans.attachments.uploadedBy:id,name',
                 'loans.deliveredBy:id,name',

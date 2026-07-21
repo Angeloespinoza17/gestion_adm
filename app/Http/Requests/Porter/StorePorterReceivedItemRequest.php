@@ -16,8 +16,11 @@ class StorePorterReceivedItemRequest extends FormRequest
 
     protected function prepareForValidation(): void
     {
+        $receivedFromRut = $this->input('received_from_rut');
+        $receivedFromRut = is_string($receivedFromRut) ? trim($receivedFromRut) : null;
+
         $this->merge([
-            'received_from_rut' => Rut::normalize($this->input('received_from_rut')),
+            'received_from_rut' => $receivedFromRut === '' ? null : (Rut::normalize($receivedFromRut) ?: $receivedFromRut),
         ]);
     }
 
@@ -30,11 +33,7 @@ class StorePorterReceivedItemRequest extends FormRequest
             'staff_id' => ['nullable', 'integer', 'exists:staff,id'],
             'department_id' => ['nullable', 'integer', 'exists:departments,id'],
             'received_from_name' => ['required', 'string', 'max:191'],
-            'received_from_rut' => ['nullable', 'string', 'max:20', function ($attribute, $value, $fail) {
-                if ($value !== null && $value !== '' && !Rut::isValid($value)) {
-                    $fail('El RUT ingresado no es válido.');
-                }
-            }],
+            'received_from_rut' => ['nullable', 'string', 'max:20'],
             'received_from_phone' => ['nullable', 'string', 'max:50'],
             'item_type' => ['required', Rule::in(array_column(PorterReceivedItem::ITEM_TYPE_OPTIONS, 'value'))],
             'description' => ['required', 'string'],

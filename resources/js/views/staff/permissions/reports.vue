@@ -2,15 +2,20 @@
 import axios from "axios";
 import Layout from "../../../layouts/main.vue";
 import LoadingState from "../../../components/ui/loading-state.vue";
+import EmptyState from "../../../components/staff/permissions/empty-state.vue";
+import MetricCard from "../../../components/staff/permissions/metric-card.vue";
+import PageHeader from "../../../components/staff/permissions/page-header.vue";
+import StatusBadge from "../../../components/staff/permissions/status-badge.vue";
 import Multiselect from "@vueform/multiselect";
 import { getPdfMake } from "../../../utils/pdfmake";
 
 export default {
-  components: { Layout, LoadingState, Multiselect },
+  components: { Layout, LoadingState, EmptyState, MetricCard, PageHeader, StatusBadge, Multiselect },
   data() {
     return {
       loading: false,
       exporting: false,
+      showAdvancedFilters: false,
       error: null,
       catalogs: { staff: [], departments: [], types: [], statuses: [] },
       filters: {
@@ -22,8 +27,6 @@ export default {
         with_pay: null,
         requires_replacement: null,
         affects_salary: null,
-        month: null,
-        year: new Date().getFullYear(),
         late_or_urgent: null,
       },
       rows: [],
@@ -49,6 +52,14 @@ export default {
         { value: null, label: "Todos" },
         { value: true, label: "Sí" },
         { value: false, label: "No" },
+      ];
+    },
+    summaryCards() {
+      return [
+        { key: "total", label: "Total", icon: "bx-folder-open", variant: "primary", hint: "Registros filtrados" },
+        { key: "con_goce", label: "Con goce", icon: "bx-wallet", variant: "success", hint: "Permisos remunerados" },
+        { key: "sin_goce", label: "Sin goce", icon: "bx-wallet-alt", variant: "neutral", hint: "Impacto remuneracional" },
+        { key: "pendientes", label: "Pendientes", icon: "bx-time-five", variant: "warning", hint: "En flujo de revisión" },
       ];
     },
   },
@@ -95,8 +106,6 @@ export default {
         with_pay: null,
         requires_replacement: null,
         affects_salary: null,
-        month: null,
-        year: new Date().getFullYear(),
         late_or_urgent: null,
       };
       this.loadRows(1);
@@ -113,6 +122,20 @@ export default {
         reemplazo: item.requires_replacement ? "Sí" : "No",
         afecta_remuneracion: item.affects_salary ? "Sí" : "No",
       };
+    },
+    formatDate(value) {
+      if (!value) return "-";
+      const [year, month, day] = String(value).split(" ")[0].split("-");
+      return year && month && day ? `${day}/${month}/${year}` : value;
+    },
+    paymentBadge(value) {
+      if (value === null || value === undefined) {
+        return { label: "Pendiente", variant: "warning", icon: "bx-time-five" };
+      }
+
+      return value
+        ? { label: "Con goce", variant: "success", icon: "bx-wallet" }
+        : { label: "Sin goce", variant: "secondary", icon: "bx-wallet-alt" };
     },
     exportCsv() {
       const lines = [
@@ -175,91 +198,136 @@ export default {
 
 <template>
   <Layout>
-    <div class="d-flex justify-content-between align-items-center mb-3">
-      <div>
-        <h4 class="mb-0">Reportes de permisos</h4>
-        <div class="text-muted">Filtros por funcionario, área, tipo, estado y efectos administrativos.</div>
-      </div>
-      <div class="btn-group">
-        <BButton variant="outline-secondary" @click="exportCsv">CSV</BButton>
-        <BButton variant="outline-secondary" @click="exportExcel">Excel</BButton>
-        <BButton variant="outline-primary" @click="exportPdf">PDF</BButton>
-      </div>
-    </div>
+    <PageHeader
+      title="Reportes de permisos"
+      subtitle="Permisos del año en curso por funcionario, área, tipo, estado y efectos administrativos."
+      icon="bx-bar-chart-alt-2"
+    >
+      <template #actions>
+        <div class="d-flex align-items-center gap-2">
+          <BButton variant="outline-secondary" :disabled="!rows.length" @click="exportCsv">
+            <i class="bx bx-file me-1"></i>CSV
+          </BButton>
+          <BButton
+            class="permission-file-button permission-pdf-button"
+            variant="outline-light"
+            :disabled="!rows.length"
+            aria-label="Descargar reporte PDF"
+            title="Descargar reporte PDF"
+            @click="exportPdf"
+          >
+            <i class="mdi mdi-file-pdf-box"></i>
+          </BButton>
+          <BButton
+            class="permission-file-button permission-excel-button"
+            variant="outline-light"
+            :disabled="!rows.length"
+            aria-label="Descargar reporte Excel"
+            title="Descargar reporte Excel"
+            @click="exportExcel"
+          >
+            <i class="mdi mdi-file-excel-box"></i>
+          </BButton>
+        </div>
+      </template>
+    </PageHeader>
 
     <BAlert v-if="error" variant="danger" show>{{ error }}</BAlert>
 
-    <BCard class="mb-3">
-      <div class="row g-3">
-        <div class="col-lg-3">
-          <label class="form-label">Búsqueda</label>
-          <BFormInput v-model="filters.search" />
+    <BCard class="permission-card permission-compact-filter mb-3">
+      <template #header>
+        <div class="d-flex flex-wrap align-items-center justify-content-between gap-2">
+          <div class="permission-section-title mb-0">
+            <i class="bx bx-filter-alt"></i>
+            <span>Filtros</span>
+          </div>
+          <div class="d-flex flex-wrap align-items-center gap-2">
+            <BButton size="sm" variant="primary" @click="loadRows(1)">
+              <i class="bx bx-filter-alt me-1"></i>Filtrar
+            </BButton>
+            <BButton size="sm" variant="outline-secondary" @click="resetFilters">
+              <i class="bx bx-reset me-1"></i>Limpiar
+            </BButton>
+            <BButton size="sm" variant="outline-primary" @click="showAdvancedFilters = !showAdvancedFilters">
+              <i :class="showAdvancedFilters ? 'bx bx-chevron-up me-1' : 'bx bx-chevron-down me-1'"></i>
+              {{ showAdvancedFilters ? "Menos" : "Más filtros" }}
+            </BButton>
+          </div>
         </div>
-        <div class="col-lg-3">
+      </template>
+      <div class="row g-2 align-items-end">
+        <div class="col-lg-3 col-xl-4">
+          <label class="form-label">Búsqueda</label>
+          <div class="permission-input-icon">
+            <i class="bx bx-search"></i>
+            <BFormInput v-model="filters.search" size="sm" placeholder="Funcionario, tipo o motivo" @keyup.enter="loadRows(1)" />
+          </div>
+        </div>
+        <div class="col-lg-2">
           <label class="form-label">Funcionario</label>
           <Multiselect v-model="filters.staff_id" :options="staffOptions" :searchable="true" />
         </div>
-        <div class="col-lg-3">
-          <label class="form-label">Departamento</label>
-          <Multiselect v-model="filters.department_id" :options="departmentOptions" :searchable="true" />
-        </div>
-        <div class="col-lg-3">
+        <div class="col-lg-2">
           <label class="form-label">Tipo</label>
           <Multiselect v-model="filters.permission_type_id" :options="typeOptions" :searchable="true" />
         </div>
-        <div class="col-lg-3">
+        <div class="col-lg-2">
           <label class="form-label">Estado</label>
           <Multiselect v-model="filters.status" :options="statusOptions" :searchable="true" />
         </div>
-        <div class="col-lg-2">
+      </div>
+      <div v-if="showAdvancedFilters" class="row g-2 align-items-end mt-2">
+        <div class="col-md-6 col-xl-3">
+          <label class="form-label">Departamento</label>
+          <Multiselect v-model="filters.department_id" :options="departmentOptions" :searchable="true" />
+        </div>
+        <div class="col-md-6 col-xl-2">
           <label class="form-label">Con goce</label>
           <Multiselect v-model="filters.with_pay" :options="booleanOptions" />
         </div>
-        <div class="col-lg-2">
-          <label class="form-label">Requiere reemplazo</label>
+        <div class="col-md-6 col-xl-2">
+          <label class="form-label">Reemplazo</label>
           <Multiselect v-model="filters.requires_replacement" :options="booleanOptions" />
         </div>
-        <div class="col-lg-2">
-          <label class="form-label">Afecta remuneración</label>
+        <div class="col-md-6 col-xl-2">
+          <label class="form-label">Remuneración</label>
           <Multiselect v-model="filters.affects_salary" :options="booleanOptions" />
         </div>
-        <div class="col-lg-1">
-          <label class="form-label">Mes</label>
-          <BFormInput v-model="filters.month" type="number" min="1" max="12" />
-        </div>
-        <div class="col-lg-1">
-          <label class="form-label">Año</label>
-          <BFormInput v-model="filters.year" type="number" min="2024" />
-        </div>
-        <div class="col-lg-2">
+        <div class="col-md-6 col-xl-3">
           <label class="form-label">Fuera de plazo / urgencia</label>
           <Multiselect v-model="filters.late_or_urgent" :options="booleanOptions" />
         </div>
       </div>
-      <div class="d-flex gap-2 mt-3">
-        <BButton variant="primary" @click="loadRows(1)">Filtrar</BButton>
-        <BButton variant="outline-secondary" @click="resetFilters">Limpiar</BButton>
-      </div>
     </BCard>
 
     <div class="row g-3 mb-3">
-      <div class="col-md-3" v-for="(label, key) in {
-        total: 'Total',
-        con_goce: 'Con goce',
-        sin_goce: 'Sin goce',
-        pendientes: 'Pendientes'
-      }" :key="key">
-        <BCard>
-          <div class="text-muted small">{{ label }}</div>
-          <div class="h2 mb-0">{{ summary[key] ?? 0 }}</div>
-        </BCard>
+      <div v-for="card in summaryCards" :key="card.key" class="col-md-6 col-xl-3">
+        <MetricCard
+          :label="card.label"
+          :value="summary[card.key] ?? 0"
+          :hint="card.hint"
+          :icon="card.icon"
+          :variant="card.variant"
+        />
       </div>
     </div>
 
-    <BCard title="Resultado">
+    <BCard class="permission-card">
+      <template #header>
+        <div class="permission-section-title mb-0">
+          <i class="bx bx-table"></i>
+          <span>Resultado</span>
+        </div>
+      </template>
       <LoadingState v-if="loading" message="Cargando reporte..." compact />
+      <EmptyState
+        v-else-if="!rows.length"
+        icon="bx-search-alt"
+        title="Sin resultados"
+        text="No hay permisos para los filtros seleccionados."
+      />
       <div v-else class="table-responsive">
-        <table class="table table-sm align-middle mb-0">
+        <table class="table table-sm align-middle permission-table">
           <thead>
             <tr>
               <th>Funcionario</th>
@@ -273,16 +341,43 @@ export default {
           </thead>
           <tbody>
             <tr v-for="item in rows" :key="item.id">
-              <td>{{ item.staff?.full_name || "-" }}</td>
+              <td>
+                <div class="fw-semibold">{{ item.staff?.full_name || "-" }}</div>
+                <div class="text-muted small">{{ item.reason || "Sin motivo registrado" }}</div>
+              </td>
               <td>{{ item.permission_type?.name || "-" }}</td>
-              <td>{{ item.status }}</td>
-              <td>{{ item.start_date }} - {{ item.end_date }}</td>
+              <td><StatusBadge :status="item.status" /></td>
+              <td>{{ formatDate(item.start_date) }} - {{ formatDate(item.end_date) }}</td>
               <td>{{ item.duration_label || "-" }}</td>
-              <td>{{ item.with_pay === null ? "Pendiente" : item.with_pay ? "Sí" : "No" }}</td>
-              <td>{{ item.requires_replacement ? "Sí" : "No" }}</td>
+              <td>
+                <StatusBadge
+                  :label="paymentBadge(item.with_pay).label"
+                  :variant="paymentBadge(item.with_pay).variant"
+                  :icon="paymentBadge(item.with_pay).icon"
+                />
+              </td>
+              <td>
+                <StatusBadge
+                  :status="item.requires_replacement ? 'activo' : 'inactivo'"
+                  :label="item.requires_replacement ? 'Sí' : 'No'"
+                  :variant="item.requires_replacement ? 'info' : 'secondary'"
+                  :icon="item.requires_replacement ? 'bx-transfer-alt' : 'bx-minus'"
+                />
+              </td>
             </tr>
           </tbody>
         </table>
+      </div>
+
+      <div v-if="pagination.total" class="d-flex flex-wrap justify-content-between align-items-center gap-2 mt-3">
+        <div class="text-muted small">Total: {{ pagination.total }}</div>
+        <BPagination
+          v-model="pagination.current_page"
+          :total-rows="pagination.total"
+          :per-page="15"
+          pills
+          @update:model-value="loadRows"
+        />
       </div>
     </BCard>
   </Layout>

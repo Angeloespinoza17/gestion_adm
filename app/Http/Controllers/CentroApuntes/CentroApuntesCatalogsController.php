@@ -35,6 +35,20 @@ class CentroApuntesCatalogsController extends Controller
             ->get(['id', 'name', 'email', 'staff_id']);
 
         return response()->json([
+            'capabilities' => [
+                'can_create_request' => $this->accessService->canCreateRequest($request->user()),
+                'can_edit_request' => $this->accessService->canEditRequest($request->user()),
+                'can_delete_request' => $this->accessService->canDeleteRequest($request->user()),
+                'can_change_request_status' => $this->accessService->canChangeRequestStatus($request->user()),
+                'can_register_request_delivery' => $this->accessService->canRegisterRequestDelivery($request->user()),
+                'can_manage_subjects' => $this->accessService->canManageSubjects($request->user()),
+                'can_manage_machines' => $this->accessService->canManageMachines($request->user()),
+                'can_manage_inventory' => $this->accessService->canManageInventory($request->user()),
+                'can_register_stock_movements' => $this->accessService->canRegisterStockMovements($request->user()),
+                'can_request_materials' => $this->accessService->canRequestMaterials($request->user()),
+                'can_approve_deliveries' => $this->accessService->canApproveDeliveries($request->user()),
+                'can_export_reports' => $this->accessService->canExportReports($request->user()),
+            ],
             'task_types' => $this->toOptions(CentroApuntesSolicitud::TASK_TYPES),
             'paper_sizes' => $this->toOptions(CentroApuntesSolicitud::PAPER_SIZES),
             'request_priorities' => $this->toOptions(CentroApuntesSolicitud::PRIORITY_OPTIONS),

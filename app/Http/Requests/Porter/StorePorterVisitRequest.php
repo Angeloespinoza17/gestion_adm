@@ -14,8 +14,11 @@ class StorePorterVisitRequest extends FormRequest
 
     protected function prepareForValidation(): void
     {
+        $visitorRut = $this->input('visitor_rut');
+        $visitorRut = is_string($visitorRut) ? trim($visitorRut) : null;
+
         $this->merge([
-            'visitor_rut' => Rut::normalize($this->input('visitor_rut')),
+            'visitor_rut' => $visitorRut === '' ? null : (Rut::normalize($visitorRut) ?: $visitorRut),
         ]);
     }
 
@@ -23,11 +26,7 @@ class StorePorterVisitRequest extends FormRequest
     {
         return [
             'visitor_name' => ['required', 'string', 'max:191'],
-            'visitor_rut' => ['nullable', 'string', 'max:20', function ($attribute, $value, $fail) {
-                if ($value !== null && $value !== '' && !Rut::isValid($value)) {
-                    $fail('El RUT ingresado no es válido.');
-                }
-            }],
+            'visitor_rut' => ['nullable', 'string', 'max:20'],
             'purpose' => ['required', 'string', 'max:191'],
             'visited_staff_id' => ['nullable', 'integer', 'exists:staff,id'],
             'visited_department_id' => ['nullable', 'integer', 'exists:departments,id'],

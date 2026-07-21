@@ -19,6 +19,7 @@ class InventoryCategoryController extends Controller
 
         $query = InventoryCategory::query()
             ->withCount('items')
+            ->withCount('subcategories')
             ->when($search !== '', function ($query) use ($search) {
                 $query->where(function ($query) use ($search) {
                     $query

@@ -84,7 +84,13 @@ export async function downloadInfirmaryFile(url, fileName = null) {
 
 export function formatInfirmaryDate(value) {
   if (!value) return "-";
-  return new Date(value).toLocaleDateString("es-CL", {
+  const rawValue = String(value).slice(0, 10);
+  const dateOnlyMatch = rawValue.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  const date = dateOnlyMatch
+    ? new Date(Number(dateOnlyMatch[1]), Number(dateOnlyMatch[2]) - 1, Number(dateOnlyMatch[3]))
+    : new Date(value);
+
+  return date.toLocaleDateString("es-CL", {
     year: "numeric",
     month: "2-digit",
     day: "2-digit",
@@ -109,7 +115,19 @@ export function toInputDate(value) {
 
 export function toInputDateTime(value) {
   if (!value) return "";
-  return String(value).replace(" ", "T").slice(0, 16);
+  const rawValue = String(value);
+
+  // Los valores ISO con zona horaria (por ejemplo, Date#toISOString) deben
+  // convertirse a la hora local antes de asignarlos a un datetime-local.
+  if (/T.*(?:Z|[+-]\d{2}:?\d{2})$/i.test(rawValue)) {
+    const date = new Date(rawValue);
+    if (!Number.isNaN(date.getTime())) {
+      const pad = (part) => String(part).padStart(2, "0");
+      return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+    }
+  }
+
+  return rawValue.replace(" ", "T").slice(0, 16);
 }
 
 export function humanizeInfirmaryStatus(status) {
@@ -127,6 +145,7 @@ export function statusVariant(status) {
     abierta_diat: "primary",
     disponible: "success",
     vigente: "success",
+    administrada: "success",
     leve: "success",
     contesto: "success",
     cerrado: "success",
@@ -148,6 +167,7 @@ export function statusVariant(status) {
     vencido: "danger",
     vencida: "danger",
     no_contesto: "secondary",
+    no_administrada: "secondary",
     terminada: "secondary",
     sin_acompanante: "light",
   };
@@ -218,37 +238,140 @@ export function downloadExcelWorkbook(fileName, sections) {
   URL.revokeObjectURL(url);
 }
 
-export function downloadPdfReport(fileName, title, subtitle, sections) {
+export function downloadPdfReport(fileName, title, subtitle, sections, context = {}) {
   const pdfMake = getPdfMake();
-  const content = [{ text: title, style: "title" }];
+  const generatedAt = context.generatedAt || new Date().toLocaleString("es-CL");
+  const content = [
+    {
+      columns: [
+        {
+          width: "*",
+          stack: [
+            { text: context.organization || "Gestión Escolar", style: "eyebrow" },
+            { text: title, style: "title" },
+            subtitle ? { text: subtitle, style: "subtitle" } : null,
+          ].filter(Boolean),
+        },
+        {
+          width: 125,
+          stack: [
+            { text: "INFORME ESTADÍSTICO", style: "reportBadge" },
+            { text: `Generado: ${generatedAt}`, style: "generatedAt" },
+          ],
+        },
+      ],
+      margin: [0, 0, 0, 12],
+    },
+    { canvas: [{ type: "line", x1: 0, y1: 0, x2: 515, y2: 0, lineWidth: 2, lineColor: "#3568d4" }] },
+  ];
 
-  if (subtitle) {
-    content.push({ text: subtitle, style: "subtitle" });
+  if (context.summary) {
+    content.push({ text: context.summary, style: "executiveSummary" });
   }
 
   (sections || []).forEach((section) => {
-    content.push({ text: section.title, style: "section" });
+    const columnCount = Math.max(
+      1,
+      section.headers?.length || 0,
+      ...(section.rows || []).map((row) => (Array.isArray(row) ? row.length : 1))
+    );
+    const normalizeCell = (cell) => {
+      if (cell === null || cell === undefined || cell === "") return "-";
+      if (["string", "number", "boolean"].includes(typeof cell)) return cell;
+      return String(cell?.text ?? cell?.label ?? cell?.name ?? "-");
+    };
+    const normalizeRow = (row) => {
+      const cells = (Array.isArray(row) ? row : [row]).map(normalizeCell).slice(0, columnCount);
+      return cells.concat(Array(Math.max(0, columnCount - cells.length)).fill("-"));
+    };
+    const dataRows = section.rows?.length
+      ? section.rows.map(normalizeRow)
+      : [normalizeRow(["Sin datos disponibles"])];
+    const rows = []
+      .concat(section.headers?.length ? [normalizeRow(section.headers)] : [])
+      .concat(dataRows);
+
+    content.push({ text: section.title, style: "section", pageBreak: section.pageBreakBefore ? "before" : undefined });
+    if (section.description) {
+      content.push({ text: section.description, style: "sectionDescription" });
+    }
     content.push({
       table: {
         headerRows: section.headers?.length ? 1 : 0,
-        body: []
-          .concat(section.headers?.length ? [section.headers] : [])
-          .concat(section.rows || []),
+        widths: section.widths?.length === columnCount ? section.widths : Array(columnCount).fill("*"),
+        body: rows,
       },
-      layout: "lightHorizontalLines",
-      margin: [0, 0, 0, 10],
+      layout: {
+        fillColor: (rowIndex) => (rowIndex === 0 && section.headers?.length ? "#eaf0fb" : rowIndex % 2 === 0 ? "#f8fafc" : null),
+        hLineColor: () => "#dfe5ee",
+        vLineColor: () => "#dfe5ee",
+        hLineWidth: () => 0.5,
+        vLineWidth: () => 0.5,
+        paddingLeft: () => 6,
+        paddingRight: () => 6,
+        paddingTop: () => 5,
+        paddingBottom: () => 5,
+      },
+      margin: [0, 0, 0, 8],
     });
   });
 
+  if (context.charts?.length) {
+    content.push({ text: "Visualizaciones", style: "section", pageBreak: "before" });
+    content.push({
+      columns: context.charts.slice(0, 2).map((chart) => chartColumn(chart)),
+      columnGap: 12,
+      margin: [0, 0, 0, 12],
+    });
+
+    for (let index = 2; index < context.charts.length; index += 2) {
+      content.push({
+        columns: context.charts.slice(index, index + 2).map((chart) => chartColumn(chart)),
+        columnGap: 12,
+        margin: [0, 0, 0, 12],
+      });
+    }
+  }
+
   pdfMake.createPdf({
+    pageSize: "A4",
+    pageMargins: [40, 45, 40, 48],
+    header: (currentPage) => currentPage > 1
+      ? { text: title, alignment: "right", color: "#8791a3", fontSize: 8, margin: [40, 18, 40, 0] }
+      : null,
+    footer: (currentPage, pageCount) => ({
+      columns: [
+        { text: "Documento de uso interno · Información confidencial", color: "#8791a3", fontSize: 7 },
+        { text: `Página ${currentPage} de ${pageCount}`, alignment: "right", color: "#8791a3", fontSize: 7 },
+      ],
+      margin: [40, 14, 40, 0],
+    }),
     content,
     styles: {
-      title: { fontSize: 18, bold: true, color: "#2a3042" },
-      subtitle: { fontSize: 10, color: "#74788d", margin: [0, 0, 0, 10] },
-      section: { fontSize: 12, bold: true, margin: [0, 10, 0, 6] },
+      eyebrow: { fontSize: 8, bold: true, color: "#3568d4", characterSpacing: 1.1, margin: [0, 0, 0, 3] },
+      title: { fontSize: 21, bold: true, color: "#263247" },
+      subtitle: { fontSize: 9, color: "#687386", margin: [0, 4, 0, 0] },
+      reportBadge: { fontSize: 8, bold: true, color: "#ffffff", fillColor: "#3568d4", alignment: "center", margin: [0, 5, 0, 5] },
+      generatedAt: { fontSize: 7, color: "#7b8493", alignment: "right" },
+      executiveSummary: { fontSize: 9, color: "#3f4a5c", fillColor: "#f2f6fc", margin: [0, 12, 0, 3] },
+      section: { fontSize: 12, bold: true, color: "#263247", margin: [0, 12, 0, 6] },
+      sectionDescription: { fontSize: 8, color: "#7b8493", margin: [0, -3, 0, 6] },
+      chartTitle: { fontSize: 9, bold: true, color: "#263247", margin: [0, 0, 0, 4] },
     },
-    defaultStyle: { fontSize: 9 },
+    defaultStyle: { fontSize: 8, color: "#354052" },
   }).download(fileName.endsWith(".pdf") ? fileName : `${fileName}.pdf`);
+}
+
+function chartColumn(chart) {
+  return {
+    width: "*",
+    stack: [
+      { text: chart.title || "Gráfico", style: "chartTitle" },
+      { image: chart.image, fit: [245, 165], alignment: "center" },
+      chart.caption ? { text: chart.caption, fontSize: 7, color: "#7b8493", margin: [0, 4, 0, 0] } : null,
+    ].filter(Boolean),
+    margin: [0, 0, 0, 4],
+  };
 }
 
 export function printInfirmaryHtml(title, html) {

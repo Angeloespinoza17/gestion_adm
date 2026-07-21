@@ -11,11 +11,21 @@ class InfirmaryAttentionTreatment extends Model
 {
     use HasFactory;
 
+    public const CATEGORY_OPTIONS = [
+        ['value' => 'fisico', 'label' => 'Físico'],
+        ['value' => 'emocional', 'label' => 'Emocional'],
+        ['value' => 'derivacion', 'label' => 'Derivación'],
+        ['value' => 'csv', 'label' => 'CSV'],
+        ['value' => 'otro', 'label' => 'OTRO'],
+    ];
+
     public const TYPE_OPTIONS = [
         'compresa_fria',
         'compresa_caliente',
+        'medicamento_sos',
         'curaciones',
         'administracion_medicamento',
+        'apoyo_equipo_formacion',
         'reposo',
         'lavado_heridas',
         'vendaje',
@@ -27,11 +37,36 @@ class InfirmaryAttentionTreatment extends Model
         'otro',
     ];
 
+    public const PHYSICAL_TYPE_OPTIONS = [
+        ['value' => 'compresa_fria', 'label' => 'Compresa fría'],
+        ['value' => 'compresa_caliente', 'label' => 'Compresa de calor'],
+        ['value' => 'administracion_medicamento', 'label' => 'Administración de medicamento'],
+        ['value' => 'medicamento_sos', 'label' => 'Medicamento S.O.S.'],
+        ['value' => 'apoyo_equipo_formacion', 'label' => 'Apoyo equipo formación'],
+        ['value' => 'curaciones', 'label' => 'Curaciones'],
+    ];
+
+    public const DERIVATION_TYPE_OPTIONS = [
+        ['value' => 'sala', 'label' => 'Sala'],
+        ['value' => 'domicilio', 'label' => 'Domicilio'],
+        ['value' => 'samu', 'label' => 'SAMU'],
+        ['value' => 'urgencias', 'label' => 'Urgencias'],
+    ];
+
+    public const DERIVATION_SUPPORT_TEAM_OPTIONS = [
+        ['value' => 'equipo_directivo', 'label' => 'Equipo directivo'],
+        ['value' => 'convivencia', 'label' => 'Convivencia'],
+        ['value' => 'psicosocial', 'label' => 'Psicosocial'],
+    ];
+
     protected $table = 'infirmary_attention_treatments';
 
     protected $fillable = [
         'attention_id',
         'treatment_types',
+        'treatment_categories',
+        'derivation_type',
+        'derivation_support_teams',
         'treatment_other',
         'medication_id',
         'medication_quantity',
@@ -55,6 +90,8 @@ class InfirmaryAttentionTreatment extends Model
 
     protected $casts = [
         'treatment_types' => 'array',
+        'treatment_categories' => 'array',
+        'derivation_support_teams' => 'array',
         'medication_quantity' => 'decimal:2',
         'temperature' => 'decimal:1',
         'weight' => 'decimal:2',

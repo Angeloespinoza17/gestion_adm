@@ -67,14 +67,20 @@
           <div class="contact-form-wrapper">
             <h2 class="text-center mb-4">Escríbenos</h2>
 
-            <form action="https://cnscvaldivia.cl/contacto" method="get" class="php-email-form">
+            <form action="{{ route('public.contact.store') }}" method="post" class="php-email-form">
+              @csrf
+              <input type="text" name="website" value="" tabindex="-1" autocomplete="off" aria-hidden="true" class="d-none">
+
               <div class="row g-3">
                 <div class="col-md-6">
                   <div class="form-group">
                     <div class="input-with-icon">
                       <i class="bi bi-person"></i>
-                      <input type="text" class="form-control" name="nombre" placeholder="Nombre" required>
+                      <input type="text" class="form-control @error('nombre') is-invalid @enderror" name="nombre" value="{{ old('nombre') }}" placeholder="Nombre" required>
                     </div>
+                    @error('nombre')
+                      <div class="text-danger small mt-1">{{ $message }}</div>
+                    @enderror
                   </div>
                 </div>
 
@@ -82,17 +88,35 @@
                   <div class="form-group">
                     <div class="input-with-icon">
                       <i class="bi bi-envelope"></i>
-                      <input type="email" class="form-control" name="correo" placeholder="Correo electrónico" required>
+                      <input type="email" class="form-control @error('correo') is-invalid @enderror" name="correo" value="{{ old('correo') }}" placeholder="Correo electrónico" required>
                     </div>
+                    @error('correo')
+                      <div class="text-danger small mt-1">{{ $message }}</div>
+                    @enderror
                   </div>
                 </div>
 
-                <div class="col-md-12">
+                <div class="col-md-6">
+                  <div class="form-group">
+                    <div class="input-with-icon">
+                      <i class="bi bi-telephone"></i>
+                      <input type="text" class="form-control @error('telefono') is-invalid @enderror" name="telefono" value="{{ old('telefono') }}" placeholder="Teléfono (opcional)">
+                    </div>
+                    @error('telefono')
+                      <div class="text-danger small mt-1">{{ $message }}</div>
+                    @enderror
+                  </div>
+                </div>
+
+                <div class="col-md-6">
                   <div class="form-group">
                     <div class="input-with-icon">
                       <i class="bi bi-text-left"></i>
-                      <input type="text" class="form-control" name="asunto" placeholder="Asunto" required>
+                      <input type="text" class="form-control @error('asunto') is-invalid @enderror" name="asunto" value="{{ old('asunto') }}" placeholder="Asunto" required>
                     </div>
+                    @error('asunto')
+                      <div class="text-danger small mt-1">{{ $message }}</div>
+                    @enderror
                   </div>
                 </div>
 
@@ -100,15 +124,24 @@
                   <div class="form-group">
                     <div class="input-with-icon">
                       <i class="bi bi-chat-dots message-icon"></i>
-                      <textarea class="form-control" name="mensaje" placeholder="Mensaje" style="height: 180px" required></textarea>
+                      <textarea class="form-control @error('mensaje') is-invalid @enderror" name="mensaje" placeholder="Mensaje" style="height: 180px" required>{{ old('mensaje') }}</textarea>
                     </div>
+                    @error('mensaje')
+                      <div class="text-danger small mt-1">{{ $message }}</div>
+                    @enderror
                   </div>
                 </div>
 
                 <div class="col-12">
                   <div class="loading">Cargando</div>
-                  <div class="error-message"></div>
-                  <div class="sent-message">Tu mensaje ha sido enviado. Gracias.</div>
+                  <div class="error-message" style="{{ $errors->any() ? 'display: block;' : '' }}">
+                    @if($errors->any())
+                      Revisa los campos marcados e intenta nuevamente.
+                    @endif
+                  </div>
+                  <div class="sent-message" style="{{ session('contact_success') ? 'display: block;' : '' }}">
+                    {{ session('contact_success') ?: 'Tu mensaje ha sido enviado. Gracias.' }}
+                  </div>
                 </div>
 
                 <div class="col-12 text-center">

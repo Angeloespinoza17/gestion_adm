@@ -378,71 +378,87 @@
       <p>La actividad escolar se expresa en pastoral, deporte, encuentros familiares y participación de todos los estamentos.</p>
     </div>
 
-    <div class="container">
-      <div class="row gy-4">
-        <div class="col-xl-4 col-md-6" data-aos="fade-up" data-aos-delay="100">
-          <article>
-            <div class="post-img">
-              <img src="{{ asset('niceschool/assets/img/blog/blog-post-1.webp') }}" alt="Noticia institucional" class="img-fluid">
-            </div>
-            <p class="post-category">Institucional</p>
-            <h2 class="title">
-              <a href="{{ route('public.news') }}">Proceso de admisión y acompañamiento familiar</a>
-            </h2>
-            <div class="d-flex align-items-center">
-              <img src="{{ asset('niceschool/assets/img/person/person-f-12.webp') }}" alt="Equipo institucional" class="img-fluid post-author-img flex-shrink-0">
-              <div class="post-meta">
-                <p class="post-author">María López</p>
-                <p class="post-date">
-                  <time datetime="2026-05-28">28 mayo 2026</time>
-                </p>
+    <div class="container" data-aos="fade-up" data-aos-delay="100">
+      @if($latestNews->isNotEmpty())
+        <div id="recentNewsCarousel" class="carousel slide recent-news-carousel" data-bs-ride="carousel" data-bs-interval="6500">
+          <div class="carousel-indicators">
+            @foreach($latestNews as $post)
+              <button
+                type="button"
+                data-bs-target="#recentNewsCarousel"
+                data-bs-slide-to="{{ $loop->index }}"
+                class="{{ $loop->first ? 'active' : '' }}"
+                aria-current="{{ $loop->first ? 'true' : 'false' }}"
+                aria-label="Noticia {{ $loop->iteration }}"
+              ></button>
+            @endforeach
+          </div>
+
+          <div class="carousel-inner">
+            @foreach($latestNews as $post)
+              @php
+                $publishedAt = $post->published_at?->copy()->locale('es');
+                $fallbackImage = asset('niceschool/assets/img/blog/blog-post-' . ((($loop->iteration - 1) % 3) + 1) . '.webp');
+                $summary = \Illuminate\Support\Str::limit(strip_tags($post->excerpt ?: $post->body_html ?: $post->body ?: ''), 180);
+              @endphp
+              <div class="carousel-item {{ $loop->first ? 'active' : '' }}">
+                <article class="recent-news-slide">
+                  <div class="row g-0 align-items-stretch">
+                    <div class="col-lg-6">
+                      <a href="{{ route('public.news.show', $post) }}" class="recent-news-image-link">
+                        <img
+                          src="{{ $post->image_url ?: $fallbackImage }}"
+                          alt="{{ $post->image_alt ?: $post->title }}"
+                          class="recent-news-slide-image"
+                        >
+                      </a>
+                    </div>
+                    <div class="col-lg-6">
+                      <div class="recent-news-slide-content">
+                        <p class="post-category">{{ $post->category ?: 'Institucional' }}</p>
+                        <h3>
+                          <a href="{{ route('public.news.show', $post) }}">{{ $post->title }}</a>
+                        </h3>
+                        @if($summary)
+                          <p class="recent-news-summary">{{ $summary }}</p>
+                        @endif
+                        <div class="recent-news-meta">
+                          <img src="{{ asset('brand/logo-cnsc.png') }}" alt="Colegio Nuestra Señora del Carmen">
+                          <div>
+                            <p>{{ $post->author_name ?: 'Colegio Nuestra Señora del Carmen' }}</p>
+                            <time datetime="{{ $post->published_at?->toDateString() }}">
+                              {{ $publishedAt ? $publishedAt->translatedFormat('j F Y') : 'Sin fecha' }}
+                            </time>
+                          </div>
+                        </div>
+                        <a href="{{ route('public.news.show', $post) }}" class="btn btn-primary mt-4">Leer noticia</a>
+                      </div>
+                    </div>
+                  </div>
+                </article>
               </div>
-            </div>
-          </article>
+            @endforeach
+          </div>
+
+          <button class="carousel-control-prev" type="button" data-bs-target="#recentNewsCarousel" data-bs-slide="prev">
+            <span class="carousel-control-prev-icon" aria-hidden="true"></span>
+            <span class="visually-hidden">Anterior</span>
+          </button>
+          <button class="carousel-control-next" type="button" data-bs-target="#recentNewsCarousel" data-bs-slide="next">
+            <span class="carousel-control-next-icon" aria-hidden="true"></span>
+            <span class="visually-hidden">Siguiente</span>
+          </button>
         </div>
 
-        <div class="col-xl-4 col-md-6" data-aos="fade-up" data-aos-delay="200">
-          <article>
-            <div class="post-img">
-              <img src="{{ asset('niceschool/assets/img/blog/blog-post-2.webp') }}" alt="Noticia pastoral" class="img-fluid">
-            </div>
-            <p class="post-category">Pastoral</p>
-            <h2 class="title">
-              <a href="{{ route('public.news') }}">Encuentro de fe y servicio con la comunidad educativa</a>
-            </h2>
-            <div class="d-flex align-items-center">
-              <img src="{{ asset('niceschool/assets/img/person/person-f-13.webp') }}" alt="Encargada de pastoral" class="img-fluid post-author-img flex-shrink-0">
-              <div class="post-meta">
-                <p class="post-author">Allisa Mayer</p>
-                <p class="post-date">
-                  <time datetime="2026-05-21">21 mayo 2026</time>
-                </p>
-              </div>
-            </div>
-          </article>
+        <div class="text-center mt-4">
+          <a href="{{ route('public.news') }}" class="btn btn-outline-primary">Ver todas las noticias</a>
         </div>
-
-        <div class="col-xl-4 col-md-6" data-aos="fade-up" data-aos-delay="300">
-          <article>
-            <div class="post-img">
-              <img src="{{ asset('niceschool/assets/img/blog/blog-post-3.webp') }}" alt="Noticia deportiva" class="img-fluid">
-            </div>
-            <p class="post-category">Deportes</p>
-            <h2 class="title">
-              <a href="{{ route('public.news') }}">Participación estudiantil en actividades deportivas</a>
-            </h2>
-            <div class="d-flex align-items-center">
-              <img src="{{ asset('niceschool/assets/img/person/person-m-10.webp') }}" alt="Profesor de educación física" class="img-fluid post-author-img flex-shrink-0">
-              <div class="post-meta">
-                <p class="post-author">Mark Dower</p>
-                <p class="post-date">
-                  <time datetime="2026-05-14">14 mayo 2026</time>
-                </p>
-              </div>
-            </div>
-          </article>
+      @else
+        <div class="page-card text-center">
+          <h3>Noticias en preparación</h3>
+          <p class="mb-0">Pronto publicaremos nuevas actividades de la comunidad educativa pastoral.</p>
         </div>
-      </div>
+      @endif
     </div>
   </section>
 @endsection

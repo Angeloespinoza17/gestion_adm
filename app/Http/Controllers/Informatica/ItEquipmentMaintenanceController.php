@@ -58,7 +58,6 @@ class ItEquipmentMaintenanceController extends Controller
                 'pending' => ItEquipmentMaintenanceReport::query()->pending()->count(),
                 'closed' => ItEquipmentMaintenanceReport::query()->closed()->count(),
                 'month_total' => ItEquipmentMaintenanceReport::query()->whereDate('maintenance_date', '>=', now()->startOfMonth())->count(),
-                'month_cost' => round((float) ItEquipmentMaintenanceReport::query()->whereDate('maintenance_date', '>=', now()->startOfMonth())->sum('cost_amount'), 2),
             ],
         ]);
     }

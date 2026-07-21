@@ -43,44 +43,52 @@ export default {
       this.search = "";
       this.results = [];
     },
+    clearSearch() {
+      this.search = "";
+      this.results = [];
+    },
   },
 };
 </script>
 
 <template>
-  <div class="position-relative">
+  <div class="pme-search position-relative" role="search">
     <div class="input-group">
       <span class="input-group-text bg-white"><i class="bx bx-search"></i></span>
       <input
         v-model="search"
         type="text"
         class="form-control"
-        placeholder="Buscar PME, objetivo, estrategia, indicador, acción, estudiante, curso o evidencia..."
+        aria-label="Buscar en todo el módulo PME y SEP"
+        autocomplete="off"
+        placeholder="Buscar en PME / SEP..."
         @input="queueSearch"
+        @keyup.enter="performSearch"
+        @keyup.esc="clearSearch"
       />
-      <button class="btn btn-outline-secondary" type="button" :disabled="loading" @click="performSearch">
-        {{ loading ? "Buscando..." : "Buscar" }}
+      <button v-if="search" class="btn btn-light" type="button" aria-label="Limpiar búsqueda" @click="clearSearch">
+        <i class="bx bx-x"></i>
+      </button>
+      <button class="btn btn-outline-secondary" type="button" :disabled="loading || !search.trim()" @click="performSearch">
+        <span v-if="loading" class="spinner-border spinner-border-sm" aria-hidden="true"></span>
+        <i v-else class="bx bx-right-arrow-alt"></i><span class="visually-hidden">Buscar</span>
       </button>
     </div>
 
-    <BCard
-      v-if="results.length"
-      class="position-absolute w-100 border-0 shadow-sm mt-2 z-3"
-      style="max-height: 320px; overflow-y: auto;"
-    >
-      <div
+    <div v-if="results.length" class="pme-search-results" aria-live="polite">
+      <button
         v-for="item in results"
         :key="`${item.type}-${item.id}`"
-        class="d-flex justify-content-between align-items-start gap-2 py-2 border-bottom cursor-pointer"
-        role="button"
+        type="button"
+        class="pme-search-result"
         @click="openResult(item)"
       >
         <div>
-          <div class="fw-semibold">{{ item.label }}</div>
-          <div class="small text-muted">{{ item.subtitle }}</div>
+          <strong>{{ item.label }}</strong>
+          <small>{{ item.subtitle }}</small>
         </div>
         <BBadge variant="light">{{ item.type }}</BBadge>
-      </div>
-    </BCard>
+      </button>
+    </div>
   </div>
 </template>

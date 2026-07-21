@@ -16,8 +16,11 @@ class UpdatePorterReceivedItemStatusRequest extends FormRequest
 
     protected function prepareForValidation(): void
     {
+        $deliveredToRut = $this->input('delivered_to_rut');
+        $deliveredToRut = is_string($deliveredToRut) ? trim($deliveredToRut) : null;
+
         $this->merge([
-            'delivered_to_rut' => Rut::normalize($this->input('delivered_to_rut')),
+            'delivered_to_rut' => $deliveredToRut === '' ? null : (Rut::normalize($deliveredToRut) ?: $deliveredToRut),
         ]);
     }
 
@@ -26,11 +29,7 @@ class UpdatePorterReceivedItemStatusRequest extends FormRequest
         return [
             'status' => ['required', Rule::in(array_column(PorterReceivedItem::STATUS_OPTIONS, 'value'))],
             'delivered_to_name' => ['nullable', 'string', 'max:191'],
-            'delivered_to_rut' => ['nullable', 'string', 'max:20', function ($attribute, $value, $fail) {
-                if ($value !== null && $value !== '' && !Rut::isValid($value)) {
-                    $fail('El RUT ingresado no es válido.');
-                }
-            }],
+            'delivered_to_rut' => ['nullable', 'string', 'max:20'],
             'delivery_observations' => ['nullable', 'string'],
         ];
     }

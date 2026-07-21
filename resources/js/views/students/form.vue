@@ -11,9 +11,19 @@ const emptyForm = () => ({
   registered_name: "",
   rut: "",
   birthdate: "",
+  gender: "",
+  nationality: "",
   email: "",
   phone: "",
   address: "",
+  commune: "",
+  school_admission_date: "",
+  previous_school: "",
+  emergency_contact_name: "",
+  emergency_contact_phone: "",
+  religion: "",
+  accepts_religion_classes: null,
+  ethnicity: "",
   general_status: "activo",
   observations: "",
   pickup_restriction: false,
@@ -26,14 +36,30 @@ const emptyForm = () => ({
   guardian_relationship: "",
   guardian_role: "",
   guardian_rut: "",
+  guardian_passport: "",
   guardian_phone: "",
   guardian_address: "",
+  guardian_commune: "",
+  guardian_photo_authorization: null,
+  guardian_pickup_authorization: null,
+  guardian_marital_status: "",
+  guardian_education_level: "",
+  guardian_last_education_level: "",
+  guardian_occupation: "",
   guardian_email: "",
   guardian_backup_name: "",
   guardian_backup_relationship: "",
   guardian_backup_role: "",
   guardian_backup_rut: "",
+  guardian_backup_passport: "",
   guardian_backup_address: "",
+  guardian_backup_commune: "",
+  guardian_backup_photo_authorization: null,
+  guardian_backup_pickup_authorization: null,
+  guardian_backup_marital_status: "",
+  guardian_backup_education_level: "",
+  guardian_backup_last_education_level: "",
+  guardian_backup_occupation: "",
   guardian_backup_phone: "",
   guardian_backup_email: "",
   lives_with: "",
@@ -60,6 +86,10 @@ const emptyForm = () => ({
   has_internet: null,
   has_computer: null,
   health_insurance: "",
+  height_cm: "",
+  weight_kg: "",
+  blood_type: "",
+  food_allergies: "",
   beneficiary_programs: "",
   scholarships: "",
   has_judicial_process: null,
@@ -67,6 +97,14 @@ const emptyForm = () => ({
   chronic_illness_details: "",
   has_medication_allergies: null,
   medication_allergies_details: "",
+  contraindicated_medications: "",
+  fit_for_physical_education: null,
+  has_private_school_insurance: null,
+  healthcare_provider: "",
+  health_observations: "",
+  is_pie_participant: null,
+  pie_permanence_type: "",
+  pie_diagnosis: "",
   has_physical_restrictions: null,
   physical_restrictions_details: "",
   baptism_date: "",
@@ -84,6 +122,7 @@ const emptyEnrollmentForm = () => ({
   academic_year_id: null,
   course_section_id: null,
   enrollment_status: "matriculada",
+  registration_number: "",
   enrolled_at: "",
   withdrawn_at: "",
   observations: "",
@@ -178,6 +217,61 @@ export default {
     generatedPlatformPassword() {
       return this.form.rut || "Se generará temporalmente";
     },
+    studentDisplayName() {
+      return this.textValue(
+        this.student?.registered_name_resolved ||
+          this.form.registered_name ||
+          [this.form.first_name, this.form.last_name].filter(Boolean).join(" "),
+        this.isNew ? "Nueva estudiante" : "Estudiante"
+      );
+    },
+    studentInitials() {
+      const parts = this.studentDisplayName
+        .split(/\s+/)
+        .filter(Boolean);
+
+      return (parts.length > 1 ? `${parts[0][0]}${parts.at(-1)[0]}` : parts[0]?.slice(0, 2) || "NE").toUpperCase();
+    },
+    studentAge() {
+      if (!this.form.birthdate) return "Sin registro";
+
+      const birthdate = new Date(`${String(this.form.birthdate).slice(0, 10)}T12:00:00`);
+      const today = new Date();
+      let age = today.getFullYear() - birthdate.getFullYear();
+      const monthDelta = today.getMonth() - birthdate.getMonth();
+
+      if (monthDelta < 0 || (monthDelta === 0 && today.getDate() < birthdate.getDate())) {
+        age -= 1;
+      }
+
+      return Number.isFinite(age) && age >= 0 ? `${age} años` : "Sin registro";
+    },
+    studentStatusLabel() {
+      return this.statusOptions.find((option) => option.value === this.form.general_status)?.text || this.form.general_status || "Sin estado";
+    },
+    profileCompletion() {
+      const requiredFields = [
+        this.form.registered_name || this.form.first_name,
+        this.form.last_name,
+        this.form.rut,
+        this.form.birthdate,
+        this.form.address,
+        this.form.guardian_name,
+        this.form.guardian_phone,
+        this.currentEnrollment?.snapshot_course_display_name,
+      ];
+      const completed = requiredFields.filter((value) => String(value || "").trim() !== "").length;
+
+      return Math.round((completed / requiredFields.length) * 100);
+    },
+    operationalAlertCount() {
+      return [
+        this.form.pickup_restriction,
+        this.form.has_chronic_illness,
+        this.form.has_medication_allergies,
+        this.form.has_physical_restrictions,
+      ].filter(Boolean).length;
+    },
   },
   async mounted() {
     await this.load();
@@ -204,9 +298,19 @@ export default {
         registered_name: student.registered_name || student.registered_name_resolved || "",
         rut: student.rut || "",
         birthdate: student.birthdate || "",
+        gender: student.gender || "",
+        nationality: student.nationality || "",
         email: student.email || "",
         phone: student.phone || "",
         address: student.address || "",
+        commune: student.commune || "",
+        school_admission_date: student.school_admission_date || "",
+        previous_school: student.previous_school || "",
+        emergency_contact_name: student.emergency_contact_name || "",
+        emergency_contact_phone: student.emergency_contact_phone || "",
+        religion: student.religion || "",
+        accepts_religion_classes: student.accepts_religion_classes ?? null,
+        ethnicity: student.ethnicity || "",
         general_status: student.general_status || "activo",
         observations: student.observations || "",
         pickup_restriction: Boolean(student.pickup_restriction),
@@ -226,14 +330,30 @@ export default {
         guardian_relationship: student.guardian_relationship || "",
         guardian_role: student.guardian_role || "",
         guardian_rut: student.guardian_rut || "",
+        guardian_passport: student.guardian_passport || "",
         guardian_phone: student.guardian_phone || "",
         guardian_address: student.guardian_address || "",
+        guardian_commune: student.guardian_commune || "",
+        guardian_photo_authorization: student.guardian_photo_authorization ?? null,
+        guardian_pickup_authorization: student.guardian_pickup_authorization ?? null,
+        guardian_marital_status: student.guardian_marital_status || "",
+        guardian_education_level: student.guardian_education_level || "",
+        guardian_last_education_level: student.guardian_last_education_level || "",
+        guardian_occupation: student.guardian_occupation || "",
         guardian_email: student.guardian_email || "",
         guardian_backup_name: student.guardian_backup_name || "",
         guardian_backup_relationship: student.guardian_backup_relationship || "",
         guardian_backup_role: student.guardian_backup_role || "",
         guardian_backup_rut: student.guardian_backup_rut || "",
+        guardian_backup_passport: student.guardian_backup_passport || "",
         guardian_backup_address: student.guardian_backup_address || "",
+        guardian_backup_commune: student.guardian_backup_commune || "",
+        guardian_backup_photo_authorization: student.guardian_backup_photo_authorization ?? null,
+        guardian_backup_pickup_authorization: student.guardian_backup_pickup_authorization ?? null,
+        guardian_backup_marital_status: student.guardian_backup_marital_status || "",
+        guardian_backup_education_level: student.guardian_backup_education_level || "",
+        guardian_backup_last_education_level: student.guardian_backup_last_education_level || "",
+        guardian_backup_occupation: student.guardian_backup_occupation || "",
         guardian_backup_phone: student.guardian_backup_phone || "",
         guardian_backup_email: student.guardian_backup_email || "",
         lives_with: student.lives_with || "",
@@ -260,6 +380,10 @@ export default {
         has_internet: student.has_internet ?? null,
         has_computer: student.has_computer ?? null,
         health_insurance: student.health_insurance || "",
+        height_cm: student.height_cm ?? "",
+        weight_kg: student.weight_kg ?? "",
+        blood_type: student.blood_type || "",
+        food_allergies: student.food_allergies || "",
         beneficiary_programs: student.beneficiary_programs || "",
         scholarships: student.scholarships || "",
         has_judicial_process: student.has_judicial_process ?? null,
@@ -267,6 +391,14 @@ export default {
         chronic_illness_details: student.chronic_illness_details || "",
         has_medication_allergies: student.has_medication_allergies ?? null,
         medication_allergies_details: student.medication_allergies_details || "",
+        contraindicated_medications: student.contraindicated_medications || "",
+        fit_for_physical_education: student.fit_for_physical_education ?? null,
+        has_private_school_insurance: student.has_private_school_insurance ?? null,
+        healthcare_provider: student.healthcare_provider || "",
+        health_observations: student.health_observations || "",
+        is_pie_participant: student.is_pie_participant ?? null,
+        pie_permanence_type: student.pie_permanence_type || "",
+        pie_diagnosis: student.pie_diagnosis || "",
         has_physical_restrictions: student.has_physical_restrictions ?? null,
         physical_restrictions_details: student.physical_restrictions_details || "",
         baptism_date: student.baptism_date || "",
@@ -344,6 +476,9 @@ export default {
       } else {
         this.motherImportSource = null;
       }
+    },
+    scrollToRecordSection(sectionId) {
+      document.getElementById(sectionId)?.scrollIntoView({ behavior: "smooth", block: "start" });
     },
     textValue(value, fallback = "No registra información") {
       if (value === null || value === undefined) {
@@ -468,6 +603,7 @@ export default {
             academic_year_id: enrollment.academic_year_id,
             course_section_id: enrollment.course_section_id,
             enrollment_status: enrollment.enrollment_status,
+            registration_number: enrollment.registration_number || "",
             enrolled_at: enrollment.enrolled_at || "",
             withdrawn_at: enrollment.withdrawn_at || "",
             observations: enrollment.observations || "",
@@ -529,7 +665,17 @@ export default {
           ["RUT", this.textValue(this.form.rut)],
           ["Correo", this.textValue(this.form.email || this.student?.user?.email)],
           ["Fecha de nacimiento", this.formatDate(this.form.birthdate)],
+          ["Género", this.textValue(this.form.gender)],
+          ["Nacionalidad", this.textValue(this.form.nationality)],
           ["Domicilio", this.textValue(this.form.address)],
+          ["Comuna", this.textValue(this.form.commune)],
+          ["Fecha de ingreso", this.formatDate(this.form.school_admission_date)],
+          ["Colegio de procedencia", this.textValue(this.form.previous_school)],
+          ["Contacto de emergencia", this.textValue(this.form.emergency_contact_name)],
+          ["Teléfono de emergencia", this.textValue(this.form.emergency_contact_phone)],
+          ["Religión", this.textValue(this.form.religion)],
+          ["Acepta clases de religión", this.boolValue(this.form.accepts_religion_classes)],
+          ["Etnia", this.textValue(this.form.ethnicity)],
           ["Curso actual", this.textValue(this.currentEnrollment?.snapshot_course_display_name, "-")],
           ["Última matrícula", this.textValue(this.latestEnrollment?.snapshot_year_name, "-")],
           ["Estado general", this.textValue(this.form.general_status, "-")],
@@ -542,16 +688,32 @@ export default {
           ["Nombre completo apoderado", this.textValue(this.form.guardian_name)],
           ["Relación apoderado", this.textValue(this.form.guardian_relationship)],
           ["RUT apoderado", this.textValue(this.form.guardian_rut)],
+          ["Pasaporte apoderado", this.textValue(this.form.guardian_passport)],
           ["Domicilio apoderado", this.textValue(this.form.guardian_address)],
+          ["Comuna apoderado", this.textValue(this.form.guardian_commune)],
           ["Correo apoderado", this.textValue(this.form.guardian_email)],
           ["Teléfono apoderado", this.textValue(this.form.guardian_phone)],
+          ["Estado civil apoderado", this.textValue(this.form.guardian_marital_status)],
+          ["Nivel educacional apoderado", this.textValue(this.form.guardian_education_level)],
+          ["Último nivel apoderado", this.textValue(this.form.guardian_last_education_level)],
+          ["Ocupación apoderado", this.textValue(this.form.guardian_occupation)],
+          ["Autoriza fotografía", this.boolValue(this.form.guardian_photo_authorization)],
+          ["Autoriza retiro", this.boolValue(this.form.guardian_pickup_authorization)],
           ["Quién es el apoderado suplente", this.textValue(this.form.guardian_backup_role)],
           ["Nombre completo apoderado suplente", this.textValue(this.form.guardian_backup_name)],
           ["Relación apoderado suplente", this.textValue(this.form.guardian_backup_relationship)],
           ["RUT apoderado suplente", this.textValue(this.form.guardian_backup_rut)],
+          ["Pasaporte apoderado suplente", this.textValue(this.form.guardian_backup_passport)],
           ["Domicilio apoderado suplente", this.textValue(this.form.guardian_backup_address)],
+          ["Comuna apoderado suplente", this.textValue(this.form.guardian_backup_commune)],
           ["Correo apoderado suplente", this.textValue(this.form.guardian_backup_email)],
           ["Teléfono apoderado suplente", this.textValue(this.form.guardian_backup_phone)],
+          ["Estado civil apoderado suplente", this.textValue(this.form.guardian_backup_marital_status)],
+          ["Nivel educacional apoderado suplente", this.textValue(this.form.guardian_backup_education_level)],
+          ["Último nivel apoderado suplente", this.textValue(this.form.guardian_backup_last_education_level)],
+          ["Ocupación apoderado suplente", this.textValue(this.form.guardian_backup_occupation)],
+          ["Suplente autoriza fotografía", this.boolValue(this.form.guardian_backup_photo_authorization)],
+          ["Suplente autoriza retiro", this.boolValue(this.form.guardian_backup_pickup_authorization)],
         ];
 
         const familyRows = [
@@ -587,19 +749,33 @@ export default {
           ["Ha repetido curso", this.boolValue(this.form.has_repeated_course)],
           ["Internet en domicilio", this.boolValue(this.form.has_internet)],
           ["Computador en domicilio", this.boolValue(this.form.has_computer)],
-          ["Previsión de salud", this.textValue(this.form.health_insurance)],
           ["Programas beneficiaria", this.textValue(this.form.beneficiary_programs)],
           ["Becas", this.textValue(this.form.scholarships)],
           ["Proceso judicial", this.boolValue(this.form.has_judicial_process)],
         ];
 
         const medicalRows = [
+          ["Estatura (cm)", this.textValue(this.form.height_cm)],
+          ["Peso (kg)", this.textValue(this.form.weight_kg)],
+          ["Grupo sanguíneo", this.textValue(this.form.blood_type)],
+          ["Alergias a alimentos", this.textValue(this.form.food_allergies)],
           ["Enfermedad crónica", this.boolValue(this.form.has_chronic_illness)],
           ["Detalle enfermedad crónica", this.textValue(this.form.chronic_illness_details)],
           ["Alergias a medicamentos", this.boolValue(this.form.has_medication_allergies)],
           ["Detalle alergias medicamentos", this.textValue(this.form.medication_allergies_details)],
+          ["Medicamentos contraindicados", this.textValue(this.form.contraindicated_medications)],
           ["Restricciones físicas", this.boolValue(this.form.has_physical_restrictions)],
           ["Detalle restricciones físicas", this.textValue(this.form.physical_restrictions_details)],
+          ["Apta para Educación Física", this.boolValue(this.form.fit_for_physical_education)],
+          ["Previsión de salud", this.textValue(this.form.health_insurance)],
+          ["Seguro escolar privado", this.boolValue(this.form.has_private_school_insurance)],
+          ["Centro de atención", this.textValue(this.form.healthcare_provider)],
+          ["Observaciones de salud", this.textValue(this.form.health_observations)],
+        ];
+        const pieRows = [
+          ["Permanencia PIE", this.boolValue(this.form.is_pie_participant)],
+          ["Tipo de permanencia", this.textValue(this.form.pie_permanence_type)],
+          ["Diagnóstico", this.textValue(this.form.pie_diagnosis)],
         ];
         const sacramentRows = [
           ["Fecha bautismo", this.formatDate(this.form.baptism_date)],
@@ -616,6 +792,7 @@ export default {
             ["Año", item.snapshot_year_name || "-"],
             ["Curso", item.snapshot_course_display_name || "-"],
             ["Estado", item.enrollment_status || "-"],
+            ["Número de matrícula", item.registration_number || "-"],
             ["Fecha matrícula", this.formatDate(item.enrolled_at)],
             ["Fecha retiro", this.formatDate(item.withdrawn_at)],
             ["Observaciones", item.observations || "-"],
@@ -668,6 +845,7 @@ export default {
             ...this.buildPdfSection("Antecedentes de la madre", motherRows),
             ...this.buildPdfSection("Antecedentes escolares y sociales", socialRows),
             ...this.buildPdfSection("Antecedentes médicos", medicalRows),
+            ...this.buildPdfSection("Programa de Integración Escolar (PIE)", pieRows),
             ...this.buildPdfSection("Sacramentos", sacramentRows),
             ...historyContent,
             ...promotionContent,
@@ -728,36 +906,118 @@ export default {
 <template>
   <Layout>
     <div class="student-record-page">
-    <div class="d-flex justify-content-between align-items-center mb-3">
-      <div>
-        <h4 class="mb-0">{{ isNew ? "Nueva estudiante" : "Ficha de estudiante" }}</h4>
-        <div class="text-muted">Perfil personal ampliado y matrículas anuales históricas.</div>
+      <div class="student-record-topline">
+        <router-link to="/students" class="student-record-back" title="Volver a estudiantes" aria-label="Volver a estudiantes">
+          <i class="bx bx-arrow-back"></i>
+        </router-link>
+        <div>
+          <div class="student-record-eyebrow">Estudiantes</div>
+          <div class="student-record-breadcrumb">{{ isNew ? "Nuevo registro" : `Ficha #${itemId}` }}</div>
+        </div>
       </div>
-      <div class="d-flex gap-2">
-        <router-link to="/students" class="btn btn-outline-secondary">Volver</router-link>
-        <router-link v-if="!isNew" to="/students/movements" class="btn btn-outline-secondary">Cambios y retiros</router-link>
-        <BButton v-if="!isNew" variant="outline-danger" :disabled="exportingPdf" @click="exportPdf()">
-          {{ exportingPdf ? "Generando PDF..." : "Descargar PDF" }}
-        </BButton>
-        <BButton v-if="!isNew" variant="outline-primary" @click="openEnrollmentModal()">Nueva matrícula</BButton>
-      </div>
-    </div>
 
-    <BAlert v-if="error" variant="danger" show class="mb-3">{{ error }}</BAlert>
+      <section class="student-profile-header">
+        <div class="student-profile-main">
+          <div class="student-profile-avatar" aria-hidden="true">{{ studentInitials }}</div>
+          <div class="student-profile-identity">
+            <div class="student-profile-kicker">{{ isNew ? "Creación de ficha" : "Ficha de estudiante" }}</div>
+            <h1>{{ studentDisplayName }}</h1>
+            <div class="student-profile-meta">
+              <span><i class="bx bx-id-card"></i>{{ form.rut || "RUT pendiente" }}</span>
+              <span><i class="bx bx-envelope"></i>{{ generatedPlatformEmail }}</span>
+              <span class="student-status" :class="`student-status--${form.general_status || 'pendiente'}`">
+                <i class="bx bx-check-circle"></i>{{ studentStatusLabel }}
+              </span>
+            </div>
+          </div>
+
+          <div class="student-profile-actions">
+            <router-link v-if="!isNew" to="/students/movements" class="btn btn-outline-secondary">
+              <i class="bx bx-transfer-alt"></i><span>Movimientos</span>
+            </router-link>
+            <BButton v-if="!isNew" variant="outline-secondary" :disabled="exportingPdf" @click="exportPdf()">
+              <i class="bx bx-download"></i><span>{{ exportingPdf ? "Generando..." : "PDF" }}</span>
+            </BButton>
+            <BButton v-if="!isNew" variant="outline-primary" @click="openEnrollmentModal()">
+              <i class="bx bx-calendar-plus"></i><span>Nueva matrícula</span>
+            </BButton>
+          </div>
+        </div>
+
+        <div class="student-profile-facts">
+          <div class="student-profile-fact">
+            <span>Curso vigente</span>
+            <strong>{{ currentEnrollment?.snapshot_course_display_name || "Sin matrícula" }}</strong>
+          </div>
+          <div class="student-profile-fact">
+            <span>Año académico</span>
+            <strong>{{ currentEnrollment?.snapshot_year_name || latestEnrollment?.snapshot_year_name || "Sin registro" }}</strong>
+          </div>
+          <div class="student-profile-fact">
+            <span>Edad</span>
+            <strong>{{ studentAge }}</strong>
+          </div>
+          <div class="student-profile-fact">
+            <span>Apoderado titular</span>
+            <strong>{{ textValue(form.guardian_name, "Sin registro") }}</strong>
+          </div>
+          <div class="student-profile-fact student-profile-fact--completion">
+            <div>
+              <span>Ficha esencial</span>
+              <strong>{{ profileCompletion }}%</strong>
+            </div>
+            <div class="student-profile-progress" role="progressbar" :aria-valuenow="profileCompletion" aria-valuemin="0" aria-valuemax="100">
+              <span :style="{ width: `${profileCompletion}%` }"></span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <div v-if="operationalAlertCount" class="student-operational-alerts">
+        <div class="student-operational-alerts__title">
+          <i class="bx bx-error-circle"></i>
+          <span>{{ operationalAlertCount }} alerta{{ operationalAlertCount === 1 ? "" : "s" }} operativa{{ operationalAlertCount === 1 ? "" : "s" }}</span>
+        </div>
+        <div class="student-operational-alerts__items">
+          <span v-if="form.pickup_restriction">Restricción de retiro</span>
+          <span v-if="form.has_chronic_illness">Enfermedad crónica</span>
+          <span v-if="form.has_medication_allergies">Alergia a medicamentos</span>
+          <span v-if="form.has_physical_restrictions">Restricción física</span>
+        </div>
+      </div>
+
+      <BAlert v-if="error" variant="danger" show class="mb-3">{{ error }}</BAlert>
 
     <div v-if="loading" class="py-4">
       <LoadingState message="Cargando ficha de estudiante..." />
     </div>
 
     <template v-else>
+      <div class="student-section-bar">
+        <div class="student-section-tabs" role="navigation" aria-label="Secciones de la ficha">
+          <button type="button" @click="scrollToRecordSection('record-personal')"><i class="bx bx-user"></i>Personales</button>
+          <button type="button" @click="scrollToRecordSection('record-guardians')"><i class="bx bx-group"></i>Apoderados</button>
+          <button type="button" @click="scrollToRecordSection('record-porter')"><i class="bx bx-shield-quarter"></i>Portería</button>
+          <button type="button" @click="scrollToRecordSection('record-family')"><i class="bx bx-home-alt"></i>Familia</button>
+          <button type="button" @click="scrollToRecordSection('record-school')"><i class="bx bx-book-open"></i>Escolar</button>
+          <button type="button" @click="scrollToRecordSection('record-health')"><i class="bx bx-plus-medical"></i>Salud y PIE</button>
+          <button v-if="!isNew" type="button" @click="scrollToRecordSection('record-history')"><i class="bx bx-history"></i>Trayectoria</button>
+        </div>
+        <BButton variant="primary" class="student-section-save" :disabled="saving" @click="save">
+          <i class="bx" :class="saving ? 'bx-loader-alt bx-spin' : 'bx-save'"></i>
+          <span>{{ saving ? "Guardando..." : isNew ? "Crear estudiante" : "Guardar" }}</span>
+        </BButton>
+      </div>
+
       <div class="row g-3">
         <div class="col-xl-8">
-          <BCard class="student-form-card">
-            <div class="d-flex justify-content-between align-items-center mb-3">
-              <h5 class="mb-0">Datos personales</h5>
-              <BButton variant="primary" :disabled="saving" @click="save">
-                {{ saving ? "Guardando..." : isNew ? "Crear estudiante" : "Guardar cambios" }}
-              </BButton>
+          <BCard id="record-personal" class="student-form-card student-section-anchor">
+            <div class="student-card-heading">
+              <div class="student-card-heading__icon"><i class="bx bx-user"></i></div>
+              <div>
+                <h2>Datos personales</h2>
+                <p>Identidad, contacto y cuenta de acceso</p>
+              </div>
             </div>
 
             <div class="row g-3">
@@ -785,6 +1045,18 @@ export default {
                 <label class="form-label">Estado general</label>
                 <BFormSelect v-model="form.general_status" :options="statusOptions" />
               </div>
+              <div class="col-md-4">
+                <label class="form-label">Género</label>
+                <BFormInput v-model="form.gender" />
+              </div>
+              <div class="col-md-4">
+                <label class="form-label">Nacionalidad</label>
+                <BFormInput v-model="form.nationality" />
+              </div>
+              <div class="col-md-4">
+                <label class="form-label">Comuna</label>
+                <BFormInput v-model="form.commune" />
+              </div>
               <div class="col-md-6">
                 <label class="form-label">Correo</label>
                 <BFormInput v-model="form.email" type="email" />
@@ -811,9 +1083,13 @@ export default {
                 <label class="form-label">Restablecer contraseña</label>
                 <BFormInput v-model="form.password" type="password" placeholder="Opcional" />
               </div>
-              <div class="col-md-12">
+              <div class="col-md-8">
                 <label class="form-label">Domicilio</label>
                 <BFormInput v-model="form.address" />
+              </div>
+              <div class="col-md-4">
+                <label class="form-label">Fecha de ingreso al colegio</label>
+                <BFormInput v-model="form.school_admission_date" type="date" />
               </div>
               <div class="col-md-6">
                 <label class="form-label">Curso actual</label>
@@ -831,26 +1107,66 @@ export default {
           </BCard>
 
           <BCard class="mt-3 student-form-card">
-            <h5 class="mb-3">Antecedentes del apoderado</h5>
+            <div class="student-card-heading student-card-heading--compact">
+              <div class="student-card-heading__icon"><i class="bx bx-map"></i></div>
+              <div><h2>Contacto y procedencia</h2><p>Antecedentes de ingreso y pertenencia</p></div>
+            </div>
+            <div class="row g-3">
+              <div class="col-md-6">
+                <label class="form-label">Colegio de procedencia</label>
+                <BFormInput v-model="form.previous_school" />
+              </div>
+              <div class="col-md-4">
+                <label class="form-label">Contacto de emergencia</label>
+                <BFormInput v-model="form.emergency_contact_name" />
+              </div>
+              <div class="col-md-2">
+                <label class="form-label">Teléfono de emergencia</label>
+                <BFormInput v-model="form.emergency_contact_phone" />
+              </div>
+              <div class="col-md-4">
+                <label class="form-label">Religión</label>
+                <BFormInput v-model="form.religion" />
+              </div>
+              <div class="col-md-4">
+                <label class="form-label">¿Acepta clases de religión?</label>
+                <BFormSelect v-model="form.accepts_religion_classes" :options="booleanOptions" />
+              </div>
+              <div class="col-md-4">
+                <label class="form-label">Etnia o pueblo originario</label>
+                <BFormInput v-model="form.ethnicity" />
+              </div>
+            </div>
+          </BCard>
+
+          <BCard id="record-guardians" class="mt-3 student-form-card student-section-anchor">
+            <div class="student-card-heading">
+              <div class="student-card-heading__icon"><i class="bx bx-group"></i></div>
+              <div><h2>Apoderados</h2><p>Contactos titular y suplente</p></div>
+            </div>
             <div class="row g-3">
               <div class="col-12">
                 <div class="fw-semibold text-muted small text-uppercase">Apoderado titular</div>
               </div>
               <div class="col-md-4">
-                <label class="form-label">Quién es el apoderado</label>
-                <BFormInput v-model="form.guardian_role" placeholder="Madre, padre, tutor..." />
+                <label class="form-label">Tipo de apoderado</label>
+                <BFormInput v-model="form.guardian_role" placeholder="Titular" />
               </div>
               <div class="col-md-8">
                 <label class="form-label">Nombre completo</label>
                 <BFormInput v-model="form.guardian_name" />
               </div>
               <div class="col-md-4">
-                <label class="form-label">Relación</label>
-                <BFormInput v-model="form.guardian_relationship" placeholder="Apoderada titular, tutor legal..." />
+                <label class="form-label">Parentesco</label>
+                <BFormInput v-model="form.guardian_relationship" placeholder="Madre, padre, tutor..." />
               </div>
               <div class="col-md-4">
                 <label class="form-label">RUT</label>
                 <BFormInput v-model="form.guardian_rut" />
+              </div>
+              <div class="col-md-4">
+                <label class="form-label">Pasaporte</label>
+                <BFormInput v-model="form.guardian_passport" />
               </div>
               <div class="col-md-4">
                 <label class="form-label">Teléfono</label>
@@ -864,25 +1180,57 @@ export default {
                 <label class="form-label">Domicilio</label>
                 <BFormInput v-model="form.guardian_address" />
               </div>
+              <div class="col-md-4">
+                <label class="form-label">Comuna</label>
+                <BFormInput v-model="form.guardian_commune" />
+              </div>
+              <div class="col-md-4">
+                <label class="form-label">Estado civil</label>
+                <BFormInput v-model="form.guardian_marital_status" />
+              </div>
+              <div class="col-md-4">
+                <label class="form-label">Ocupación</label>
+                <BFormInput v-model="form.guardian_occupation" />
+              </div>
+              <div class="col-md-6">
+                <label class="form-label">Nivel educacional</label>
+                <BFormInput v-model="form.guardian_education_level" />
+              </div>
+              <div class="col-md-6">
+                <label class="form-label">Último nivel educacional</label>
+                <BFormInput v-model="form.guardian_last_education_level" />
+              </div>
+              <div class="col-md-6">
+                <label class="form-label">Autorización de fotografía o grabación</label>
+                <BFormSelect v-model="form.guardian_photo_authorization" :options="booleanOptions" />
+              </div>
+              <div class="col-md-6">
+                <label class="form-label">Autorizado para retirar</label>
+                <BFormSelect v-model="form.guardian_pickup_authorization" :options="booleanOptions" />
+              </div>
 
               <div class="col-12 pt-2">
                 <div class="fw-semibold text-muted small text-uppercase">Apoderado suplente</div>
               </div>
               <div class="col-md-4">
-                <label class="form-label">Quién es el apoderado suplente</label>
-                <BFormInput v-model="form.guardian_backup_role" placeholder="Madre, padre, tutor..." />
+                <label class="form-label">Tipo de apoderado</label>
+                <BFormInput v-model="form.guardian_backup_role" placeholder="Suplente" />
               </div>
               <div class="col-md-8">
                 <label class="form-label">Nombre completo</label>
                 <BFormInput v-model="form.guardian_backup_name" />
               </div>
               <div class="col-md-4">
-                <label class="form-label">Relación</label>
-                <BFormInput v-model="form.guardian_backup_relationship" />
+                <label class="form-label">Parentesco</label>
+                <BFormInput v-model="form.guardian_backup_relationship" placeholder="Madre, padre, tutor..." />
               </div>
               <div class="col-md-4">
                 <label class="form-label">RUT</label>
                 <BFormInput v-model="form.guardian_backup_rut" />
+              </div>
+              <div class="col-md-4">
+                <label class="form-label">Pasaporte</label>
+                <BFormInput v-model="form.guardian_backup_passport" />
               </div>
               <div class="col-md-4">
                 <label class="form-label">Teléfono</label>
@@ -896,11 +1244,42 @@ export default {
                 <label class="form-label">Domicilio</label>
                 <BFormInput v-model="form.guardian_backup_address" />
               </div>
+              <div class="col-md-4">
+                <label class="form-label">Comuna</label>
+                <BFormInput v-model="form.guardian_backup_commune" />
+              </div>
+              <div class="col-md-4">
+                <label class="form-label">Estado civil</label>
+                <BFormInput v-model="form.guardian_backup_marital_status" />
+              </div>
+              <div class="col-md-4">
+                <label class="form-label">Ocupación</label>
+                <BFormInput v-model="form.guardian_backup_occupation" />
+              </div>
+              <div class="col-md-6">
+                <label class="form-label">Nivel educacional</label>
+                <BFormInput v-model="form.guardian_backup_education_level" />
+              </div>
+              <div class="col-md-6">
+                <label class="form-label">Último nivel educacional</label>
+                <BFormInput v-model="form.guardian_backup_last_education_level" />
+              </div>
+              <div class="col-md-6">
+                <label class="form-label">Autorización de fotografía o grabación</label>
+                <BFormSelect v-model="form.guardian_backup_photo_authorization" :options="booleanOptions" />
+              </div>
+              <div class="col-md-6">
+                <label class="form-label">Autorizado para retirar</label>
+                <BFormSelect v-model="form.guardian_backup_pickup_authorization" :options="booleanOptions" />
+              </div>
             </div>
           </BCard>
 
-          <BCard class="mt-3 student-form-card">
-            <h5 class="mb-3">Portería y autorizaciones de retiro</h5>
+          <BCard id="record-porter" class="mt-3 student-form-card student-section-anchor">
+            <div class="student-card-heading">
+              <div class="student-card-heading__icon student-card-heading__icon--warning"><i class="bx bx-shield-quarter"></i></div>
+              <div><h2>Portería y retiros</h2><p>Restricciones y personas autorizadas</p></div>
+            </div>
             <div class="row g-3">
               <div class="col-md-4">
                 <label class="form-label">¿Tiene restricción de retiro?</label>
@@ -972,8 +1351,11 @@ export default {
             </div>
           </BCard>
 
-          <BCard class="mt-3 student-form-card">
-            <h5 class="mb-3">Antecedentes familiares</h5>
+          <BCard id="record-family" class="mt-3 student-form-card student-section-anchor">
+            <div class="student-card-heading">
+              <div class="student-card-heading__icon"><i class="bx bx-home-alt"></i></div>
+              <div><h2>Antecedentes familiares</h2><p>Composición del hogar y vínculos escolares</p></div>
+            </div>
             <div class="row g-3">
               <div class="col-md-8">
                 <label class="form-label">¿Con quién vive la estudiante?</label>
@@ -987,7 +1369,10 @@ export default {
           </BCard>
 
           <BCard class="mt-3 student-form-card">
-            <h5 class="mb-3">Antecedentes del padre</h5>
+            <div class="student-card-heading student-card-heading--compact">
+              <div class="student-card-heading__icon"><i class="bx bx-user-circle"></i></div>
+              <div><h2>Antecedentes del padre</h2><p>Identificación y contacto</p></div>
+            </div>
             <div class="row g-3">
               <div class="col-md-8">
                 <label class="form-label">Importar desde apoderados</label>
@@ -1038,7 +1423,10 @@ export default {
           </BCard>
 
           <BCard class="mt-3 student-form-card">
-            <h5 class="mb-3">Antecedentes de la madre</h5>
+            <div class="student-card-heading student-card-heading--compact">
+              <div class="student-card-heading__icon"><i class="bx bx-user-circle"></i></div>
+              <div><h2>Antecedentes de la madre</h2><p>Identificación y contacto</p></div>
+            </div>
             <div class="row g-3">
               <div class="col-md-8">
                 <label class="form-label">Importar desde apoderados</label>
@@ -1088,8 +1476,11 @@ export default {
             </div>
           </BCard>
 
-          <BCard class="mt-3 student-form-card">
-            <h5 class="mb-3">Antecedentes escolares y sociales</h5>
+          <BCard id="record-school" class="mt-3 student-form-card student-section-anchor">
+            <div class="student-card-heading">
+              <div class="student-card-heading__icon"><i class="bx bx-book-open"></i></div>
+              <div><h2>Antecedentes escolares y sociales</h2><p>Trayectoria, conectividad y beneficios</p></div>
+            </div>
             <div class="row g-3">
               <div class="col-md-4">
                 <label class="form-label">¿Ha repetido algún curso?</label>
@@ -1102,10 +1493,6 @@ export default {
               <div class="col-md-4">
                 <label class="form-label">¿Cuenta con computador en su domicilio?</label>
                 <BFormSelect v-model="form.has_computer" :options="booleanOptions" />
-              </div>
-              <div class="col-md-6">
-                <label class="form-label">Previsión de salud</label>
-                <BFormInput v-model="form.health_insurance" />
               </div>
               <div class="col-md-6">
                 <label class="form-label">¿Cuenta con proceso judicial?</label>
@@ -1122,9 +1509,28 @@ export default {
             </div>
           </BCard>
 
-          <BCard class="mt-3 student-form-card">
-            <h5 class="mb-3">Antecedentes médicos</h5>
+          <BCard id="record-health" class="mt-3 student-form-card student-section-anchor">
+            <div class="student-card-heading">
+              <div class="student-card-heading__icon student-card-heading__icon--health"><i class="bx bx-plus-medical"></i></div>
+              <div><h2>Antecedentes médicos</h2><p>Condiciones, alergias y restricciones</p></div>
+            </div>
             <div class="row g-3">
+              <div class="col-md-4">
+                <label class="form-label">Estatura (cm)</label>
+                <BFormInput v-model="form.height_cm" type="number" min="0" step="0.01" />
+              </div>
+              <div class="col-md-4">
+                <label class="form-label">Peso (kg)</label>
+                <BFormInput v-model="form.weight_kg" type="number" min="0" step="0.01" />
+              </div>
+              <div class="col-md-4">
+                <label class="form-label">Grupo sanguíneo</label>
+                <BFormInput v-model="form.blood_type" />
+              </div>
+              <div class="col-md-12">
+                <label class="form-label">Alergias a alimentos</label>
+                <BFormTextarea v-model="form.food_allergies" rows="2" />
+              </div>
               <div class="col-md-4">
                 <label class="form-label">¿Sufre alguna enfermedad crónica?</label>
                 <BFormSelect v-model="form.has_chronic_illness" :options="booleanOptions" />
@@ -1138,8 +1544,12 @@ export default {
                 <BFormSelect v-model="form.has_medication_allergies" :options="booleanOptions" />
               </div>
               <div class="col-md-8">
-                <label class="form-label">Detalle alergias o contraindicaciones</label>
+                <label class="form-label">Detalle alergias a medicamentos</label>
                 <BFormTextarea v-model="form.medication_allergies_details" rows="2" />
+              </div>
+              <div class="col-md-12">
+                <label class="form-label">Medicamentos contraindicados</label>
+                <BFormTextarea v-model="form.contraindicated_medications" rows="2" />
               </div>
               <div class="col-md-4">
                 <label class="form-label">¿Tiene restricciones para ejercicios físicos?</label>
@@ -1149,11 +1559,55 @@ export default {
                 <label class="form-label">Detalle restricciones físicas</label>
                 <BFormTextarea v-model="form.physical_restrictions_details" rows="2" />
               </div>
+              <div class="col-md-4">
+                <label class="form-label">¿Apta para Educación Física?</label>
+                <BFormSelect v-model="form.fit_for_physical_education" :options="booleanOptions" />
+              </div>
+              <div class="col-md-4">
+                <label class="form-label">Previsión de salud</label>
+                <BFormInput v-model="form.health_insurance" />
+              </div>
+              <div class="col-md-4">
+                <label class="form-label">¿Posee seguro escolar privado?</label>
+                <BFormSelect v-model="form.has_private_school_insurance" :options="booleanOptions" />
+              </div>
+              <div class="col-md-6">
+                <label class="form-label">Consultorio o clínica donde se atiende</label>
+                <BFormInput v-model="form.healthcare_provider" />
+              </div>
+              <div class="col-md-6">
+                <label class="form-label">Observaciones de salud</label>
+                <BFormTextarea v-model="form.health_observations" rows="2" />
+              </div>
             </div>
           </BCard>
 
           <BCard class="mt-3 student-form-card">
-            <h5 class="mb-3">Sacramentos</h5>
+            <div class="student-card-heading student-card-heading--compact">
+              <div class="student-card-heading__icon student-card-heading__icon--pie"><i class="bx bx-support"></i></div>
+              <div><h2>Programa de Integración Escolar</h2><p>Permanencia y diagnóstico PIE</p></div>
+            </div>
+            <div class="row g-3">
+              <div class="col-md-4">
+                <label class="form-label">Permanencia PIE</label>
+                <BFormSelect v-model="form.is_pie_participant" :options="booleanOptions" />
+              </div>
+              <div class="col-md-4">
+                <label class="form-label">Tipo de permanencia</label>
+                <BFormInput v-model="form.pie_permanence_type" />
+              </div>
+              <div class="col-md-12">
+                <label class="form-label">Diagnóstico</label>
+                <BFormTextarea v-model="form.pie_diagnosis" rows="2" />
+              </div>
+            </div>
+          </BCard>
+
+          <BCard class="mt-3 student-form-card">
+            <div class="student-card-heading student-card-heading--compact">
+              <div class="student-card-heading__icon"><i class="bx bx-calendar-check"></i></div>
+              <div><h2>Sacramentos</h2><p>Fechas y lugares registrados</p></div>
+            </div>
             <div class="row g-3">
               <div class="col-md-6">
                 <label class="form-label">Fecha de bautismo</label>
@@ -1184,8 +1638,9 @@ export default {
         </div>
 
         <div class="col-xl-4">
-          <BCard class="student-form-card">
-            <h5 class="mb-3">Resumen actual</h5>
+          <div class="student-record-sidebar">
+          <BCard class="student-form-card student-summary-card">
+            <div class="student-sidebar-heading"><i class="bx bx-data"></i><h2>Resumen actual</h2></div>
             <div class="mb-2"><span class="text-muted">Nombre registral:</span> {{ textValue(student?.registered_name_resolved || form.registered_name || form.first_name) }}</div>
             <div class="mb-2"><span class="text-muted">Rol:</span> Estudiante</div>
             <div class="mb-2"><span class="text-muted">Cuenta:</span> {{ generatedPlatformEmail }}</div>
@@ -1197,8 +1652,8 @@ export default {
             <div class="mb-0"><span class="text-muted">Correo apoderado:</span> {{ textValue(form.guardian_email) }}</div>
           </BCard>
 
-          <BCard class="mt-3 student-form-card">
-            <h5 class="mb-3">Resumen de portería</h5>
+          <BCard class="mt-3 student-form-card student-summary-card" :class="{ 'student-summary-card--alert': form.pickup_restriction }">
+            <div class="student-sidebar-heading"><i class="bx bx-shield-quarter"></i><h2>Resumen de portería</h2></div>
             <div class="mb-2"><span class="text-muted">Restricción de retiro:</span> {{ form.pickup_restriction ? "Sí" : "No" }}</div>
             <div class="small text-muted mb-3">{{ textValue(form.pickup_restriction_notes) }}</div>
             <div class="mb-2"><span class="text-muted">Observaciones portería:</span> {{ textValue(form.porter_alert_notes) }}</div>
@@ -1213,8 +1668,8 @@ export default {
             </div>
           </BCard>
 
-          <BCard class="mt-3 student-form-card">
-            <h5 class="mb-3">Vista rápida</h5>
+          <BCard class="mt-3 student-form-card student-summary-card">
+            <div class="student-sidebar-heading"><i class="bx bx-list-check"></i><h2>Vista rápida</h2></div>
             <div class="mb-2"><span class="text-muted">Vive con:</span> {{ textValue(form.lives_with) }}</div>
             <div class="mb-2"><span class="text-muted">Hermanas en el colegio:</span> {{ textValue(form.siblings_in_school, "0") }}</div>
             <div class="mb-2"><span class="text-muted">Internet:</span> {{ boolValue(form.has_internet) }}</div>
@@ -1223,8 +1678,8 @@ export default {
             <div class="mb-0"><span class="text-muted">Previsión:</span> {{ textValue(form.health_insurance) }}</div>
           </BCard>
 
-          <BCard class="mt-3 student-form-card">
-            <h5 class="mb-3">Alertas médicas</h5>
+          <BCard class="mt-3 student-form-card student-summary-card" :class="{ 'student-summary-card--alert': operationalAlertCount > (form.pickup_restriction ? 1 : 0) }">
+            <div class="student-sidebar-heading"><i class="bx bx-plus-medical"></i><h2>Alertas médicas</h2></div>
             <div class="mb-2"><span class="text-muted">Enfermedad crónica:</span> {{ boolValue(form.has_chronic_illness) }}</div>
             <div class="small text-muted mb-3">{{ textValue(form.chronic_illness_details) }}</div>
             <div class="mb-2"><span class="text-muted">Alergias / medicamentos:</span> {{ boolValue(form.has_medication_allergies) }}</div>
@@ -1233,19 +1688,23 @@ export default {
             <div class="small text-muted mb-0">{{ textValue(form.physical_restrictions_details) }}</div>
           </BCard>
 
-          <BCard class="mt-3 student-form-card">
-            <h5 class="mb-3">Sacramentos</h5>
+          <BCard class="mt-3 student-form-card student-summary-card">
+            <div class="student-sidebar-heading"><i class="bx bx-calendar-check"></i><h2>Sacramentos</h2></div>
             <div class="mb-2"><span class="text-muted">Bautismo:</span> {{ formatDate(form.baptism_date) }}<span v-if="form.baptism_place"> · {{ form.baptism_place }}</span></div>
             <div class="mb-2"><span class="text-muted">Primera comunión:</span> {{ formatDate(form.first_communion_date) }}<span v-if="form.first_communion_place"> · {{ form.first_communion_place }}</span></div>
             <div class="mb-0"><span class="text-muted">Confirmación:</span> {{ formatDate(form.confirmation_date) }}<span v-if="form.confirmation_place"> · {{ form.confirmation_place }}</span></div>
           </BCard>
+          </div>
         </div>
       </div>
 
-      <BCard v-if="!isNew" class="mt-3 student-form-card">
+      <BCard v-if="!isNew" id="record-history" class="mt-3 student-form-card student-history-card student-section-anchor">
         <div class="d-flex justify-content-between align-items-center mb-3">
-          <h5 class="mb-0">Historial académico anual</h5>
-          <BButton variant="outline-primary" size="sm" @click="openEnrollmentModal()">Agregar año</BButton>
+          <div class="student-card-heading mb-0">
+            <div class="student-card-heading__icon"><i class="bx bx-history"></i></div>
+            <div><h2>Historial académico anual</h2><p>Matrículas y cursos registrados</p></div>
+          </div>
+          <BButton variant="outline-primary" size="sm" @click="openEnrollmentModal()"><i class="bx bx-plus"></i>Agregar año</BButton>
         </div>
         <BTable
           :items="student?.enrollments || []"
@@ -1255,6 +1714,7 @@ export default {
             { key: 'snapshot_year_name', label: 'Año' },
             { key: 'snapshot_course_display_name', label: 'Curso' },
             { key: 'enrollment_status', label: 'Estado' },
+            { key: 'registration_number', label: 'Nº matrícula' },
             { key: 'enrolled_at', label: 'Fecha matrícula' },
             { key: 'observations', label: 'Observaciones' },
             { key: 'actions', label: 'Acciones' },
@@ -1266,8 +1726,11 @@ export default {
         </BTable>
       </BCard>
 
-      <BCard v-if="!isNew && (student?.promotions || []).length" class="mt-3 student-form-card">
-        <h5 class="mb-3">Promociones registradas</h5>
+      <BCard v-if="!isNew && (student?.promotions || []).length" class="mt-3 student-form-card student-history-card">
+        <div class="student-card-heading student-card-heading--compact">
+          <div class="student-card-heading__icon"><i class="bx bx-up-arrow-alt"></i></div>
+          <div><h2>Promociones registradas</h2><p>Resultados de cierre académico</p></div>
+        </div>
         <BTable
           :items="student.promotions"
           small
@@ -1288,8 +1751,11 @@ export default {
         </BTable>
       </BCard>
 
-      <BCard v-if="!isNew && (student?.enrollment_movements || []).length" class="mt-3 student-form-card">
-        <h5 class="mb-3">Movimientos de matrícula</h5>
+      <BCard v-if="!isNew && (student?.enrollment_movements || []).length" class="mt-3 student-form-card student-history-card">
+        <div class="student-card-heading student-card-heading--compact">
+          <div class="student-card-heading__icon"><i class="bx bx-transfer-alt"></i></div>
+          <div><h2>Movimientos de matrícula</h2><p>Cambios, traslados y retiros</p></div>
+        </div>
         <BTable
           :items="student.enrollment_movements"
           small
@@ -1328,6 +1794,10 @@ export default {
           <BFormSelect v-model="enrollmentForm.enrollment_status" :options="enrollmentStatusOptions" />
         </div>
         <div class="col-md-6">
+          <label class="form-label">Número de matrícula</label>
+          <BFormInput v-model="enrollmentForm.registration_number" />
+        </div>
+        <div class="col-md-6">
           <label class="form-label">Fecha de matrícula</label>
           <BFormInput v-model="enrollmentForm.enrolled_at" type="date" />
         </div>
@@ -1353,32 +1823,646 @@ export default {
 
 <style scoped>
 .student-record-page {
+  --record-ink: #172033;
+  --record-muted: #64748b;
+  --record-border: #dfe5ec;
+  --record-surface: var(--bs-card-bg, #ffffff);
+  --record-soft: var(--bs-tertiary-bg, #f6f8fa);
+  --record-accent: #0f766e;
+  color: var(--record-ink);
+  padding-bottom: 2rem;
+}
+
+:global(.premium-content-grid:has(.student-record-page)),
+:global(.premium-main-content:has(.student-record-page)) {
+  overflow: clip;
+}
+
+.student-record-topline {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  margin-bottom: 0.75rem;
+}
+
+.student-record-back {
+  display: inline-grid;
+  width: 36px;
+  height: 36px;
+  place-items: center;
+  flex: 0 0 36px;
+  border: 1px solid var(--record-border);
+  border-radius: 6px;
+  background: var(--record-surface);
+  color: var(--record-ink);
+  font-size: 1.15rem;
+}
+
+.student-record-back:hover {
+  border-color: var(--record-accent);
+  color: var(--record-accent);
+}
+
+.student-record-eyebrow {
+  color: var(--record-muted);
+  font-size: 0.68rem;
+  font-weight: 700;
+  line-height: 1.1;
+  text-transform: uppercase;
+}
+
+.student-record-breadcrumb {
+  color: var(--record-ink);
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+
+.student-profile-header {
+  overflow: hidden;
+  margin-bottom: 0.75rem;
+  border: 1px solid var(--record-border);
+  border-radius: 8px;
+  background: var(--record-surface);
+  box-shadow: 0 8px 24px rgba(23, 32, 51, 0.06);
+}
+
+.student-profile-main {
+  display: grid;
+  grid-template-columns: 72px minmax(0, 1fr) auto;
+  gap: 1rem;
+  align-items: center;
+  padding: 1.25rem;
+}
+
+.student-profile-avatar {
+  display: grid;
+  width: 72px;
+  height: 72px;
+  place-items: center;
+  border: 1px solid #99d5ce;
+  border-radius: 50%;
+  background: #dff5f1;
+  color: #075e57;
+  font-size: 1.25rem;
+  font-weight: 800;
+}
+
+.student-profile-identity {
+  min-width: 0;
+}
+
+.student-profile-kicker {
+  margin-bottom: 0.2rem;
+  color: var(--record-accent);
+  font-size: 0.68rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.student-profile-identity h1 {
+  overflow-wrap: anywhere;
+  margin: 0;
+  color: var(--record-ink);
+  font-size: 1.55rem;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.student-profile-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem 1rem;
+  align-items: center;
+  margin-top: 0.55rem;
+  color: var(--record-muted);
+  font-size: 0.78rem;
+}
+
+.student-profile-meta > span {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: 0.35rem;
+  overflow-wrap: anywhere;
+}
+
+.student-profile-meta i {
+  flex: 0 0 auto;
+  font-size: 1rem;
+}
+
+.student-status {
+  padding: 0.2rem 0.5rem;
+  border-radius: 999px;
+  background: #e7f6ed;
+  color: #166534;
+  font-weight: 700;
+}
+
+.student-status--retirado,
+.student-status--suspendido {
+  background: #fff0e5;
+  color: #9a3412;
+}
+
+.student-status--egresado {
+  background: #edf0f5;
+  color: #475569;
+}
+
+.student-profile-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+
+.student-profile-actions :deep(.btn),
+.student-profile-actions > .btn {
+  display: inline-flex;
+  min-height: 40px;
+  align-items: center;
+  gap: 0.4rem;
+  border-radius: 6px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.student-profile-actions i {
+  font-size: 1.05rem;
+}
+
+.student-profile-facts {
+  display: grid;
+  grid-template-columns: 1fr 0.8fr 0.65fr 1.4fr 1fr;
+  border-top: 1px solid var(--record-border);
+  background: var(--record-soft);
+}
+
+.student-profile-fact {
+  min-width: 0;
+  padding: 0.85rem 1rem;
+  border-right: 1px solid var(--record-border);
+}
+
+.student-profile-fact:last-child {
+  border-right: 0;
+}
+
+.student-profile-fact > span,
+.student-profile-fact--completion span {
   display: block;
+  margin-bottom: 0.16rem;
+  color: var(--record-muted);
+  font-size: 0.66rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.student-profile-fact strong {
+  display: block;
+  overflow: hidden;
+  color: var(--record-ink);
+  font-size: 0.85rem;
+  font-weight: 700;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+
+.student-profile-fact--completion > div:first-child {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.student-profile-progress {
+  overflow: hidden;
+  height: 5px;
+  margin-top: 0.45rem;
+  border-radius: 999px;
+  background: #d8e0e8;
+}
+
+.student-profile-progress span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--record-accent);
+  transition: width 180ms ease;
+}
+
+.student-operational-alerts {
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+  margin-bottom: 0.75rem;
+  padding: 0.65rem 0.85rem;
+  border: 1px solid #fed7aa;
+  border-left: 4px solid #ea580c;
+  border-radius: 6px;
+  background: #fff7ed;
+  color: #7c2d12;
+}
+
+.student-operational-alerts__title,
+.student-operational-alerts__items {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  align-items: center;
+}
+
+.student-operational-alerts__title {
+  flex: 0 0 auto;
+  font-weight: 800;
+}
+
+.student-operational-alerts__title i {
+  font-size: 1.2rem;
+}
+
+.student-operational-alerts__items span {
+  padding: 0.15rem 0.45rem;
+  border: 1px solid #fdba74;
+  border-radius: 999px;
+  background: #ffffff;
+  font-size: 0.72rem;
+  font-weight: 600;
+}
+
+.student-section-bar {
+  position: sticky;
+  z-index: 20;
+  top: 70px;
+  display: flex;
+  gap: 0.65rem;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.75rem;
+  padding: 0.45rem;
+  border: 1px solid var(--record-border);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--record-surface) 94%, transparent);
+  box-shadow: 0 5px 18px rgba(23, 32, 51, 0.08);
+  backdrop-filter: blur(10px);
+}
+
+.student-section-tabs {
+  display: flex;
+  min-width: 0;
+  gap: 0.2rem;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.student-section-tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.student-section-tabs button {
+  display: inline-flex;
+  min-height: 36px;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.4rem 0.6rem;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--record-muted);
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.student-section-tabs button:hover,
+.student-section-tabs button:focus-visible {
+  background: #e4f3f1;
+  color: #075e57;
+}
+
+.student-section-tabs i {
+  font-size: 1rem;
+}
+
+.student-section-save {
+  display: inline-flex;
+  min-height: 38px;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 0.4rem;
+  border-radius: 6px;
+  font-weight: 700;
+}
+
+.student-section-anchor {
+  scroll-margin-top: 140px;
+}
+
+.student-form-card {
+  border: 1px solid var(--record-border);
+  border-radius: 8px;
+  background: var(--record-surface);
+  box-shadow: 0 3px 12px rgba(23, 32, 51, 0.035);
+}
+
+.student-form-card :deep(.card-body) {
+  padding: 1.15rem;
+}
+
+.student-card-heading {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+  margin-bottom: 1rem;
+  padding-bottom: 0.8rem;
+  border-bottom: 1px solid var(--record-border);
+}
+
+.student-card-heading--compact {
+  margin-bottom: 0.9rem;
+}
+
+.student-card-heading__icon {
+  display: grid;
+  width: 36px;
+  height: 36px;
+  place-items: center;
+  flex: 0 0 36px;
+  border-radius: 6px;
+  background: #e4f3f1;
+  color: #075e57;
+  font-size: 1.1rem;
+}
+
+.student-card-heading__icon--warning {
+  background: #fff1e6;
+  color: #c2410c;
+}
+
+.student-card-heading__icon--health {
+  background: #fde8e8;
+  color: #b42318;
+}
+
+.student-card-heading__icon--pie {
+  background: #eef2ff;
+  color: #4338ca;
+}
+
+.student-card-heading h2,
+.student-sidebar-heading h2 {
+  margin: 0;
+  color: var(--record-ink);
+  font-size: 1rem;
+  font-weight: 750;
+  line-height: 1.25;
+}
+
+.student-card-heading p {
+  margin: 0.12rem 0 0;
+  color: var(--record-muted);
+  font-size: 0.74rem;
+  line-height: 1.3;
 }
 
 .student-form-card :deep(.form-control),
 .student-form-card :deep(.form-select) {
-  min-height: 44px;
+  min-height: 40px;
+  border-color: #ced6df;
+  border-radius: 5px;
+  font-size: 0.84rem;
+}
+
+.student-form-card :deep(.form-control:focus),
+.student-form-card :deep(.form-select:focus) {
+  border-color: #4ea69d;
+  box-shadow: 0 0 0 0.18rem rgba(15, 118, 110, 0.12);
+}
+
+.student-form-card :deep(.form-control:disabled),
+.student-form-card :deep(.form-select:disabled) {
+  background: var(--record-soft);
+  color: var(--record-muted);
+  opacity: 1;
 }
 
 .student-form-card :deep(.form-label) {
-  display: flex;
-  align-items: flex-end;
-  line-height: 1.25;
-  margin-bottom: 0.5rem;
+  margin-bottom: 0.35rem;
+  color: #4b5565;
+  font-size: 0.73rem;
+  font-weight: 700;
+  line-height: 1.3;
 }
 
 .student-form-card :deep(textarea.form-control) {
-  min-height: 90px;
+  min-height: 76px;
 }
 
 .student-form-card :deep(.btn) {
-  min-height: 42px;
+  min-height: 38px;
+  border-radius: 5px;
 }
 
-@media (min-width: 768px) {
-  .student-form-card :deep(.form-label) {
-    min-height: 3.15rem;
+.student-record-sidebar {
+  min-width: 0;
+}
+
+.student-sidebar-heading {
+  display: flex;
+  gap: 0.55rem;
+  align-items: center;
+  margin: -0.1rem 0 0.85rem;
+  padding-bottom: 0.7rem;
+  border-bottom: 1px solid var(--record-border);
+}
+
+.student-sidebar-heading > i {
+  color: var(--record-accent);
+  font-size: 1.1rem;
+}
+
+.student-summary-card :deep(.card-body) > .mb-2,
+.student-summary-card :deep(.card-body) > .mb-0 {
+  padding: 0.3rem 0;
+  color: var(--record-ink);
+  font-size: 0.8rem;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.student-summary-card :deep(.card-body) > .mb-2 .text-muted,
+.student-summary-card :deep(.card-body) > .mb-0 .text-muted {
+  display: block;
+  margin-bottom: 0.08rem;
+  color: var(--record-muted) !important;
+  font-size: 0.66rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.student-summary-card--alert {
+  border-left: 4px solid #ea580c;
+}
+
+.student-history-card :deep(.table) {
+  margin-bottom: 0;
+  font-size: 0.8rem;
+}
+
+.student-history-card :deep(.table thead th) {
+  border-bottom-width: 1px;
+  background: var(--record-soft);
+  color: #475569;
+  font-size: 0.67rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  vertical-align: middle;
+}
+
+.student-history-card :deep(.table tbody td) {
+  color: var(--record-ink);
+  vertical-align: middle;
+}
+
+@media (min-width: 1200px) {
+  .student-record-sidebar {
+    position: sticky;
+    top: 140px;
+  }
+}
+
+@media (max-width: 1199.98px) {
+  .student-profile-main {
+    grid-template-columns: 64px minmax(0, 1fr);
+  }
+
+  .student-profile-avatar {
+    width: 64px;
+    height: 64px;
+  }
+
+  .student-profile-actions {
+    grid-column: 1 / -1;
+    justify-content: flex-start;
+  }
+
+  .student-profile-facts {
+    grid-template-columns: repeat(3, 1fr);
+  }
+
+  .student-profile-fact:nth-child(3) {
+    border-right: 0;
+  }
+
+  .student-profile-fact:nth-child(n + 4) {
+    border-top: 1px solid var(--record-border);
+  }
+
+  .student-profile-fact--completion {
+    grid-column: span 2;
+  }
+}
+
+@media (max-width: 767.98px) {
+  .student-profile-main {
+    grid-template-columns: 52px minmax(0, 1fr);
+    gap: 0.75rem;
+    padding: 1rem;
+  }
+
+  .student-profile-avatar {
+    width: 52px;
+    height: 52px;
+    font-size: 1rem;
+  }
+
+  .student-profile-identity h1 {
+    font-size: 1.2rem;
+  }
+
+  .student-profile-meta {
+    gap: 0.35rem 0.7rem;
+  }
+
+  .student-profile-meta > span:nth-child(2) {
+    flex-basis: 100%;
+  }
+
+  .student-profile-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    width: 100%;
+  }
+
+  .student-profile-actions > :last-child {
+    grid-column: 1 / -1;
+  }
+
+  .student-profile-actions :deep(.btn),
+  .student-profile-actions > .btn {
+    width: 100%;
+    min-width: 0;
+    justify-content: center;
+    padding-right: 0.5rem;
+    padding-left: 0.5rem;
+    font-size: 0.73rem;
+  }
+
+  .student-profile-facts {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .student-profile-fact,
+  .student-profile-fact:nth-child(3) {
+    border-top: 1px solid var(--record-border);
+    border-right: 1px solid var(--record-border);
+  }
+
+  .student-profile-fact:nth-child(2n) {
+    border-right: 0;
+  }
+
+  .student-profile-fact:nth-child(-n + 2) {
+    border-top: 0;
+  }
+
+  .student-profile-fact--completion {
+    grid-column: 1 / -1;
+    border-right: 0;
+  }
+
+  .student-operational-alerts {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 0.45rem;
+  }
+
+  .student-section-bar {
+    top: 64px;
+  }
+
+  .student-section-save span {
+    display: none;
+  }
+
+  .student-section-save {
+    width: 38px;
+    justify-content: center;
+    padding: 0;
+  }
+
+  .student-form-card :deep(.card-body) {
+    padding: 1rem;
+  }
+
+  .student-card-heading {
+    align-items: flex-start;
+  }
+
+  .student-history-card > :deep(.card-body) > .d-flex {
+    align-items: flex-start !important;
+    flex-direction: column;
+    gap: 0.75rem;
   }
 }
 </style>

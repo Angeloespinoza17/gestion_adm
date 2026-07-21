@@ -1,16 +1,27 @@
 <?php
 
 use App\Http\Controllers\APIController;
+use App\Http\Controllers\Admin\RoleImpersonationController;
+use App\Http\Controllers\Admin\SuperAdminDashboardController;
 use App\Http\Controllers\CargoController;
 use App\Http\Controllers\Accounting\AccountingModuleController;
+use App\Http\Controllers\Attendance\AttendanceController;
+use App\Http\Controllers\Attendance\AttendanceStatisticsController;
+use App\Http\Controllers\Attendance\AttendanceStatisticsExportController;
+use App\Http\Controllers\Attendance\AttendanceStatisticsManagementController;
+use App\Http\Controllers\ContactMessageController;
 use App\Http\Controllers\DeployController;
+use App\Http\Controllers\HomeDashboardController;
 use App\Http\Controllers\MeController;
 use App\Http\Controllers\MaintenanceAnnualPlanController;
 use App\Http\Controllers\MaintenanceDependencyController;
 use App\Http\Controllers\MaintenanceVisitController;
 use App\Http\Controllers\MaintenanceWorkOrderController;
+use App\Http\Controllers\NewsPostController;
 use App\Http\Controllers\OrganigramController;
 use App\Http\Controllers\PermissionController;
+use App\Http\Controllers\ProfileController;
+use App\Http\Controllers\SiteEventController;
 use App\Http\Controllers\Porter\PorterCatalogController;
 use App\Http\Controllers\Porter\PorterDashboardController;
 use App\Http\Controllers\Porter\PorterDailyLogEntryController;
@@ -29,6 +40,7 @@ use App\Http\Controllers\RelevantCalendar\CalendarProcessTypeController;
 use App\Http\Controllers\Remuneration\RemunerationModuleController;
 use App\Http\Controllers\Infirmary\InfirmaryAccidentController;
 use App\Http\Controllers\Infirmary\InfirmaryAttentionController;
+use App\Http\Controllers\Infirmary\InfirmaryAttentionCategoryController;
 use App\Http\Controllers\Infirmary\InfirmaryCallLogController;
 use App\Http\Controllers\Infirmary\InfirmaryCatalogController;
 use App\Http\Controllers\Infirmary\InfirmaryDashboardController;
@@ -37,6 +49,8 @@ use App\Http\Controllers\Infirmary\InfirmaryMedicationAuthorizationController;
 use App\Http\Controllers\Infirmary\InfirmaryMedicationInventoryController;
 use App\Http\Controllers\Infirmary\InfirmaryReportController;
 use App\Http\Controllers\Infirmary\InfirmaryStudentHistoryController;
+use App\Http\Controllers\Infirmary\InfirmaryStaffAttentionController;
+use App\Http\Controllers\InternalCommunications\InternalAnnouncementController;
 use App\Http\Controllers\ApoyoProfesional\ApoyoProfesionalAttentionController;
 use App\Http\Controllers\ApoyoProfesional\ApoyoProfesionalCatalogController;
 use App\Http\Controllers\ApoyoProfesional\ApoyoProfesionalDashboardController;
@@ -123,6 +137,7 @@ use App\Http\Controllers\Students\StudentController;
 use App\Http\Controllers\Students\StudentEnrollmentController;
 use App\Http\Controllers\Students\StudentEnrollmentManagementController;
 use App\Http\Controllers\Students\StudentPromotionController;
+use App\Http\Controllers\Students\StudentReportController;
 use App\Http\Controllers\Spaces\DependencyReservationController;
 use App\Http\Controllers\Spaces\DependencyTypeController;
 use App\Http\Controllers\Spaces\SpaceStatisticsController;
@@ -200,14 +215,31 @@ Route::prefix('convivencia/public')->middleware('convivencia.installed')->group(
     Route::get('/complaints/{folio}', [ConvivenciaPublicComplaintController::class, 'show']);
 });
 
-    Route::middleware('auth:sanctum')->group(function () {
-        Route::get('/me/modules', [MeController::class, 'modules']);
-        Route::get('/me/permissions', [MeController::class, 'permissions']);
-        Route::post('/logout', [APIController::class, 'logout']);
-        Route::get('/logout', [APIController::class, 'logout']);
+Route::middleware('auth:sanctum')->group(function () {
+    Route::get('/me/modules', [MeController::class, 'modules']);
+    Route::get('/me/permissions', [MeController::class, 'permissions']);
+    Route::get('/me/profile', [ProfileController::class, 'show']);
+    Route::post('/me/profile', [ProfileController::class, 'update']);
+    Route::put('/me/password', [ProfileController::class, 'updatePassword']);
+    Route::get('/inicio/overview', HomeDashboardController::class);
+    Route::post('/logout', [APIController::class, 'logout']);
+    Route::get('/logout', [APIController::class, 'logout']);
+
+    Route::prefix('internal-communications')->group(function () {
+        Route::post('/{internalAnnouncement}/read', [InternalAnnouncementController::class, 'markRead']);
+        Route::get('/catalogs', [InternalAnnouncementController::class, 'catalogs'])->middleware('permission:ver_comunicaciones_internas');
+        Route::get('/', [InternalAnnouncementController::class, 'index'])->middleware('permission:ver_comunicaciones_internas');
+        Route::post('/', [InternalAnnouncementController::class, 'store'])->middleware('permission:gestionar_comunicaciones_internas');
+        Route::get('/{internalAnnouncement}', [InternalAnnouncementController::class, 'show'])->middleware('permission:ver_comunicaciones_internas');
+        Route::put('/{internalAnnouncement}', [InternalAnnouncementController::class, 'update'])->middleware('permission:gestionar_comunicaciones_internas');
+        Route::delete('/{internalAnnouncement}', [InternalAnnouncementController::class, 'destroy'])->middleware('permission:gestionar_comunicaciones_internas');
+    });
 
     // Administración (RBAC)
     Route::prefix('admin')->group(function () {
+        Route::get('/dashboard', [SuperAdminDashboardController::class, 'index'])->middleware('permission:administrar_modulos');
+        Route::get('/dashboard/report', [SuperAdminDashboardController::class, 'report'])->middleware('permission:administrar_modulos');
+
         Route::get('/users/catalogs', [UserController::class, 'catalogs'])->middleware('permission:administrar_usuarios');
         Route::get('/users', [UserController::class, 'index'])->middleware('permission:administrar_usuarios');
         Route::post('/users', [UserController::class, 'store'])->middleware('permission:administrar_usuarios');
@@ -224,8 +256,10 @@ Route::prefix('convivencia/public')->middleware('convivencia.installed')->group(
         Route::get('/roles/{role}', [RoleController::class, 'show'])->middleware('permission:administrar_roles');
         Route::put('/roles/{role}', [RoleController::class, 'update'])->middleware('permission:administrar_roles');
         Route::delete('/roles/{role}', [RoleController::class, 'destroy'])->middleware('permission:administrar_roles');
+        Route::delete('/roles/{role}/users/{user}', [RoleController::class, 'removeUser'])->middleware('permission:administrar_roles');
         Route::put('/roles/{role}/permissions', [RoleController::class, 'setPermissions'])->middleware('permission:administrar_roles');
         Route::put('/roles/{role}/modules', [RoleController::class, 'setModules'])->middleware('permission:administrar_roles');
+        Route::post('/impersonate/roles/{roleSlug}', [RoleImpersonationController::class, 'switch']);
 
         Route::get('/permissions', [PermissionController::class, 'index'])->middleware('permission:administrar_permisos');
         Route::post('/permissions', [PermissionController::class, 'store'])->middleware('permission:administrar_permisos');
@@ -234,6 +268,26 @@ Route::prefix('convivencia/public')->middleware('convivencia.installed')->group(
         Route::post('/modules', [SystemModuleController::class, 'store'])->middleware('permission:administrar_modulos');
         Route::put('/modules/{systemModule}', [SystemModuleController::class, 'update'])->middleware('permission:administrar_modulos');
         Route::put('/modules/{systemModule}/active', [SystemModuleController::class, 'setActive'])->middleware('permission:administrar_modulos');
+
+        Route::get('/news/catalogs', [NewsPostController::class, 'catalogs'])->middleware('permission:ver_noticias');
+        Route::get('/news', [NewsPostController::class, 'index'])->middleware('permission:ver_noticias');
+        Route::post('/news', [NewsPostController::class, 'store'])->middleware('permission:gestionar_noticias');
+        Route::get('/news/{newsPost}', [NewsPostController::class, 'show'])->middleware('permission:ver_noticias');
+        Route::put('/news/{newsPost}', [NewsPostController::class, 'update'])->middleware('permission:gestionar_noticias');
+        Route::delete('/news/{newsPost}', [NewsPostController::class, 'destroy'])->middleware('permission:gestionar_noticias');
+
+        Route::get('/events/catalogs', [SiteEventController::class, 'catalogs'])->middleware('permission:ver_eventos');
+        Route::get('/events', [SiteEventController::class, 'index'])->middleware('permission:ver_eventos');
+        Route::post('/events', [SiteEventController::class, 'store'])->middleware('permission:gestionar_eventos');
+        Route::get('/events/{siteEvent}', [SiteEventController::class, 'show'])->middleware('permission:ver_eventos');
+        Route::put('/events/{siteEvent}', [SiteEventController::class, 'update'])->middleware('permission:gestionar_eventos');
+        Route::delete('/events/{siteEvent}', [SiteEventController::class, 'destroy'])->middleware('permission:gestionar_eventos');
+
+        Route::get('/contact-messages/catalogs', [ContactMessageController::class, 'catalogs'])->middleware('permission:ver_contactos_sitio');
+        Route::get('/contact-messages', [ContactMessageController::class, 'index'])->middleware('permission:ver_contactos_sitio');
+        Route::get('/contact-messages/{contactMessage}', [ContactMessageController::class, 'show'])->middleware('permission:ver_contactos_sitio');
+        Route::put('/contact-messages/{contactMessage}', [ContactMessageController::class, 'update'])->middleware('permission:gestionar_contactos_sitio');
+        Route::delete('/contact-messages/{contactMessage}', [ContactMessageController::class, 'destroy'])->middleware('permission:gestionar_contactos_sitio');
 
         Route::get('/cargos', [CargoController::class, 'index'])->middleware('permission:administrar_cargos');
         Route::post('/cargos', [CargoController::class, 'store'])->middleware('permission:administrar_cargos');
@@ -246,9 +300,70 @@ Route::prefix('convivencia/public')->middleware('convivencia.installed')->group(
         Route::put('/organigram/{staff}/relations', [OrganigramController::class, 'sync'])->middleware('permission:administrar_organigrama');
     });
 
+    Route::prefix('attendance-statistics')->group(function () {
+        Route::get('/dashboard', [AttendanceStatisticsController::class, 'dashboard'])->middleware('permission:attendance_statistics.view');
+        Route::get('/timeline', [AttendanceStatisticsController::class, 'timeline'])->middleware('permission:attendance_statistics.view');
+        Route::get('/courses', [AttendanceStatisticsController::class, 'courses'])->middleware('permission:attendance_statistics.view_course');
+        Route::get('/students', [AttendanceStatisticsController::class, 'students'])->middleware('permission:attendance_statistics.view_student');
+        Route::get('/students/{studentProfile}', [AttendanceStatisticsController::class, 'student'])->middleware('permission:attendance_statistics.view_student');
+        Route::get('/heatmap', [AttendanceStatisticsController::class, 'heatmap'])->middleware('permission:attendance_statistics.view_course');
+        Route::get('/risk', [AttendanceStatisticsController::class, 'risk'])->middleware('permission:attendance_statistics.view');
+        Route::get('/alerts', [AttendanceStatisticsController::class, 'alerts'])->middleware('permission:attendance_statistics.view');
+        Route::post('/alerts/{attendanceAlert}/assign', [AttendanceStatisticsManagementController::class, 'assignAlert'])->middleware('permission:attendance_statistics.manage_alerts');
+
+        Route::get('/interventions', [AttendanceStatisticsManagementController::class, 'interventions'])->middleware('permission:attendance_statistics.view');
+        Route::post('/interventions', [AttendanceStatisticsManagementController::class, 'storeIntervention'])->middleware('permission:attendance_statistics.manage_interventions');
+        Route::patch('/interventions/{attendanceIntervention}', [AttendanceStatisticsManagementController::class, 'updateIntervention'])->middleware('permission:attendance_statistics.manage_interventions');
+
+        Route::get('/goals', [AttendanceStatisticsManagementController::class, 'goals'])->middleware('permission:attendance_statistics.view');
+        Route::post('/goals', [AttendanceStatisticsManagementController::class, 'storeGoal'])->middleware('permission:attendance_statistics.manage_goals');
+        Route::put('/goals/{attendanceGoal}', [AttendanceStatisticsManagementController::class, 'updateGoal'])->middleware('permission:attendance_statistics.manage_goals');
+        Route::delete('/goals/{attendanceGoal}', [AttendanceStatisticsManagementController::class, 'destroyGoal'])->middleware('permission:attendance_statistics.manage_goals');
+
+        Route::post('/simulate', [AttendanceStatisticsController::class, 'simulate'])->middleware('permission:attendance_statistics.view');
+        Route::get('/financial-impact', [AttendanceStatisticsController::class, 'financial'])->middleware('permission:attendance_statistics.view_financial');
+        Route::get('/data-quality', [AttendanceStatisticsController::class, 'dataQuality'])->middleware('permission:attendance_statistics.configure');
+        Route::get('/audit', [AttendanceStatisticsController::class, 'audit'])->middleware('permission:attendance_statistics.view_audit');
+
+        Route::get('/configuration', [AttendanceStatisticsManagementController::class, 'configuration'])->middleware('permission:attendance_statistics.configure');
+        Route::put('/configuration/risk-levels/{attendanceRiskLevel}', [AttendanceStatisticsManagementController::class, 'updateRiskLevel'])->middleware('permission:attendance_statistics.configure');
+        Route::put('/configuration/alert-rules/{attendanceAlertRule}', [AttendanceStatisticsManagementController::class, 'updateAlertRule'])->middleware('permission:attendance_statistics.configure');
+        Route::post('/configuration/financial-parameters', [AttendanceStatisticsManagementController::class, 'storeFinancialParameter'])->middleware('permission:attendance_statistics.configure');
+        Route::get('/saved-filters', [AttendanceStatisticsManagementController::class, 'savedFilters'])->middleware('permission:attendance_statistics.view');
+        Route::post('/saved-filters', [AttendanceStatisticsManagementController::class, 'storeSavedFilter'])->middleware('permission:attendance_statistics.view');
+        Route::put('/preferences', [AttendanceStatisticsManagementController::class, 'updatePreferences'])->middleware('permission:attendance_statistics.view');
+
+        Route::get('/scheduled-reports', [AttendanceStatisticsManagementController::class, 'scheduledReports'])->middleware('permission:attendance_statistics.manage_reports');
+        Route::post('/scheduled-reports', [AttendanceStatisticsManagementController::class, 'storeScheduledReport'])->middleware('permission:attendance_statistics.manage_reports');
+        Route::delete('/scheduled-reports/{attendanceScheduledReport}', [AttendanceStatisticsManagementController::class, 'destroyScheduledReport'])->middleware('permission:attendance_statistics.manage_reports');
+
+        Route::get('/exports', [AttendanceStatisticsExportController::class, 'index'])->middleware('permission:attendance_statistics.export');
+        Route::post('/exports', [AttendanceStatisticsExportController::class, 'store'])->middleware('permission:attendance_statistics.export');
+        Route::get('/exports/{attendanceExportJob}', [AttendanceStatisticsExportController::class, 'show'])->middleware('permission:attendance_statistics.export');
+        Route::get('/exports/{attendanceExportJob}/download', [AttendanceStatisticsExportController::class, 'download'])->middleware('permission:attendance_statistics.export');
+    });
+
     Route::prefix('students')->group(function () {
         Route::get('/catalogs', [StudentController::class, 'catalogs'])->middleware('permission:ver_estudiantes');
         Route::get('/export', [StudentController::class, 'export'])->middleware('permission:ver_estudiantes');
+        Route::post('/import-pdf/chunk', [StudentController::class, 'importPdfChunk'])->middleware('permission:crear_estudiantes');
+        Route::post('/import-pdf', [StudentController::class, 'importPdf'])->middleware('permission:crear_estudiantes');
+        Route::get('/reports', StudentReportController::class)->middleware('permission:ver_estudiantes');
+        Route::get('/reports/details', [StudentReportController::class, 'details'])->middleware('permission:ver_estudiantes');
+        Route::get('/reports/missing-data', [StudentReportController::class, 'missingData'])->middleware('permission:ver_estudiantes');
+
+        Route::get('/attendance/dashboard', [AttendanceController::class, 'dashboard'])->middleware('permission:ver_asistencia');
+        Route::get('/attendance/alerts', [AttendanceController::class, 'alerts'])->middleware('permission:ver_asistencia');
+        Route::get('/attendance/students', [AttendanceController::class, 'students'])->middleware('permission:ver_asistencia');
+        Route::post('/attendance/imports/preview', [AttendanceController::class, 'preview'])->middleware('permission:importar_asistencia');
+        Route::post('/attendance/imports/{attendanceImport}/confirm', [AttendanceController::class, 'confirm'])->middleware('permission:importar_asistencia');
+        Route::get('/attendance/students/{studentProfile}', [AttendanceController::class, 'student'])->middleware('permission:ver_asistencia');
+        Route::get('/attendance/days/{schoolDay}', [AttendanceController::class, 'day'])->middleware('permission:ver_asistencia');
+        Route::patch('/attendance/school-days/{schoolDay}', [AttendanceController::class, 'updateSchoolDay'])->middleware('permission:editar_asistencia');
+        Route::patch('/attendance/records/{attendanceRecord}', [AttendanceController::class, 'updateRecord'])->middleware('permission:editar_asistencia');
+        Route::patch('/attendance/alerts/{attendanceAlert}', [AttendanceController::class, 'updateAlert'])->middleware('permission:gestionar_alertas_asistencia');
+        Route::post('/attendance/alerts/{attendanceAlert}/followups', [AttendanceController::class, 'followup'])->middleware('permission:gestionar_alertas_asistencia');
+        Route::put('/attendance/projection-settings/{academicYear}', [AttendanceController::class, 'updateProjection'])->middleware('permission:proyectar_ingresos_asistencia');
 
         Route::get('/levels', [EducationLevelController::class, 'index'])->middleware('permission:ver_estudiantes');
         Route::post('/levels', [EducationLevelController::class, 'store'])->middleware('permission:administrar_cursos_academicos');
@@ -264,6 +379,7 @@ Route::prefix('convivencia/public')->middleware('convivencia.installed')->group(
         Route::post('/courses', [CourseSectionController::class, 'store'])->middleware('permission:administrar_cursos_academicos');
         Route::get('/courses/{courseSection}', [CourseSectionController::class, 'show'])->middleware('permission:ver_estudiantes');
         Route::put('/courses/{courseSection}', [CourseSectionController::class, 'update'])->middleware('permission:administrar_cursos_academicos');
+        Route::delete('/courses/{courseSection}', [CourseSectionController::class, 'destroy'])->middleware('permission:administrar_cursos_academicos');
 
         Route::get('/enrollment-management', [StudentEnrollmentManagementController::class, 'index'])->middleware('permission:gestionar_matriculas_estudiantes');
         Route::post('/enrollment-management/{studentEnrollment}/transfer', [StudentEnrollmentManagementController::class, 'transfer'])->middleware('permission:gestionar_matriculas_estudiantes');
@@ -315,6 +431,7 @@ Route::prefix('convivencia/public')->middleware('convivencia.installed')->group(
         Route::post('/daily-log', [PorterDailyLogEntryController::class, 'store'])->middleware('permission:registrar_bitacora_porteria');
 
         Route::get('/keys', [PorterKeyController::class, 'index'])->middleware('permission:ver_historial_porteria');
+        Route::post('/key-groups', [PorterKeyController::class, 'storeGroup'])->middleware('permission:gestionar_llaves_porteria');
         Route::post('/keys', [PorterKeyController::class, 'store'])->middleware('permission:gestionar_llaves_porteria');
         Route::post('/keys/{porterKey}/loans', [PorterKeyController::class, 'loan'])->middleware('permission:gestionar_llaves_porteria');
         Route::post('/key-loans/{porterKeyLoan}/return', [PorterKeyController::class, 'returnLoan'])->middleware('permission:gestionar_llaves_porteria');
@@ -421,7 +538,13 @@ Route::prefix('convivencia/public')->middleware('convivencia.installed')->group(
     Route::prefix('infirmary')->group(function () {
         Route::get('/catalogs', [InfirmaryCatalogController::class, 'catalogs'])->middleware('permission:ver_enfermeria');
         Route::get('/students', [InfirmaryCatalogController::class, 'students'])->middleware('permission:ver_enfermeria');
+        Route::get('/students/{studentProfile}/context', [InfirmaryCatalogController::class, 'studentContext'])->middleware('permission:ver_enfermeria');
         Route::get('/dashboard', InfirmaryDashboardController::class)->middleware('permission:ver_enfermeria');
+
+        Route::get('/categories', [InfirmaryAttentionCategoryController::class, 'index'])->middleware('permission:ver_enfermeria');
+        Route::post('/categories', [InfirmaryAttentionCategoryController::class, 'store'])->middleware('permission:administrar_catalogos_enfermeria');
+        Route::put('/categories/{category}', [InfirmaryAttentionCategoryController::class, 'update'])->middleware('permission:administrar_catalogos_enfermeria');
+        Route::delete('/categories/{category}', [InfirmaryAttentionCategoryController::class, 'destroy'])->middleware('permission:administrar_catalogos_enfermeria');
 
         Route::get('/attentions', [InfirmaryAttentionController::class, 'index'])->middleware('permission:ver_enfermeria');
         Route::post('/attentions', [InfirmaryAttentionController::class, 'store'])->middleware('permission:crear_atenciones_enfermeria');
@@ -431,6 +554,11 @@ Route::prefix('convivencia/public')->middleware('convivencia.installed')->group(
         Route::post('/attentions/{attention}/finalize', [InfirmaryAttentionController::class, 'finalize'])->middleware('permission:editar_atenciones_enfermeria');
         Route::post('/attentions/{attention}/documents', [InfirmaryDocumentController::class, 'storeForAttention'])->middleware('permission:editar_atenciones_enfermeria');
 
+        Route::get('/staff-attentions', [InfirmaryStaffAttentionController::class, 'index'])->middleware('permission:ver_enfermeria');
+        Route::post('/staff-attentions', [InfirmaryStaffAttentionController::class, 'store'])->middleware('permission:crear_atenciones_enfermeria');
+        Route::get('/staff-attentions/{attention}', [InfirmaryStaffAttentionController::class, 'show'])->middleware('permission:ver_enfermeria');
+        Route::put('/staff-attentions/{attention}', [InfirmaryStaffAttentionController::class, 'update'])->middleware('permission:editar_atenciones_enfermeria');
+        Route::delete('/staff-attentions/{attention}', [InfirmaryStaffAttentionController::class, 'destroy'])->middleware('permission:eliminar_atenciones_enfermeria');
         Route::get('/student-history/{studentProfile}', InfirmaryStudentHistoryController::class)->middleware('permission:ver_enfermeria');
 
         Route::get('/medications', [InfirmaryMedicationInventoryController::class, 'index'])->middleware('permission:ver_enfermeria');
@@ -749,7 +877,13 @@ Route::prefix('convivencia/public')->middleware('convivencia.installed')->group(
     Route::prefix('remuneraciones')->group(function () {
         Route::get('/catalogs', [RemunerationModuleController::class, 'catalogs'])->middleware('permission:remuneraciones.ver');
         Route::get('/dashboard', [RemunerationModuleController::class, 'dashboard'])->middleware('permission:remuneraciones.ver');
+        Route::get('/book-analytics', [RemunerationModuleController::class, 'bookAnalytics'])->middleware('permission:remuneraciones.reportes.ver');
+        Route::get('/book-alert-rules', [RemunerationModuleController::class, 'bookAlertRules'])->middleware('permission:remuneraciones.reportes.ver');
+        Route::post('/book-alert-rules', [RemunerationModuleController::class, 'storeBookAlertRule'])->middleware('permission:remuneraciones.reportes.ver');
+        Route::patch('/book-concept-settings/{conceptKey}', [RemunerationModuleController::class, 'updateBookConceptSetting'])->middleware('permission:remuneraciones.conceptos.gestionar');
         Route::get('/export', [RemunerationModuleController::class, 'export'])->middleware('permission:remuneraciones.reportes.exportar');
+        Route::post('/imports/preview', [RemunerationModuleController::class, 'previewImport'])->middleware('permission:remuneraciones.importar');
+        Route::post('/imports', [RemunerationModuleController::class, 'importBook'])->middleware('permission:remuneraciones.importar');
         Route::get('/payrolls/pdf-data', [RemunerationModuleController::class, 'payrollPdfData'])->middleware('permission:remuneraciones.reportes.exportar');
         Route::post('/payrolls/calculate', [RemunerationModuleController::class, 'calculate'])->middleware('permission:remuneraciones.liquidaciones.calcular');
         Route::post('/payrolls/bulk-calculate', [RemunerationModuleController::class, 'bulkCalculate'])->middleware('permission:remuneraciones.liquidaciones.calcular');
@@ -1018,11 +1152,15 @@ Route::prefix('convivencia/public')->middleware('convivencia.installed')->group(
         // Bienes
         Route::get('/items/catalogs', [InventoryItemController::class, 'catalogs'])
             ->middleware('permission:ver_inventario');
+        Route::get('/items/similar', [InventoryItemController::class, 'similar'])
+            ->middleware('permission:ver_inventario');
         Route::get('/items', [InventoryItemController::class, 'index'])
             ->middleware('permission:ver_inventario');
         Route::post('/items', [InventoryItemController::class, 'store'])
             ->middleware('permission:crear_inventario');
         Route::get('/items/{item}', [InventoryItemController::class, 'show'])
+            ->middleware('permission:ver_inventario');
+        Route::get('/items/{item}/image', [InventoryItemController::class, 'image'])
             ->middleware('permission:ver_inventario');
         Route::put('/items/{item}', [InventoryItemController::class, 'update'])
             ->middleware('permission:editar_inventario');
@@ -1032,6 +1170,8 @@ Route::prefix('convivencia/public')->middleware('convivencia.installed')->group(
         // Fotos
         Route::post('/items/{item}/photos', [InventoryItemPhotoController::class, 'store'])
             ->middleware('permission:editar_inventario');
+        Route::get('/photos/{photo}/image', [InventoryItemPhotoController::class, 'image'])
+            ->middleware('permission:ver_inventario');
         Route::delete('/photos/{photo}', [InventoryItemPhotoController::class, 'destroy'])
             ->middleware('permission:eliminar_documentos_inventario');
         Route::put('/photos/{photo}/main', [InventoryItemPhotoController::class, 'setMain'])

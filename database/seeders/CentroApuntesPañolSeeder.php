@@ -21,6 +21,7 @@ use App\Services\CentroApuntes\PanolDeliveryService;
 use App\Services\CentroApuntes\PanolStockService;
 use Carbon\Carbon;
 use Database\Seeders\Modules\StaffModuleSeeder;
+use Database\Seeders\Support\PreventsProductionSeeding;
 use Faker\Factory as Faker;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Collection;
@@ -29,6 +30,8 @@ use Illuminate\Support\Facades\Storage;
 
 class CentroApuntesPañolSeeder extends Seeder
 {
+    use PreventsProductionSeeding;
+
     private \Faker\Generator $faker;
 
     private User $actor;
@@ -37,6 +40,7 @@ class CentroApuntesPañolSeeder extends Seeder
 
     public function run(): void
     {
+        $this->preventProductionSeeding();
         $this->faker = Faker::create('es_CL');
         $this->faker->seed(20260629);
 

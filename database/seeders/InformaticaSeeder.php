@@ -18,10 +18,13 @@ use App\Services\Informatica\ItEquipmentService;
 use Carbon\Carbon;
 use Database\Seeders\Modules\StaffModuleSeeder;
 use Database\Seeders\Modules\StudentModuleSeeder;
+use Database\Seeders\Support\PreventsProductionSeeding;
 use Illuminate\Database\Seeder;
 
 class InformaticaSeeder extends Seeder
 {
+    use PreventsProductionSeeding;
+
     private Carbon $now;
 
     private User $actor;
@@ -36,6 +39,7 @@ class InformaticaSeeder extends Seeder
 
     public function run(): void
     {
+        $this->preventProductionSeeding();
         $this->call([
             RbacSeeder::class,
             ChileLocationSeeder::class,

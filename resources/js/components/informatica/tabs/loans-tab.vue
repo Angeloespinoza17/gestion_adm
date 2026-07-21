@@ -208,6 +208,15 @@ export default {
         this.form.attachment = file;
       }
     },
+    clearCreateAttachment() {
+      this.form.attachment = null;
+      if (this.$refs.createAttachmentInput) this.$refs.createAttachmentInput.value = "";
+    },
+    formatFileSize(bytes) {
+      if (!bytes) return "0 KB";
+      if (bytes < 1024 * 1024) return `${Math.ceil(bytes / 1024)} KB`;
+      return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+    },
     buildCreateFormData() {
       const payload = new FormData();
       [
@@ -501,42 +510,61 @@ export default {
       </div>
     </BCard>
 
-    <BModal v-model="showCreateModal" size="xl" title="Nuevo préstamo de equipo" hide-footer>
-      <div class="d-flex justify-content-between align-items-center mb-3 gap-2">
-        <div class="text-muted small">Selecciona un equipo disponible, define el solicitante y registra la fecha comprometida de devolución.</div>
+    <BModal v-model="showCreateModal" size="xl" title="Nuevo préstamo de equipo" hide-footer scrollable>
+      <div class="loan-form-intro">
+        <div><strong>Registra solo la información disponible</strong><span>Únicamente el equipo es obligatorio. Los demás antecedentes se pueden completar más adelante.</span></div>
         <InformaticaHelpButton
           title="Ayuda: nuevo préstamo"
-          text="Si el sistema ya tiene usuarios, funcionarios o estudiantes puedes vincularlos. Si no, registra nombre, RUT y contacto manualmente."
+          text="Selecciona el equipo. Puedes vincular un funcionario, estudiante o usuario existente; todos los demás campos son opcionales."
         />
       </div>
-      <div class="row g-3">
-        <div class="col-md-4"><label class="form-label">Equipo disponible</label><BFormSelect v-model="form.it_equipment_id" :options="availableEquipmentOptions" /></div>
-        <div class="col-md-3"><label class="form-label">Tipo solicitante</label><BFormSelect v-model="form.requester_type" :options="normalizeOptions(catalogs.requester_types || []).map((item) => ({ value: item.value, text: item.label }))" /></div>
-        <div class="col-md-3"><label class="form-label">Responsable entrega</label><BFormSelect v-model="form.delivered_by_user_id" :options="userOptions" /></div>
-        <div class="col-md-2"><label class="form-label">Adjunto</label><BFormFile @change="onAttachmentSelected($event, 'form')" /></div>
 
-        <div class="col-md-4" v-if="form.requester_type === 'funcionario'">
-          <label class="form-label">Funcionario del sistema</label>
-          <BFormSelect v-model="form.requester_staff_id" :options="staffOptions" />
+      <section class="loan-form-section">
+        <div class="loan-form-section__title"><span><i class="bx bx-laptop"></i></span><div><strong>Equipo y entrega</strong><small>Selecciona el activo que saldrá en préstamo</small></div></div>
+        <div class="row g-3">
+          <div class="col-lg-6"><label class="form-label">Equipo disponible <span class="text-danger">*</span></label><BFormSelect v-model="form.it_equipment_id" :options="availableEquipmentOptions" /></div>
+          <div class="col-lg-3"><label class="form-label">Responsable entrega <span class="optional-label">Opcional</span></label><BFormSelect v-model="form.delivered_by_user_id" :options="userOptions" /></div>
+          <div class="col-lg-3"><label class="form-label">Fecha y hora <span class="optional-label">Opcional</span></label><BFormInput v-model="form.borrowed_at" type="datetime-local" /></div>
         </div>
-        <div class="col-md-4" v-if="form.requester_type === 'estudiante'">
-          <label class="form-label">Estudiante del sistema</label>
-          <BFormSelect v-model="form.requester_student_profile_id" :options="studentOptions" />
-        </div>
-        <div class="col-md-4" v-if="['funcionario', 'apoderado', 'externo', 'otro'].includes(form.requester_type)">
-          <label class="form-label">Usuario del sistema (opcional)</label>
-          <BFormSelect v-model="form.requester_user_id" :options="userOptions" />
-        </div>
+      </section>
 
-        <div class="col-md-4"><label class="form-label">Nombre solicitante</label><BFormInput v-model="form.requester_name" /></div>
-        <div class="col-md-4"><label class="form-label">RUT solicitante</label><BFormInput v-model="form.requester_rut" /></div>
-        <div class="col-md-4"><label class="form-label">Contacto</label><BFormInput v-model="form.requester_contact" /></div>
-        <div class="col-md-3"><label class="form-label">Fecha y hora préstamo</label><BFormInput v-model="form.borrowed_at" type="datetime-local" /></div>
-        <div class="col-md-3"><label class="form-label">Fecha comprometida</label><BFormInput v-model="form.due_at" type="datetime-local" /></div>
-        <div class="col-md-3"><label class="form-label">Lugar de uso</label><BFormInput v-model="form.location_name" /></div>
-        <div class="col-md-3"><label class="form-label">Motivo</label><BFormInput v-model="form.purpose" /></div>
-        <div class="col-12"><label class="form-label">Observaciones</label><BFormTextarea v-model="form.notes" rows="3" /></div>
-      </div>
+      <section class="loan-form-section">
+        <div class="loan-form-section__title"><span><i class="bx bx-user"></i></span><div><strong>Solicitante</strong><small>Vincúlalo al sistema o escribe los datos que conozcas</small></div></div>
+        <div class="row g-3">
+          <div class="col-lg-4"><label class="form-label">Tipo solicitante <span class="optional-label">Opcional</span></label><BFormSelect v-model="form.requester_type" :options="normalizeOptions(catalogs.requester_types || []).map((item) => ({ value: item.value, text: item.label }))" /></div>
+          <div class="col-lg-4" v-if="form.requester_type === 'funcionario'"><label class="form-label">Funcionario del sistema <span class="optional-label">Opcional</span></label><BFormSelect v-model="form.requester_staff_id" :options="staffOptions" /></div>
+          <div class="col-lg-4" v-if="form.requester_type === 'estudiante'"><label class="form-label">Estudiante del sistema <span class="optional-label">Opcional</span></label><BFormSelect v-model="form.requester_student_profile_id" :options="studentOptions" /></div>
+          <div class="col-lg-4" v-if="['funcionario', 'apoderado', 'externo', 'otro'].includes(form.requester_type)"><label class="form-label">Usuario del sistema <span class="optional-label">Opcional</span></label><BFormSelect v-model="form.requester_user_id" :options="userOptions" /></div>
+          <div class="col-lg-4"><label class="form-label">Nombre <span class="optional-label">Opcional</span></label><BFormInput v-model="form.requester_name" placeholder="Nombre del solicitante" /></div>
+          <div class="col-lg-4"><label class="form-label">RUT <span class="optional-label">Opcional</span></label><BFormInput v-model="form.requester_rut" placeholder="12.345.678-9" /></div>
+          <div class="col-lg-4"><label class="form-label">Contacto <span class="optional-label">Opcional</span></label><BFormInput v-model="form.requester_contact" placeholder="Correo o teléfono" /></div>
+        </div>
+      </section>
+
+      <section class="loan-form-section">
+        <div class="loan-form-section__title"><span><i class="bx bx-calendar"></i></span><div><strong>Uso y devolución</strong><small>Información complementaria del préstamo</small></div></div>
+        <div class="row g-3">
+          <div class="col-lg-4"><label class="form-label">Fecha comprometida <span class="optional-label">Opcional</span></label><BFormInput v-model="form.due_at" type="datetime-local" /></div>
+          <div class="col-lg-4"><label class="form-label">Lugar de uso <span class="optional-label">Opcional</span></label><BFormInput v-model="form.location_name" placeholder="Sala, oficina o dependencia" /></div>
+          <div class="col-lg-4"><label class="form-label">Motivo <span class="optional-label">Opcional</span></label><BFormInput v-model="form.purpose" placeholder="Actividad o finalidad" /></div>
+          <div class="col-12"><label class="form-label">Observaciones <span class="optional-label">Opcional</span></label><BFormTextarea v-model="form.notes" rows="2" placeholder="Información adicional relevante" /></div>
+        </div>
+      </section>
+
+      <section class="loan-form-section mb-0">
+        <div class="loan-form-section__title"><span><i class="bx bx-paperclip"></i></span><div><strong>Documento de respaldo</strong><small>Acta, autorización o fotografía, si corresponde</small></div></div>
+        <input ref="createAttachmentInput" type="file" class="visually-hidden" accept="image/*,.pdf,.doc,.docx" @change="onAttachmentSelected($event, 'form')" />
+        <button v-if="!form.attachment" type="button" class="loan-file-dropzone" @click="$refs.createAttachmentInput.click()">
+          <span class="loan-file-dropzone__icon"><i class="bx bx-cloud-upload"></i></span>
+          <span><strong>Seleccionar archivo</strong><small>PDF, imagen o documento · máximo 20 MB · opcional</small></span>
+        </button>
+        <div v-else class="loan-file-selected">
+          <span class="loan-file-selected__icon"><i class="bx bx-file"></i></span>
+          <span class="loan-file-selected__info"><strong>{{ form.attachment.name }}</strong><small>{{ formatFileSize(form.attachment.size) }}</small></span>
+          <BButton size="sm" variant="light" @click="$refs.createAttachmentInput.click()">Cambiar</BButton>
+          <BButton size="sm" variant="outline-danger" aria-label="Quitar archivo" @click="clearCreateAttachment"><i class="bx bx-trash"></i></BButton>
+        </div>
+      </section>
       <div class="d-flex justify-content-end gap-2 mt-4">
         <BButton variant="light" @click="closeCreateModal">Cancelar</BButton>
         <BButton variant="primary" :disabled="saving" @click="save">{{ saving ? "Guardando..." : "Registrar préstamo" }}</BButton>
@@ -620,3 +648,13 @@ export default {
     </BModal>
   </div>
 </template>
+
+<style scoped>
+.loan-form-intro { display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-bottom: 1rem; padding: .85rem 1rem; color: #395a50; border-radius: 11px; background: rgba(52,195,143,.09); }.loan-form-intro strong,.loan-form-intro span { display: block; }.loan-form-intro span { margin-top: .15rem; color: #6a7d77; font-size: .75rem; }
+.loan-form-section { margin-bottom: 1rem; padding: 1rem 1.1rem 1.15rem; border: 1px solid #e8ebf2; border-radius: 14px; background: #fff; }
+.loan-form-section__title { display: flex; align-items: center; gap: .7rem; margin-bottom: 1rem; }.loan-form-section__title > span { display: grid; flex: 0 0 36px; height: 36px; place-items: center; color: #556ee6; border-radius: 10px; background: #eef1ff; font-size: 1.15rem; }.loan-form-section__title strong,.loan-form-section__title small { display: block; }.loan-form-section__title strong { color: #2d3548; }.loan-form-section__title small { margin-top: .1rem; color: #858d9d; font-size: .7rem; }
+.optional-label { margin-left: .25rem; color: #9299a7; font-size: .62rem; font-weight: 500; }
+.loan-file-dropzone { display: flex; width: 100%; align-items: center; justify-content: center; gap: .85rem; min-height: 92px; padding: 1rem; color: #667085; text-align: left; border: 1.5px dashed #bdc7e9; border-radius: 12px; background: #fafbff; transition: .18s ease; }.loan-file-dropzone:hover { color: #4057d6; border-color: #7285e4; background: #f3f5ff; }.loan-file-dropzone__icon { font-size: 2rem; }.loan-file-dropzone strong,.loan-file-dropzone small { display: block; }.loan-file-dropzone small { margin-top: .2rem; color: #8a92a2; font-size: .72rem; }
+.loan-file-selected { display: flex; align-items: center; gap: .75rem; padding: .85rem; border: 1px solid #cfd7f3; border-radius: 12px; background: #f8f9ff; }.loan-file-selected__icon { display: grid; flex: 0 0 40px; height: 40px; place-items: center; color: #556ee6; border-radius: 10px; background: #e8ecff; font-size: 1.3rem; }.loan-file-selected__info { min-width: 0; flex: 1; }.loan-file-selected__info strong,.loan-file-selected__info small { display: block; }.loan-file-selected__info strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }.loan-file-selected__info small { color: #87909f; }
+@media (max-width: 575.98px) { .loan-form-section { padding: .9rem; }.loan-file-selected { flex-wrap: wrap; }.loan-file-selected__info { flex-basis: calc(100% - 55px); } }
+</style>

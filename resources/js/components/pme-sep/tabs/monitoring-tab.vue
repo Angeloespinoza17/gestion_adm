@@ -1,12 +1,14 @@
 <script>
 import axios from "axios";
 import PmeHelpButton from "../help-button.vue";
+import PmePagination from "../pagination.vue";
 import PmeStatusBadge from "../status-badge.vue";
 import {
   confirmPmeAction,
   formatPmeDate,
   formatPmeError,
   normalizeOptions,
+  normalizePagination,
   showPmeError,
   showPmeSuccess,
 } from "../module-utils";
@@ -32,7 +34,7 @@ const defaultForm = () => ({
 });
 
 export default {
-  components: { PmeHelpButton, PmeStatusBadge },
+  components: { PmeHelpButton, PmePagination, PmeStatusBadge },
   props: {
     catalogs: {
       type: Object,
@@ -45,6 +47,7 @@ export default {
       saving: false,
       error: null,
       items: [],
+      pagination: normalizePagination(),
       form: defaultForm(),
       guidingQuestionsText: "",
       filters: {
@@ -86,6 +89,14 @@ export default {
     actionCatalog() {
       return this.catalogs.actions || [];
     },
+    monitoringSummary() {
+      return [
+        { label: "Monitoreos", value: this.items.length, icon: "bx-search-alt" },
+        { label: "Registrados", value: this.items.filter((item) => item.state === "registrado").length, icon: "bx-check-circle", tone: "success" },
+        { label: "Con ajustes", value: this.items.filter((item) => String(item.required_adjustments || "").trim()).length, icon: "bx-slider-alt", tone: "warning" },
+        { label: "Con próximos pasos", value: this.items.filter((item) => String(item.next_steps || "").trim()).length, icon: "bx-right-arrow-circle" },
+      ];
+    },
   },
   mounted() {
     this.filters.pme_plan_id = this.catalogs.active_plan_id || this.catalogs.plans?.[0]?.id || null;
@@ -110,14 +121,16 @@ export default {
         .map((question) => question.trim())
         .filter(Boolean);
     },
-    async loadItems() {
+    async loadItems(page = 1) {
+      const requestedPage = Number.isInteger(page) ? page : 1;
       this.loading = true;
       this.error = null;
       try {
         const response = await axios.get("/api/pme-sep/monitorings", {
-          params: this.filters,
+          params: { ...this.filters, page: requestedPage },
         });
         this.items = response.data.data || [];
+        this.pagination = normalizePagination(response.data);
       } catch (error) {
         this.error = formatPmeError(error, "No se pudo cargar el monitoreo reflexivo.");
       } finally {
@@ -130,6 +143,14 @@ export default {
       this.form.pme_plan_id = this.catalogs.active_plan_id || this.catalogs.plans?.[0]?.id || null;
       this.form.guiding_questions = this.defaultGuidingQuestions();
       this.syncGuidingQuestionsText(this.form.guiding_questions);
+    },
+    resetFilters() {
+      this.filters = {
+        pme_plan_id: this.catalogs.active_plan_id || this.catalogs.plans?.[0]?.id || null,
+        state: null,
+        responsible_user_id: null,
+      };
+      this.loadItems(1);
     },
     editItem(item) {
       this.editing = true;
@@ -194,7 +215,7 @@ export default {
       <BCard class="border-0 shadow-sm">
         <template #header>
           <div class="d-flex justify-content-between align-items-center gap-2 flex-wrap">
-            <div class="fw-semibold">Filtros y registro de monitoreo reflexivo</div>
+            <div><div class="fw-semibold">{{ editing ? 'Editar monitoreo reflexivo' : 'Registrar monitoreo reflexivo' }}</div><div class="small text-muted">Análisis cualitativo, decisiones y próximos pasos</div></div>
             <PmeHelpButton
               title="Ayuda: monitoreo reflexivo"
               text="Aquí se registran análisis cualitativos del avance PME, decisiones tomadas, dificultades, evidencias revisadas y ajustes requeridos."
@@ -202,7 +223,7 @@ export default {
           </div>
         </template>
 
-        <div class="row g-3">
+        <div class="monitoring-filter pme-filter-bar row g-2">
           <div class="col-md-3">
             <label class="form-label">Plan</label>
             <BFormSelect v-model="filters.pme_plan_id" :options="planOptions.map((item) => ({ value: item.value, text: item.label }))" />
@@ -215,12 +236,13 @@ export default {
             <label class="form-label">Responsable</label>
             <BFormSelect v-model="filters.responsible_user_id" :options="responsibleOptions.map((item) => ({ value: item.value, text: item.label }))" />
           </div>
-          <div class="col-md-3 d-flex align-items-end">
-            <BButton variant="primary" class="w-100" @click="loadItems">Aplicar filtros</BButton>
+          <div class="col-md-3 d-flex align-items-end gap-2">
+            <BButton variant="outline-secondary" @click="resetFilters"><i class="bx bx-reset"></i></BButton>
+            <BButton variant="primary" class="flex-grow-1" :disabled="loading" @click="loadItems(1)"><i class="bx bx-filter-alt"></i>Aplicar filtros</BButton>
           </div>
         </div>
 
-        <hr />
+        <div class="form-section-heading"><span><i class="bx bx-link-alt"></i>Contexto del monitoreo</span><small>Vincula el análisis con el nivel más específico disponible.</small></div>
 
         <div class="row g-3">
           <div class="col-md-4">
@@ -259,6 +281,7 @@ export default {
             <label class="form-label">Preguntas orientadoras</label>
             <BFormTextarea v-model="guidingQuestionsText" rows="3" />
           </div>
+          <div class="col-12"><div class="form-section-heading is-inner"><span><i class="bx bx-message-square-detail"></i>Análisis reflexivo</span><small>Registra hallazgos concretos y acuerdos accionables.</small></div></div>
           <div class="col-md-6">
             <label class="form-label">Avances observados</label>
             <BFormTextarea v-model="form.observed_progress" rows="3" />
@@ -290,8 +313,8 @@ export default {
         </div>
 
         <div class="d-flex gap-2 mt-3">
-          <BButton variant="primary" :disabled="saving" @click="save">{{ editing ? "Actualizar" : "Registrar" }}</BButton>
-          <BButton variant="outline-secondary" @click="startCreate">Limpiar</BButton>
+          <BButton variant="primary" :disabled="saving" @click="save"><span v-if="saving" class="spinner-border spinner-border-sm"></span>{{ editing ? "Actualizar monitoreo" : "Registrar monitoreo" }}</BButton>
+          <BButton variant="outline-secondary" :disabled="saving" @click="startCreate">Cancelar</BButton>
         </div>
       </BCard>
     </div>
@@ -301,10 +324,13 @@ export default {
       <BCard class="border-0 shadow-sm">
         <template #header>
           <div class="d-flex justify-content-between align-items-center gap-2 flex-wrap">
-            <div class="fw-semibold">Monitoreos registrados</div>
+            <div><div class="fw-semibold">Monitoreos registrados</div><div class="small text-muted">{{ items.length }} análisis en la vista actual</div></div>
             <PmeHelpButton title="Ayuda: bandeja de monitoreos" text="Esta tabla permite revisar y editar monitoreos reflexivos, acuerdos, ajustes pendientes y próximos pasos del PME." />
           </div>
         </template>
+        <div class="monitoring-summary mb-3">
+          <div v-for="metric in monitoringSummary" :key="metric.label" :class="metric.tone ? `is-${metric.tone}` : ''"><i class="bx" :class="metric.icon"></i><span>{{ metric.label }}</span><strong>{{ metric.value }}</strong></div>
+        </div>
         <div class="table-responsive">
           <table class="table align-middle">
             <thead>
@@ -326,7 +352,7 @@ export default {
                 <td colspan="7" class="text-center text-muted">No hay monitoreos registrados.</td>
               </tr>
               <tr v-for="item in items" :key="item.id">
-                <td>{{ formatPmeDate(item.monitored_at) }}</td>
+                <td><strong>{{ formatPmeDate(item.monitored_at) }}</strong></td>
                 <td>{{ item.plan?.name }}</td>
                 <td>{{ item.dimension?.name || "-" }}</td>
                 <td>{{ item.action?.name || "-" }}</td>
@@ -339,7 +365,12 @@ export default {
             </tbody>
           </table>
         </div>
+        <PmePagination :pagination="pagination" :loading="loading" @change="loadItems" />
       </BCard>
     </div>
   </div>
 </template>
+
+<style scoped>
+.form-section-heading{display:flex;align-items:center;justify-content:space-between;gap:.75rem;margin:1rem 0 .85rem;padding:.65rem .75rem;border-radius:8px;background:#f2f6fc;color:#3156a6}.form-section-heading span{display:flex;align-items:center;gap:.35rem;font-size:.7rem;font-weight:750}.form-section-heading small{color:#78859a;font-size:.6rem}.form-section-heading.is-inner{margin:.2rem 0 0;background:#f8fafc;color:#536b99}.monitoring-summary{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));overflow:hidden;border:1px solid var(--pme-border);border-radius:9px}.monitoring-summary>div{display:grid;grid-template-columns:auto 1fr;align-items:center;gap:.08rem .45rem;padding:.68rem;border-right:1px solid #e7ebf1}.monitoring-summary>div:last-child{border:0}.monitoring-summary i{grid-row:1/3;color:#6680b1;font-size:1rem}.monitoring-summary span{color:#7b8798;font-size:.57rem}.monitoring-summary strong{color:#273449;font-size:.78rem}.monitoring-summary .is-success i,.monitoring-summary .is-success strong{color:#16866f}.monitoring-summary .is-warning i,.monitoring-summary .is-warning strong{color:#bd7010}@media(max-width:767px){.form-section-heading{align-items:flex-start;flex-direction:column}.monitoring-summary{grid-template-columns:1fr 1fr}.monitoring-summary>div:nth-child(2){border-right:0}.monitoring-summary>div:nth-child(-n+2){border-bottom:1px solid #e7ebf1}}
+</style>

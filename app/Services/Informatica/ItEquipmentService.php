@@ -2,11 +2,15 @@
 
 namespace App\Services\Informatica;
 
+use App\Models\InventoryCategory;
+use App\Models\InventoryItem;
 use App\Models\It\ItEquipment;
 use App\Models\It\ItEquipmentAttachment;
 use App\Models\It\ItEquipmentLoan;
 use App\Models\It\ItEquipmentMaintenanceReport;
 use App\Models\User;
+use App\Services\Inventory\InventoryCodeService;
+use App\Services\Inventory\QrValueService;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
@@ -15,9 +19,26 @@ use Illuminate\Validation\ValidationException;
 
 class ItEquipmentService
 {
+    public function __construct(
+        private readonly InventoryCodeService $inventoryCodeService,
+        private readonly QrValueService $qrValueService,
+    ) {
+    }
+
     public function create(array $payload, User $actor, ?UploadedFile $photo = null): ItEquipment
     {
         return DB::transaction(function () use ($payload, $actor, $photo) {
+            $createInventoryItem = (bool) ($payload['create_inventory_item'] ?? false);
+            unset($payload['create_inventory_item']);
+
+            if (!empty($payload['inventory_item_id'])) {
+                $payload = $this->mergeInventoryAssetData($payload, InventoryItem::query()->findOrFail($payload['inventory_item_id']));
+            } elseif ($createInventoryItem) {
+                $inventoryItem = $this->createInventoryItem($payload, $actor);
+                $payload['inventory_item_id'] = $inventoryItem->id;
+                $payload['internal_code'] = $inventoryItem->code;
+            }
+
             $data = $this->normalizeResponsible($payload);
             $data['created_by'] = $actor->id;
             $data['updated_by'] = $actor->id;
@@ -47,11 +68,19 @@ class ItEquipmentService
     {
         return DB::transaction(function () use ($equipment, $payload, $actor, $photo) {
             $previousStatus = $equipment->status;
+            unset($payload['create_inventory_item']);
+            if (!empty($payload['inventory_item_id'])) {
+                $payload = $this->mergeInventoryAssetData($payload, InventoryItem::query()->findOrFail($payload['inventory_item_id']));
+            }
             $data = $this->normalizeResponsible($payload);
             $data['updated_by'] = $actor->id;
             $data['active'] = $data['active'] ?? (($data['status'] ?? $equipment->status) !== 'dado_de_baja');
 
             $equipment->fill($data)->save();
+
+            if ($equipment->inventoryItem) {
+                $this->syncInventoryItem($equipment, $actor);
+            }
 
             if ($photo) {
                 $this->storePhoto($equipment, $photo);
@@ -98,6 +127,10 @@ class ItEquipmentService
                 'active' => $active,
                 'updated_by' => $actor->id,
             ])->save();
+
+            if ($equipment->inventoryItem) {
+                $this->syncInventoryItem($equipment->fresh('inventoryItem'), $actor);
+            }
 
             if ($previousStatus !== $newStatus || $notes) {
                 $this->logStatusChange(
@@ -210,6 +243,83 @@ class ItEquipmentService
         return $payload;
     }
 
+    private function mergeInventoryAssetData(array $payload, InventoryItem $item): array
+    {
+        $payload['inventory_item_id'] = $item->id;
+        $payload['internal_code'] = $item->code;
+        $payload['brand'] = $item->brand ?: ($payload['brand'] ?? null);
+        $payload['model'] = $item->model ?: ($payload['model'] ?? null);
+        $payload['serial_number'] = $item->serial_number ?: ($payload['serial_number'] ?? null);
+        $payload['acquisition_date'] = $item->purchase_date?->toDateString() ?: ($payload['acquisition_date'] ?? null);
+        $payload['reference_value'] = $item->purchase_value ?? ($payload['reference_value'] ?? null);
+        $payload['responsible_user_id'] = $item->responsible_user_id ?: ($payload['responsible_user_id'] ?? null);
+        $payload['location_name'] = $item->dependency?->name ?: ($payload['location_name'] ?? null);
+
+        return $payload;
+    }
+
+    private function createInventoryItem(array $payload, User $actor): InventoryItem
+    {
+        $category = InventoryCategory::query()->firstWhere('slug', 'tecnologia');
+
+        if (!$category) {
+            throw ValidationException::withMessages([
+                'inventory_item_id' => 'No existe la categoría Tecnología en Inventario. Ejecuta los catálogos de inventario antes de crear el activo.',
+            ]);
+        }
+
+        $code = $this->inventoryCodeService->nextCode($category);
+        $typeLabel = str((string) ($payload['equipment_type'] ?? 'equipo'))->replace('_', ' ')->title();
+
+        return InventoryItem::query()->create([
+            'code' => $code,
+            'qr_code' => $this->qrValueService->forCode($code),
+            'name' => trim("{$typeLabel} " . ($payload['brand'] ?? '') . ' ' . ($payload['model'] ?? '')),
+            'description' => $payload['observations'] ?? null,
+            'category_id' => $category->id,
+            'brand' => $payload['brand'] ?? null,
+            'model' => $payload['model'] ?? null,
+            'serial_number' => $payload['serial_number'] ?? null,
+            'purchase_date' => $payload['acquisition_date'] ?? null,
+            'purchase_value' => $payload['reference_value'] ?? null,
+            'status' => $this->inventoryStatus($payload['status'] ?? 'disponible'),
+            'condition' => ($payload['status'] ?? null) === 'danado' ? 'Malo' : 'Bueno',
+            'responsible_user_id' => $payload['responsible_user_id'] ?? null,
+            'active' => (bool) ($payload['active'] ?? true),
+            'item_type' => 'asset',
+            'stock_quantity' => 1,
+            'unit_of_measure' => 'un',
+            'created_by' => $actor->id,
+            'updated_by' => $actor->id,
+        ]);
+    }
+
+    private function syncInventoryItem(ItEquipment $equipment, User $actor): void
+    {
+        $equipment->inventoryItem->forceFill([
+            'brand' => $equipment->brand,
+            'model' => $equipment->model,
+            'serial_number' => $equipment->serial_number,
+            'purchase_date' => $equipment->acquisition_date,
+            'purchase_value' => $equipment->reference_value,
+            'responsible_user_id' => $equipment->responsible_user_id,
+            'status' => $this->inventoryStatus($equipment->status),
+            'condition' => $equipment->status === 'danado' ? 'Malo' : $equipment->inventoryItem->condition,
+            'active' => $equipment->active,
+            'updated_by' => $actor->id,
+        ])->save();
+    }
+
+    private function inventoryStatus(string $status): string
+    {
+        return match ($status) {
+            'prestado' => 'Prestado',
+            'en_mantencion' => 'En reparación',
+            'dado_de_baja' => 'Dado de baja',
+            default => 'Activo',
+        };
+    }
+
     private function assertStatusChangeAllowed(ItEquipment $equipment, string $newStatus): void
     {
         $hasOpenLoan = $equipment->loans()->active()->exists();
@@ -249,6 +359,9 @@ class ItEquipmentService
     private function freshEquipment(ItEquipment $equipment): ItEquipment
     {
         return $equipment->fresh([
+            'inventoryItem.category:id,name,slug',
+            'inventoryItem.subcategory:id,category_id,name,slug',
+            'inventoryItem.dependency:id,code,name',
             'responsibleUser:id,name,email',
             'createdBy:id,name',
             'updatedBy:id,name',

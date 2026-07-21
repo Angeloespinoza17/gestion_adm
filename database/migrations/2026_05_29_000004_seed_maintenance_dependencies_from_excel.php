@@ -71,32 +71,17 @@ DATA;
             ]))
             ->all();
 
-        DB::table('maintenance_dependencies')->upsert(
-            $rows,
-            ['code'],
-            [
-                'name',
-                'distribution',
-                'sector',
-                'zone',
-                'usage',
-                'distribution_code',
-                'floor_code',
-                'dependency_code',
-                'numbering',
-                'active',
-                'updated_at',
-            ]
-        );
+        foreach (array_chunk($rows, 100) as $chunk) {
+            // code tiene un índice único. Los registros existentes pertenecen a
+            // producción y no deben sobrescribirse con la planilla inicial.
+            DB::table('maintenance_dependencies')->insertOrIgnore($chunk);
+        }
     }
 
     public function down(): void
     {
-        $codes = collect($this->rows())->pluck('code')->all();
-
-        foreach (array_chunk($codes, 100) as $chunk) {
-            DB::table('maintenance_dependencies')->whereIn('code', $chunk)->delete();
-        }
+        // No eliminamos por código: un registro inicialmente sembrado puede haber
+        // sido modificado o estar relacionado con información real de producción.
     }
 
     private function rows(): array

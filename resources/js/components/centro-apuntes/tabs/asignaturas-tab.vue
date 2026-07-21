@@ -51,6 +51,9 @@ export default {
     };
   },
   computed: {
+    canManage() {
+      return Boolean(this.catalogs.capabilities?.can_manage_subjects);
+    },
     statusOptions() {
       return normalizeOptions(this.catalogs.subject_statuses || []);
     },
@@ -178,7 +181,7 @@ export default {
           title="Ayuda: asignaturas"
           text="Aquí se crean y actualizan las asignaturas que usarán los funcionarios al ingresar solicitudes de impresión, permitiendo filtros por área y nivel."
         />
-        <BButton variant="primary" @click="openCreate">Nueva asignatura</BButton>
+        <BButton v-if="canManage" variant="primary" @click="openCreate"><i class="bx bx-plus me-1"></i>Nueva asignatura</BButton>
       </div>
     </div>
 
@@ -214,6 +217,8 @@ export default {
       <BTable
         v-else
         responsive
+        show-empty
+        empty-text="No hay asignaturas que coincidan con los filtros."
         :items="items"
         :fields="[
           { key: 'name', label: 'Asignatura' },
@@ -234,8 +239,8 @@ export default {
         </template>
         <template #cell(actions)="{ item }">
           <div class="d-flex gap-2">
-            <BButton size="sm" variant="outline-primary" @click="openEdit(item)">Editar</BButton>
-            <BButton size="sm" variant="outline-danger" @click="destroy(item)">Eliminar</BButton>
+            <BButton v-if="canManage" size="sm" variant="outline-primary" @click="openEdit(item)">Editar</BButton>
+            <BButton v-if="canManage" size="sm" variant="outline-danger" @click="destroy(item)">Eliminar</BButton>
           </div>
         </template>
       </BTable>

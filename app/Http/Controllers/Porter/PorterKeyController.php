@@ -3,10 +3,12 @@
 namespace App\Http\Controllers\Porter;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Porter\StorePorterKeyGroupRequest;
 use App\Http\Requests\Porter\StorePorterKeyLoanRequest;
 use App\Http\Requests\Porter\StorePorterKeyRequest;
 use App\Http\Requests\Porter\UpdatePorterKeyLoanReturnRequest;
 use App\Models\PorterKey;
+use App\Models\PorterKeyGroup;
 use App\Models\PorterKeyLoan;
 use App\Services\Porter\PorterAccessService;
 use App\Services\Porter\PorterAuditService;
@@ -29,8 +31,13 @@ class PorterKeyController extends Controller
         $search = trim((string) $request->query('search'));
         $status = trim((string) $request->query('status'));
 
+        $groups = PorterKeyGroup::query()
+            ->withCount(['keys', 'activeKeys'])
+            ->orderBy('name')
+            ->get(['id', 'code', 'name', 'description', 'active']);
+
         $keys = PorterKey::query()
-            ->with(['dependency:id,name,code', 'department:id,name'])
+            ->with(['dependency:id,name,code', 'group:id,code,name'])
             ->withCount([
                 'activeLoan as active_loans_count',
             ])
@@ -38,7 +45,12 @@ class PorterKeyController extends Controller
                 $query->where(function (Builder $query) use ($search) {
                     $query
                         ->where('code', 'like', "%{$search}%")
-                        ->orWhere('name', 'like', "%{$search}%");
+                        ->orWhere('name', 'like', "%{$search}%")
+                        ->orWhereHas('group', function (Builder $groupQuery) use ($search) {
+                            $groupQuery
+                                ->where('code', 'like', "%{$search}%")
+                                ->orWhere('name', 'like', "%{$search}%");
+                        });
                 });
             })
             ->orderBy('name')
@@ -46,7 +58,8 @@ class PorterKeyController extends Controller
 
         $loans = PorterKeyLoan::query()
             ->with([
-                'porterKey:id,code,name',
+                'porterKey:id,porter_key_group_id,code,name',
+                'porterKey.group:id,code,name',
                 'staff:id,full_name,rut',
                 'dependency:id,name,code',
                 'registeredBy:id,name',
@@ -66,10 +79,12 @@ class PorterKeyController extends Controller
             ->paginate((int) $request->query('per_page', 15));
 
         return response()->json([
+            'groups' => $groups,
             'keys' => $keys,
             'loans' => $loans,
             'summary' => [
                 'total_keys' => $keys->count(),
+                'key_groups' => $groups->count(),
                 'active_loans' => PorterKeyLoan::query()->where('status', 'prestada')->count(),
                 'observed_loans' => PorterKeyLoan::query()->where('status', 'observada')->count(),
             ],
@@ -82,7 +97,7 @@ class PorterKeyController extends Controller
 
         $key = PorterKey::create([
             'maintenance_dependency_id' => $request->integer('maintenance_dependency_id') ?: null,
-            'department_id' => $request->integer('department_id') ?: null,
+            'porter_key_group_id' => $request->integer('porter_key_group_id') ?: null,
             'code' => trim((string) $request->input('code')),
             'name' => trim((string) $request->input('name')),
             'observations' => $request->input('observations'),
@@ -101,7 +116,34 @@ class PorterKeyController extends Controller
 
         return response()->json([
             'message' => 'Llave registrada correctamente.',
-            'data' => $key->fresh(['dependency:id,name,code', 'department:id,name']),
+            'data' => $key->fresh(['dependency:id,name,code', 'group:id,code,name']),
+        ], 201);
+    }
+
+    public function storeGroup(StorePorterKeyGroupRequest $request): JsonResponse
+    {
+        abort_unless($request->user()?->hasPermission('gestionar_llaves_porteria') || $request->user()?->isSuperAdmin(), 403);
+
+        $group = PorterKeyGroup::create([
+            'code' => $request->input('code') ? trim((string) $request->input('code')) : null,
+            'name' => trim((string) $request->input('name')),
+            'description' => $request->input('description'),
+            'active' => $request->boolean('active', true),
+        ]);
+
+        $this->auditService->log(
+            $group,
+            'registro_manojo_llaves',
+            null,
+            $group->active ? 'activo' : 'inactivo',
+            'Manojo de llaves registrado en portería.',
+            $request->user(),
+            $request,
+        );
+
+        return response()->json([
+            'message' => 'Manojo registrado correctamente.',
+            'data' => $group->fresh()->loadCount(['keys', 'activeKeys']),
         ], 201);
     }
 
@@ -138,7 +180,7 @@ class PorterKeyController extends Controller
 
         return response()->json([
             'message' => 'Préstamo de llave registrado correctamente.',
-            'data' => $loan->fresh(['porterKey:id,code,name', 'staff:id,full_name,rut', 'dependency:id,name,code', 'registeredBy:id,name']),
+            'data' => $loan->fresh(['porterKey:id,porter_key_group_id,code,name', 'porterKey.group:id,code,name', 'staff:id,full_name,rut', 'dependency:id,name,code', 'registeredBy:id,name']),
         ], 201);
     }
 
@@ -169,7 +211,7 @@ class PorterKeyController extends Controller
 
         return response()->json([
             'message' => 'Devolución de llave registrada correctamente.',
-            'data' => $porterKeyLoan->fresh(['porterKey:id,code,name', 'staff:id,full_name,rut', 'dependency:id,name,code', 'registeredBy:id,name', 'returnedToBy:id,name']),
+            'data' => $porterKeyLoan->fresh(['porterKey:id,porter_key_group_id,code,name', 'porterKey.group:id,code,name', 'staff:id,full_name,rut', 'dependency:id,name,code', 'registeredBy:id,name', 'returnedToBy:id,name']),
         ]);
     }
 }

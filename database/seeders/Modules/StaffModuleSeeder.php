@@ -4,11 +4,15 @@ namespace Database\Seeders\Modules;
 
 use App\Models\Department;
 use Database\Seeders\Support\ModuleSeeder;
+use Database\Seeders\Support\PreventsProductionSeeding;
 
 class StaffModuleSeeder extends ModuleSeeder
 {
+    use PreventsProductionSeeding;
+
     public function run(): void
     {
+        $this->preventProductionSeeding();
         $region = $this->region('Los Ríos') ?: $this->region('Los Rios');
         $commune = $this->commune('Valdivia');
 

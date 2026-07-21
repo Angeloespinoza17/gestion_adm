@@ -17,6 +17,8 @@ use App\Models\PorterReceivedItem;
 use App\Models\PorterStudentWithdrawal;
 use App\Models\PorterVisit;
 use App\Models\Staff;
+use App\Models\StudentEnrollment;
+use App\Models\StudentProfile;
 use App\Services\Porter\PorterAccessService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -51,6 +53,8 @@ class PorterCatalogController extends Controller
                 ->where('active', true)
                 ->orderBy('name')
                 ->get(['id', 'code', 'name', 'responsible_staff_id']),
+            'student_general_statuses' => StudentProfile::GENERAL_STATUS_OPTIONS,
+            'student_enrollment_statuses' => StudentEnrollment::STATUS_OPTIONS,
             'withdrawal_statuses' => PorterStudentWithdrawal::STATUS_OPTIONS,
             'withdrawal_relationships' => PorterStudentWithdrawal::RELATIONSHIP_OPTIONS,
             'withdrawal_reasons' => PorterStudentWithdrawal::REASON_OPTIONS,

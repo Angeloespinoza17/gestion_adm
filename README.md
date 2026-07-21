@@ -7,6 +7,30 @@
 <a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
 </p>
 
+## Dashboard de gestion superadmin
+
+El dashboard de gestion superadmin se mantiene dentro del proyecto Laravel + Vue existente. La capa Laravel expone los endpoints `/api/admin/dashboard` y `/api/admin/dashboard/report`; `SuperAdminDashboardService` concentra la agregacion de metricas por modulo, filtros, reportes generales y reportes por modulo. La vista Vue esta en `resources/js/views/admin/superadmin-dashboard.vue` y reutiliza utilidades de exportacion en `resources/js/components/admin/module-utils.js`.
+
+Para ejecutarlo localmente:
+
+```bash
+composer install
+npm install
+php artisan migrate --seed
+php artisan serve --port=8006
+npm run dev
+```
+
+`--seed` es solo para `local`, `development` o `testing`: los seeders demostrativos están bloqueados en cualquier otro entorno porque algunos reinician datos de módulos. El despliegue exige un árbol Git limpio, valida que el servidor esté en `production`, muestra el estado de migraciones y crea un respaldo antes de ejecutar `php artisan migrate --force`. La configuración de respaldos está en [docs/production-backups.md](docs/production-backups.md).
+
+Para compilar assets de produccion:
+
+```bash
+npm run prod
+```
+
+El dashboard se revisa en `/admin/dashboard`. Para probar PDF, usa los botones `PDF macro`, `PDF modulo` o el boton `PDF` del generador de reportes; el archivo incluye fecha de generacion, filtros aplicados, resumen ejecutivo, KPIs, tablas y graficos visibles cuando el grafico esta disponible en pantalla.
+
 ## About Laravel
 
 Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:

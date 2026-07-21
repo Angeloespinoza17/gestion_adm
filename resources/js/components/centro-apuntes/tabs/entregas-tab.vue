@@ -64,6 +64,9 @@ export default {
     };
   },
   computed: {
+    capabilities() {
+      return this.catalogs.capabilities || {};
+    },
     userOptions() {
       return normalizeOptions(this.catalogs.users || []);
     },
@@ -328,7 +331,7 @@ export default {
           title="Ayuda: entregas de materiales"
           text="Aquí se solicitan, aprueban y registran entregas de materiales a funcionarios o áreas, con descuento automático de stock y comprobante de entrega."
         />
-        <BButton variant="primary" @click="openCreate">Nueva solicitud de materiales</BButton>
+        <BButton v-if="capabilities.can_request_materials" variant="primary" @click="openCreate"><i class="bx bx-plus me-1"></i>Nueva solicitud de materiales</BButton>
       </div>
     </div>
 
@@ -364,6 +367,8 @@ export default {
       <BTable
         v-else
         responsive
+        show-empty
+        empty-text="No hay entregas que coincidan con los filtros."
         :items="items"
         :fields="[
           { key: 'delivery_code', label: 'Solicitud' },
@@ -388,12 +393,12 @@ export default {
         <template #cell(actions)="{ item }">
           <div class="d-flex flex-wrap gap-2">
             <BButton size="sm" variant="outline-info" @click="openDetail(item)">Ver</BButton>
-            <BButton size="sm" variant="outline-primary" @click="openEdit(item)">Editar</BButton>
-            <BButton size="sm" variant="outline-success" @click="approve(item)">Aprobar</BButton>
-            <BButton size="sm" variant="outline-warning" @click="deliver(item)">Entregar</BButton>
-            <BButton size="sm" variant="outline-danger" @click="reject(item)">Rechazar</BButton>
-            <BButton size="sm" variant="outline-secondary" @click="annul(item)">Anular</BButton>
-            <BButton size="sm" variant="outline-dark" @click="destroy(item)">Eliminar</BButton>
+            <BButton v-if="capabilities.can_request_materials" size="sm" variant="outline-primary" @click="openEdit(item)">Editar</BButton>
+            <BButton v-if="capabilities.can_approve_deliveries" size="sm" variant="outline-success" @click="approve(item)">Aprobar</BButton>
+            <BButton v-if="capabilities.can_approve_deliveries" size="sm" variant="outline-warning" @click="deliver(item)">Entregar</BButton>
+            <BButton v-if="capabilities.can_approve_deliveries" size="sm" variant="outline-danger" @click="reject(item)">Rechazar</BButton>
+            <BButton v-if="capabilities.can_approve_deliveries" size="sm" variant="outline-secondary" @click="annul(item)">Anular</BButton>
+            <BButton v-if="capabilities.can_approve_deliveries" size="sm" variant="outline-dark" @click="destroy(item)">Eliminar</BButton>
           </div>
         </template>
       </BTable>

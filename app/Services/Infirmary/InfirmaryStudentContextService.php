@@ -67,7 +67,7 @@ class InfirmaryStudentContextService
             ? $date
             : ($date ? Carbon::parse($date) : now());
 
-        return Carbon::parse($student->birthdate)->diffInYears($reference);
+        return (int) Carbon::parse($student->birthdate)->diffInYears($reference);
     }
 
     public function studentSummary(StudentProfile $student, Carbon|string|null $date = null): array
@@ -99,16 +99,28 @@ class InfirmaryStudentContextService
             'academic_year' => $enrollment?->snapshot_year_name,
             'teacher_name' => $teacher?->full_name,
             'health_insurance' => $student->health_insurance,
+            'healthcare_provider' => $student->healthcare_provider,
+            'blood_type' => $student->blood_type,
+            'food_allergies' => $this->meaningfulMedicalText($student->food_allergies),
+            'contraindicated_medications' => $this->meaningfulMedicalText($student->contraindicated_medications),
+            'fit_for_physical_education' => $student->fit_for_physical_education,
+            'has_private_school_insurance' => $student->has_private_school_insurance,
+            'health_observations' => $this->meaningfulMedicalText($student->health_observations),
             'emergency_contacts' => $this->emergencyContacts($student),
             'allergies' => $student->has_medication_allergies ? $student->medication_allergies_details : null,
             'chronic_illness' => $student->has_chronic_illness ? $student->chronic_illness_details : null,
             'physical_restrictions' => $student->has_physical_restrictions ? $student->physical_restrictions_details : null,
+            'medical_alerts' => $this->medicalAlerts($student, $permanentMedications),
             'permanent_medications' => $permanentMedications->map(fn (InfirmaryMedicationAuthorization $authorization) => [
                 'id' => $authorization->id,
                 'medication_name' => $authorization->medication?->commercial_name ?: $authorization->medication?->name,
                 'dose' => $authorization->dose,
+                'dose_amount' => $authorization->dose_amount,
+                'dose_unit' => $authorization->dose_unit,
+                'administration_route' => $authorization->administration_route,
                 'frequency' => $authorization->frequency,
                 'schedule_text' => $authorization->schedule_text,
+                'regimen_type' => $authorization->regimen_type,
                 'end_date' => $authorization->end_date,
                 'status' => $authorization->status,
             ])->values()->all(),
@@ -181,15 +193,68 @@ class InfirmaryStudentContextService
                     'teacher_name' => $summary['teacher_name'],
                     'age' => $summary['age'],
                     'photo_url' => $summary['photo_url'],
+                    'guardian_name' => $student->guardian_name,
+                    'guardian_relationship' => $student->guardian_relationship ?: $student->guardian_role,
+                    'guardian_phone' => $student->guardian_phone,
                     'alerts' => array_values(array_filter([
                         $summary['allergies'] ? 'Alergias registradas' : null,
                         $summary['chronic_illness'] ? 'Enfermedad crónica' : null,
                         count($summary['permanent_medications']) > 0 ? 'Medicamentos permanentes' : null,
+                        $summary['food_allergies'] ? 'Alergias alimentarias' : null,
+                        $summary['contraindicated_medications'] ? 'Medicamentos contraindicados' : null,
+                        $student->has_physical_restrictions ? 'Restricción física' : null,
+                        $student->fit_for_physical_education === false ? 'No apta para Educación Física' : null,
                     ])),
+                    'medical_context' => $summary,
                 ];
             })
             ->values()
             ->all();
+    }
+
+    private function medicalAlerts(StudentProfile $student, Collection $permanentMedications): array
+    {
+        return collect([
+            $student->has_medication_allergies
+                ? ['level' => 'critical', 'label' => 'Alergia a medicamentos', 'detail' => $student->medication_allergies_details]
+                : null,
+            $this->meaningfulMedicalText($student->contraindicated_medications)
+                ? ['level' => 'critical', 'label' => 'Medicamentos contraindicados', 'detail' => $this->meaningfulMedicalText($student->contraindicated_medications)]
+                : null,
+            $this->meaningfulMedicalText($student->food_allergies)
+                ? ['level' => 'warning', 'label' => 'Alergias alimentarias', 'detail' => $this->meaningfulMedicalText($student->food_allergies)]
+                : null,
+            $student->has_chronic_illness
+                ? ['level' => 'warning', 'label' => 'Enfermedad crónica', 'detail' => $student->chronic_illness_details]
+                : null,
+            $student->has_physical_restrictions
+                ? ['level' => 'warning', 'label' => 'Restricción física', 'detail' => $student->physical_restrictions_details]
+                : null,
+            $student->fit_for_physical_education === false
+                ? ['level' => 'warning', 'label' => 'No apta para Educación Física', 'detail' => null]
+                : null,
+            $permanentMedications->isNotEmpty()
+                ? ['level' => 'info', 'label' => 'Medicación vigente', 'detail' => $permanentMedications
+                    ->map(fn (InfirmaryMedicationAuthorization $authorization) => $authorization->medication?->commercial_name ?: $authorization->medication?->name)
+                    ->filter()
+                    ->join(', ')]
+                : null,
+        ])->filter()->values()->all();
+    }
+
+    private function meaningfulMedicalText(?string $value): ?string
+    {
+        $value = trim((string) $value);
+        if ($value === '') {
+            return null;
+        }
+
+        $normalized = mb_strtoupper($value);
+        if (in_array($normalized, ['NO', 'NINGUNA', 'NINGUNO', 'NO TIENE', 'NO PRESENTA', 'N/A', 'NA', '-'], true)) {
+            return null;
+        }
+
+        return $value;
     }
 
     /**

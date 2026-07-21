@@ -20,6 +20,7 @@ class RemunerationPayroll extends RemunerationModel
         'approved_at' => 'datetime:Y-m-d H:i',
         'paid_at' => 'datetime:Y-m-d H:i',
         'annulled_at' => 'datetime:Y-m-d H:i',
+        'source_row_number' => 'integer',
         'gross_taxable_amount' => 'integer',
         'gross_non_taxable_amount' => 'integer',
         'gross_total' => 'integer',
@@ -71,6 +72,11 @@ class RemunerationPayroll extends RemunerationModel
     public function accountingExports(): HasMany
     {
         return $this->hasMany(RemunerationAccountingExport::class, 'payroll_id');
+    }
+
+    public function bookImport(): BelongsTo
+    {
+        return $this->belongsTo(RemunerationBookImport::class, 'book_import_id');
     }
 
     public function calculatedBy(): BelongsTo

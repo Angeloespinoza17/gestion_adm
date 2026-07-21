@@ -31,6 +31,7 @@ class StudentEnrollment extends Model
         'academic_year_id',
         'course_section_id',
         'enrollment_status',
+        'registration_number',
         'enrolled_at',
         'withdrawn_at',
         'observations',

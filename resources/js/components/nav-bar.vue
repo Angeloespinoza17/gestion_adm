@@ -69,7 +69,21 @@ export default {
   },
   computed: {
     currentUser() {
-      return auth.currentUser
+      if (auth.currentUser?.name || auth.currentUser?.email) {
+        return auth.currentUser;
+      }
+
+      try {
+        return JSON.parse(localStorage.getItem("user") || "null");
+      } catch (error) {
+        return null;
+      }
+    },
+    headerAvatar() {
+      return this.currentUser?.profile_photo_url || this.avatar1;
+    },
+    headerName() {
+      return this.currentUser?.displayName || this.currentUser?.name || "Cuenta";
     },
     layout() {
       return useLayoutStore();
@@ -126,6 +140,7 @@ export default {
           localStorage.removeItem("user");
           localStorage.removeItem("token");
           localStorage.removeItem("permissions");
+          localStorage.removeItem("impersonator_token");
           document.cookie = "cnsc_token=; Max-Age=0; path=/; samesite=lax";
           delete axios.defaults.headers.common["Authorization"];
           this.$router.push("/login");
@@ -604,20 +619,17 @@ export default {
 
         <BDropdown right variant="black" toggle-class="header-item" menu-class="dropdown-menu-end">
           <template v-slot:button-content>
-            <img class="rounded-circle header-profile-user" :src="avatar1" alt="Header Avatar" />
+            <img class="rounded-circle header-profile-user" :src="headerAvatar" alt="Header Avatar" />
             <span class="d-none d-xl-inline-block ms-1">
-              <div v-if="currentUser">
-                {{ currentUser.displayName }}
-              </div>
-              <div v-else>Henry</div>
+              {{ headerName }}
             </span>
             <i class="mdi mdi-chevron-down d-none d-xl-inline-block"></i>
           </template>
           <BDropdownItem>
-            <router-link to="/contacts/profile" v-slot="{ navigate }">
+            <router-link to="/account/profile" v-slot="{ navigate }">
               <span @click="navigate" @keypress.enter="navigate" class="text-body">
                 <i class="bx bx-user font-size-16 align-middle me-1"></i>
-                {{ $t("navbar.dropdown.henry.list.profile") }}
+                Mi ficha
               </span>
             </router-link>
           </BDropdownItem>

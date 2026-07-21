@@ -32,17 +32,22 @@ class InfirmaryReportController extends Controller
 
         $attentionQuery = InfirmaryAttention::query()
             ->with(['student:id,first_name,last_name,rut', 'attendedBy:id,name'])
+            ->where('subject_type', InfirmaryAttention::SUBJECT_STUDENT)
             ->whereBetween('attended_at', [$from, $to]);
         $accidentQuery = InfirmaryAccident::query()
             ->with(['student:id,first_name,last_name,rut', 'dependency:id,name'])
             ->whereBetween('occurred_at', [$from, $to]);
         $administrationQuery = InfirmaryMedicationAdministration::query()
             ->with(['student:id,first_name,last_name,rut', 'medication:id,name,commercial_name', 'administeredBy:id,name'])
+            ->whereNotNull('student_profile_id')
             ->whereBetween('administered_at', [$from, $to]);
         $referralQuery = InfirmaryAttentionReferral::query()
+            ->whereHas('attention', fn (Builder $attention) => $attention
+                ->where('subject_type', InfirmaryAttention::SUBJECT_STUDENT))
             ->whereBetween('referred_at', [$from, $to]);
         $callQuery = InfirmaryAttentionCall::query()
             ->with(['student:id,first_name,last_name,rut', 'calledBy:id,name'])
+            ->whereNotNull('student_profile_id')
             ->whereBetween('called_at', [$from, $to]);
 
         $this->applyFilters($request, $attentionQuery, $accidentQuery, $administrationQuery, $referralQuery, $callQuery);

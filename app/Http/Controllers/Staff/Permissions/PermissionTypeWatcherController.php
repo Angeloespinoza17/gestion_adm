@@ -20,6 +20,7 @@ class PermissionTypeWatcherController extends Controller
 
         return response()->json([
             'types' => PermissionType::query()
+                ->withCount('watchers')
                 ->orderBy('name')
                 ->get(['id', 'name', 'active']),
             'roles' => Role::query()
@@ -31,10 +32,36 @@ class PermissionTypeWatcherController extends Controller
                 ->orderBy('name')
                 ->get(['id', 'name', 'email', 'staff_id']),
             'staff' => Staff::query()
+                ->withCount('permissionWatchers')
                 ->where('active', true)
                 ->orderBy('full_name')
                 ->get(['id', 'full_name', 'institutional_email']),
             'target_options' => PermissionTypeWatcher::TARGET_OPTIONS,
+            'configurations' => [
+                'types' => PermissionType::query()
+                    ->with([
+                        'watchers.role:id,name,slug',
+                        'watchers.user:id,name,email',
+                    ])
+                    ->withCount([
+                        'watchers',
+                        'watchers as active_watchers_count' => fn ($watchers) => $watchers->where('active', true),
+                    ])
+                    ->orderBy('name')
+                    ->get(['id', 'name', 'active']),
+                'staff' => Staff::query()
+                    ->whereHas('permissionWatchers')
+                    ->with([
+                        'permissionWatchers.role:id,name,slug',
+                        'permissionWatchers.user:id,name,email',
+                    ])
+                    ->withCount([
+                        'permissionWatchers',
+                        'permissionWatchers as active_permission_watchers_count' => fn ($watchers) => $watchers->where('active', true),
+                    ])
+                    ->orderBy('full_name')
+                    ->get(['id', 'full_name', 'institutional_email', 'active']),
+            ],
         ]);
     }
 

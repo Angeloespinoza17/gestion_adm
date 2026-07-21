@@ -6,7 +6,6 @@ import LoadingState from "../../ui/loading-state.vue";
 import {
   confirmInformaticaAction,
   confirmInformaticaCancel,
-  formatCurrency,
   formatInformaticaDate,
   formatInformaticaDateTime,
   formatInformaticaError,
@@ -30,7 +29,6 @@ const emptyForm = () => ({
   diagnosis: "",
   actions_performed: "",
   spare_parts: "",
-  cost_amount: "",
   initial_equipment_status: "disponible",
   next_maintenance_at: "",
   observations: "",
@@ -67,7 +65,6 @@ export default {
         pending: 0,
         closed: 0,
         month_total: 0,
-        month_cost: 0,
       },
       pagination: { current_page: 1, total: 0, per_page: 15 },
       filters: {
@@ -120,7 +117,6 @@ export default {
         { label: "Pendientes", value: this.summary.pending, help: "Informes abiertos o en borrador que aún no se cierran." },
         { label: "Cerradas", value: this.summary.closed, help: "Mantenciones que ya definieron estado final del equipo." },
         { label: "Registradas este mes", value: this.summary.month_total, help: "Cantidad total de informes generados en el mes actual." },
-        { label: "Costo del mes", value: formatCurrency(this.summary.month_cost || 0), help: "Suma estimada o real de mantenciones registradas este mes." },
       ];
     },
   },
@@ -128,7 +124,6 @@ export default {
     this.load();
   },
   methods: {
-    formatCurrency,
     formatInformaticaDate,
     formatInformaticaDateTime,
     humanizeInformaticaStatus,
@@ -211,7 +206,6 @@ export default {
         diagnosis: item.diagnosis || "",
         actions_performed: item.actions_performed || "",
         spare_parts: item.spare_parts || "",
-        cost_amount: item.cost_amount || "",
         initial_equipment_status: item.initial_equipment_status || "disponible",
         next_maintenance_at: toInputDate(item.next_maintenance_at),
         observations: item.observations || "",
@@ -221,6 +215,15 @@ export default {
     },
     onAttachmentSelected(event) {
       this.form.attachment = event.target.files?.[0] || null;
+    },
+    clearAttachment() {
+      this.form.attachment = null;
+      if (this.$refs.maintenanceAttachmentInput) this.$refs.maintenanceAttachmentInput.value = "";
+    },
+    formatFileSize(bytes) {
+      if (!bytes) return "0 KB";
+      if (bytes < 1024 * 1024) return `${Math.ceil(bytes / 1024)} KB`;
+      return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
     },
     buildFormData() {
       const payload = new FormData();
@@ -234,7 +237,6 @@ export default {
         "diagnosis",
         "actions_performed",
         "spare_parts",
-        "cost_amount",
         "initial_equipment_status",
         "next_maintenance_at",
         "observations",
@@ -336,7 +338,7 @@ export default {
       <div class="d-flex gap-2 flex-wrap">
         <InformaticaHelpButton
           title="Ayuda: mantenciones"
-          text="Aquí se registran diagnósticos, acciones realizadas, repuestos, costos, estado inicial y final del equipo, manteniendo la trazabilidad técnica."
+          text="Aquí se registran diagnósticos, acciones realizadas, repuestos, estado inicial y final del equipo, manteniendo la trazabilidad técnica."
         />
         <BButton v-if="capabilities.can_create_maintenance" variant="primary" @click="openCreate">Nuevo informe</BButton>
       </div>
@@ -420,31 +422,58 @@ export default {
       </div>
     </BCard>
 
-    <BModal v-model="showFormModal" size="xl" :title="form.id ? 'Editar informe de mantención' : 'Nuevo informe de mantención'" hide-footer>
-      <div class="d-flex justify-content-between align-items-center mb-3 gap-2">
-        <div class="text-muted small">Registra el motivo, diagnóstico, acciones, costo y el estado operacional de la mantención.</div>
+    <BModal v-model="showFormModal" size="xl" :title="form.id ? 'Editar informe de mantención' : 'Nuevo informe de mantención'" hide-footer scrollable>
+      <div class="maintenance-form-intro">
+        <div><strong>Informe técnico interno</strong><span>Selecciona el equipo e indica el motivo. Los antecedentes técnicos se pueden completar a medida que avance la revisión.</span></div>
         <InformaticaHelpButton
           title="Ayuda: formulario de mantención"
           text="Si el informe sale de borrador, el equipo puede pasar a en mantención. El cierre se hace desde una acción separada para resguardar trazabilidad."
         />
       </div>
-      <div class="row g-3">
-        <div class="col-md-4"><label class="form-label">Equipo</label><BFormSelect v-model="form.it_equipment_id" :options="equipmentOptions" /></div>
-        <div class="col-md-2"><label class="form-label">Fecha</label><BFormInput v-model="form.maintenance_date" type="date" /></div>
-        <div class="col-md-3"><label class="form-label">Tipo de mantención</label><BFormSelect v-model="form.maintenance_type" :options="normalizeOptions(catalogs.maintenance_types || []).map((item) => ({ value: item.value, text: item.label }))" /></div>
-        <div class="col-md-3"><label class="form-label">Estado del informe</label><BFormSelect v-model="form.status" :options="normalizeOptions((catalogs.maintenance_statuses || []).filter((item) => item.value !== 'cerrado')).map((item) => ({ value: item.value, text: item.label }))" /></div>
-        <div class="col-md-4"><label class="form-label">Técnico del sistema</label><BFormSelect v-model="form.technician_user_id" :options="userOptions" /></div>
-        <div class="col-md-4"><label class="form-label">Técnico / responsable texto libre</label><BFormInput v-model="form.technician_name" /></div>
-        <div class="col-md-4"><label class="form-label">Estado inicial del equipo</label><BFormSelect v-model="form.initial_equipment_status" :options="normalizeOptions(catalogs.equipment_statuses || []).map((item) => ({ value: item.value, text: item.label }))" /></div>
-        <div class="col-12"><label class="form-label">Motivo</label><BFormInput v-model="form.reason" /></div>
-        <div class="col-md-6"><label class="form-label">Diagnóstico</label><BFormTextarea v-model="form.diagnosis" rows="3" /></div>
-        <div class="col-md-6"><label class="form-label">Acciones realizadas</label><BFormTextarea v-model="form.actions_performed" rows="3" /></div>
-        <div class="col-md-6"><label class="form-label">Repuestos utilizados</label><BFormTextarea v-model="form.spare_parts" rows="3" /></div>
-        <div class="col-md-3"><label class="form-label">Costo estimado/real</label><BFormInput v-model="form.cost_amount" type="number" step="0.01" /></div>
-        <div class="col-md-3"><label class="form-label">Próxima mantención sugerida</label><BFormInput v-model="form.next_maintenance_at" type="date" /></div>
-        <div class="col-md-6"><label class="form-label">Adjunto</label><BFormFile @change="onAttachmentSelected" /></div>
-        <div class="col-12"><label class="form-label">Observaciones</label><BFormTextarea v-model="form.observations" rows="3" /></div>
-      </div>
+      <section class="maintenance-form-section">
+        <div class="maintenance-form-section__title"><span><i class="bx bx-wrench"></i></span><div><strong>Identificación de la mantención</strong><small>Equipo, fecha y estado administrativo del informe</small></div></div>
+        <div class="row g-3">
+          <div class="col-lg-5"><label class="form-label">Equipo <span class="text-danger">*</span></label><BFormSelect v-model="form.it_equipment_id" :options="equipmentOptions" /></div>
+          <div class="col-lg-2 col-md-4"><label class="form-label">Fecha <span class="text-danger">*</span></label><BFormInput v-model="form.maintenance_date" type="date" /></div>
+          <div class="col-lg-2 col-md-4"><label class="form-label">Tipo</label><BFormSelect v-model="form.maintenance_type" :options="normalizeOptions(catalogs.maintenance_types || []).map((item) => ({ value: item.value, text: item.label }))" /></div>
+          <div class="col-lg-3 col-md-4"><label class="form-label">Estado del informe</label><BFormSelect v-model="form.status" :options="normalizeOptions((catalogs.maintenance_statuses || []).filter((item) => item.value !== 'cerrado')).map((item) => ({ value: item.value, text: item.label }))" /></div>
+          <div class="col-12"><label class="form-label">Motivo <span class="text-danger">*</span></label><BFormInput v-model="form.reason" placeholder="Describe brevemente por qué se revisará el equipo" /></div>
+        </div>
+      </section>
+
+      <section class="maintenance-form-section">
+        <div class="maintenance-form-section__title"><span><i class="bx bx-user-check"></i></span><div><strong>Responsable y condición inicial</strong><small>Estos datos son opcionales y pueden completarse posteriormente</small></div></div>
+        <div class="row g-3">
+          <div class="col-lg-4"><label class="form-label">Técnico del sistema <span class="optional-label">Opcional</span></label><BFormSelect v-model="form.technician_user_id" :options="userOptions" /></div>
+          <div class="col-lg-4"><label class="form-label">Responsable externo o texto libre <span class="optional-label">Opcional</span></label><BFormInput v-model="form.technician_name" placeholder="Nombre del responsable" /></div>
+          <div class="col-lg-4"><label class="form-label">Estado inicial del equipo <span class="optional-label">Opcional</span></label><BFormSelect v-model="form.initial_equipment_status" :options="normalizeOptions(catalogs.equipment_statuses || []).map((item) => ({ value: item.value, text: item.label }))" /></div>
+        </div>
+      </section>
+
+      <section class="maintenance-form-section">
+        <div class="maintenance-form-section__title"><span><i class="bx bx-clipboard"></i></span><div><strong>Trabajo técnico</strong><small>Registra los hallazgos y actividades realizadas</small></div></div>
+        <div class="row g-3">
+          <div class="col-lg-6"><label class="form-label">Diagnóstico <span class="optional-label">Opcional</span></label><BFormTextarea v-model="form.diagnosis" rows="3" placeholder="Falla detectada o resultado de la revisión" /></div>
+          <div class="col-lg-6"><label class="form-label">Acciones realizadas <span class="optional-label">Opcional</span></label><BFormTextarea v-model="form.actions_performed" rows="3" placeholder="Limpieza, configuración, reparación, pruebas..." /></div>
+          <div class="col-lg-6"><label class="form-label">Repuestos utilizados <span class="optional-label">Opcional</span></label><BFormTextarea v-model="form.spare_parts" rows="2" placeholder="Componentes o insumos utilizados" /></div>
+          <div class="col-lg-3"><label class="form-label">Próxima mantención <span class="optional-label">Opcional</span></label><BFormInput v-model="form.next_maintenance_at" type="date" /></div>
+          <div class="col-lg-3"><label class="form-label">Observaciones <span class="optional-label">Opcional</span></label><BFormTextarea v-model="form.observations" rows="2" placeholder="Notas adicionales" /></div>
+        </div>
+      </section>
+
+      <section class="maintenance-form-section mb-0">
+        <div class="maintenance-form-section__title"><span><i class="bx bx-paperclip"></i></span><div><strong>Documento o evidencia</strong><small>Fotografía, informe o respaldo de la intervención</small></div></div>
+        <input ref="maintenanceAttachmentInput" type="file" class="visually-hidden" accept="image/*,.pdf,.doc,.docx" @change="onAttachmentSelected" />
+        <button v-if="!form.attachment" type="button" class="maintenance-file-dropzone" @click="$refs.maintenanceAttachmentInput.click()">
+          <i class="bx bx-cloud-upload"></i><span><strong>Seleccionar archivo</strong><small>PDF, imagen o documento · máximo 20 MB · opcional</small></span>
+        </button>
+        <div v-else class="maintenance-file-selected">
+          <span class="maintenance-file-selected__icon"><i class="bx bx-file"></i></span>
+          <span class="maintenance-file-selected__info"><strong>{{ form.attachment.name }}</strong><small>{{ formatFileSize(form.attachment.size) }}</small></span>
+          <BButton size="sm" variant="light" @click="$refs.maintenanceAttachmentInput.click()">Cambiar</BButton>
+          <BButton size="sm" variant="outline-danger" aria-label="Quitar archivo" @click="clearAttachment"><i class="bx bx-trash"></i></BButton>
+        </div>
+      </section>
       <div class="d-flex justify-content-end gap-2 mt-4">
         <BButton variant="light" @click="closeFormModal">Cancelar</BButton>
         <BButton variant="primary" :disabled="saving" @click="save">{{ saving ? "Guardando..." : form.id ? "Actualizar informe" : "Registrar informe" }}</BButton>
@@ -460,7 +489,6 @@ export default {
           <div class="col-md-3"><div class="small text-muted">Fecha</div><div class="fw-semibold">{{ formatInformaticaDate(selectedReport.maintenance_date) }}</div></div>
           <div class="col-md-4"><div class="small text-muted">Equipo</div><div class="fw-semibold">{{ selectedReport.equipment?.internal_code || "-" }}</div><div class="small text-muted">{{ [selectedReport.equipment?.brand, selectedReport.equipment?.model].filter(Boolean).join(" ") || "-" }}</div></div>
           <div class="col-md-4"><div class="small text-muted">Técnico</div><div class="fw-semibold">{{ selectedReport.technician?.name || selectedReport.technician_name_snapshot || "-" }}</div></div>
-          <div class="col-md-4"><div class="small text-muted">Costo</div><div class="fw-semibold">{{ formatCurrency(selectedReport.cost_amount) }}</div></div>
           <div class="col-md-4"><div class="small text-muted">Estado inicial</div><div><InformaticaStatusBadge :status="selectedReport.initial_equipment_status" /></div></div>
           <div class="col-md-4"><div class="small text-muted">Estado final</div><div><InformaticaStatusBadge v-if="selectedReport.final_equipment_status" :status="selectedReport.final_equipment_status" /><span v-else>-</span></div></div>
           <div class="col-md-4"><div class="small text-muted">Próxima mantención</div><div class="fw-semibold">{{ formatInformaticaDate(selectedReport.next_maintenance_at) }}</div></div>
@@ -514,3 +542,13 @@ export default {
     </BModal>
   </div>
 </template>
+
+<style scoped>
+.maintenance-form-intro { display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-bottom: 1rem; padding: .85rem 1rem; color: #5d5437; border-radius: 11px; background: rgba(241,180,76,.11); }.maintenance-form-intro strong,.maintenance-form-intro span { display: block; }.maintenance-form-intro span { margin-top: .15rem; color: #81785e; font-size: .75rem; }
+.maintenance-form-section { margin-bottom: 1rem; padding: 1rem 1.1rem 1.15rem; border: 1px solid #e8ebf2; border-radius: 14px; background: #fff; }
+.maintenance-form-section__title { display: flex; align-items: center; gap: .7rem; margin-bottom: 1rem; }.maintenance-form-section__title > span { display: grid; flex: 0 0 36px; height: 36px; place-items: center; color: #c78617; border-radius: 10px; background: rgba(241,180,76,.15); font-size: 1.15rem; }.maintenance-form-section__title strong,.maintenance-form-section__title small { display: block; }.maintenance-form-section__title strong { color: #2d3548; }.maintenance-form-section__title small { margin-top: .1rem; color: #858d9d; font-size: .7rem; }
+.optional-label { margin-left: .25rem; color: #9299a7; font-size: .62rem; font-weight: 500; }
+.maintenance-file-dropzone { display: flex; width: 100%; align-items: center; justify-content: center; gap: .85rem; min-height: 92px; padding: 1rem; color: #667085; text-align: left; border: 1.5px dashed #d5bd89; border-radius: 12px; background: #fffdf8; transition: .18s ease; }.maintenance-file-dropzone:hover { color: #a66e0d; border-color: #d49a34; background: #fff9ec; }.maintenance-file-dropzone > i { font-size: 2rem; }.maintenance-file-dropzone strong,.maintenance-file-dropzone small { display: block; }.maintenance-file-dropzone small { margin-top: .2rem; color: #8a92a2; font-size: .72rem; }
+.maintenance-file-selected { display: flex; align-items: center; gap: .75rem; padding: .85rem; border: 1px solid #ead6ad; border-radius: 12px; background: #fffaf0; }.maintenance-file-selected__icon { display: grid; flex: 0 0 40px; height: 40px; place-items: center; color: #b87a0f; border-radius: 10px; background: #fae9c7; font-size: 1.3rem; }.maintenance-file-selected__info { min-width: 0; flex: 1; }.maintenance-file-selected__info strong,.maintenance-file-selected__info small { display: block; }.maintenance-file-selected__info strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }.maintenance-file-selected__info small { color: #87909f; }
+@media (max-width: 575.98px) { .maintenance-form-section { padding: .9rem; }.maintenance-file-selected { flex-wrap: wrap; }.maintenance-file-selected__info { flex-basis: calc(100% - 55px); } }
+</style>

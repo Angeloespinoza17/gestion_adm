@@ -66,6 +66,13 @@ export default {
       },
       showModal: false,
       form: emptyForm(),
+      templateSearch: "",
+      templateLoading: false,
+      templateResults: [],
+      templateError: null,
+      creation: {
+        quantity: 1,
+      },
       cameraActive: false,
       cameraStream: null,
       cameraError: null,
@@ -87,8 +94,20 @@ export default {
     isEditing() {
       return Boolean(this.form.id);
     },
+    normalizedCreateQuantity() {
+      const quantity = Number(this.creation.quantity);
+
+      return Number.isInteger(quantity) && quantity > 0 ? quantity : 1;
+    },
+    willCreateIndividualUnits() {
+      return (
+        !this.isEditing &&
+        this.form.item_type === "asset" &&
+        this.normalizedCreateQuantity > 1
+      );
+    },
     categoryOptions() {
-      return [{ value: null, label: "Selecciona..." }].concat(
+      return [{ value: null, label: "Sin categoría" }].concat(
         this.catalogs.categories.map((c) => ({ value: c.id, label: c.name }))
       );
     },
@@ -98,15 +117,25 @@ export default {
         categoryId ? s.category_id === categoryId : true
       );
       return [{ value: null, label: "Sin subcategoría" }].concat(
-        subs.map((s) => ({ value: s.id, label: s.name }))
+        subs.map((s) => ({
+          value: s.id,
+          label: categoryId || !s.category?.name ? s.name : `${s.name} · ${s.category.name}`,
+        }))
       );
     },
     dependencyOptions() {
       return [{ value: null, label: "Sin dependencia" }].concat(
-        this.catalogs.dependencies.map((d) => ({
-          value: d.id,
-          label: `${d.code} - ${d.name}`,
-        }))
+        this.catalogs.dependencies.map((d) => {
+          const shortLabel = `${d.code || "Sin código"} - ${d.name || "Sin nombre"}`;
+          const usage = String(d.usage || "").trim();
+
+          return {
+            value: d.id,
+            label: usage ? `${shortLabel} · Uso: ${usage}` : shortLabel,
+            shortLabel,
+            usage,
+          };
+        })
       );
     },
     userOptions() {
@@ -146,13 +175,30 @@ export default {
       );
     },
     itemTypeCatalogOptions() {
-      return (this.catalogs.item_types || []).map((t) => ({
-        value: t,
-        label: this.typeLabel(t),
-      }));
+      return [{ value: null, label: "Sin tipo" }].concat(
+        (this.catalogs.item_types || []).map((t) => ({
+          value: t,
+          label: this.typeLabel(t),
+        }))
+      );
     },
     itemTypeOptions() {
-      return [{ value: "", label: "Todos" }].concat(this.itemTypeCatalogOptions);
+      return [{ value: "", label: "Todos" }].concat(
+        (this.catalogs.item_types || []).map((t) => ({
+          value: t,
+          label: this.typeLabel(t),
+        }))
+      );
+    },
+    statusFormOptions() {
+      return [{ value: null, label: "Sin estado" }].concat(
+        (this.catalogs.statuses || []).map((s) => ({ value: s, label: s }))
+      );
+    },
+    conditionFormOptions() {
+      return [{ value: null, label: "Sin condición" }].concat(
+        (this.catalogs.conditions || []).map((s) => ({ value: s, label: s }))
+      );
     },
     itemFields() {
       const head = "text-center inventory-table__head";
@@ -252,9 +298,15 @@ export default {
         this.form.warranty_expires_at = null;
       }
     },
+    "form.item_type"(type) {
+      if (type === "consumable") {
+        this.creation.quantity = 1;
+      }
+    },
     showModal(isOpen) {
       if (!isOpen) {
         this.stopCamera();
+        this.resetCreationTools();
       }
     },
   },
@@ -267,33 +319,52 @@ export default {
   },
   methods: {
     validateForm() {
-      const missing = [];
-
-      if (!this.form.name || !String(this.form.name).trim()) missing.push("Nombre");
-      if (!this.form.category_id) missing.push("Categoría");
-      if (this.form.has_warranty && !this.form.purchase_date) {
-        missing.push("Fecha compra para garantía");
-      }
-      if (
-        this.form.has_warranty &&
-        (!this.form.warranty_months || Number(this.form.warranty_months) < 1)
-      ) {
-        missing.push("Duración de garantía");
-      }
-
-      if (missing.length > 0) {
+      if (!this.form.name || !String(this.form.name).trim()) {
         Swal.fire({
           icon: "warning",
-          title: "Faltan campos por completar",
-          html: `<div class="text-start">Completa:<ul>${missing
-            .map((m) => `<li>${m}</li>`)
-            .join("")}</ul></div>`,
+          title: "Falta el nombre del bien",
+          text: "Ingresa el nombre del bien antes de guardar.",
           confirmButtonText: "OK",
         });
+
         return false;
       }
 
+      if (!this.isEditing && this.form.item_type === "asset") {
+        const quantity = Number(this.creation.quantity);
+
+        if (!Number.isInteger(quantity) || quantity < 1 || quantity > 100) {
+          Swal.fire({
+            icon: "warning",
+            title: "Cantidad de unidades inválida",
+            text: "Ingresa un número entero entre 1 y 100.",
+            confirmButtonText: "OK",
+          });
+
+          return false;
+        }
+      }
+
       return true;
+    },
+    generateFallbackSerialNumber() {
+      const now = new Date();
+      const date = [
+        now.getFullYear(),
+        String(now.getMonth() + 1).padStart(2, "0"),
+        String(now.getDate()).padStart(2, "0"),
+      ].join("");
+      const time = [
+        String(now.getHours()).padStart(2, "0"),
+        String(now.getMinutes()).padStart(2, "0"),
+        String(now.getSeconds()).padStart(2, "0"),
+      ].join("");
+      const suffix = Math.floor(Math.random() * 36 ** 4)
+        .toString(36)
+        .padStart(4, "0")
+        .toUpperCase();
+
+      this.form.serial_number = `SS-${date}-${time}-${suffix}`;
     },
     async loadCatalogs() {
       const response = await axios.get("/api/inventory/items/catalogs");
@@ -323,11 +394,20 @@ export default {
         this.loading = false;
       }
     },
+    resetCreationTools() {
+      this.templateSearch = "";
+      this.templateLoading = false;
+      this.templateResults = [];
+      this.templateError = null;
+      this.creation = { quantity: 1 };
+    },
     openCreate() {
       this.form = emptyForm();
+      this.resetCreationTools();
       this.showModal = true;
     },
     openEdit(item) {
+      this.resetCreationTools();
       this.form = {
         ...emptyForm(),
         id: item.id,
@@ -359,6 +439,78 @@ export default {
       };
       this.showModal = true;
     },
+    async searchSimilarItems() {
+      const search = String(this.templateSearch || "").trim();
+      this.templateError = null;
+
+      if (search.length < 2) {
+        this.templateResults = [];
+        return;
+      }
+
+      this.templateLoading = true;
+      try {
+        const response = await axios.get("/api/inventory/items/similar", {
+          params: { search },
+        });
+        this.templateResults = response.data.data || [];
+      } catch (error) {
+        this.templateResults = [];
+        this.templateError = this.formatError(error);
+      } finally {
+        this.templateLoading = false;
+      }
+    },
+    applySimilarItem(item) {
+      const subcategoryId = item.subcategory_id ?? item.subcategory?.id ?? null;
+
+      this.form = {
+        ...this.form,
+        name: item.name || "",
+        description: item.description || "",
+        category_id: item.category_id ?? item.category?.id ?? null,
+        subcategory_id: null,
+        brand: item.brand || "",
+        model: item.model || "",
+        serial_number: "",
+        purchase_value: item.purchase_value ?? null,
+        useful_life_years: item.useful_life_years ?? null,
+        has_warranty: Boolean(item.has_warranty),
+        warranty_months: item.warranty_months ?? null,
+        warranty_expires_at: null,
+        status: item.status || "Activo",
+        condition: item.condition || "Bueno",
+        supplier_id: item.supplier_id ?? item.supplier?.id ?? null,
+        item_type: item.item_type || "asset",
+        stock_quantity:
+          item.item_type === "consumable" ? item.stock_quantity ?? null : null,
+        minimum_stock: item.minimum_stock ?? null,
+        unit_of_measure: item.unit_of_measure || "",
+        photo: null,
+      };
+
+      this.$nextTick(() => {
+        this.form.subcategory_id = subcategoryId;
+      });
+
+      this.templateSearch = item.name || "";
+      this.templateResults = [];
+    },
+    similarItemMeta(item) {
+      return [
+        item.code,
+        item.brand,
+        item.model,
+        item.category?.name,
+      ]
+        .filter(Boolean)
+        .join(" · ");
+    },
+    similarItemLocation(item) {
+      if (!item.dependency) return "Sin dependencia";
+
+      return `${item.dependency.code} - ${item.dependency.name}`;
+    },
     buildFormData() {
       const fd = new FormData();
       const add = (key, value) => {
@@ -371,9 +523,9 @@ export default {
         fd.append(key, value === undefined || value === null ? "" : value);
       };
 
-      add("name", this.form.name);
+      addNullable("name", this.form.name);
       addNullable("description", this.form.description);
-      add("category_id", this.form.category_id);
+      addNullable("category_id", this.form.category_id);
       addNullable("subcategory_id", this.form.subcategory_id);
       addNullable("brand", this.form.brand);
       addNullable("model", this.form.model);
@@ -390,25 +542,24 @@ export default {
         "warranty_expires_at",
         this.form.has_warranty ? this.warrantyExpirationDate : null
       );
-      add("status", this.form.status);
-      add("condition", this.form.condition);
+      addNullable("status", this.form.status);
+      addNullable("condition", this.form.condition);
       addNullable("dependency_id", this.form.dependency_id);
       addNullable("responsible_user_id", this.form.responsible_user_id);
       addNullable("supplier_id", this.form.supplier_id);
       add("active", this.form.active ? 1 : 0);
-      add("item_type", this.form.item_type);
-      addNullable(
-        "stock_quantity",
-        this.form.item_type === "consumable" ? this.form.stock_quantity : null
-      );
-      addNullable(
-        "minimum_stock",
-        this.form.item_type === "consumable" ? this.form.minimum_stock : null
-      );
-      addNullable(
-        "unit_of_measure",
-        this.form.item_type === "consumable" ? this.form.unit_of_measure : null
-      );
+      addNullable("item_type", this.form.item_type);
+      addNullable("stock_quantity", this.form.stock_quantity);
+      addNullable("minimum_stock", this.form.minimum_stock);
+      addNullable("unit_of_measure", this.form.unit_of_measure);
+
+      if (!this.isEditing) {
+        add(
+          "create_quantity",
+          this.form.item_type === "asset" ? this.normalizedCreateQuantity : 1
+        );
+        add("create_mode", this.form.item_type === "asset" ? "units" : "single");
+      }
 
       if (this.form.photo) {
         fd.append("photo", this.form.photo);
@@ -417,19 +568,43 @@ export default {
       return fd;
     },
     async save() {
-      this.saving = true;
       this.error = null;
       this.success = null;
       try {
         if (!this.validateForm()) return;
+
+        if (!this.isEditing) {
+          const createQuantity = this.normalizedCreateQuantity;
+          const confirmation = await Swal.fire({
+            icon: "question",
+            title: this.willCreateIndividualUnits
+              ? `Crear ${createQuantity} bienes`
+              : "Confirmar creación",
+            text: this.willCreateIndividualUnits
+              ? "Se generará una ficha individual y un código para cada unidad."
+              : "Se creará un nuevo bien de inventario con los datos ingresados.",
+            showCancelButton: true,
+            confirmButtonText: this.willCreateIndividualUnits
+              ? "Crear bienes"
+              : "Crear bien",
+            cancelButtonText: "Cancelar",
+            confirmButtonColor: "#556ee6",
+          });
+
+          if (!confirmation.isConfirmed) return;
+        }
+
+        this.saving = true;
         const fd = this.buildFormData();
         if (this.isEditing) {
           fd.append("_method", "PUT");
           await axios.post(`/api/inventory/items/${this.form.id}`, fd);
           this.success = "Bien actualizado.";
         } else {
-          await axios.post("/api/inventory/items", fd);
-          this.success = "Bien creado.";
+          const response = await axios.post("/api/inventory/items", fd);
+          const createdCount = Number(response.data.created_count || 1);
+          this.success =
+            createdCount > 1 ? `${createdCount} bienes creados.` : "Bien creado.";
         }
         this.showModal = false;
         await this.loadItems(this.pagination.current_page);
@@ -521,8 +696,10 @@ export default {
               it.item_type,
               it.status,
               it.condition,
-              it.item_type === "consumable" ? Number(it.stock_quantity || 0) : "",
-              it.item_type === "consumable" ? it.unit_of_measure || "" : "",
+              it.stock_quantity === null || it.stock_quantity === undefined
+                ? ""
+                : Number(it.stock_quantity || 0),
+              it.unit_of_measure || "",
               it.supplier?.name || "",
               it.brand || "",
               it.model || "",
@@ -555,13 +732,21 @@ export default {
         this.exporting = false;
       }
     },
-    onPhotoSelected(e) {
+    async onPhotoSelected(e) {
       const file = e?.target?.files?.[0];
-      this.form.photo = file || null;
-      this.stopCamera();
+      this.error = null;
 
-      if (e?.target) {
-        e.target.value = "";
+      try {
+        this.form.photo = file ? await this.normalizePhotoFile(file) : null;
+        this.stopCamera();
+      } catch (error) {
+        this.form.photo = null;
+        this.error =
+          error?.message || "No se pudo preparar la imagen para subir.";
+      } finally {
+        if (e?.target) {
+          e.target.value = "";
+        }
       }
     },
     async startCamera() {
@@ -643,11 +828,58 @@ export default {
       }
 
       const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
-      this.form.photo = new File([blob], `bien-${timestamp}.jpg`, {
+      const photo = new File([blob], `bien-${timestamp}.jpg`, {
         type: "image/jpeg",
         lastModified: Date.now(),
       });
+      this.form.photo = await this.normalizePhotoFile(photo);
       this.stopCamera();
+    },
+    async normalizePhotoFile(file) {
+      if (!file || !file.type?.startsWith("image/")) {
+        return file;
+      }
+
+      const imageUrl = URL.createObjectURL(file);
+
+      try {
+        const image = await new Promise((resolve, reject) => {
+          const img = new Image();
+          img.onload = () => resolve(img);
+          img.onerror = () => reject(new Error("No se pudo leer la imagen seleccionada."));
+          img.src = imageUrl;
+        });
+
+        const maxDimension = 1600;
+        const largestSide = Math.max(image.naturalWidth, image.naturalHeight);
+        const scale = largestSide > maxDimension ? maxDimension / largestSide : 1;
+        const width = Math.max(1, Math.round(image.naturalWidth * scale));
+        const height = Math.max(1, Math.round(image.naturalHeight * scale));
+        const canvas = document.createElement("canvas");
+        canvas.width = width;
+        canvas.height = height;
+        canvas.getContext("2d").drawImage(image, 0, 0, width, height);
+
+        const blob = await new Promise((resolve) =>
+          canvas.toBlob(resolve, "image/jpeg", 0.82)
+        );
+
+        if (!blob) {
+          throw new Error("No se pudo comprimir la imagen seleccionada.");
+        }
+
+        const baseName = String(file.name || "foto-bien")
+          .replace(/\.[^.]+$/, "")
+          .replace(/[^\w-]+/g, "-")
+          .replace(/^-+|-+$/g, "") || "foto-bien";
+
+        return new File([blob], `${baseName}.jpg`, {
+          type: "image/jpeg",
+          lastModified: Date.now(),
+        });
+      } finally {
+        URL.revokeObjectURL(imageUrl);
+      }
     },
     normalizeDateInput(value) {
       if (!value) return null;
@@ -735,7 +967,14 @@ export default {
       return "neutral";
     },
     stockText(item) {
-      if (item.item_type !== "consumable") return "-";
+      if (
+        item.item_type !== "consumable" &&
+        (item.stock_quantity === null ||
+          item.stock_quantity === undefined ||
+          item.stock_quantity === "")
+      ) {
+        return "-";
+      }
 
       const quantity = Number(item.stock_quantity ?? 0);
       const safeQuantity = Number.isFinite(quantity) ? quantity : 0;
@@ -766,9 +1005,9 @@ export default {
     <BAlert v-if="error" variant="danger" show class="mb-3">{{ error }}</BAlert>
     <BAlert v-if="success" variant="success" show class="mb-3">{{ success }}</BAlert>
 
-    <div class="inventory-filters mb-3">
-      <div class="inventory-filter-field">
-        <label class="inventory-filter-label">Búsqueda</label>
+    <div class="inventory-filters row g-2 align-items-end mb-3">
+      <div class="col-12 col-md-6 col-xl-3 inventory-filter-field">
+        <label class="form-label inventory-filter-label mb-1">Búsqueda</label>
         <BFormInput
           v-model="search"
           class="inventory-filter-control inventory-filter-search"
@@ -776,8 +1015,8 @@ export default {
           @keyup.enter="loadItems(1)"
         />
       </div>
-      <div class="inventory-filter-field">
-        <label class="inventory-filter-label">Tipo</label>
+      <div class="col-12 col-md-6 col-xl-2 inventory-filter-field">
+        <label class="form-label inventory-filter-label mb-1">Tipo</label>
         <Multiselect
           v-model="filters.item_type"
           class="inventory-filter-control inventory-filter-select"
@@ -787,8 +1026,8 @@ export default {
           :append-to-body="true"
         />
       </div>
-      <div class="inventory-filter-field">
-        <label class="inventory-filter-label">Estado</label>
+      <div class="col-12 col-md-6 col-xl-2 inventory-filter-field">
+        <label class="form-label inventory-filter-label mb-1">Estado</label>
         <Multiselect
           v-model="filters.status"
           class="inventory-filter-control inventory-filter-select"
@@ -798,8 +1037,8 @@ export default {
           :append-to-body="true"
         />
       </div>
-      <div class="inventory-filter-field">
-        <label class="inventory-filter-label">Condición</label>
+      <div class="col-12 col-md-6 col-xl-2 inventory-filter-field">
+        <label class="form-label inventory-filter-label mb-1">Condición</label>
         <Multiselect
           v-model="filters.condition"
           class="inventory-filter-control inventory-filter-select"
@@ -809,19 +1048,21 @@ export default {
           :append-to-body="true"
         />
       </div>
-      <div class="inventory-filter-field inventory-filter-field--checkbox">
-        <label class="inventory-filter-label">Stock</label>
+      <div class="col-6 col-md-4 col-xl-1 inventory-filter-field inventory-filter-field--checkbox">
+        <label class="form-label inventory-filter-label mb-1">Stock</label>
         <div class="inventory-low-stock">
           <BFormCheckbox v-model="filters.low_stock">Stock bajo</BFormCheckbox>
         </div>
       </div>
-      <BButton
-        variant="secondary"
-        class="inventory-search-button"
-        @click="loadItems(1)"
-      >
-        Buscar
-      </BButton>
+      <div class="col-6 col-md-4 col-xl-2 inventory-filter-action">
+        <BButton
+          variant="secondary"
+          class="inventory-search-button w-100"
+          @click="loadItems(1)"
+        >
+          Buscar
+        </BButton>
+      </div>
     </div>
 
     <div class="inventory-table-card">
@@ -929,6 +1170,68 @@ export default {
     >
       <BAlert v-if="error" variant="danger" show class="mb-3">{{ error }}</BAlert>
 
+      <div v-if="!isEditing" class="inventory-template-panel mb-3">
+        <div class="inventory-template-grid row g-2 align-items-start">
+          <div class="col-12 col-lg-9 inventory-template-search">
+            <label class="form-label mb-1">Buscar bien similar</label>
+            <div class="input-group">
+              <BFormInput
+                v-model="templateSearch"
+                placeholder="Nombre, marca, modelo o código"
+                @keyup.enter="searchSimilarItems"
+              />
+              <BButton
+                type="button"
+                variant="outline-primary"
+                :disabled="templateLoading"
+                @click="searchSimilarItems"
+              >
+                {{ templateLoading ? "Buscando..." : "Buscar" }}
+              </BButton>
+            </div>
+
+            <BAlert v-if="templateError" variant="warning" show class="mt-2 mb-0">
+              {{ templateError }}
+            </BAlert>
+
+            <div v-if="templateResults.length" class="inventory-template-results">
+              <button
+                v-for="item in templateResults"
+                :key="item.id"
+                type="button"
+                class="btn btn-light border inventory-template-result w-100 text-start d-flex align-items-center justify-content-between gap-2"
+                @click="applySimilarItem(item)"
+              >
+                <span class="inventory-template-result__content d-flex flex-column gap-1 min-w-0">
+                  <span class="inventory-template-result__main d-block">
+                    {{ item.name || "Sin nombre" }}
+                  </span>
+                  <span class="inventory-template-result__meta d-block">
+                    {{ similarItemMeta(item) || "Sin datos técnicos" }}
+                  </span>
+                  <span class="inventory-template-result__location d-block">
+                    {{ similarItemLocation(item) }}
+                  </span>
+                </span>
+                <span class="inventory-template-result__action badge rounded-pill text-bg-primary flex-shrink-0">
+                  Usar base
+                </span>
+              </button>
+            </div>
+          </div>
+          <div v-if="form.item_type === 'asset'" class="col-12 col-lg-3 inventory-template-quantity">
+            <label class="form-label mb-1">Unidades a crear</label>
+            <BFormInput
+              v-model="creation.quantity"
+              type="number"
+              min="1"
+              max="100"
+              step="1"
+            />
+          </div>
+        </div>
+      </div>
+
       <div class="row g-3">
         <div class="col-md-8">
           <label class="form-label mb-1">Nombre</label>
@@ -958,7 +1261,7 @@ export default {
           <label class="form-label mb-1">Estado</label>
           <Multiselect
             v-model="form.status"
-            :options="catalogs.statuses.map((s) => ({ value: s, label: s }))"
+            :options="statusFormOptions"
             :append-to-body="false"
             :close-on-select="true"
           />
@@ -967,7 +1270,7 @@ export default {
           <label class="form-label mb-1">Condición</label>
           <Multiselect
             v-model="form.condition"
-            :options="catalogs.conditions.map((s) => ({ value: s, label: s }))"
+            :options="conditionFormOptions"
             :append-to-body="false"
             :close-on-select="true"
           />
@@ -980,8 +1283,26 @@ export default {
             :append-to-body="false"
             :close-on-select="true"
             :searchable="true"
-            placeholder="Escribe código o nombre"
-          />
+            placeholder="Escribe código, nombre o uso"
+          >
+            <template #singlelabel="{ value }">
+              <div class="multiselect-single-label">
+                <span class="multiselect-single-label-text">
+                  {{ value.shortLabel || value.label }}
+                </span>
+              </div>
+            </template>
+            <template #option="{ option }">
+              <div class="inventory-dependency-option">
+                <span class="inventory-dependency-option__main">
+                  {{ option.shortLabel || option.label }}
+                </span>
+                <span v-if="option.usage" class="inventory-dependency-option__usage">
+                  Uso: {{ option.usage }}
+                </span>
+              </div>
+            </template>
+          </Multiselect>
         </div>
 
         <div class="col-md-6">
@@ -1017,7 +1338,20 @@ export default {
         </div>
         <div class="col-md-4">
           <label class="form-label mb-1">N° Serie</label>
-          <BFormInput v-model="form.serial_number" />
+          <div class="input-group">
+            <BFormInput
+              v-model="form.serial_number"
+              placeholder="Serie física o código interno"
+            />
+            <BButton
+              type="button"
+              variant="outline-primary"
+              title="Generar código SS para bien sin número de serie"
+              @click="generateFallbackSerialNumber"
+            >
+              SS
+            </BButton>
+          </div>
         </div>
 
         <div class="col-md-4">
@@ -1089,20 +1423,30 @@ export default {
           <BFormTextarea v-model="form.description" rows="3" />
         </div>
 
-        <template v-if="form.item_type === 'consumable'">
-          <div class="col-md-4">
-            <label class="form-label mb-1">Stock</label>
-            <BFormInput v-model="form.stock_quantity" type="number" min="0" />
-          </div>
-          <div class="col-md-4">
-            <label class="form-label mb-1">Stock mínimo</label>
-            <BFormInput v-model="form.minimum_stock" type="number" min="0" />
-          </div>
-          <div class="col-md-4">
-            <label class="form-label mb-1">Unidad</label>
-            <BFormInput v-model="form.unit_of_measure" placeholder="ej: un, caja, resma" />
-          </div>
-        </template>
+        <div class="col-md-4">
+          <label class="form-label mb-1">Cantidad</label>
+          <BFormInput
+            v-model="form.stock_quantity"
+            type="number"
+            min="0"
+            step="0.01"
+            placeholder="Ej: 1"
+          />
+        </div>
+        <div class="col-md-4">
+          <label class="form-label mb-1">Cantidad mínima</label>
+          <BFormInput
+            v-model="form.minimum_stock"
+            type="number"
+            min="0"
+            step="0.01"
+            placeholder="Opcional"
+          />
+        </div>
+        <div class="col-md-4">
+          <label class="form-label mb-1">Unidad</label>
+          <BFormInput v-model="form.unit_of_measure" placeholder="ej: un, caja, resma" />
+        </div>
 
         <div class="col-12">
           <label class="form-label mb-1">Foto principal</label>
@@ -1113,6 +1457,7 @@ export default {
                 class="inventory-photo-input"
                 type="file"
                 accept="image/*"
+                capture="environment"
                 @change="onPhotoSelected"
               />
             </label>
@@ -1177,13 +1522,85 @@ export default {
   line-height: 1.2;
 }
 
+.inventory-template-panel {
+  padding: 0.9rem;
+  border: 1px solid #dbe7ff;
+  border-radius: 0.95rem;
+  background: #f8fbff;
+}
+
+.inventory-template-grid {
+  align-items: start;
+}
+
+.inventory-template-search,
+.inventory-template-quantity {
+  min-width: 0;
+}
+
+.inventory-template-results {
+  display: grid;
+  gap: 0.45rem;
+  margin-top: 0.75rem;
+}
+
+.inventory-template-result {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.75rem;
+  align-items: center;
+  width: 100%;
+  padding: 0.55rem 0.7rem;
+  border: 1px solid #dbe7ff;
+  border-radius: 0.75rem;
+  color: #334155;
+  background: #ffffff;
+  text-align: left;
+}
+
+.inventory-template-result__content {
+  min-width: 0;
+}
+
+.inventory-template-result:hover {
+  border-color: #9eb8ff;
+  background: #f1f5ff;
+}
+
+.inventory-template-result__main {
+  color: #1f2937;
+  font-size: 0.84rem;
+  font-weight: 700;
+  line-height: 1.15;
+  overflow-wrap: anywhere;
+}
+
+.inventory-template-result__meta,
+.inventory-template-result__location {
+  color: #64748b;
+  font-size: 0.75rem;
+  font-weight: 550;
+  line-height: 1.15;
+  overflow-wrap: anywhere;
+}
+
+.inventory-template-result__action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 1.65rem;
+  padding: 0.2rem 0.55rem;
+  border-radius: 999px;
+  color: #3152c9;
+  background: #eef4ff;
+  font-size: 0.72rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
 .inventory-filters {
   position: relative;
   z-index: 20;
-  display: grid;
-  grid-template-columns: minmax(16rem, 1.5fr) repeat(3, minmax(10.25rem, 1fr)) minmax(7rem, 0.68fr) 7.5rem;
-  gap: 0.65rem;
-  align-items: end;
 }
 
 .inventory-filter-field {
@@ -1248,10 +1665,14 @@ export default {
 }
 
 .inventory-search-button {
-  width: 100%;
   border-radius: 0.85rem;
   font-size: 0.84rem;
   font-weight: 650;
+}
+
+.inventory-filter-action {
+  display: flex;
+  align-items: end;
 }
 
 .inventory-table-card {
@@ -1620,6 +2041,30 @@ export default {
   background: #eef4ff !important;
 }
 
+.inventory-dependency-option {
+  display: flex;
+  flex-direction: column;
+  gap: 0.12rem;
+  min-width: 0;
+  line-height: 1.15;
+}
+
+.inventory-dependency-option__main,
+.inventory-dependency-option__usage {
+  display: block;
+  overflow-wrap: anywhere;
+}
+
+.inventory-dependency-option__main {
+  font-weight: 650;
+}
+
+.inventory-dependency-option__usage {
+  font-size: 0.72rem;
+  font-weight: 500;
+  opacity: 0.78;
+}
+
 .inventory-photo-actions {
   display: flex;
   flex-wrap: wrap;
@@ -1796,18 +2241,18 @@ export default {
 }
 
 @media (max-width: 1399.98px) {
-  .inventory-filters {
-    grid-template-columns: minmax(14rem, 1fr) repeat(3, minmax(9.5rem, 1fr));
-  }
-
   .inventory-low-stock {
     justify-content: flex-start;
   }
 }
 
 @media (max-width: 767.98px) {
-  .inventory-filters {
+  .inventory-template-result {
     grid-template-columns: 1fr;
+  }
+
+  .inventory-template-result__action {
+    justify-self: flex-start;
   }
 
   .inventory-table-card {

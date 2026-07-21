@@ -2,6 +2,105 @@ import axios from "axios";
 import Swal from "sweetalert2";
 import { getPdfMake } from "../../utils/pdfmake";
 
+const convivenciaSwalClasses = {
+  popup: "convivencia-swal",
+  confirmButton: "convivencia-swal-confirm",
+  cancelButton: "convivencia-swal-cancel",
+};
+
+const convivenciaTranslations = {
+  open_cases: "Casos abiertos",
+  closed_cases: "Casos cerrados",
+  internal_derivations_pending: "Derivaciones internas pendientes",
+  external_derivations_pending: "Derivaciones externas pendientes",
+  pending_measures: "Medidas pendientes",
+  interviews_done: "Entrevistas realizadas",
+  complaints_received: "Denuncias recibidas",
+  active_protocols: "Protocolos activos",
+  daily_events: "Hechos registrados en bitácora",
+  overdue_followups: "Seguimientos vencidos",
+  cases_total: "Total de casos",
+  open_cases_total: "Casos abiertos",
+  complaints_total: "Total de denuncias",
+  derivations_total: "Total de derivaciones",
+  pending_measures_total: "Medidas pendientes",
+  interviews_total: "Total de entrevistas",
+  daily_logs_total: "Registros de bitácora",
+  conflicts_registered: "Conflictos registrados",
+  overdue_measures: "Medidas vencidas",
+  tardiness: "Atrasos",
+  dashboard: "Panel general",
+  overview: "Resumen general",
+  internal: "Interna",
+  external: "Externa",
+  open: "Abierto",
+  closed: "Cerrado",
+  pending: "Pendiente",
+  active: "Activo",
+  inactive: "Inactivo",
+  completed: "Completado",
+  cancelled: "Cancelado",
+  draft: "Borrador",
+  in_progress: "En proceso",
+  overdue: "Vencido",
+  done: "Realizado",
+  received: "Recibido",
+  abierto: "Abierto",
+  en_analisis: "En análisis",
+  en_intervencion: "En intervención",
+  con_protocolo_activo: "Con protocolo activo",
+  derivado: "Derivado",
+  en_seguimiento: "En seguimiento",
+  cerrado: "Cerrado",
+  archivado: "Archivado",
+  recibida: "Recibida",
+  en_revision: "En revisión",
+  requiere_antecedentes: "Requiere antecedentes",
+  derivada_a_caso: "Derivada a caso",
+  protocolo_activado: "Protocolo activado",
+  descartada_fundadamente: "Descartada fundadamente",
+  borrador: "Borrador",
+  vigente: "Vigente",
+  en_ejecucion: "En ejecución",
+  finalizado: "Finalizado",
+  suspendido: "Suspendido",
+  ingresada: "Ingresada",
+  respondida: "Respondida",
+  rechazada: "Rechazada",
+  asignada: "Asignada",
+  en_proceso: "En proceso",
+  cumplida: "Cumplida",
+  incumplida: "Incumplida",
+  reprogramada: "Reprogramada",
+  registrado: "Registrado",
+  revisado: "Revisado",
+  convertido_caso: "Convertido en caso",
+  convertido_derivacion: "Convertido en derivación",
+  aplicado: "Aplicado",
+  interpretado: "Interpretado",
+  activo: "Activo",
+};
+
+function convivenciaLabelKey(value) {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[\s-]+/g, "_");
+}
+
+export function translateConvivenciaLabel(value) {
+  if (value === null || value === undefined || value === "") return "-";
+  const original = String(value).trim();
+  const translated = convivenciaTranslations[convivenciaLabelKey(original)];
+
+  if (translated) return translated;
+  if (!original.includes("_")) return original;
+
+  return original
+    .replaceAll("_", " ")
+    .replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
 export function formatConvivenciaError(error, fallback = "No se pudo completar la operación.") {
   const errors = error?.response?.data?.errors || null;
   return (
@@ -13,15 +112,15 @@ export function formatConvivenciaError(error, fallback = "No se pudo completar l
 }
 
 export function showConvivenciaSuccess(text, title = "Operación realizada") {
-  return Swal.fire({ title, text, icon: "success", timer: 1800, showConfirmButton: false });
+  return Swal.fire({ title, text, icon: "success", timer: 1800, showConfirmButton: false, customClass: convivenciaSwalClasses });
 }
 
 export function showConvivenciaError(text, title = "Error") {
-  return Swal.fire({ title, text, icon: "error", confirmButtonText: "Entendido" });
+  return Swal.fire({ title, text, icon: "error", confirmButtonText: "Entendido", customClass: convivenciaSwalClasses });
 }
 
 export function showConvivenciaWarning(text, title = "Advertencia") {
-  return Swal.fire({ title, text, icon: "warning", confirmButtonText: "Entendido" });
+  return Swal.fire({ title, text, icon: "warning", confirmButtonText: "Entendido", customClass: convivenciaSwalClasses });
 }
 
 export function confirmConvivenciaAction({ title, text, confirmButtonText = "Confirmar", icon = "warning" }) {
@@ -33,11 +132,16 @@ export function confirmConvivenciaAction({ title, text, confirmButtonText = "Con
     confirmButtonText,
     cancelButtonText: "Cancelar",
     reverseButtons: true,
+    focusCancel: true,
+    customClass: convivenciaSwalClasses,
   });
 }
 
 export function humanizeConvivenciaStatus(status) {
   if (!status) return "-";
+  const translated = translateConvivenciaLabel(status);
+  if (translated !== String(status).trim()) return translated;
+
   return String(status)
     .replaceAll("_", " ")
     .replace(/\b\w/g, (letter) => letter.toUpperCase());
@@ -115,7 +219,7 @@ export function normalizeOptions(options, includeEmpty = false, emptyLabel = "To
 }
 
 export function extractChartLabels(items, key = "label") {
-  return (items || []).map((item) => item?.[key] ?? "-");
+  return (items || []).map((item) => translateConvivenciaLabel(item?.[key]));
 }
 
 export function extractChartTotals(items, key = "total") {

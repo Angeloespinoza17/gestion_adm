@@ -9,6 +9,7 @@ use App\Models\Infirmary\InfirmaryAttentionReferral;
 use App\Models\Infirmary\InfirmaryAttentionTreatment;
 use App\Models\Infirmary\InfirmaryMedication;
 use App\Models\Infirmary\InfirmaryMedicationAdministration;
+use App\Models\Staff;
 use App\Models\StudentProfile;
 use App\Models\User;
 use Carbon\Carbon;
@@ -80,33 +81,68 @@ class InfirmaryAttentionService
 
     private function fillAttention(InfirmaryAttention $attention, array $payload, User $user, bool $creating): void
     {
-        $student = StudentProfile::query()->findOrFail($payload['student_profile_id']);
+        $subjectType = $payload['subject_type'] ?? InfirmaryAttention::SUBJECT_STUDENT;
+        $student = $subjectType === InfirmaryAttention::SUBJECT_STUDENT
+            ? StudentProfile::query()->findOrFail($payload['student_profile_id'])
+            : null;
+        $staffMember = $subjectType === InfirmaryAttention::SUBJECT_STAFF
+            ? Staff::query()->with('cargo:id,name')->findOrFail($payload['staff_id'])
+            : null;
         $attendedAt = Carbon::parse($payload['attended_at']);
-        $summary = $this->studentContextService->studentSummary($student, $attendedAt);
-        $currentEnrollment = $this->studentContextService->currentEnrollment($student);
+        $occurredAt = Carbon::parse($payload['occurred_at'] ?? $payload['attended_at']);
+        $summary = $student
+            ? $this->studentContextService->studentSummary($student, $occurredAt)
+            : null;
+        $currentEnrollment = $student
+            ? $this->studentContextService->currentEnrollment($student)
+            : null;
         $teacherId = $payload['teacher_staff_id'] ?? null;
-        $teacher = $teacherId
-            ? \App\Models\Staff::query()->find($teacherId)
-            : $this->studentContextService->teacherForCourse($currentEnrollment?->courseSection);
+        $teacher = $student && $teacherId
+            ? Staff::query()->find($teacherId)
+            : ($student ? $this->studentContextService->teacherForCourse($currentEnrollment?->courseSection) : null);
+        $isAccidentCategory = in_array($payload['attention_category'] ?? null, ['accidente_menor', 'accidente_mayor'], true);
+        $accidentLocationType = $isAccidentCategory ? ($payload['accident_location_type'] ?? null) : null;
+        $companionType = $payload['accompanied_by_type'];
+        $companionStaffId = array_key_exists($companionType, InfirmaryAttention::STAFF_COMPANION_CARGO_SLUGS)
+            ? ($payload['accompanied_by_staff_id'] ?? null)
+            : null;
+        $companionStaff = $companionStaffId ? Staff::query()->find($companionStaffId) : null;
+        $companionName = $companionStaff?->full_name;
+
+        if (! $companionName && in_array($companionType, ['apoderado', 'otro'], true)) {
+            $companionName = $payload['accompanied_by_name'] ?? null;
+        }
 
         $attention->fill([
-            'student_profile_id' => $student->id,
-            'academic_year_id' => $payload['academic_year_id'] ?? $currentEnrollment?->academic_year_id,
-            'course_section_id' => $payload['course_section_id'] ?? $currentEnrollment?->course_section_id,
+            'subject_type' => $subjectType,
+            'student_profile_id' => $student?->id,
+            'staff_id' => $staffMember?->id,
+            'academic_year_id' => $student ? ($payload['academic_year_id'] ?? $currentEnrollment?->academic_year_id) : null,
+            'course_section_id' => $student ? ($payload['course_section_id'] ?? $currentEnrollment?->course_section_id) : null,
             'teacher_staff_id' => $teacher?->id,
             'referred_by_staff_id' => $payload['referred_by_staff_id'] ?? null,
-            'dependency_id' => $payload['dependency_id'] ?? null,
+            'dependency_id' => $accidentLocationType === 'colegio' ? ($payload['dependency_id'] ?? null) : null,
             'attended_by_user_id' => $payload['attended_by_user_id'] ?? $user->id,
             'attention_category' => $payload['attention_category'],
+            'accident_location_type' => $accidentLocationType,
+            'occurred_at' => $occurredAt->format('Y-m-d H:i:s'),
             'attended_at' => $attendedAt->format('Y-m-d H:i:s'),
-            'student_full_name_snapshot' => $summary['full_name'],
-            'student_rut_snapshot' => $summary['rut'],
-            'course_name_snapshot' => $payload['course_name_snapshot'] ?? $summary['course'],
-            'teacher_name_snapshot' => $teacher?->full_name ?: $summary['teacher_name'],
-            'age_snapshot' => $summary['age'],
-            'accompanied_by_type' => $payload['accompanied_by_type'],
-            'accompanied_by_name' => $payload['accompanied_by_name'] ?? null,
+            'student_full_name_snapshot' => $summary['full_name'] ?? null,
+            'student_rut_snapshot' => $summary['rut'] ?? null,
+            'staff_full_name_snapshot' => $staffMember?->full_name,
+            'staff_rut_snapshot' => $staffMember?->rut,
+            'staff_cargo_snapshot' => $staffMember?->cargo?->name,
+            'course_name_snapshot' => $student ? ($payload['course_name_snapshot'] ?? $summary['course']) : null,
+            'teacher_name_snapshot' => $student ? ($teacher?->full_name ?: $summary['teacher_name']) : null,
+            'age_snapshot' => $student
+                ? ($summary['age'] ?? null)
+                : ($staffMember?->birth_date ? Carbon::parse($staffMember->birth_date)->age : null),
+            'accompanied_by_type' => $companionType,
+            'accompanied_by_staff_id' => $companionStaff?->id,
+            'accompanied_by_name' => $companionName,
             'consultation_reason' => $payload['consultation_reason'],
+            'accident_circumstance' => $isAccidentCategory ? ($payload['accident_circumstance'] ?? null) : null,
+            'logbook' => $payload['logbook'] ?? null,
             'initial_description' => $payload['initial_description'] ?? null,
             'observations' => $payload['observations'] ?? null,
             'attention_duration_minutes' => $payload['attention_duration_minutes'] ?? null,
@@ -119,8 +155,46 @@ class InfirmaryAttentionService
         ]);
 
         if ($creating) {
+            $attention->correlative_number = $this->nextCorrelativeNumber($subjectType);
             $attention->created_by = $user->id;
         }
+    }
+
+    private function nextCorrelativeNumber(string $subjectType): int
+    {
+        $sequence = DB::table('infirmary_attention_sequences')
+            ->where('subject_type', $subjectType)
+            ->lockForUpdate()
+            ->first();
+
+        if (! $sequence) {
+            $lastNumber = (int) InfirmaryAttention::query()
+                ->where('subject_type', $subjectType)
+                ->max('correlative_number');
+
+            DB::table('infirmary_attention_sequences')->insertOrIgnore([
+                'subject_type' => $subjectType,
+                'last_number' => $lastNumber,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+
+            $sequence = DB::table('infirmary_attention_sequences')
+                ->where('subject_type', $subjectType)
+                ->lockForUpdate()
+                ->firstOrFail();
+        }
+
+        $nextNumber = ((int) $sequence->last_number) + 1;
+
+        DB::table('infirmary_attention_sequences')
+            ->where('subject_type', $subjectType)
+            ->update([
+                'last_number' => $nextNumber,
+                'updated_at' => now(),
+            ]);
+
+        return $nextNumber;
     }
 
     private function syncNestedData(InfirmaryAttention $attention, array $payload, User $user): void
@@ -135,6 +209,7 @@ class InfirmaryAttentionService
                     'authorization_id' => null,
                     'medication_id' => $medication->id,
                     'student_profile_id' => $attention->student_profile_id,
+                    'staff_id' => $attention->staff_id,
                     'administered_at' => $attention->attended_at,
                     'administered_by_user_id' => $user->id,
                     'quantity_administered' => $treatmentPayload['medication_quantity'],
@@ -207,7 +282,10 @@ class InfirmaryAttentionService
         $weight = $payload['weight'] ?? null;
 
         return [
+            'treatment_categories' => array_values($payload['treatment_categories'] ?? []),
             'treatment_types' => array_values($payload['treatment_types'] ?? []),
+            'derivation_type' => $payload['derivation_type'] ?? null,
+            'derivation_support_teams' => array_values($payload['derivation_support_teams'] ?? []),
             'treatment_other' => $payload['treatment_other'] ?? null,
             'medication_id' => $payload['medication_id'] ?? null,
             'medication_quantity' => $payload['medication_quantity'] ?? null,
@@ -265,10 +343,13 @@ class InfirmaryAttentionService
     {
         return $attention->fresh([
             'student:id,first_name,last_name,registered_name,rut,birthdate,guardian_name,guardian_phone,guardian_email,guardian_backup_name,guardian_backup_phone,guardian_backup_email,health_insurance,has_chronic_illness,chronic_illness_details,has_medication_allergies,medication_allergies_details,has_physical_restrictions,physical_restrictions_details',
+            'staff:id,full_name,rut,birth_date,cargo_id,institutional_email,personal_email,phone,status,active',
+            'staff.cargo:id,name,slug',
             'academicYear:id,name,year',
             'courseSection:id,display_name',
             'teacher:id,full_name',
             'referredBy:id,full_name',
+            'accompaniedByStaff:id,full_name,cargo_id',
             'dependency:id,code,name,location,floor_sector',
             'attendedBy:id,name',
             'treatments.medication:id,name,commercial_name,unit',

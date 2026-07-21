@@ -6,12 +6,19 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Students\StoreCourseSectionRequest;
 use App\Http\Requests\Students\UpdateCourseSectionRequest;
 use App\Models\AcademicYear;
+use App\Models\Attendance\AttendanceImport;
+use App\Models\Attendance\AttendanceRecord;
 use App\Models\CourseSection;
 use App\Models\EducationLevel;
+use App\Models\PorterStudentWithdrawal;
 use App\Models\StudentEnrollment;
+use App\Models\StudentEnrollmentMovement;
+use App\Models\StudentPromotion;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Database\QueryException;
 use Illuminate\Validation\ValidationException;
+use Symfony\Component\HttpFoundation\Response;
 
 class CourseSectionController extends Controller
 {
@@ -91,6 +98,63 @@ class CourseSectionController extends Controller
         return response()->json([
             'message' => 'Curso actualizado correctamente.',
             'data' => $courseSection->fresh()->load('academicYear:id,name,year,is_active,is_closed', 'educationLevel:id,name,order,type'),
+        ]);
+    }
+
+    public function destroy(Request $request, CourseSection $courseSection): JsonResponse
+    {
+        $this->ensureYearEditable(
+            $courseSection->academicYear()->firstOrFail(),
+            $request->user()?->isSuperAdmin() ?? false,
+        );
+
+        $dependencies = collect([
+            'matrículas' => $courseSection->enrollments()->count(),
+            'promociones' => StudentPromotion::query()
+                ->where('from_course_section_id', $courseSection->id)
+                ->orWhere('to_course_section_id', $courseSection->id)
+                ->count(),
+            'movimientos de matrícula' => StudentEnrollmentMovement::query()
+                ->where('from_course_section_id', $courseSection->id)
+                ->orWhere('to_course_section_id', $courseSection->id)
+                ->count(),
+            'retiros de portería' => PorterStudentWithdrawal::query()
+                ->where('course_section_id', $courseSection->id)
+                ->count(),
+            'importaciones de asistencia' => AttendanceImport::query()
+                ->where('course_section_id', $courseSection->id)
+                ->count(),
+            'registros de asistencia' => AttendanceRecord::query()
+                ->where('course_section_id', $courseSection->id)
+                ->count(),
+        ])->filter(fn (int $count) => $count > 0);
+
+        if ($dependencies->isNotEmpty()) {
+            $summary = $dependencies
+                ->map(fn (int $count, string $label) => sprintf('%d %s', $count, $label))
+                ->implode(', ');
+
+            return response()->json([
+                'message' => "No se puede eliminar {$courseSection->display_name} porque conserva información histórica: {$summary}.",
+                'errors' => [
+                    'course_section' => $dependencies
+                        ->map(fn (int $count, string $label) => sprintf('%s: %d', ucfirst($label), $count))
+                        ->values()
+                        ->all(),
+                ],
+            ], Response::HTTP_UNPROCESSABLE_ENTITY);
+        }
+
+        try {
+            $courseSection->delete();
+        } catch (QueryException) {
+            return response()->json([
+                'message' => 'No se puede eliminar el curso porque está asociado a otros registros del sistema.',
+            ], Response::HTTP_UNPROCESSABLE_ENTITY);
+        }
+
+        return response()->json([
+            'message' => 'Curso eliminado correctamente.',
         ]);
     }
 

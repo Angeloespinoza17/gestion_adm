@@ -3,6 +3,7 @@
 namespace App\Services\Remuneration;
 
 use App\Models\Cargo;
+use App\Models\Department;
 use App\Models\HumanResources\HrClimateActionPlan;
 use App\Models\HumanResources\HrClimateSurvey;
 use App\Models\HumanResources\HrCvBankEntry;
@@ -16,6 +17,8 @@ use App\Models\HumanResources\HrWorkloadAssignment;
 use App\Models\PermissionRequest;
 use App\Models\Remuneration\RemunerationAccountingExport;
 use App\Models\Remuneration\RemunerationAuditLog;
+use App\Models\Remuneration\RemunerationBookImport;
+use App\Models\Remuneration\RemunerationBookImportRow;
 use App\Models\Remuneration\RemunerationConcept;
 use App\Models\Remuneration\RemunerationContractSetting;
 use App\Models\Remuneration\RemunerationEmployeeConcept;
@@ -232,6 +235,30 @@ class RemunerationResourceRegistry
                     'status' => ['nullable', 'string', 'max:40'],
                 ],
             ],
+            'imports' => [
+                'model' => RemunerationBookImport::class,
+                'view_permission' => RemunerationAccessService::VIEW_PERMISSION,
+                'manage_permission' => RemunerationAccessService::IMPORT_PERMISSION,
+                'search' => ['original_filename', 'file_hash', 'status'],
+                'filters' => ['period_id', 'status', 'year', 'month'],
+                'order_by' => 'id',
+                'order_direction' => 'desc',
+                'with' => ['period:id,name,year,month,status', 'importedBy:id,name'],
+                'read_only' => true,
+                'rules' => fn (?int $id) => [],
+            ],
+            'import-rows' => [
+                'model' => RemunerationBookImportRow::class,
+                'view_permission' => RemunerationAccessService::VIEW_PERMISSION,
+                'manage_permission' => RemunerationAccessService::IMPORT_PERMISSION,
+                'search' => ['rut', 'employee_name', 'employee_type'],
+                'filters' => ['book_import_id', 'staff_id', 'employee_type'],
+                'order_by' => 'id',
+                'order_direction' => 'desc',
+                'with' => ['import:id,period_id,original_filename,status,book_period', 'import.period:id,name,year,month,status', 'staff:id,full_name,rut'],
+                'read_only' => true,
+                'rules' => fn (?int $id) => [],
+            ],
             'payments' => [
                 'model' => RemunerationPayment::class,
                 'view_permission' => RemunerationAccessService::VIEW_PERMISSION,
@@ -336,6 +363,37 @@ class RemunerationResourceRegistry
                     'salary_discount_days' => ['nullable', 'numeric', 'min:0'],
                     'requires_regularization' => ['nullable', 'boolean'],
                     'internal_observations' => ['nullable', 'string'],
+                ],
+            ],
+            'departments' => [
+                'model' => Department::class,
+                'view_permission' => RemunerationAccessService::VIEW_PERMISSION,
+                'manage_permission' => RemunerationAccessService::HR_MANAGEMENT_PERMISSION,
+                'search' => ['name', 'slug', 'description'],
+                'filters' => ['active'],
+                'order_by' => 'sort_order',
+                'rules' => fn (?int $id) => [
+                    'name' => ['required', 'string', 'max:191', Rule::unique('departments', 'name')->ignore($id)],
+                    'slug' => ['required', 'string', 'max:191', Rule::unique('departments', 'slug')->ignore($id)],
+                    'description' => ['nullable', 'string'],
+                    'responsible_staff_id' => ['nullable', 'integer', 'exists:staff,id'],
+                    'active' => ['nullable', 'boolean'],
+                    'color' => ['nullable', 'string', 'max:20'],
+                    'sort_order' => ['nullable', 'integer', 'min:0'],
+                ],
+            ],
+            'functions' => [
+                'model' => Cargo::class,
+                'view_permission' => RemunerationAccessService::VIEW_PERMISSION,
+                'manage_permission' => RemunerationAccessService::HR_MANAGEMENT_PERMISSION,
+                'search' => ['name', 'slug', 'description'],
+                'filters' => ['active'],
+                'order_by' => 'name',
+                'rules' => fn (?int $id) => [
+                    'name' => ['required', 'string', 'max:191', Rule::unique('cargos', 'name')->ignore($id)],
+                    'slug' => ['required', 'string', 'max:191', Rule::unique('cargos', 'slug')->ignore($id)],
+                    'description' => ['nullable', 'string'],
+                    'active' => ['nullable', 'boolean'],
                 ],
             ],
             'staff-management' => [

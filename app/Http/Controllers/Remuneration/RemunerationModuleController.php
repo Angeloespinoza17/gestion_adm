@@ -8,12 +8,16 @@ use App\Models\Accounting\AccountingCostCenter;
 use App\Models\Accounting\AccountingFundingSource;
 use App\Models\Accounting\AccountingManualAccount;
 use App\Models\Contract;
+use App\Models\Remuneration\RemunerationBookAlertRule;
+use App\Models\Remuneration\RemunerationBookConceptSetting;
 use App\Models\Remuneration\RemunerationPayment;
 use App\Models\Remuneration\RemunerationPayroll;
 use App\Models\Remuneration\RemunerationPeriod;
 use App\Models\Staff;
 use App\Services\Remuneration\PayrollAccountingService;
 use App\Services\Remuneration\PayrollCalculationService;
+use App\Services\Remuneration\RemunerationBookAnalyticsService;
+use App\Services\Remuneration\RemunerationBookImportService;
 use App\Services\Remuneration\RemunerationAccessService;
 use App\Services\Remuneration\RemunerationAuditService;
 use App\Services\Remuneration\RemunerationReportService;
@@ -25,6 +29,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
@@ -35,6 +40,8 @@ class RemunerationModuleController extends Controller
         private readonly RemunerationResourceRegistry $registry,
         private readonly PayrollCalculationService $calculationService,
         private readonly PayrollAccountingService $accountingService,
+        private readonly RemunerationBookAnalyticsService $bookAnalyticsService,
+        private readonly RemunerationBookImportService $bookImportService,
         private readonly RemunerationReportService $reportService,
         private readonly RemunerationAuditService $auditService,
     ) {
@@ -119,6 +126,168 @@ class RemunerationModuleController extends Controller
         return response()->streamDownload(function () use ($csv) {
             echo $csv;
         }, $filename, ['Content-Type' => 'text/csv; charset=UTF-8']);
+    }
+
+    public function bookAnalytics(Request $request): JsonResponse
+    {
+        abort_unless($this->accessService->canManage($request->user(), RemunerationAccessService::REPORTS_PERMISSION), 403);
+
+        $payload = Validator::make($request->all(), [
+            'period_id' => ['nullable', 'integer', 'exists:remuneration_periods,id'],
+            'from_period_id' => ['nullable', 'integer', 'exists:remuneration_periods,id'],
+            'to_period_id' => ['nullable', 'integer', 'exists:remuneration_periods,id'],
+            'import_id' => ['nullable', 'integer', 'exists:remuneration_book_imports,id'],
+            'employee_type' => ['nullable', 'string', 'max:120'],
+            'concept_key' => ['nullable', 'string', 'size:40'],
+        ])->validate();
+
+        return response()->json($this->bookAnalyticsService->dashboard($payload));
+    }
+
+    public function updateBookConceptSetting(Request $request, string $conceptKey): JsonResponse
+    {
+        abort_unless($this->accessService->canManage($request->user(), RemunerationAccessService::CONCEPTS_PERMISSION), 403);
+
+        Validator::make(['concept_key' => $conceptKey], [
+            'concept_key' => ['required', 'string', 'size:40'],
+        ])->validate();
+
+        $payload = Validator::make($request->all(), [
+            'code' => ['nullable', 'string', 'max:80'],
+            'name' => ['required', 'string', 'max:255'],
+            'label' => ['nullable', 'string', 'max:255'],
+            'nature' => ['required', 'string', 'in:Haber'],
+            'group' => ['nullable', 'string', 'max:120'],
+            'is_union_income' => ['required', 'boolean'],
+            'notes' => ['nullable', 'string', 'max:1000'],
+        ])->validate();
+
+        $setting = RemunerationBookConceptSetting::query()->firstOrNew(['concept_key' => $conceptKey]);
+        $setting->fill([
+            'code' => $payload['code'] ?? null,
+            'name' => $payload['name'],
+            'label' => ($payload['label'] ?? null) ?: trim((($payload['code'] ?? '') ? '(' . $payload['code'] . ') ' : '') . $payload['name']),
+            'nature' => $payload['nature'],
+            'group' => $payload['group'] ?? null,
+            'is_union_income' => (bool) $payload['is_union_income'],
+            'notes' => $payload['notes'] ?? null,
+            'last_seen_at' => now(),
+            'updated_by' => $request->user()?->id,
+        ]);
+
+        if (!$setting->exists) {
+            $setting->created_by = $request->user()?->id;
+        }
+
+        $setting->save();
+
+        return response()->json([
+            'message' => $setting->is_union_income ? 'Haber marcado como sindical.' : 'Haber desmarcado como sindical.',
+            'data' => $setting,
+        ]);
+    }
+
+    public function bookAlertRules(Request $request): JsonResponse
+    {
+        abort_unless($this->accessService->canManage($request->user(), RemunerationAccessService::REPORTS_PERMISSION), 403);
+
+        return response()->json([
+            'data' => RemunerationBookAlertRule::query()
+                ->orderByDesc('enabled')
+                ->orderBy('name')
+                ->get()
+                ->map(fn (RemunerationBookAlertRule $rule) => $this->bookAlertRulePayload($rule))
+                ->values(),
+        ]);
+    }
+
+    public function storeBookAlertRule(Request $request): JsonResponse
+    {
+        abort_unless($this->accessService->canManage($request->user(), RemunerationAccessService::REPORTS_PERMISSION), 403);
+
+        $payload = Validator::make($request->all(), [
+            'name' => ['required', 'string', 'max:160'],
+            'description' => ['nullable', 'string', 'max:1200'],
+            'severity' => ['required', 'string', 'in:critica,requiere_revision,informativa'],
+            'metric' => ['required', 'string', 'in:gross_total,net_amount,total_deductions,legal_deductions,other_deductions,deduction_rate,worked_days,weekly_hours,concept_amount'],
+            'operator' => ['required', 'string', 'in:gt,gte,lt,lte,eq,neq'],
+            'threshold_value' => ['required', 'numeric'],
+            'concept_key' => ['nullable', 'required_if:metric,concept_amount', 'string', 'size:40'],
+            'concept_label' => ['nullable', 'string', 'max:255'],
+            'employee_type' => ['nullable', 'string', 'max:120'],
+            'enabled' => ['nullable', 'boolean'],
+        ])->validate();
+
+        $rule = RemunerationBookAlertRule::query()->create([
+            'name' => $payload['name'],
+            'description' => $payload['description'] ?? null,
+            'severity' => $payload['severity'],
+            'metric' => $payload['metric'],
+            'operator' => $payload['operator'],
+            'threshold_value' => $payload['threshold_value'],
+            'concept_key' => $payload['concept_key'] ?? null,
+            'concept_label' => $payload['concept_label'] ?? null,
+            'employee_type' => $payload['employee_type'] ?? null,
+            'enabled' => (bool) ($payload['enabled'] ?? true),
+            'created_by' => $request->user()?->id,
+            'updated_by' => $request->user()?->id,
+        ]);
+
+        return response()->json([
+            'message' => 'Regla de alerta creada.',
+            'data' => $this->bookAlertRulePayload($rule),
+        ], 201);
+    }
+
+    private function bookAlertRulePayload(RemunerationBookAlertRule $rule): array
+    {
+        return [
+            'id' => $rule->id,
+            'name' => $rule->name,
+            'description' => $rule->description,
+            'severity' => $rule->severity,
+            'metric' => $rule->metric,
+            'operator' => $rule->operator,
+            'threshold_value' => (float) $rule->threshold_value,
+            'concept_key' => $rule->concept_key,
+            'concept_label' => $rule->concept_label,
+            'employee_type' => $rule->employee_type,
+            'enabled' => (bool) $rule->enabled,
+            'created_at' => $rule->created_at?->format('Y-m-d H:i'),
+            'updated_at' => $rule->updated_at?->format('Y-m-d H:i'),
+        ];
+    }
+
+    public function previewImport(Request $request): JsonResponse
+    {
+        abort_unless($this->accessService->canManage($request->user(), RemunerationAccessService::IMPORT_PERMISSION), 403);
+
+        $payload = Validator::make($request->all(), [
+            'file' => ['required', 'file', 'mimes:xlsx,zip', 'max:20480'],
+        ])->validate();
+
+        return response()->json($this->bookImportService->preview($payload['file']));
+    }
+
+    public function importBook(Request $request): JsonResponse
+    {
+        abort_unless($this->accessService->canManage($request->user(), RemunerationAccessService::IMPORT_PERMISSION), 403);
+
+        $payload = Validator::make($request->all(), [
+            'file' => ['required', 'file', 'mimes:xlsx,zip', 'max:20480'],
+            'replace' => ['nullable', 'boolean'],
+        ])->validate();
+
+        $import = $this->bookImportService->import(
+            $payload['file'],
+            $request->user(),
+            (bool) ($payload['replace'] ?? false),
+        );
+
+        return response()->json([
+            'message' => 'Libro de remuneraciones importado correctamente.',
+            'data' => $import,
+        ], 201);
     }
 
     public function payrollPdfData(Request $request): JsonResponse
@@ -538,7 +707,13 @@ class RemunerationModuleController extends Controller
         $modelClass = $config['model'];
         $model = $recordId ? $modelClass::query()->findOrFail($recordId) : new $modelClass();
         $rules = $config['rules']($recordId);
-        $payload = Validator::make($request->all(), $rules)->validate();
+        $input = $request->all();
+
+        if (in_array($resource, ['departments', 'functions'], true) && empty($input['slug']) && !empty($input['name'])) {
+            $input['slug'] = Str::slug((string) $input['name']);
+        }
+
+        $payload = Validator::make($input, $rules)->validate();
 
         $this->assertOpenPeriodForPayload($resource, $payload, $model);
 

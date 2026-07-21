@@ -45,6 +45,7 @@ class CentroApuntesDashboardService
         $alerts = $this->refreshAlerts($today);
 
         return [
+            'generated_at' => now()->toIso8601String(),
             'metrics' => $metrics,
             'alerts' => $alerts,
             'charts' => [

@@ -2,6 +2,8 @@
 
 namespace Database\Seeders;
 
+use Database\Seeders\Support\PreventsProductionSeeding;
+
 use App\Models\AcademicYear;
 use App\Models\CourseSection;
 use App\Models\Permission;
@@ -39,12 +41,15 @@ use Illuminate\Support\Str;
 
 class PmeSeeder extends ModuleSeeder
 {
+    use PreventsProductionSeeding;
+
     private \Faker\Generator $faker;
 
     private User $actor;
 
     public function run(): void
     {
+        $this->preventProductionSeeding();
         $this->faker = Faker::create('es_CL');
         $this->faker->seed(20260629);
 

@@ -2,10 +2,16 @@
 
 namespace Database\Seeders;
 
-use Database\Seeders\Modules\StaffModuleSeeder;
-use Database\Seeders\Modules\StudentModuleSeeder;
 use App\Models\AcademicYear;
 use App\Models\CourseSection;
+use App\Models\Infirmary\InfirmaryAccident;
+use App\Models\Infirmary\InfirmaryAttention;
+use App\Models\Infirmary\InfirmaryAttentionCall;
+use App\Models\Infirmary\InfirmaryMedication;
+use App\Models\Infirmary\InfirmaryMedicationAdministration;
+use App\Models\Infirmary\InfirmaryMedicationAuthorization;
+use App\Models\Infirmary\InfirmaryMedicationMovement;
+use App\Models\MaintenanceDependency;
 use App\Models\Permission;
 use App\Models\Role;
 use App\Models\Staff;
@@ -14,32 +20,33 @@ use App\Models\StudentProfile;
 use App\Models\Supplier;
 use App\Models\SystemModule;
 use App\Models\User;
-use App\Models\Infirmary\InfirmaryAccident;
-use App\Models\Infirmary\InfirmaryAttentionCall;
-use App\Models\Infirmary\InfirmaryDocument;
-use App\Models\Infirmary\InfirmaryMedication;
-use App\Models\Infirmary\InfirmaryMedicationAdministration;
-use App\Models\Infirmary\InfirmaryMedicationAuthorization;
-use App\Models\Infirmary\InfirmaryMedicationMovement;
 use App\Services\Infirmary\InfirmaryAttentionService;
 use App\Services\Infirmary\InfirmaryMedicationStockService;
 use App\Services\Infirmary\InfirmaryStudentContextService;
 use Carbon\Carbon;
+use Database\Seeders\Modules\StaffModuleSeeder;
+use Database\Seeders\Modules\StudentModuleSeeder;
+use Database\Seeders\Support\PreventsProductionSeeding;
 use Faker\Factory as Faker;
-use Illuminate\Database\Seeder;
+use Faker\Generator;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Seeder;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 
 class EnfermeriaSeeder extends Seeder
 {
-    private \Faker\Generator $faker;
+    use PreventsProductionSeeding;
+
+    private Generator $faker;
 
     private User $actor;
 
     public function run(): void
     {
+        $this->preventProductionSeeding();
         $this->faker = Faker::create('es_CL');
         $this->faker->seed(20260628);
 
@@ -58,6 +65,7 @@ class EnfermeriaSeeder extends Seeder
             ?: User::query()->firstOrFail();
 
         $this->seedPermissionsAndModules();
+        $this->call(InfirmaryCatalogSeeder::class);
         $this->ensureSuppliers();
         $this->ensureMinimumStudents(100);
 
@@ -85,6 +93,7 @@ class EnfermeriaSeeder extends Seeder
             ['slug' => 'administrar_medicamentos_enfermeria', 'name' => 'Administrar medicamentos de Enfermería'],
             ['slug' => 'gestionar_accidentes_enfermeria', 'name' => 'Gestionar accidentes escolares de Enfermería'],
             ['slug' => 'ver_reportes_enfermeria', 'name' => 'Ver reportes de Enfermería'],
+            ['slug' => 'administrar_catalogos_enfermeria', 'name' => 'Administrar catálogos de Enfermería'],
         ];
 
         foreach ($permissions as $permission) {
@@ -112,13 +121,12 @@ class EnfermeriaSeeder extends Seeder
 
         $children = [
             ['slug' => 'infirmary_dashboard', 'name' => 'Dashboard', 'route' => '/infirmary', 'sort' => 1],
-            ['slug' => 'infirmary_attentions', 'name' => 'Atenciones', 'route' => '/infirmary/attentions', 'sort' => 2],
-            ['slug' => 'infirmary_history', 'name' => 'Ficha médica', 'route' => '/infirmary/history', 'sort' => 3],
-            ['slug' => 'infirmary_inventory', 'name' => 'Inventario medicamentos', 'route' => '/infirmary/inventory', 'sort' => 4],
-            ['slug' => 'infirmary_medications', 'name' => 'Administración medicamentos', 'route' => '/infirmary/medications', 'sort' => 5],
-            ['slug' => 'infirmary_accidents', 'name' => 'Accidentes escolares', 'route' => '/infirmary/accidents', 'sort' => 6],
-            ['slug' => 'infirmary_calls', 'name' => 'Registro de llamados', 'route' => '/infirmary/calls', 'sort' => 7],
-            ['slug' => 'infirmary_reports', 'name' => 'Reportes', 'route' => '/infirmary/reports', 'sort' => 8],
+            ['slug' => 'infirmary_attentions', 'name' => 'Atención a estudiantes', 'route' => '/infirmary/attentions', 'sort' => 2],
+            ['slug' => 'infirmary_staff_attentions', 'name' => 'Atención a funcionarios', 'route' => '/infirmary/staff-attentions', 'sort' => 3],
+            ['slug' => 'infirmary_categories', 'name' => 'Categorías', 'route' => '/infirmary/categories', 'sort' => 4],
+            ['slug' => 'infirmary_inventory', 'name' => 'Inventario', 'route' => '/infirmary/inventory', 'sort' => 5],
+            ['slug' => 'infirmary_accidents', 'name' => 'Seguro escolar', 'route' => '/infirmary/accidents', 'sort' => 6],
+            ['slug' => 'infirmary_medications', 'name' => 'Medicamentos', 'route' => '/infirmary/medications', 'sort' => 7],
         ];
 
         foreach ($children as $child) {
@@ -134,6 +142,13 @@ class EnfermeriaSeeder extends Seeder
                 ],
             );
         }
+
+        SystemModule::query()
+            ->whereIn('slug', ['infirmary_history', 'infirmary_calls', 'infirmary_reports'])
+            ->update([
+                'active' => false,
+                'parent_id' => $parent->id,
+            ]);
 
         $permissionsBySlug = Permission::query()->whereIn('slug', array_column($permissions, 'slug'))->get()->keyBy('slug');
         $modules = SystemModule::query()->whereIn('slug', array_merge(['infirmary'], array_column($children, 'slug')))->get()->keyBy('slug');
@@ -152,19 +167,21 @@ class EnfermeriaSeeder extends Seeder
             ],
         ];
 
+        $navigationModules = array_merge(['infirmary'], array_column($children, 'slug'));
+
         $moduleRoleMap = [
-            'super_admin' => $modules->keys()->all(),
-            'administrador' => $modules->keys()->all(),
-            'enfermeria' => $modules->keys()->all(),
-            'direccion' => ['infirmary', 'infirmary_dashboard', 'infirmary_history', 'infirmary_reports'],
-            'rrhh' => ['infirmary', 'infirmary_dashboard', 'infirmary_history', 'infirmary_reports'],
-            'inspectoria' => ['infirmary', 'infirmary_dashboard', 'infirmary_attentions', 'infirmary_history', 'infirmary_accidents', 'infirmary_calls'],
+            'super_admin' => $navigationModules,
+            'administrador' => $navigationModules,
+            'enfermeria' => $navigationModules,
+            'direccion' => $navigationModules,
+            'rrhh' => $navigationModules,
+            'inspectoria' => $navigationModules,
         ];
 
         foreach ($roleMap as $roleSlug => $permissionSlugs) {
             $role = Role::query()->firstWhere('slug', $roleSlug);
 
-            if (!$role) {
+            if (! $role) {
                 continue;
             }
 
@@ -200,8 +217,8 @@ class EnfermeriaSeeder extends Seeder
                 [
                     'name' => $supplier['name'],
                     'business_name' => $supplier['business_name'],
-                    'email' => Str::slug($supplier['name'], '.') . '@proveedores.local',
-                    'phone' => '+5697' . str_pad((string) random_int(1000000, 9999999), 7, '0', STR_PAD_LEFT),
+                    'email' => Str::slug($supplier['name'], '.').'@proveedores.local',
+                    'phone' => '+5697'.str_pad((string) random_int(1000000, 9999999), 7, '0', STR_PAD_LEFT),
                     'address' => 'Valdivia, Chile',
                     'active' => true,
                 ],
@@ -228,20 +245,20 @@ class EnfermeriaSeeder extends Seeder
                 ['rut' => $rut],
                 [
                     'first_name' => $this->faker->firstNameFemale(),
-                    'last_name' => $this->faker->lastName() . ' ' . $this->faker->lastName(),
+                    'last_name' => $this->faker->lastName().' '.$this->faker->lastName(),
                     'registered_name' => null,
                     'birthdate' => Carbon::now()->subYears(random_int(6, 18))->subDays(random_int(0, 364))->format('Y-m-d'),
-                    'email' => 'estudiante.enfermeria' . $index . '@cnscgestion.local',
-                    'phone' => '+5699' . str_pad((string) random_int(1000000, 9999999), 7, '0', STR_PAD_LEFT),
+                    'email' => 'estudiante.enfermeria'.$index.'@cnscgestion.local',
+                    'phone' => '+5699'.str_pad((string) random_int(1000000, 9999999), 7, '0', STR_PAD_LEFT),
                     'address' => $this->faker->streetAddress(),
                     'general_status' => 'activo',
                     'guardian_name' => $this->faker->name(),
                     'guardian_relationship' => random_int(0, 1) ? 'Madre' : 'Padre',
-                    'guardian_phone' => '+5698' . str_pad((string) random_int(1000000, 9999999), 7, '0', STR_PAD_LEFT),
-                    'guardian_email' => 'apoderado.enfermeria' . $index . '@cnscgestion.local',
+                    'guardian_phone' => '+5698'.str_pad((string) random_int(1000000, 9999999), 7, '0', STR_PAD_LEFT),
+                    'guardian_email' => 'apoderado.enfermeria'.$index.'@cnscgestion.local',
                     'guardian_backup_name' => $this->faker->name(),
                     'guardian_backup_relationship' => 'Abuela',
-                    'guardian_backup_phone' => '+5698' . str_pad((string) random_int(1000000, 9999999), 7, '0', STR_PAD_LEFT),
+                    'guardian_backup_phone' => '+5698'.str_pad((string) random_int(1000000, 9999999), 7, '0', STR_PAD_LEFT),
                     'health_insurance' => random_int(0, 1) ? 'Fonasa' : 'Isapre',
                     'has_chronic_illness' => random_int(1, 100) <= 20,
                     'chronic_illness_details' => random_int(1, 100) <= 50 ? 'Control crónico en seguimiento.' : null,
@@ -287,7 +304,7 @@ class EnfermeriaSeeder extends Seeder
     }
 
     /**
-     * @return \Illuminate\Support\Collection<int, InfirmaryMedication>
+     * @return Collection<int, InfirmaryMedication>
      */
     private function seedMedications()
     {
@@ -324,17 +341,17 @@ class EnfermeriaSeeder extends Seeder
             };
 
             $medication = InfirmaryMedication::query()->updateOrCreate(
-                ['name' => $name, 'batch' => 'LOT-' . str_pad((string) ($index + 1), 4, '0', STR_PAD_LEFT)],
+                ['name' => $name, 'batch' => 'LOT-'.str_pad((string) ($index + 1), 4, '0', STR_PAD_LEFT)],
                 [
-                    'commercial_name' => $name . ' Escolar',
+                    'commercial_name' => $name.' Escolar',
                     'active_ingredient' => $name,
                     'presentation' => random_int(0, 1) ? 'Tabletas' : 'Solución',
                     'concentration' => random_int(0, 1) ? '500 mg' : '100 ml',
                     'unit' => random_int(0, 1) ? 'unidad' : 'ml',
-                    'laboratory' => 'Laboratorio ' . chr(65 + ($index % 10)),
+                    'laboratory' => 'Laboratorio '.chr(65 + ($index % 10)),
                     'current_stock' => 0,
                     'minimum_stock' => $minimum,
-                    'physical_location' => 'Botiquín ' . (($index % 4) + 1),
+                    'physical_location' => 'Botiquín '.(($index % 4) + 1),
                     'manufactured_at' => now()->subMonths(random_int(2, 18))->format('Y-m-d'),
                     'expires_at' => $expiresAt->format('Y-m-d'),
                     'supplier_id' => $suppliers->random()?->id,
@@ -373,9 +390,9 @@ class EnfermeriaSeeder extends Seeder
     }
 
     /**
-     * @param  \Illuminate\Support\Collection<int, StudentProfile>  $students
-     * @param  \Illuminate\Support\Collection<int, InfirmaryMedication>  $medications
-     * @return \Illuminate\Support\Collection<int, InfirmaryMedicationAuthorization>
+     * @param  Collection<int, StudentProfile>  $students
+     * @param  Collection<int, InfirmaryMedication>  $medications
+     * @return Collection<int, InfirmaryMedicationAuthorization>
      */
     private function seedAuthorizations($students, $medications)
     {
@@ -390,17 +407,27 @@ class EnfermeriaSeeder extends Seeder
                 $index % 4 === 0 => now()->addDays(random_int(5, 20)),
                 default => now()->addDays(random_int(30, 180)),
             };
+            $dailyDoseCount = $this->faker->randomElement([1, 1, 2, 3]);
+            $scheduleMode = $this->faker->randomElement(['fixed_time', 'fixed_time', 'flexible']);
+            $availableTimes = ['08:00', '10:30', '12:30', '14:00', '16:00'];
+            $scheduledTimes = collect($availableTimes)->shuffle()->take($dailyDoseCount)->sort()->values();
 
             $authorization = InfirmaryMedicationAuthorization::query()->create([
                 'student_profile_id' => $student->id,
                 'medication_id' => $medication->id,
                 'diagnosis' => $this->faker->randomElement(['Asma', 'Rinitis alérgica', 'Tratamiento antibiótico', 'Control glicémico', 'Dolor crónico leve']),
                 'dose' => $this->faker->randomElement(['1 comprimido', '5 ml', '10 ml', '2 puff', '1 cápsula']),
-                'frequency' => $this->faker->randomElement(['Cada 8 horas', 'Cada 12 horas', 'Una vez al día', 'SOS']),
-                'schedule_text' => $this->faker->randomElement(['08:00', '12:30', '14:00', '08:00 / 16:00', '09:00 / 13:00 / 17:00']),
+                'dose_amount' => $this->faker->randomElement([5, 10, 15, 20]),
+                'dose_unit' => $this->faker->randomElement(['mg', 'cc']),
+                'administration_route' => $this->faker->randomElement(['oral', 'topica']),
+                'frequency' => $dailyDoseCount === 1 ? 'Una vez al día' : "{$dailyDoseCount} veces al día",
+                'daily_dose_count' => $dailyDoseCount,
+                'schedule_mode' => $scheduleMode,
+                'schedule_text' => $scheduleMode === 'fixed_time' ? $scheduledTimes->implode(' / ') : 'Sin horario fijo',
+                'regimen_type' => 'fecha_especifica',
                 'start_date' => $startDate->format('Y-m-d'),
                 'end_date' => $endDate->format('Y-m-d'),
-                'physician_name' => 'Dr(a). ' . $this->faker->lastName(),
+                'physician_name' => 'Dr(a). '.$this->faker->lastName(),
                 'medical_authorization_expires_at' => $endDate->copy()->subDays(random_int(-5, 15))->format('Y-m-d'),
                 'guardian_authorization_expires_at' => $endDate->copy()->subDays(random_int(-3, 20))->format('Y-m-d'),
                 'observations' => 'Autorización permanente de prueba para administración escolar.',
@@ -409,9 +436,17 @@ class EnfermeriaSeeder extends Seeder
                 'updated_by' => $this->actor->id,
             ]);
 
-            $this->attachTextDocument($authorization, $student->id, 'receta', 'receta_' . $authorization->id, 'Receta médica de prueba');
-            $this->attachTextDocument($authorization, $student->id, 'autorizacion_medica', 'autorizacion_medica_' . $authorization->id, 'Autorización médica de prueba');
-            $this->attachTextDocument($authorization, $student->id, 'autorizacion_apoderado', 'autorizacion_apoderado_' . $authorization->id, 'Autorización de apoderado de prueba');
+            $authorization->schedules()->createMany(
+                collect(range(1, $dailyDoseCount))->map(fn (int $doseOrder) => [
+                    'dose_order' => $doseOrder,
+                    'scheduled_time' => $scheduleMode === 'fixed_time' ? $scheduledTimes->get($doseOrder - 1) : null,
+                    'active' => true,
+                ])->all()
+            );
+
+            $this->attachTextDocument($authorization, $student->id, 'receta', 'receta_'.$authorization->id, 'Receta médica de prueba');
+            $this->attachTextDocument($authorization, $student->id, 'autorizacion_medica', 'autorizacion_medica_'.$authorization->id, 'Autorización médica de prueba');
+            $this->attachTextDocument($authorization, $student->id, 'autorizacion_apoderado', 'autorizacion_apoderado_'.$authorization->id, 'Autorización de apoderado de prueba');
 
             $items->push($authorization->fresh());
         }
@@ -420,19 +455,20 @@ class EnfermeriaSeeder extends Seeder
     }
 
     /**
-     * @param  \Illuminate\Support\Collection<int, StudentProfile>  $students
-     * @param  \Illuminate\Support\Collection<int, InfirmaryMedication>  $medications
-     * @return \Illuminate\Support\Collection<int, \App\Models\Infirmary\InfirmaryAttention>
+     * @param  Collection<int, StudentProfile>  $students
+     * @param  Collection<int, InfirmaryMedication>  $medications
+     * @return Collection<int, InfirmaryAttention>
      */
     private function seedAttentions($students, $medications)
     {
         $attentionService = app(InfirmaryAttentionService::class);
         $studentContextService = app(InfirmaryStudentContextService::class);
-        $dependencies = \App\Models\MaintenanceDependency::query()
+        $dependencies = MaintenanceDependency::query()
             ->physicalSpaces()
             ->where('active', true)
             ->get();
         $inspectors = Staff::query()->whereHas('cargo', fn ($query) => $query->where('slug', 'inspectoria'))->get();
+        $classroomAssistants = Staff::query()->whereHas('cargo', fn ($query) => $query->where('slug', 'asistente-de-aula'))->get();
         $nurse = $this->actor;
         $items = collect();
 
@@ -443,37 +479,91 @@ class EnfermeriaSeeder extends Seeder
             $date = now()->subDays(random_int(0, 120))->setTime(random_int(8, 17), random_int(0, 59));
             $status = $index % 9 === 0 ? 'abierta' : ($index % 6 === 0 ? 'en_atencion' : 'finalizada');
             $withMedication = $index % 3 === 0;
+            $occurredAt = $date->copy()->subMinutes(random_int(0, 180));
+            $attentionCategory = $this->faker->randomElement([
+                'accidente_menor',
+                'accidente_mayor',
+                'emocional',
+                'dolor_estomago',
+                'dolor_cabeza',
+                'epistaxis',
+                'control_signos_vitales',
+                'herido_dolor_anterior',
+                'otro',
+            ]);
+            $accidentLocationType = in_array($attentionCategory, ['accidente_menor', 'accidente_mayor'], true)
+                ? $this->faker->randomElement(['colegio', 'trayecto'])
+                : null;
+            $companionTypes = ['sin_acompanante', 'apoderado', 'otro'];
+
+            if ($inspectors->isNotEmpty()) {
+                $companionTypes[] = 'inspectora';
+            }
+
+            if ($classroomAssistants->isNotEmpty()) {
+                $companionTypes[] = 'asistente_aula';
+            }
+
+            $companionType = $this->faker->randomElement($companionTypes);
+            $companionStaffId = match ($companionType) {
+                'inspectora' => $inspectors->random()?->id,
+                'asistente_aula' => $classroomAssistants->random()?->id,
+                default => null,
+            };
+            $companionName = match ($companionType) {
+                'apoderado' => $this->faker->name(),
+                'otro' => $this->faker->randomElement(['Compañera de curso', 'Auxiliar de turno', 'Encargada de convivencia']),
+                default => null,
+            };
 
             $payload = [
                 'student_profile_id' => $student->id,
                 'academic_year_id' => $enrollment?->academic_year_id,
                 'course_section_id' => $enrollment?->course_section_id,
-                'referred_by_staff_id' => $inspectors->random()?->id,
-                'dependency_id' => $dependencies->random()?->id,
-                'attention_category' => $this->faker->randomElement([
-                    'accidente_escolar', 'malestar_general', 'control_signos_vitales', 'administracion_medicamento',
-                    'curacion', 'contencion_emocional', 'control_cronico', 'otro',
-                ]),
+                'referred_by_staff_id' => $inspectors->isNotEmpty() ? $inspectors->random()?->id : null,
+                'dependency_id' => $accidentLocationType === 'colegio' ? $dependencies->random()?->id : null,
+                'attention_category' => $attentionCategory,
+                'accident_location_type' => $accidentLocationType,
+                'occurred_at' => $occurredAt->format('Y-m-d H:i:s'),
                 'attended_at' => $date->format('Y-m-d H:i:s'),
-                'accompanied_by_type' => $this->faker->randomElement(['sin_acompanante', 'inspectora', 'profesor', 'apoderado']),
-                'accompanied_by_name' => null,
+                'accompanied_by_type' => $companionType,
+                'accompanied_by_staff_id' => $companionStaffId,
+                'accompanied_by_name' => $companionName,
                 'consultation_reason' => $this->faker->randomElement([
                     'Dolor de cabeza', 'Golpe en recreo', 'Control por medicamento', 'Malestar abdominal', 'Herida superficial',
                     'Contención emocional', 'Control de temperatura', 'Mareo transitorio',
                 ]),
+                'accident_circumstance' => in_array($attentionCategory, ['accidente_menor', 'accidente_mayor'], true)
+                    ? $this->faker->randomElement([
+                        'Alumna cae en clases de educación física.',
+                        'Estudiante se golpea durante el recreo.',
+                        'Caída en escalera durante cambio de sala.',
+                        'Golpe accidental en actividad deportiva.',
+                    ])
+                    : null,
                 'initial_description' => $this->faker->sentence(12),
                 'observations' => $this->faker->optional()->sentence(10),
                 'attention_duration_minutes' => random_int(8, 45),
                 'priority' => $this->faker->randomElement(['baja', 'media', 'alta', 'emergencia']),
                 'status' => $status,
                 'treatments' => [[
-                    'treatment_types' => array_values(array_unique([
-                        $this->faker->randomElement(['compresa_fria', 'curaciones', 'reposo', 'vendaje', 'toma_temperatura', 'control_glicemia']),
-                        $withMedication ? 'administracion_medicamento' : null,
+                    'treatment_categories' => array_values(array_filter([
+                        'fisico',
+                        'csv',
+                        $index % 5 === 0 ? 'emocional' : null,
+                        $index % 4 === 0 ? 'derivacion' : null,
                     ])),
+                    'treatment_types' => array_values(array_unique([
+                        $this->faker->randomElement(['compresa_fria', 'compresa_caliente', 'curaciones', 'apoyo_equipo_formacion']),
+                        $withMedication ? $this->faker->randomElement(['administracion_medicamento', 'medicamento_sos']) : null,
+                    ])),
+                    'derivation_type' => $index % 4 === 0 ? $this->faker->randomElement(['sala', 'domicilio', 'samu', 'urgencias']) : null,
+                    'derivation_support_teams' => $index % 4 === 0
+                        ? [$this->faker->randomElement(['equipo_directivo', 'convivencia', 'psicosocial'])]
+                        : [],
                     'medication_id' => $withMedication ? $medication->id : null,
                     'medication_quantity' => $withMedication ? random_int(1, 2) : null,
-                    'blood_pressure' => random_int(90, 130) . '/' . random_int(60, 85),
+                    'blood_pressure' => random_int(90, 130).'/'.random_int(60, 85),
                     'pulse' => random_int(65, 110),
                     'respiratory_rate' => random_int(12, 24),
                     'temperature' => $this->faker->randomFloat(1, 36, 39.5),
@@ -500,7 +590,7 @@ class EnfermeriaSeeder extends Seeder
                     'called_at' => $date->copy()->addMinutes(random_int(3, 20))->format('Y-m-d H:i:s'),
                     'person_contacted' => $student->guardian_name ?: $this->faker->name(),
                     'relationship' => $student->guardian_relationship ?: 'Apoderado',
-                    'phone_number' => $student->guardian_phone ?: '+5698' . random_int(1000000, 9999999),
+                    'phone_number' => $student->guardian_phone ?: '+5698'.random_int(1000000, 9999999),
                     'call_status' => $this->faker->randomElement(['contesto', 'no_contesto', 'mensaje_dejado']),
                     'reason' => 'Aviso por atención de enfermería',
                     'conversation_summary' => $this->faker->sentence(12),
@@ -522,11 +612,11 @@ class EnfermeriaSeeder extends Seeder
             $items->push($attention);
 
             if ($index % 4 === 0) {
-                $this->attachTextDocument($attention, $student->id, 'certificado_medico', 'certificado_' . $attention->id, 'Certificado médico ficticio');
+                $this->attachTextDocument($attention, $student->id, 'certificado_medico', 'certificado_'.$attention->id, 'Certificado médico ficticio');
             }
 
             if ($index % 6 === 0) {
-                $this->attachImageDocument($attention, $student->id, 'fotografia', 'foto_atencion_' . $attention->id);
+                $this->attachImageDocument($attention, $student->id, 'fotografia', 'foto_atencion_'.$attention->id);
             }
         }
 
@@ -534,12 +624,12 @@ class EnfermeriaSeeder extends Seeder
     }
 
     /**
-     * @param  \Illuminate\Support\Collection<int, StudentProfile>  $students
-     * @param  \Illuminate\Support\Collection<int, \App\Models\Infirmary\InfirmaryAttention>  $attentions
+     * @param  Collection<int, StudentProfile>  $students
+     * @param  Collection<int, InfirmaryAttention>  $attentions
      */
     private function seedAccidents($students, $attentions): void
     {
-        $dependencies = \App\Models\MaintenanceDependency::query()
+        $dependencies = MaintenanceDependency::query()
             ->physicalSpaces()
             ->where('active', true)
             ->get();
@@ -562,7 +652,7 @@ class EnfermeriaSeeder extends Seeder
                 'place' => $this->faker->randomElement(['Patio', 'Sala', 'Gimnasio', 'Escalera', 'Cancha', 'Comedor']),
                 'activity' => $this->faker->randomElement(['Recreo', 'Educación física', 'Cambio de sala', 'Almuerzo', 'Trabajo en aula']),
                 'description' => $this->faker->sentence(18),
-                'witnesses' => $this->faker->name() . ', ' . $this->faker->name(),
+                'witnesses' => $this->faker->name().', '.$this->faker->name(),
                 'present_staff_id' => $staff->random()?->id,
                 'severity' => $this->faker->randomElement(['leve', 'moderado', 'grave']),
                 'observed_injuries' => $this->faker->sentence(10),
@@ -570,7 +660,7 @@ class EnfermeriaSeeder extends Seeder
                 'guardian_call_status' => $this->faker->randomElement(['contesto', 'no_contesto', 'mensaje_dejado']),
                 'referral_destination' => $this->faker->randomElement(['Regresa a sala', 'Observación en enfermería', 'Retiro por apoderado', 'CESFAM', 'Urgencias']),
                 'school_insurance' => $index % 3 === 0,
-                'diat_number' => $index % 3 === 0 ? 'DIAT-' . now()->format('Y') . '-' . str_pad((string) $index, 4, '0', STR_PAD_LEFT) : null,
+                'diat_number' => $index % 3 === 0 ? 'DIAT-'.now()->format('Y').'-'.str_pad((string) $index, 4, '0', STR_PAD_LEFT) : null,
                 'diat_generated_at' => $index % 3 === 0 ? now()->subDays(random_int(0, 5)) : null,
                 'observations' => $this->faker->optional()->sentence(10),
                 'case_status' => $index % 4 === 0 ? 'abierto' : ($index % 5 === 0 ? 'en_seguimiento' : 'cerrado'),
@@ -578,16 +668,16 @@ class EnfermeriaSeeder extends Seeder
                 'updated_by' => $this->actor->id,
             ]);
 
-            $this->attachTextDocument($accident, $student->id, 'orden_atencion', 'diat_' . $accident->id, 'Documento DIAT ficticio');
+            $this->attachTextDocument($accident, $student->id, 'orden_atencion', 'diat_'.$accident->id, 'Documento DIAT ficticio');
 
             if ($index % 2 === 0) {
-                $this->attachImageDocument($accident, $student->id, 'fotografia', 'foto_accidente_' . $accident->id);
+                $this->attachImageDocument($accident, $student->id, 'fotografia', 'foto_accidente_'.$accident->id);
             }
         }
     }
 
     /**
-     * @param  \Illuminate\Support\Collection<int, StudentProfile>  $students
+     * @param  Collection<int, StudentProfile>  $students
      */
     private function seedStandaloneCalls($students): void
     {
@@ -600,7 +690,7 @@ class EnfermeriaSeeder extends Seeder
                 'called_at' => now()->subDays(random_int(0, 45))->setTime(random_int(8, 18), random_int(0, 59)),
                 'person_contacted' => $student->guardian_name ?: $this->faker->name(),
                 'relationship' => $student->guardian_relationship ?: 'Apoderado',
-                'phone_number' => $student->guardian_phone ?: '+5698' . random_int(1000000, 9999999),
+                'phone_number' => $student->guardian_phone ?: '+5698'.random_int(1000000, 9999999),
                 'call_status' => $this->faker->randomElement(['pendiente', 'contesto', 'no_contesto', 'mensaje_dejado']),
                 'reason' => $this->faker->randomElement(['Seguimiento posterior', 'Coordinación de medicamento', 'Aviso de accidente', 'Recordatorio de receta']),
                 'conversation_summary' => $this->faker->sentence(12),
@@ -613,24 +703,34 @@ class EnfermeriaSeeder extends Seeder
     }
 
     /**
-     * @param  \Illuminate\Support\Collection<int, InfirmaryMedicationAuthorization>  $authorizations
+     * @param  Collection<int, InfirmaryMedicationAuthorization>  $authorizations
      */
     private function seedAuthorizationAdministrations($authorizations): void
     {
         $stockService = app(InfirmaryMedicationStockService::class);
 
         foreach ($authorizations as $index => $authorization) {
+            $schedules = $authorization->schedules()->orderBy('dose_order')->get();
             foreach (range(1, random_int(1, 3)) as $iteration) {
-                $adminDate = now()->subDays(random_int(0, 35))->setTime(random_int(8, 17), random_int(0, 59));
+                $adminDate = now()->subDays(($index + ($iteration * 7)) % 35)->setTime(random_int(8, 17), random_int(0, 59));
+                $schedule = $schedules->get(($iteration - 1) % max(1, $schedules->count()));
                 $administration = InfirmaryMedicationAdministration::query()->create([
                     'authorization_id' => $authorization->id,
+                    'schedule_id' => $schedule?->id,
                     'attention_id' => null,
                     'medication_id' => $authorization->medication_id,
                     'student_profile_id' => $authorization->student_profile_id,
                     'administered_at' => $adminDate->format('Y-m-d H:i:s'),
+                    'scheduled_for_date' => $adminDate->toDateString(),
+                    'administration_status' => 'administrada',
                     'administered_by_user_id' => $this->actor->id,
                     'quantity_administered' => 1,
-                    'schedule_reference' => $authorization->schedule_text,
+                    'dose_amount' => $authorization->dose_amount,
+                    'dose_unit' => $authorization->dose_unit,
+                    'administration_route' => $authorization->administration_route,
+                    'schedule_reference' => $schedule?->scheduled_time
+                        ? substr((string) $schedule->scheduled_time, 0, 5)
+                        : ($schedule ? "Dosis {$schedule->dose_order}" : $authorization->schedule_text),
                     'source_type' => 'autorizacion',
                     'observations' => 'Administración programada registrada por seeder.',
                 ]);
@@ -652,13 +752,13 @@ class EnfermeriaSeeder extends Seeder
     private function attachTextDocument(Model $subject, ?int $studentId, string $category, string $basename, string $title): void
     {
         $path = sprintf('infirmary/%s/%s.txt', strtolower(class_basename($subject)), $basename);
-        Storage::disk('public')->put($path, $title . PHP_EOL . 'Documento de prueba generado por EnfermeriaSeeder.');
+        Storage::disk('public')->put($path, $title.PHP_EOL.'Documento de prueba generado por EnfermeriaSeeder.');
 
         $subject->documents()->create([
             'student_profile_id' => $studentId,
             'category' => $category,
             'file_path' => $path,
-            'original_name' => $basename . '.txt',
+            'original_name' => $basename.'.txt',
             'mime_type' => 'text/plain',
             'file_size' => Storage::disk('public')->size($path),
             'notes' => 'Documento ficticio generado automáticamente.',
@@ -676,7 +776,7 @@ class EnfermeriaSeeder extends Seeder
             'student_profile_id' => $studentId,
             'category' => $category,
             'file_path' => $path,
-            'original_name' => $basename . '.png',
+            'original_name' => $basename.'.png',
             'mime_type' => 'image/png',
             'file_size' => Storage::disk('public')->size($path),
             'notes' => 'Imagen ficticia generada automáticamente.',

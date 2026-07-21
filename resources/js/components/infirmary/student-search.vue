@@ -31,7 +31,7 @@ export default {
       default: "Buscar",
     },
   },
-  emits: ["selected"],
+  emits: ["selected", "cleared"],
   data() {
     return {
       loading: false,
@@ -40,10 +40,16 @@ export default {
       error: null,
       debounceId: null,
       opened: false,
+      selectedId: null,
+      requestSequence: 0,
     };
   },
   methods: {
     onInput() {
+      if (this.selectedId) {
+        this.selectedId = null;
+        this.$emit("cleared");
+      }
       window.clearTimeout(this.debounceId);
       if ((this.search || "").trim().length < 2) {
         this.results = [];
@@ -54,25 +60,31 @@ export default {
       this.debounceId = window.setTimeout(() => this.fetchStudents(), 300);
     },
     async fetchStudents() {
+      const search = this.search.trim();
+      if (search.length < 2) return;
+      const requestSequence = ++this.requestSequence;
       this.loading = true;
       this.error = null;
       try {
         const response = await axios.get("/api/infirmary/students", {
           params: {
-            search: this.search,
+            search,
             course_section_id: this.courseSectionId || null,
           },
         });
+        if (requestSequence !== this.requestSequence || search !== this.search.trim()) return;
         this.results = response.data.data || [];
         this.opened = true;
       } catch (error) {
+        if (requestSequence !== this.requestSequence) return;
         this.error = formatInfirmaryError(error, "No se pudo realizar la búsqueda.");
       } finally {
-        this.loading = false;
+        if (requestSequence === this.requestSequence) this.loading = false;
       }
     },
     selectStudent(student) {
       this.search = student.full_name;
+      this.selectedId = student.id;
       this.opened = false;
       this.$emit("selected", student);
 

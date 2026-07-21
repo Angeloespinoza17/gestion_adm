@@ -29,6 +29,16 @@ REMOTE="${DEPLOY_USER}@${DEPLOY_HOST}"
 
 cd "${ROOT_DIR}"
 
+if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+  DIRTY_FILES="$(git status --porcelain --untracked-files=all)"
+
+  if [ -n "${DIRTY_FILES}" ]; then
+    echo "El deploy fue cancelado: el árbol de trabajo contiene cambios sin confirmar." >&2
+    echo "Cree un commit o genere un artefacto limpio antes de desplegar." >&2
+    exit 1
+  fi
+fi
+
 echo "==> Build local"
 npm run prod
 
@@ -45,8 +55,11 @@ rsync -az --delete \
 echo "==> Instalando dependencias y optimizando Laravel"
 "${SSH_COMMAND[@]}" "${REMOTE}" "cd '${DEPLOY_REMOTE_PATH}' && \
 ${DEPLOY_COMPOSER_BIN} install --no-dev --optimize-autoloader && \
-${DEPLOY_PHP_BIN} artisan migrate --force && \
 ${DEPLOY_PHP_BIN} artisan config:clear && \
+${DEPLOY_PHP_BIN} artisan env --no-ansi | grep -Eq 'environment([[:space:]]+is|:)[[:space:]]*\[?production\]?[[:space:].]*$' && \
+${DEPLOY_PHP_BIN} artisan migrate:status --no-ansi && \
+${DEPLOY_PHP_BIN} artisan backup:database --no-prune && \
+${DEPLOY_PHP_BIN} artisan migrate --force --no-interaction && \
 ${DEPLOY_PHP_BIN} artisan route:clear && \
 ${DEPLOY_PHP_BIN} artisan view:clear && \
 ${DEPLOY_PHP_BIN} artisan config:cache && \

@@ -90,6 +90,27 @@ export default {
     isNew() {
       return this.$route.path === "/staff/new";
     },
+    pageTitle() {
+      return this.isNew ? "Nuevo funcionario" : "Ficha de funcionario";
+    },
+    pageSubtitle() {
+      if (this.isNew) {
+        return "Completa los datos base para crear la ficha institucional.";
+      }
+
+      if (this.staff) {
+        return `${this.staff.full_name || "Funcionario"} · ${this.staff.rut || "Sin RUT"}`;
+      }
+
+      return "Gestión de datos personales, laborales y documentos.";
+    },
+    primaryActionLabel() {
+      if (this.saving) {
+        return "Guardando...";
+      }
+
+      return this.isNew ? "Crear funcionario" : "Guardar cambios";
+    },
     itemId() {
       return this.$route.params.id;
     },
@@ -168,6 +189,10 @@ export default {
       );
     },
     userOptions() {
+      if (this.isNew) {
+        return [];
+      }
+
       return [{ value: null, label: "Sin usuario asociado" }].concat(
         (this.catalogs.users || [])
           .filter((user) => !user.staff_id || user.staff_id === this.staff?.id)
@@ -235,6 +260,46 @@ export default {
     currentPhotoUrl() {
       return this.profilePhotoPreview || this.staff?.profile_photo_url || null;
     },
+    selectedCargoLabel() {
+      return this.cargoOptions.find((item) => item.value === this.form.cargo_id)?.label || "Sin cargo asignado";
+    },
+    selectedStatusLabel() {
+      return this.statusOptions.find((item) => item.value === this.form.status)?.label || this.form.status || "Sin estado";
+    },
+    keyFieldStatus() {
+      return [
+        { key: "full_name", label: "Nombre", complete: Boolean(String(this.form.full_name || "").trim()) },
+        { key: "rut", label: "RUT", complete: Boolean(String(this.form.rut || "").trim()) },
+        { key: "institutional_email", label: "Correo", complete: Boolean(String(this.form.institutional_email || "").trim()) },
+        { key: "cargo_id", label: "Cargo", complete: Boolean(this.form.cargo_id) },
+        { key: "status", label: "Estado", complete: Boolean(this.form.status) },
+      ];
+    },
+    completedKeyFieldCount() {
+      return this.keyFieldStatus.filter((item) => item.complete).length;
+    },
+    formCompletionPercent() {
+      if (!this.keyFieldStatus.length) {
+        return 0;
+      }
+
+      return Math.round((this.completedKeyFieldCount / this.keyFieldStatus.length) * 100);
+    },
+    missingRequiredFields() {
+      const fields = [
+        { label: "Nombre completo", complete: Boolean(String(this.form.full_name || "").trim()) },
+        { label: "Estado laboral", complete: Boolean(this.form.status) },
+      ];
+
+      if (this.isNew) {
+        fields.push(
+          { label: "RUT", complete: Boolean(String(this.form.rut || "").trim()) },
+          { label: "Correo institucional", complete: Boolean(String(this.form.institutional_email || "").trim()) }
+        );
+      }
+
+      return fields.filter((item) => !item.complete);
+    },
     documentTypes() {
       return [
         "Contrato",
@@ -270,6 +335,9 @@ export default {
     },
   },
   watch: {
+    "$route.path"() {
+      this.load();
+    },
     "form.contract_type"(value) {
       if (value === "indefinido") {
         this.form.end_date = "";
@@ -308,6 +376,15 @@ export default {
     async load() {
       this.loading = true;
       this.error = null;
+      if (this.isNew) {
+        this.staff = null;
+        this.form = emptyForm();
+        this.profilePhoto = null;
+        this.profilePhotoPreview = null;
+        this.permissionSummary = null;
+        this.permissionWatchers = [];
+      }
+
       try {
         const requests = [axios.get("/api/staff/catalogs")];
         if (!this.isNew) {
@@ -485,8 +562,52 @@ export default {
 
       return formData;
     },
+    validateBeforeSave() {
+      if (!this.missingRequiredFields.length) {
+        return true;
+      }
+
+      const items = this.missingRequiredFields
+        .map((field) => `<li>${field.label}</li>`)
+        .join("");
+
+      Swal.fire({
+        title: "Faltan datos obligatorios",
+        html: `<div class="text-start"><p class="mb-2">Completa estos campos antes de guardar:</p><ul class="mb-0">${items}</ul></div>`,
+        icon: "warning",
+        confirmButtonText: "Revisar formulario",
+      });
+
+      return false;
+    },
+    async confirmSave() {
+      const name = String(this.form.full_name || "").trim() || "este funcionario";
+
+      const result = await Swal.fire({
+        title: this.isNew ? "Crear funcionario" : "Guardar cambios",
+        text: this.isNew
+          ? `Se creará la ficha de ${name}.`
+          : `Se actualizará la ficha de ${name}.`,
+        icon: "question",
+        showCancelButton: true,
+        confirmButtonText: this.isNew ? "Sí, crear" : "Sí, guardar",
+        cancelButtonText: "Cancelar",
+        reverseButtons: true,
+      });
+
+      return result.isConfirmed;
+    },
     async save() {
-      if (!this.canEdit) {
+      if (!this.canEdit || this.saving) {
+        return;
+      }
+
+      if (!this.validateBeforeSave()) {
+        return;
+      }
+
+      const confirmed = await this.confirmSave();
+      if (!confirmed) {
         return;
       }
 
@@ -500,7 +621,11 @@ export default {
 
         if (this.isNew) {
           response = await axios.post("/api/staff", payload);
-          this.$router.replace({ path: `/staff/${response.data.data.id}`, query: { created: 1 } });
+          this.success = "Funcionario creado correctamente.";
+          this.profilePhoto = null;
+          this.profilePhotoPreview = null;
+          await this.showSuccessAlert("Funcionario creado", this.success);
+          await this.$router.replace({ path: `/staff/${response.data.data.id}` });
           return;
         }
 
@@ -508,7 +633,7 @@ export default {
         response = await axios.post(`/api/staff/${this.staff.id}`, payload);
         this.staff = response.data.data;
         this.success = "Funcionario actualizado correctamente.";
-        this.showSuccessAlert("Cambios guardados", this.success);
+        await this.showSuccessAlert("Cambios guardados", this.success);
         this.profilePhoto = null;
         this.profilePhotoPreview = null;
         await this.load();
@@ -826,44 +951,92 @@ export default {
 
 <template>
   <Layout>
-    <div class="d-flex justify-content-between align-items-center mb-3">
-      <div>
-        <h4 class="mb-0">{{ isNew ? "Nuevo funcionario" : "Ficha de funcionario" }}</h4>
-        <div class="text-muted" v-if="staff">
-          {{ staff.full_name }} · {{ staff.rut }}
+    <div class="staff-form-hero mb-3">
+      <div class="d-flex flex-column flex-xl-row justify-content-between gap-3">
+        <div>
+          <div class="staff-form-kicker">Gestión de funcionarios</div>
+          <h4 class="mb-1">{{ pageTitle }}</h4>
+          <div class="text-muted">{{ pageSubtitle }}</div>
+        </div>
+        <div class="staff-form-actions d-flex flex-wrap justify-content-xl-end gap-2">
+          <router-link to="/staff" class="btn btn-outline-secondary">
+            <i class="mdi mdi-arrow-left me-1"></i>
+            Volver
+          </router-link>
+          <BButton
+            v-if="staff && canExport"
+            variant="outline-primary"
+            :disabled="exportingPdf"
+            @click="exportPdf"
+          >
+            <i class="mdi mdi-file-pdf-box me-1"></i>
+            {{ exportingPdf ? "Generando PDF..." : "Exportar PDF" }}
+          </BButton>
+          <BButton v-if="canDelete && staff" variant="outline-danger" @click="removeStaff">
+            <i class="mdi mdi-trash-can-outline me-1"></i>
+            Eliminar
+          </BButton>
+          <BButton v-if="canEdit" variant="primary" :disabled="saving" @click="save">
+            <i :class="saving ? 'mdi mdi-loading mdi-spin me-1' : 'mdi mdi-content-save-outline me-1'"></i>
+            {{ primaryActionLabel }}
+          </BButton>
         </div>
       </div>
-      <div class="d-flex gap-2">
-        <router-link to="/staff" class="btn btn-outline-secondary">Volver</router-link>
-        <BButton
-          v-if="staff && canExport"
-          variant="outline-primary"
-          :disabled="exportingPdf"
-          @click="exportPdf"
+
+      <div v-if="isNew" class="staff-key-fields mt-3">
+        <div
+          v-for="field in keyFieldStatus"
+          :key="field.key"
+          class="staff-key-chip"
+          :class="{ 'is-complete': field.complete }"
         >
-          <i class="mdi mdi-file-pdf-box me-1"></i>
-          {{ exportingPdf ? "Generando PDF..." : "Exportar PDF" }}
-        </BButton>
-        <BButton v-if="canDelete && staff" variant="outline-danger" @click="removeStaff">
-          Eliminar
-        </BButton>
-        <BButton v-if="canEdit" variant="primary" :disabled="saving" @click="save">
-          {{ saving ? "Guardando..." : isNew ? "Crear funcionario" : "Guardar cambios" }}
-        </BButton>
+          <i :class="field.complete ? 'mdi mdi-check-circle-outline' : 'mdi mdi-circle-outline'"></i>
+          {{ field.label }}
+        </div>
       </div>
     </div>
 
     <BAlert v-if="error" variant="danger" show class="mb-3">{{ error }}</BAlert>
     <BAlert v-if="success" variant="success" show class="mb-3">{{ success }}</BAlert>
-    <BCard v-if="loading">Cargando...</BCard>
+    <BCard v-if="loading" class="staff-form-card">
+      <div class="staff-loading">
+        <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+        Cargando ficha...
+      </div>
+    </BCard>
 
     <div v-else class="row g-3">
       <div class="col-lg-4">
-        <BCard title="Foto y estado">
-          <div v-if="currentPhotoUrl" class="mb-3 text-center">
-            <img :src="currentPhotoUrl" class="img-fluid rounded border" alt="perfil" style="max-height: 280px" />
+        <BCard title="Estado de la ficha" class="staff-form-card staff-state-card">
+          <div class="staff-profile-panel">
+            <div class="staff-photo-frame">
+              <img v-if="currentPhotoUrl" :src="currentPhotoUrl" alt="perfil" />
+              <div v-else class="staff-photo-empty">
+                <i class="mdi mdi-account-outline"></i>
+              </div>
+            </div>
+            <div class="min-w-0">
+              <div class="staff-profile-name">{{ form.full_name || "Sin nombre" }}</div>
+              <div class="staff-profile-meta">{{ selectedCargoLabel }}</div>
+            </div>
           </div>
-          <div v-else class="text-muted mb-3">Sin foto de perfil.</div>
+
+          <div class="staff-completion">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+              <span>Datos clave</span>
+              <strong>{{ completedKeyFieldCount }}/{{ keyFieldStatus.length }}</strong>
+            </div>
+            <div class="progress staff-progress">
+              <div
+                class="progress-bar"
+                role="progressbar"
+                :style="{ width: `${formCompletionPercent}%` }"
+                :aria-valuenow="formCompletionPercent"
+                aria-valuemin="0"
+                aria-valuemax="100"
+              ></div>
+            </div>
+          </div>
 
           <div class="mb-3">
             <label class="form-label">Foto de perfil</label>
@@ -877,8 +1050,18 @@ export default {
           </div>
 
           <div class="mb-3">
-            <label class="form-label">Estado laboral</label>
-            <Multiselect v-model="form.status" :options="statusOptions" :searchable="true" :disabled="!canEdit" />
+            <label class="form-label">
+              Estado laboral
+              <span class="staff-required-dot">*</span>
+            </label>
+            <Multiselect
+              v-model="form.status"
+              class="staff-multiselect"
+              :options="statusOptions"
+              :searchable="true"
+              :disabled="!canEdit"
+            />
+            <div class="staff-status-pill mt-2">{{ selectedStatusLabel }}</div>
           </div>
 
           <div class="mb-3">
@@ -915,40 +1098,60 @@ export default {
       </div>
 
       <div class="col-lg-8">
-        <BCard title="Datos personales">
+        <BCard title="Datos personales" class="staff-form-card">
           <div class="row g-3">
             <div class="col-md-8">
-              <label class="form-label">Nombre completo</label>
-              <BFormInput v-model="form.full_name" :disabled="!canEdit" />
+              <label class="form-label">
+                Nombre completo
+                <span class="staff-required-dot">*</span>
+              </label>
+              <BFormInput v-model="form.full_name" placeholder="Nombre y apellidos" :disabled="!canEdit" />
             </div>
             <div class="col-md-4">
-              <label class="form-label">RUT</label>
-              <BFormInput v-model="form.rut" :disabled="!canEdit" />
+              <label class="form-label">
+                RUT
+                <span v-if="isNew" class="staff-required-dot">*</span>
+              </label>
+              <BFormInput v-model="form.rut" placeholder="12.345.678-9" :disabled="!canEdit" />
             </div>
             <div class="col-md-4">
               <label class="form-label">Fecha de nacimiento</label>
               <BFormInput v-model="form.birth_date" type="date" :disabled="!canEdit" />
             </div>
             <div class="col-md-4">
-              <label class="form-label">Correo institucional</label>
-              <BFormInput v-model="form.institutional_email" type="email" :disabled="!canEdit" />
+              <label class="form-label">
+                Correo institucional
+                <span v-if="isNew" class="staff-required-dot">*</span>
+              </label>
+              <BFormInput
+                v-model="form.institutional_email"
+                type="email"
+                placeholder="nombre@colegio.cl"
+                :disabled="!canEdit"
+              />
             </div>
             <div class="col-md-4">
               <label class="form-label">Correo personal</label>
-              <BFormInput v-model="form.personal_email" type="email" :disabled="!canEdit" />
+              <BFormInput
+                v-model="form.personal_email"
+                type="email"
+                placeholder="correo personal"
+                :disabled="!canEdit"
+              />
             </div>
             <div class="col-md-4">
               <label class="form-label">Teléfono</label>
-              <BFormInput v-model="form.phone" :disabled="!canEdit" />
+              <BFormInput v-model="form.phone" placeholder="+569..." :disabled="!canEdit" />
             </div>
             <div class="col-md-8">
               <label class="form-label">Dirección</label>
-              <BFormInput v-model="form.address" :disabled="!canEdit" />
+              <BFormInput v-model="form.address" placeholder="Calle, número, sector" :disabled="!canEdit" />
             </div>
             <div class="col-md-6">
               <label class="form-label">Región</label>
               <Multiselect
                 v-model="form.region_id"
+                class="staff-multiselect"
                 :options="regionOptions"
                 :searchable="true"
                 :disabled="!canEdit"
@@ -958,6 +1161,7 @@ export default {
               <label class="form-label">Comuna</label>
               <Multiselect
                 v-model="form.commune_id"
+                class="staff-multiselect"
                 :options="communeOptions"
                 :searchable="true"
                 :disabled="!canEdit || !form.region_id"
@@ -966,16 +1170,23 @@ export default {
           </div>
         </BCard>
 
-        <BCard title="Datos laborales" class="mt-3">
+        <BCard title="Datos laborales" class="staff-form-card mt-3">
           <div class="row g-3">
             <div class="col-md-6">
               <label class="form-label">Cargo</label>
-              <Multiselect v-model="form.cargo_id" :options="cargoOptions" :searchable="true" :disabled="!canEdit" />
+              <Multiselect
+                v-model="form.cargo_id"
+                class="staff-multiselect"
+                :options="cargoOptions"
+                :searchable="true"
+                :disabled="!canEdit"
+              />
             </div>
             <div class="col-md-6">
               <label class="form-label">Tipo de contrato</label>
               <Multiselect
                 v-model="form.contract_type"
+                class="staff-multiselect"
                 :options="contractTypeOptions"
                 :searchable="true"
                 :disabled="!canEdit"
@@ -999,28 +1210,46 @@ export default {
             </div>
             <div class="col-md-4">
               <label class="form-label">Jornada</label>
-              <Multiselect v-model="form.workday" :options="workdayOptions" :searchable="true" :disabled="!canEdit" />
+              <Multiselect
+                v-model="form.workday"
+                class="staff-multiselect"
+                :options="workdayOptions"
+                :searchable="true"
+                :disabled="!canEdit"
+              />
             </div>
             <div class="col-md-4">
               <label class="form-label">Horas de contrato</label>
-              <BFormInput v-model="form.contract_hours" type="number" min="0" step="0.01" :disabled="!canEdit" />
+              <BFormInput
+                v-model="form.contract_hours"
+                type="number"
+                min="0"
+                step="0.01"
+                placeholder="44"
+                :disabled="!canEdit"
+              />
             </div>
             <div class="col-md-4">
               <label class="form-label">Título profesional</label>
-              <BFormInput v-model="form.professional_title" :disabled="!canEdit" />
+              <BFormInput v-model="form.professional_title" placeholder="Título o grado" :disabled="!canEdit" />
             </div>
             <div class="col-md-4">
               <label class="form-label">Especialidad</label>
-              <BFormInput v-model="form.specialty" :disabled="!canEdit" />
+              <BFormInput v-model="form.specialty" placeholder="Especialidad" :disabled="!canEdit" />
             </div>
-            <div class="col-md-6">
+            <div :class="isNew ? 'col-12' : 'col-md-6'">
               <label class="form-label">Registro profesional</label>
-              <BFormInput v-model="form.professional_registration" :disabled="!canEdit" />
+              <BFormInput
+                v-model="form.professional_registration"
+                placeholder="Número de registro"
+                :disabled="!canEdit"
+              />
             </div>
-            <div class="col-md-6">
+            <div v-if="!isNew" class="col-md-6">
               <label class="form-label">Usuario asociado</label>
               <Multiselect
                 v-model="form.associated_user_id"
+                class="staff-multiselect"
                 :options="userOptions"
                 :searchable="true"
                 :disabled="!canEdit"
@@ -1033,10 +1262,11 @@ export default {
           </div>
         </BCard>
 
-        <BCard title="Departamentos asociados" class="mt-3">
+        <BCard title="Departamentos asociados" class="staff-form-card mt-3">
           <label class="form-label">Asignación de departamentos</label>
           <Multiselect
             v-model="form.department_ids"
+            class="staff-multiselect"
             :options="departmentOptions"
             mode="multiple"
             :close-on-select="false"
@@ -1416,8 +1646,227 @@ export default {
 </template>
 
 <style scoped>
+.staff-form-hero {
+  background: #fff;
+  border: 1px solid #e6ebf5;
+  border-radius: 8px;
+  box-shadow: 0 12px 28px rgba(42, 48, 66, 0.06);
+  padding: 1.25rem;
+}
+
+.staff-form-kicker {
+  color: #556ee6;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0;
+  margin-bottom: 0.35rem;
+  text-transform: uppercase;
+}
+
+.staff-form-actions .btn {
+  align-items: center;
+  border-radius: 8px;
+  display: inline-flex;
+  font-weight: 600;
+  min-height: 2.6rem;
+}
+
+.staff-key-fields {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.staff-key-chip {
+  align-items: center;
+  background: #f6f8fc;
+  border: 1px solid #e3e8f4;
+  border-radius: 999px;
+  color: #6b7280;
+  display: inline-flex;
+  font-size: 0.82rem;
+  font-weight: 600;
+  gap: 0.35rem;
+  min-height: 2rem;
+  padding: 0.35rem 0.75rem;
+}
+
+.staff-key-chip.is-complete {
+  background: #e8f7ef;
+  border-color: #c9ecd8;
+  color: #16855b;
+}
+
+.staff-form-card {
+  border: 1px solid #e6ebf5;
+  border-radius: 8px;
+  box-shadow: 0 10px 26px rgba(42, 48, 66, 0.05);
+}
+
+:deep(.staff-form-card > .card-body) {
+  padding: 1.25rem;
+}
+
+:deep(.staff-form-card .card-title) {
+  color: #2a3042;
+  font-size: 1rem;
+  font-weight: 700;
+  margin-bottom: 1rem;
+}
+
+:deep(.staff-form-card .form-label) {
+  color: #4b5563;
+  font-size: 0.86rem;
+  font-weight: 700;
+  margin-bottom: 0.45rem;
+}
+
+:deep(.staff-form-card .form-control),
+:deep(.staff-form-card .form-select) {
+  border-color: #dfe6f5;
+  border-radius: 8px;
+  min-height: 2.65rem;
+}
+
+:deep(.staff-form-card .form-control:focus),
+:deep(.staff-form-card .form-select:focus) {
+  border-color: #8ea0ff;
+  box-shadow: 0 0 0 0.18rem rgba(85, 110, 230, 0.12);
+}
+
+.staff-loading {
+  align-items: center;
+  color: #55606f;
+  display: flex;
+  font-weight: 600;
+  gap: 0.65rem;
+}
+
+.staff-profile-panel {
+  align-items: center;
+  background: #f8fafc;
+  border: 1px solid #edf1f7;
+  border-radius: 8px;
+  display: flex;
+  gap: 0.9rem;
+  margin-bottom: 1rem;
+  padding: 0.85rem;
+}
+
+.staff-photo-frame {
+  align-items: center;
+  background: #fff;
+  border: 1px solid #dfe6f5;
+  border-radius: 8px;
+  display: flex;
+  flex: 0 0 4.5rem;
+  height: 4.5rem;
+  justify-content: center;
+  overflow: hidden;
+  width: 4.5rem;
+}
+
+.staff-photo-frame img {
+  height: 100%;
+  object-fit: cover;
+  width: 100%;
+}
+
+.staff-photo-empty {
+  align-items: center;
+  color: #6b7280;
+  display: flex;
+  font-size: 2rem;
+  height: 100%;
+  justify-content: center;
+  width: 100%;
+}
+
+.staff-profile-name {
+  color: #2a3042;
+  font-size: 1.05rem;
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.staff-profile-meta {
+  color: #74788d;
+  font-size: 0.9rem;
+  margin-top: 0.15rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.staff-completion {
+  color: #4b5563;
+  font-size: 0.88rem;
+  margin-bottom: 1.25rem;
+}
+
+.staff-progress {
+  background: #edf1f7;
+  border-radius: 999px;
+  height: 0.55rem;
+}
+
+.staff-progress .progress-bar {
+  background: #34c38f;
+  border-radius: 999px;
+}
+
+.staff-status-pill {
+  background: #e8f7ef;
+  border-radius: 999px;
+  color: #16855b;
+  display: inline-flex;
+  font-size: 0.82rem;
+  font-weight: 700;
+  padding: 0.25rem 0.7rem;
+}
+
+.staff-required-dot {
+  color: #f46a6a;
+  margin-left: 0.15rem;
+}
+
+.min-w-0 {
+  min-width: 0;
+}
+
+:deep(.staff-multiselect) {
+  --ms-radius: 8px;
+  --ms-border-color: #dfe6f5;
+  --ms-bg: #fff;
+  --ms-font-size: 0.95rem;
+  width: 100%;
+}
+
+:deep(.staff-multiselect .multiselect-wrapper) {
+  min-height: 2.65rem;
+}
+
+:deep(.staff-multiselect .multiselect-placeholder),
+:deep(.staff-multiselect .multiselect-single-label) {
+  color: #465161;
+  font-weight: 500;
+}
+
+:deep(.staff-multiselect .multiselect-dropdown) {
+  z-index: 3000;
+  border-color: #dfe6f5;
+  box-shadow: 0 0.75rem 1.75rem rgba(31, 41, 55, 0.14);
+}
+
+:deep(.staff-multiselect .multiselect-option) {
+  color: #364154;
+  font-weight: 500;
+}
+
 :deep(.staff-role-multiselect) {
-  --ms-radius: 0.7rem;
+  --ms-radius: 8px;
   --ms-border-color: #dfe6f5;
   --ms-bg: #fff;
   --ms-font-size: 0.95rem;
@@ -1443,5 +1892,24 @@ export default {
 :deep(.staff-role-multiselect .multiselect-option) {
   color: #364154;
   font-weight: 500;
+}
+
+@media (max-width: 575.98px) {
+  .staff-form-hero {
+    padding: 1rem;
+  }
+
+  .staff-form-actions {
+    width: 100%;
+  }
+
+  .staff-form-actions .btn {
+    flex: 1 1 auto;
+    justify-content: center;
+  }
+
+  .staff-profile-panel {
+    align-items: flex-start;
+  }
 }
 </style>

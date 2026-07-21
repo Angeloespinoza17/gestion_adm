@@ -90,6 +90,10 @@ export function formatInformaticaDateTime(value) {
 
 export function toInputDate(value) {
   if (!value) return "";
+  if (value instanceof Date) {
+    const local = new Date(value.getTime() - value.getTimezoneOffset() * 60000);
+    return local.toISOString().slice(0, 10);
+  }
   return String(value).slice(0, 10);
 }
 

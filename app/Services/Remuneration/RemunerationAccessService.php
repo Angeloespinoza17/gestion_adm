@@ -20,6 +20,7 @@ class RemunerationAccessService
     public const ACCOUNTING_PERMISSION = 'remuneraciones.contabilidad.centralizar';
     public const REPORTS_PERMISSION = 'remuneraciones.reportes.ver';
     public const EXPORT_PERMISSION = 'remuneraciones.reportes.exportar';
+    public const IMPORT_PERMISSION = 'remuneraciones.importar';
     public const CLOSE_PERIOD_PERMISSION = 'remuneraciones.periodos.cerrar';
     public const HR_MANAGEMENT_PERMISSION = 'remuneraciones.rrhh.gestionar';
     public const ADMIN_PERMISSION = 'remuneraciones.admin';
@@ -43,6 +44,7 @@ class RemunerationAccessService
             ['slug' => self::ACCOUNTING_PERMISSION, 'name' => 'Centralizar remuneraciones'],
             ['slug' => self::REPORTS_PERMISSION, 'name' => 'Ver reportes de remuneraciones'],
             ['slug' => self::EXPORT_PERMISSION, 'name' => 'Exportar reportes de remuneraciones'],
+            ['slug' => self::IMPORT_PERMISSION, 'name' => 'Importar libro de remuneraciones'],
             ['slug' => self::CLOSE_PERIOD_PERMISSION, 'name' => 'Cerrar y reabrir períodos de remuneraciones'],
             ['slug' => self::HR_MANAGEMENT_PERMISSION, 'name' => 'Gestionar RR.HH. integral'],
             ['slug' => self::ADMIN_PERMISSION, 'name' => 'Administrar módulo Remuneraciones'],
@@ -73,6 +75,10 @@ class RemunerationAccessService
             'remuneration_payrolls',
             'remuneration_payroll_lines',
             'remuneration_payroll_distributions',
+            'remuneration_book_imports',
+            'remuneration_book_import_rows',
+            'remuneration_book_concept_settings',
+            'remuneration_book_alert_rules',
             'remuneration_payments',
             'remuneration_accounting_exports',
             'remuneration_audit_logs',

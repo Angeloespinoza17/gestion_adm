@@ -19,7 +19,7 @@ export default defineConfig({
                         return 'icons/' + css.name;
                     }
                 },
-                entryFileNames: 'js/' + `[name]` + `.js`,
+                entryFileNames: 'js/' + `[name]` + `-[hash].js`,
             },
         },
     },

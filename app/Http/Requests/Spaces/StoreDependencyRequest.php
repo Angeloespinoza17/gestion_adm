@@ -3,6 +3,7 @@
 namespace App\Http\Requests\Spaces;
 
 use App\Models\MaintenanceDependency;
+use App\Models\Staff;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
@@ -37,6 +38,14 @@ class StoreDependencyRequest extends FormRequest
 
     public function rules(): array
     {
+        $staffUserExists = Rule::exists('users', 'id')->where(function ($query) {
+            $query
+                ->where('active', true)
+                ->where('user_type', 'staff')
+                ->whereNotNull('staff_id')
+                ->whereIn('staff_id', Staff::query()->where('active', true)->select('id'));
+        });
+
         return [
             'dependency_type_id' => ['nullable', 'integer', 'exists:dependency_types,id'],
             'parent_dependency_id' => [
@@ -77,7 +86,7 @@ class StoreDependencyRequest extends FormRequest
             'is_maintenance_location' => ['sometimes', 'boolean'],
             'requires_approval' => ['sometimes', 'boolean'],
             'approver_user_ids' => ['nullable', 'array'],
-            'approver_user_ids.*' => ['integer', 'exists:users,id'],
+            'approver_user_ids.*' => ['integer', $staffUserExists],
             'image' => ['nullable', 'file', 'image', 'max:10240'],
         ];
     }

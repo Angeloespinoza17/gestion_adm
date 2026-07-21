@@ -76,9 +76,6 @@ class UpdateStaffRequest extends FormRequest
     {
         $routeStaff = $this->route('staff');
         $staffId = $routeStaff instanceof Staff ? $routeStaff->id : $routeStaff;
-        $currentRut = $routeStaff instanceof Staff
-            ? $routeStaff->rut
-            : Staff::query()->whereKey($staffId)->value('rut');
 
         return [
             'full_name' => ['sometimes', 'string', 'max:255'],
@@ -88,15 +85,6 @@ class UpdateStaffRequest extends FormRequest
                 'string',
                 'max:20',
                 Rule::unique('staff', 'rut')->ignore($staffId),
-                function ($attribute, $value, $fail) use ($currentRut) {
-                    if (Rut::normalize($value) === Rut::normalize($currentRut)) {
-                        return;
-                    }
-
-                    if ($value !== null && $value !== '' && !Rut::isValid($value)) {
-                        $fail('El RUT ingresado no es válido.');
-                    }
-                },
             ],
             'birth_date' => ['nullable', 'date'],
             'institutional_email' => ['nullable', 'email', 'max:255', Rule::unique('staff', 'institutional_email')->ignore($staffId)],

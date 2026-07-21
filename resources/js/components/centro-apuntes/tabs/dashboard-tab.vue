@@ -29,6 +29,7 @@ export default {
       loading: false,
       error: null,
       dashboard: {
+        generated_at: null,
         metrics: {},
         alerts: {},
         charts: {
@@ -53,32 +54,32 @@ export default {
     metricCards() {
       const metrics = this.dashboard.metrics || {};
       return [
-        { label: "Tareas pendientes", value: metrics.pending_tasks || 0, icon: "bx-time-five" },
-        { label: "Tareas en proceso", value: metrics.in_progress_tasks || 0, icon: "bx-loader-circle" },
-        { label: "Listas para retiro", value: metrics.ready_for_pickup || 0, icon: "bx-package" },
-        { label: "Entregadas hoy", value: metrics.delivered_today || 0, icon: "bx-check-double" },
-        { label: "Solicitudes urgentes", value: metrics.urgent_requests || 0, icon: "bx-alarm-exclamation" },
-        { label: "Hojas del mes", value: metrics.month_sheets || 0, icon: "bx-file" },
-        { label: "Copias del mes", value: metrics.month_copies || 0, icon: "bx-copy" },
-        { label: "Consumo carta", value: metrics.month_letter_consumption || 0, icon: "bx-news" },
-        { label: "Consumo oficio", value: metrics.month_officio_consumption || 0, icon: "bx-spreadsheet" },
-        { label: "Stock crítico", value: metrics.critical_stock || 0, icon: "bx-error-circle" },
-        { label: "Materiales entregados", value: metrics.delivered_materials || 0, icon: "bx-transfer-alt" },
-        { label: "Costo estimado mes", value: `$${Number(metrics.month_estimated_costs || 0).toLocaleString("es-CL")}`, icon: "bx-dollar-circle" },
+        { label: "Tareas pendientes", value: metrics.pending_tasks || 0, icon: "bx-time-five", tone: "warning" },
+        { label: "Tareas en proceso", value: metrics.in_progress_tasks || 0, icon: "bx-loader-circle", tone: "primary" },
+        { label: "Listas para retiro", value: metrics.ready_for_pickup || 0, icon: "bx-package", tone: "success" },
+        { label: "Entregadas hoy", value: metrics.delivered_today || 0, icon: "bx-check-double", tone: "success" },
+        { label: "Solicitudes urgentes", value: metrics.urgent_requests || 0, icon: "bx-bell", tone: "danger" },
+        { label: "Hojas del mes", value: metrics.month_sheets || 0, icon: "bx-file", tone: "info" },
+        { label: "Copias del mes", value: metrics.month_copies || 0, icon: "bx-copy", tone: "info" },
+        { label: "Consumo carta", value: metrics.month_letter_consumption || 0, icon: "bx-news", tone: "secondary" },
+        { label: "Consumo oficio", value: metrics.month_officio_consumption || 0, icon: "bx-spreadsheet", tone: "secondary" },
+        { label: "Stock crítico", value: metrics.critical_stock || 0, icon: "bx-error-circle", tone: "warning" },
+        { label: "Materiales entregados", value: metrics.delivered_materials || 0, icon: "bx-transfer-alt", tone: "primary" },
+        { label: "Costo estimado mes", value: `$${Number(metrics.month_estimated_costs || 0).toLocaleString("es-CL")}`, icon: "bx-dollar-circle", tone: "success" },
       ];
     },
     alertCards() {
       const alerts = this.dashboard.alerts || {};
       return [
-        { label: "Pendientes", value: alerts.pending_tasks || 0, status: "pendiente" },
-        { label: "Urgentes", value: alerts.urgent_tasks || 0, status: "urgente" },
-        { label: "Inmediatas", value: alerts.immediate_deliveries || 0, status: "entrega_inmediata" },
-        { label: "Atrasadas", value: alerts.overdue_tasks || 0, status: "rechazada" },
-        { label: "Stock crítico", value: alerts.critical_stock || 0, status: "stock_bajo" },
-        { label: "Agotados", value: alerts.out_of_stock || 0, status: "agotado" },
-        { label: "Mantención", value: alerts.machines_in_maintenance || 0, status: "en_mantencion" },
-        { label: "Listas para retiro", value: alerts.ready_for_pickup || 0, status: "lista_para_retiro" },
-        { label: "Próximos a vencer", value: alerts.supplies_expiring || 0, status: "vencido" },
+        { label: "Pendientes", value: alerts.pending_tasks || 0, status: "pendiente", chipLabel: "Pendiente" },
+        { label: "Urgentes", value: alerts.urgent_tasks || 0, status: "urgente", chipLabel: "Urgente" },
+        { label: "Inmediatas", value: alerts.immediate_deliveries || 0, status: "entrega_inmediata", chipLabel: "Entrega inmediata" },
+        { label: "Atrasadas", value: alerts.overdue_tasks || 0, status: "rechazada", chipLabel: "Atrasada" },
+        { label: "Stock crítico", value: alerts.critical_stock || 0, status: "stock_bajo", chipLabel: "Stock bajo" },
+        { label: "Agotados", value: alerts.out_of_stock || 0, status: "agotado", chipLabel: "Agotado" },
+        { label: "Mantención", value: alerts.machines_in_maintenance || 0, status: "en_mantencion", chipLabel: "En mantención" },
+        { label: "Listas para retiro", value: alerts.ready_for_pickup || 0, status: "lista_para_retiro", chipLabel: "Lista para retiro" },
+        { label: "Próximos a vencer", value: alerts.supplies_expiring || 0, status: "vencido", chipLabel: "Próximo a vencer" },
       ];
     },
     requestsDayChartOptions() {
@@ -169,13 +170,16 @@ export default {
 <template>
   <div class="d-flex flex-column gap-3">
     <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
-      <div class="fw-semibold">Panel operativo del Centro de Apuntes</div>
+      <div>
+        <div class="fw-semibold">Panel operativo del Centro de Apuntes</div>
+        <small v-if="dashboard.generated_at" class="text-muted">Actualizado {{ formatCentroApuntesDateTime(dashboard.generated_at) }}</small>
+      </div>
       <div class="d-flex gap-2 flex-wrap">
         <CentroApuntesHelpButton
           title="Ayuda: dashboard operativo"
           text="Este panel resume solicitudes de impresión, urgencias, stock crítico, consumo de insumos, costos estimados y entregas de materiales para priorizar la operación diaria."
         />
-        <BButton variant="primary" @click="loadDashboard">Actualizar</BButton>
+        <BButton variant="primary" :disabled="loading" @click="loadDashboard"><i class="bx bx-refresh me-1" :class="{ 'bx-spin': loading }"></i>Actualizar</BButton>
       </div>
     </div>
 
@@ -187,13 +191,13 @@ export default {
     <template v-else>
       <div class="row g-3">
         <div v-for="card in metricCards" :key="card.label" class="col-sm-6 col-xl-3 col-xxl-2">
-          <BCard class="border-0 shadow-sm h-100">
+          <BCard class="metric-card h-100" :class="`metric-card--${card.tone}`">
             <div class="d-flex justify-content-between align-items-start gap-2">
               <div>
                 <div class="text-muted small">{{ card.label }}</div>
                 <div class="display-6 fw-semibold card-value">{{ card.value }}</div>
               </div>
-              <div class="avatar-title rounded-circle bg-soft-primary text-primary" style="width: 42px; height: 42px">
+              <div class="metric-icon">
                 <i :class="`bx ${card.icon} fs-4`"></i>
               </div>
             </div>
@@ -213,13 +217,13 @@ export default {
         </template>
         <div class="row g-3">
           <div v-for="item in alertCards" :key="item.label" class="col-md-6 col-xl-4 col-xxl-3">
-            <div class="border rounded p-3 h-100">
+            <div class="alert-card h-100" :class="{ 'alert-card--active': Number(item.value) > 0 }">
               <div class="d-flex justify-content-between gap-2">
                 <div>
                   <div class="small text-muted">{{ item.label }}</div>
                   <div class="h2 mb-0">{{ item.value }}</div>
                 </div>
-                <CentroApuntesStatusBadge :status="item.status" />
+                <CentroApuntesStatusBadge :status="item.status" :label="item.chipLabel" />
               </div>
             </div>
           </div>
@@ -291,6 +295,7 @@ export default {
                   </tr>
                 </thead>
                 <tbody>
+                  <tr v-if="!(dashboard.recent?.requests || []).length"><td colspan="3" class="empty-table">Sin solicitudes recientes.</td></tr>
                   <tr v-for="item in dashboard.recent?.requests || []" :key="item.id">
                     <td>
                       <div class="fw-semibold">{{ item.request_code }}</div>
@@ -317,6 +322,7 @@ export default {
                   </tr>
                 </thead>
                 <tbody>
+                  <tr v-if="!(dashboard.recent?.deliveries || []).length"><td colspan="3" class="empty-table">Sin entregas recientes.</td></tr>
                   <tr v-for="item in dashboard.recent?.deliveries || []" :key="item.id">
                     <td>
                       <div class="fw-semibold">{{ item.delivery_code }}</div>
@@ -343,6 +349,7 @@ export default {
                   </tr>
                 </thead>
                 <tbody>
+                  <tr v-if="!(dashboard.recent?.movements || []).length"><td colspan="3" class="empty-table">Sin movimientos recientes.</td></tr>
                   <tr v-for="item in dashboard.recent?.movements || []" :key="item.id">
                     <td>{{ formatCentroApuntesDateTime(item.moved_at) }}</td>
                     <td>{{ item.insumo?.name }}</td>
@@ -362,4 +369,19 @@ export default {
 .card-value {
   font-size: clamp(1.4rem, 2vw, 2rem);
 }
+.metric-card { overflow: hidden; position: relative; transition: transform .15s ease, box-shadow .15s ease; }
+.metric-card :deep(.card-body) { min-height: 7.5rem; padding: 1rem; }
+.metric-card::before { background: var(--metric-color, var(--bs-primary)); content: ""; inset: 0 auto 0 0; position: absolute; width: .22rem; }
+.metric-card:hover { box-shadow: 0 1rem 2.2rem rgba(90, 110, 150, .13) !important; transform: translateY(-2px); }
+.metric-icon { align-items: center; background: color-mix(in srgb, var(--metric-color, var(--bs-primary)) 12%, transparent); border-radius: .65rem; color: var(--metric-color, var(--bs-primary)); display: inline-flex; height: 2.65rem; justify-content: center; width: 2.65rem; }
+.metric-card--primary { --metric-color: var(--bs-primary); }
+.metric-card--success { --metric-color: var(--bs-success); }
+.metric-card--warning { --metric-color: #d99518; }
+.metric-card--danger { --metric-color: var(--bs-danger); }
+.metric-card--info { --metric-color: var(--bs-info); }
+.metric-card--secondary { --metric-color: var(--bs-secondary); }
+.alert-card { border: 1px solid var(--bs-border-color); border-radius: .6rem; min-height: 5.25rem; padding: .9rem; transition: border-color .15s ease, background-color .15s ease; }
+.alert-card > div { align-items: center; }
+.alert-card--active { background: rgba(var(--bs-warning-rgb), .035); border-color: rgba(var(--bs-warning-rgb), .42); }
+.empty-table { color: var(--bs-secondary-color); padding: 1.5rem !important; text-align: center; }
 </style>

@@ -88,6 +88,22 @@ export default {
     isConsumable() {
       return this.item?.item_type === "consumable";
     },
+    hasQuantity() {
+      return (
+        this.item?.stock_quantity !== null &&
+        this.item?.stock_quantity !== undefined &&
+        this.item?.stock_quantity !== ""
+      );
+    },
+    quantitySummary() {
+      if (!this.item || (!this.isConsumable && !this.hasQuantity)) return "-";
+
+      const quantity = Number(this.item.stock_quantity ?? 0);
+      const safeQuantity = Number.isFinite(quantity) ? quantity : 0;
+      const displayValue = Number.isInteger(safeQuantity) ? safeQuantity : safeQuantity.toFixed(2);
+
+      return `${displayValue} ${this.item.unit_of_measure || ""}`.trim();
+    },
   },
   mounted() {
     this.load();
@@ -163,8 +179,21 @@ export default {
       }
     },
 
-    onNewPhoto(e) {
-      this.newPhotoFile = e?.target?.files?.[0] || null;
+    async onNewPhoto(e) {
+      const file = e?.target?.files?.[0] || null;
+      this.photoError = null;
+
+      try {
+        this.newPhotoFile = file ? await this.normalizePhotoFile(file) : null;
+      } catch (error) {
+        this.newPhotoFile = null;
+        this.photoError =
+          error?.message || "No se pudo preparar la imagen para subir.";
+      } finally {
+        if (e?.target) {
+          e.target.value = "";
+        }
+      }
     },
     async uploadPhoto(isMain = false) {
       this.photoError = null;
@@ -195,6 +224,53 @@ export default {
       if (!confirm("Eliminar esta foto?")) return;
       await axios.delete(`/api/inventory/photos/${photo.id}`);
       await this.load();
+    },
+
+    async normalizePhotoFile(file) {
+      if (!file || !file.type?.startsWith("image/")) {
+        return file;
+      }
+
+      const imageUrl = URL.createObjectURL(file);
+
+      try {
+        const image = await new Promise((resolve, reject) => {
+          const img = new Image();
+          img.onload = () => resolve(img);
+          img.onerror = () => reject(new Error("No se pudo leer la imagen seleccionada."));
+          img.src = imageUrl;
+        });
+
+        const maxDimension = 1600;
+        const largestSide = Math.max(image.naturalWidth, image.naturalHeight);
+        const scale = largestSide > maxDimension ? maxDimension / largestSide : 1;
+        const width = Math.max(1, Math.round(image.naturalWidth * scale));
+        const height = Math.max(1, Math.round(image.naturalHeight * scale));
+        const canvas = document.createElement("canvas");
+        canvas.width = width;
+        canvas.height = height;
+        canvas.getContext("2d").drawImage(image, 0, 0, width, height);
+
+        const blob = await new Promise((resolve) =>
+          canvas.toBlob(resolve, "image/jpeg", 0.82)
+        );
+
+        if (!blob) {
+          throw new Error("No se pudo comprimir la imagen seleccionada.");
+        }
+
+        const baseName = String(file.name || "foto-bien")
+          .replace(/\.[^.]+$/, "")
+          .replace(/[^\w-]+/g, "-")
+          .replace(/^-+|-+$/g, "") || "foto-bien";
+
+        return new File([blob], `${baseName}.jpg`, {
+          type: "image/jpeg",
+          lastModified: Date.now(),
+        });
+      } finally {
+        URL.revokeObjectURL(imageUrl);
+      }
     },
 
     onNewDoc(e) {
@@ -262,9 +338,7 @@ export default {
         const dependencyLabel = this.item.dependency
           ? `${this.item.dependency.code} - ${this.item.dependency.name}`
           : "-";
-        const stockSummary = this.isConsumable
-          ? `${this.item.stock_quantity ?? 0} ${this.item.unit_of_measure || ""}`.trim()
-          : "-";
+        const stockSummary = this.quantitySummary;
         const sectionTable = (rows) => ({
           table: {
             widths: ["34%", "*"],
@@ -361,8 +435,8 @@ export default {
           ],
         ];
 
-        if (this.isConsumable) {
-          purchaseRows.push(["Stock actual", stockSummary]);
+        if (this.isConsumable || this.hasQuantity) {
+          purchaseRows.push(["Cantidad", stockSummary]);
           purchaseRows.push(["Stock mínimo", this.item.minimum_stock ?? "-"]);
         }
 
@@ -780,14 +854,14 @@ export default {
               <div class="inventory-info-label">Valor compra</div>
               <div class="inventory-info-value">{{ formatMoney(item.purchase_value) }}</div>
             </div>
-            <div class="inventory-info-item" v-if="isConsumable">
-              <div class="inventory-info-label">Stock</div>
+            <div class="inventory-info-item" v-if="isConsumable || hasQuantity">
+              <div class="inventory-info-label">Cantidad</div>
               <div class="inventory-info-value">
-                {{ item.stock_quantity ?? 0 }} {{ item.unit_of_measure || "" }}
+                {{ quantitySummary }}
               </div>
             </div>
-            <div class="inventory-info-item" v-if="isConsumable">
-              <div class="inventory-info-label">Stock mínimo</div>
+            <div class="inventory-info-item" v-if="isConsumable || item.minimum_stock">
+              <div class="inventory-info-label">Cantidad mínima</div>
               <div class="inventory-info-value">{{ item.minimum_stock ?? "-" }}</div>
             </div>
           </div>

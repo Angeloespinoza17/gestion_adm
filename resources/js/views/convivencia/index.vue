@@ -91,21 +91,21 @@ export default {
         protocols: [],
       },
       tabs: [
-        { key: "dashboard", route: "/convivencia", label: "Dashboard", capability: "can_view_dashboard" },
-        { key: "planes", route: "/convivencia/planes", label: "Plan de gestión", capability: "can_manage_plans" },
-        { key: "casos", route: "/convivencia/casos", label: "Casos", capability: "can_view_cases" },
-        { key: "denuncias", route: "/convivencia/denuncias", label: "Denuncias", capability: "can_manage_complaints" },
-        { key: "derivaciones", route: "/convivencia/derivaciones", label: "Derivaciones", capability: "can_manage_internal_derivations" },
-        { key: "protocolos", route: "/convivencia/protocolos", label: "Protocolos", capability: "can_manage_protocols" },
-        { key: "entrevistas", route: "/convivencia/entrevistas", label: "Entrevistas", capability: "can_manage_interviews" },
-        { key: "medidas", route: "/convivencia/medidas", label: "Medidas", capability: "can_manage_measures" },
-        { key: "bitacora", route: "/convivencia/bitacora", label: "Bitácora", capability: "can_manage_daily_logs" },
-        { key: "sociogramas", route: "/convivencia/sociogramas", label: "Sociogramas", capability: "can_view_sociograms" },
-        { key: "idps", route: "/convivencia/idps", label: "IDPS", capability: "can_manage_plans" },
-        { key: "reportes", route: "/convivencia/reportes", label: "Reportes", capability: "can_view_course_reports" },
+        { key: "dashboard", route: "/convivencia", label: "Panel general", icon: "bx-grid-alt", capability: "can_view_dashboard" },
+        { key: "planes", route: "/convivencia/planes", label: "Plan de gestión", icon: "bx-calendar-check", capability: "can_manage_plans" },
+        { key: "casos", route: "/convivencia/casos", label: "Casos", icon: "bx-folder-open", capability: "can_view_cases" },
+        { key: "denuncias", route: "/convivencia/denuncias", label: "Denuncias", icon: "bx-message-square-error", capability: "can_manage_complaints" },
+        { key: "derivaciones", route: "/convivencia/derivaciones", label: "Derivaciones", icon: "bx-transfer-alt", capability: "can_manage_internal_derivations" },
+        { key: "protocolos", route: "/convivencia/protocolos", label: "Protocolos", icon: "bx-shield-quarter", capability: "can_manage_protocols" },
+        { key: "entrevistas", route: "/convivencia/entrevistas", label: "Entrevistas", icon: "bx-conversation", capability: "can_manage_interviews" },
+        { key: "medidas", route: "/convivencia/medidas", label: "Medidas", icon: "bx-check-shield", capability: "can_manage_measures" },
+        { key: "bitacora", route: "/convivencia/bitacora", label: "Bitácora", icon: "bx-book-content", capability: "can_manage_daily_logs" },
+        { key: "sociogramas", route: "/convivencia/sociogramas", label: "Sociogramas", icon: "bx-network-chart", capability: "can_view_sociograms" },
+        { key: "idps", route: "/convivencia/idps", label: "IDPS", icon: "bx-bar-chart-square", capability: "can_manage_plans" },
+        { key: "reportes", route: "/convivencia/reportes", label: "Reportes", icon: "bx-file-find", capability: "can_view_course_reports" },
       ],
       meta: {
-        dashboard: { title: "Dashboard de Convivencia", subtitle: "Indicadores, alertas y distribución de casos, protocolos y seguimiento.", help: "Muestra casos abiertos y cerrados, criticidad, protocolos activos, derivaciones, entrevistas, denuncias y alertas vencidas." },
+        dashboard: { title: "Panel general de Convivencia", subtitle: "Indicadores, alertas y distribución de casos, protocolos y seguimiento.", help: "Muestra casos abiertos y cerrados, criticidad, protocolos activos, derivaciones, entrevistas, denuncias y alertas vencidas." },
         planes: { title: "Plan de Gestión de Convivencia Escolar", subtitle: "Administración anual de objetivos, acciones, responsables y avance del plan.", help: "Registra el plan anual con acciones preventivas, promocionales, formativas y reactivas, con trazabilidad de avance y responsables." },
         casos: { title: "Gestión de Casos", subtitle: "Registro central de casos, personas involucradas, seguimiento y cierre.", help: "Aquí se crean, editan, derivan y cierran casos de convivencia. El folio se genera automáticamente y el cierre exige resolución o conclusión." },
         denuncias: { title: "Ingreso de Denuncias", subtitle: "Recepción y revisión de denuncias con folio, admisibilidad y conversión en caso.", help: "Permite recibir denuncias internas o externas, registrar antecedentes, activar protocolo y convertir una denuncia en caso de convivencia." },
@@ -148,6 +148,9 @@ export default {
     },
     activeMeta() {
       return this.meta[this.activeTab];
+    },
+    activeSection() {
+      return this.tabs.find((tab) => tab.key === this.activeTab) || this.tabs[0];
     },
     visibleTabs() {
       const capabilities = this.catalogs.capabilities || {};
@@ -193,6 +196,11 @@ export default {
     this.loadCatalogs();
   },
   methods: {
+    navigateSection(route) {
+      if (route && route !== this.$route.path) {
+        this.$router.push(route);
+      }
+    },
     catalogOptions(group) {
       return (this.catalogs.catalogs?.[group] || []).map((item) => ({ value: item.id, text: item.name }));
     },
@@ -290,6 +298,7 @@ export default {
     async loadCatalogs() {
       this.catalogsLoading = true;
       this.catalogsError = null;
+      let catalogsLoaded = false;
       try {
         const response = await axios.get("/api/convivencia/catalogs");
         this.catalogs = response.data || this.catalogs;
@@ -306,11 +315,15 @@ export default {
         this.reports.filters.academic_year_id = this.catalogs.active_academic_year_id;
         this.idps.periodForm.academic_year_id = this.catalogs.active_academic_year_id;
         this.idps.resultForm.academic_year_id = this.catalogs.active_academic_year_id;
-        this.loadActiveTab();
+        catalogsLoaded = true;
       } catch (error) {
         this.catalogsError = formatConvivenciaError(error, "No se pudieron cargar los catálogos de convivencia.");
       } finally {
         this.catalogsLoading = false;
+      }
+
+      if (catalogsLoaded) {
+        await this.loadActiveTab();
       }
     },
     async loadActiveTab() {
@@ -754,20 +767,36 @@ export default {
 
 <template>
   <Layout>
-    <div class="d-flex flex-column gap-3">
-      <div class="d-flex flex-wrap justify-content-between align-items-start gap-3">
-        <div>
-          <h4 class="mb-1">{{ activeMeta.title }}</h4>
-          <div class="text-muted">{{ activeMeta.subtitle }}</div>
+    <div class="convivencia-page d-flex flex-column gap-3">
+      <section class="convivencia-hero" aria-labelledby="convivencia-page-title">
+        <div class="convivencia-hero__main">
+          <div class="convivencia-hero__icon" aria-hidden="true">
+            <i class="bx" :class="activeSection.icon"></i>
+          </div>
+          <div class="convivencia-hero__copy">
+            <div class="convivencia-hero__eyebrow">
+              <span>Convivencia Escolar</span>
+              <i class="bx bx-chevron-right"></i>
+              <span>{{ activeSection.label }}</span>
+            </div>
+            <h1 id="convivencia-page-title" class="convivencia-hero__title">{{ activeMeta.title }}</h1>
+            <p class="convivencia-hero__subtitle">{{ activeMeta.subtitle }}</p>
+          </div>
         </div>
-        <HelpButton :title="`Ayuda: ${activeMeta.title}`" :text="activeMeta.help" />
-      </div>
-
-      <div class="d-flex flex-wrap gap-2">
-        <router-link v-for="tab in visibleTabs" :key="tab.key" :to="tab.route" class="btn" :class="activeTab === tab.key ? 'btn-primary' : 'btn-outline-secondary'">
-          {{ tab.label }}
-        </router-link>
-      </div>
+        <div class="convivencia-hero__actions">
+          <span class="convivencia-hero__status"><span></span>Módulo activo</span>
+          <HelpButton :title="`Ayuda: ${activeMeta.title}`" :text="activeMeta.help" button-text="Ayuda" variant="light" />
+        </div>
+        <div class="convivencia-mobile-nav">
+          <label for="convivencia-section">Sección</label>
+          <BFormSelect
+            id="convivencia-section"
+            :model-value="$route.path"
+            :options="visibleTabs.map((tab) => ({ value: tab.route, text: tab.label }))"
+            @update:model-value="navigateSection"
+          />
+        </div>
+      </section>
 
       <BAlert v-if="catalogsError" show variant="danger">{{ catalogsError }}</BAlert>
       <BCard v-if="catalogsLoading" class="border-0 shadow-sm"><LoadingState compact message="Cargando módulo de convivencia..." /></BCard>
@@ -775,7 +804,7 @@ export default {
       <template v-else>
         <template v-if="activeTab === 'dashboard'">
           <ReportFilterBar v-model="dashboard.filters" :catalogs="catalogs" @submit="loadDashboard" />
-          <BCard v-if="dashboard.loading" class="border-0 shadow-sm"><LoadingState compact message="Cargando dashboard..." /></BCard>
+          <BCard v-if="dashboard.loading" class="border-0 shadow-sm"><LoadingState compact message="Cargando panel general..." /></BCard>
           <template v-else-if="dashboard.data">
             <div class="row g-3">
               <div v-for="(value, key) in dashboard.data.metrics" :key="key" class="col-md-3">
@@ -899,11 +928,22 @@ export default {
             </div>
           </BCard>
           <div class="d-flex flex-column gap-3">
-            <CaseSummaryCard v-for="item in cases.items" :key="item.id" :item="item" />
-            <BCard v-for="item in cases.items" :key="`row-${item.id}`" class="border-0 shadow-sm">
-              <div class="d-flex justify-content-between align-items-center">
-                <div class="small text-muted">{{ item.student?.registered_name_resolved || item.student?.registered_name || "-" }}</div>
-                <div class="d-flex gap-2"><BButton size="sm" variant="outline-secondary" @click="openCaseDetail(item)">Detalle</BButton><BButton size="sm" variant="outline-primary" @click="editItem('casos', item)">Editar</BButton><BButton size="sm" variant="outline-success" @click="closeCase(item)">Cerrar</BButton><BButton size="sm" variant="outline-danger" @click="deleteItem('/api/convivencia/cases', item.id, loadCases, 'Se archivará el caso seleccionado.')">Archivar</BButton></div>
+            <CaseSummaryCard v-for="item in cases.items" :key="item.id" :item="item">
+              <div class="d-flex flex-wrap justify-content-between align-items-center gap-2">
+                <div class="small text-muted"><i class="bx bx-user me-1"></i>{{ item.student?.registered_name_resolved || item.student?.registered_name || "Estudiante sin identificar" }}</div>
+                <div class="d-flex flex-wrap gap-2">
+                  <BButton size="sm" variant="outline-secondary" @click="openCaseDetail(item)"><i class="bx bx-show me-1"></i>Detalle</BButton>
+                  <BButton size="sm" variant="outline-primary" @click="editItem('casos', item)"><i class="bx bx-edit-alt me-1"></i>Editar</BButton>
+                  <BButton size="sm" variant="outline-success" @click="closeCase(item)"><i class="bx bx-check-circle me-1"></i>Cerrar</BButton>
+                  <BButton size="sm" variant="outline-danger" @click="deleteItem('/api/convivencia/cases', item.id, loadCases, 'Se archivará el caso seleccionado.')"><i class="bx bx-archive-in me-1"></i>Archivar</BButton>
+                </div>
+              </div>
+            </CaseSummaryCard>
+            <BCard v-if="!cases.loading && cases.items.length === 0" class="convivencia-empty-state border-0 shadow-sm">
+              <div class="text-center py-4">
+                <div class="convivencia-empty-state__icon"><i class="bx bx-folder-open"></i></div>
+                <h6 class="mt-3 mb-1">No hay casos para mostrar</h6>
+                <p class="text-muted mb-0">Ajusta los filtros o registra un nuevo caso.</p>
               </div>
             </BCard>
           </div>
@@ -1217,7 +1257,7 @@ export default {
             </div>
             <div class="col-12">
               <BCard class="border-0 shadow-sm">
-                <div class="d-flex justify-content-between align-items-center mb-3"><h6 class="mb-0">Registrar resultado IDPS</h6><BButton size="sm" variant="outline-primary" @click="loadIdps">Actualizar overview</BButton></div>
+                <div class="d-flex justify-content-between align-items-center mb-3"><h6 class="mb-0">Registrar resultado IDPS</h6><BButton size="sm" variant="outline-primary" @click="loadIdps">Actualizar resumen</BButton></div>
                 <div class="row g-3">
                   <div class="col-md-3"><label class="form-label">Período</label><BFormSelect v-model="idps.resultForm.period_id" :options="idpsPeriods.map((item) => ({ value: item.id, text: item.name }))" /></div>
                   <div class="col-md-3"><label class="form-label">Dimensión</label><BFormSelect v-model="idps.resultForm.dimension_id" :options="idpsDimensions.map((item) => ({ value: item.id, text: item.name }))" /></div>
@@ -1332,47 +1372,614 @@ export default {
       </template>
     </div>
 
-    <BModal v-model="caseDetailModal" size="xl" title="Detalle del caso" hide-footer scrollable>
-      <div v-if="caseDetail" class="d-flex flex-column gap-3">
-        <div class="row g-3">
-          <div class="col-md-4"><BCard class="border bg-light-subtle"><div class="text-muted small">Folio</div><div class="fw-semibold">{{ caseDetail.folio }}</div></BCard></div>
-          <div class="col-md-4"><BCard class="border bg-light-subtle"><div class="text-muted small">Estudiante</div><div class="fw-semibold">{{ caseDetail.student?.registered_name_resolved || caseDetail.student?.registered_name || "-" }}</div></BCard></div>
-          <div class="col-md-4"><BCard class="border bg-light-subtle"><div class="text-muted small">Estado</div><StatusBadge :status="caseDetail.status" /></BCard></div>
+    <BModal
+      v-model="caseDetailModal"
+      size="xl"
+      title="Detalle y seguimiento del caso"
+      modal-class="convivencia-detail-modal"
+      content-class="convivencia-detail-modal__content"
+      header-class="convivencia-detail-modal__header"
+      body-class="convivencia-detail-modal__body"
+      hide-footer
+      scrollable
+    >
+      <div v-if="caseDetail" class="case-detail d-flex flex-column gap-3">
+        <div class="case-detail__hero">
+          <div class="case-detail__hero-icon"><i class="bx bx-folder-open"></i></div>
+          <div class="case-detail__hero-copy">
+            <div class="case-detail__eyebrow">Caso de convivencia · {{ caseDetail.folio }}</div>
+            <h5>{{ caseDetail.student?.registered_name_resolved || caseDetail.student?.registered_name || "Estudiante sin identificar" }}</h5>
+            <div class="case-detail__meta">
+              <span><i class="bx bx-calendar"></i>{{ formatDateTime(caseDetail.opened_at) }}</span>
+              <span><i class="bx bx-group"></i>{{ caseDetail.course_section?.display_name || caseDetail.courseSection?.display_name || "Sin curso" }}</span>
+            </div>
+          </div>
+          <StatusBadge :status="caseDetail.status" />
         </div>
-        <BCard class="border-0 shadow-sm">
-          <h6 class="mb-3">Relato y medidas</h6>
+        <BCard class="case-detail__section border-0 shadow-sm">
+          <div class="case-detail__section-title"><i class="bx bx-file"></i><h6>Relato y medidas</h6></div>
           <div class="small text-muted mb-1">Relato inicial</div>
-          <div class="mb-3">{{ caseDetail.initial_report }}</div>
+          <div class="case-detail__text mb-3">{{ caseDetail.initial_report }}</div>
           <div class="small text-muted mb-1">Antecedentes</div>
-          <div class="mb-3">{{ caseDetail.background || "-" }}</div>
+          <div class="case-detail__text mb-3">{{ caseDetail.background || "-" }}</div>
           <div class="small text-muted mb-1">Medidas inmediatas</div>
-          <div>{{ caseDetail.immediate_measures || "-" }}</div>
+          <div class="case-detail__text">{{ caseDetail.immediate_measures || "-" }}</div>
         </BCard>
         <div class="row g-3">
           <div class="col-lg-6">
-            <BCard class="border-0 shadow-sm h-100">
-              <h6 class="mb-3">Seguimientos</h6>
+            <BCard class="case-detail__section border-0 shadow-sm h-100">
+              <div class="case-detail__section-title"><i class="bx bx-time-five"></i><h6>Seguimientos</h6></div>
               <ConvivenciaTimeline :items="caseDetail.follow_ups || []" empty-text="No hay seguimientos registrados para este caso." />
             </BCard>
           </div>
           <div class="col-lg-6">
-            <BCard class="border-0 shadow-sm h-100">
-              <h6 class="mb-3">Cambios de estado</h6>
+            <BCard class="case-detail__section border-0 shadow-sm h-100">
+              <div class="case-detail__section-title"><i class="bx bx-history"></i><h6>Cambios de estado</h6></div>
               <ConvivenciaTimeline :items="caseDetail.status_logs || []" empty-text="No hay cambios de estado registrados." />
             </BCard>
           </div>
         </div>
-        <BCard class="border-0 shadow-sm">
-          <h6 class="mb-3">Registrar seguimiento</h6>
+        <BCard class="case-detail__section case-detail__section--accent border-0 shadow-sm">
+          <div class="case-detail__section-title"><i class="bx bx-plus-circle"></i><h6>Registrar seguimiento</h6></div>
           <div class="row g-3">
             <div class="col-md-4"><label class="form-label">Fecha y hora</label><BFormInput v-model="caseFollowUpForm.follow_up_at" type="datetime-local" /></div>
             <div class="col-md-4"><label class="form-label">Título</label><BFormInput v-model="caseFollowUpForm.title" /></div>
             <div class="col-md-4"><label class="form-label">Próximo seguimiento</label><BFormInput v-model="caseFollowUpForm.next_follow_up_at" type="datetime-local" /></div>
             <div class="col-12"><label class="form-label">Notas</label><BFormTextarea v-model="caseFollowUpForm.notes" rows="3" /></div>
-            <div class="col-12"><BButton variant="success" :disabled="caseFollowUpSaving" @click="saveCaseFollowUp">Guardar seguimiento</BButton></div>
+            <div class="col-12 d-flex justify-content-end"><BButton variant="success" :disabled="caseFollowUpSaving" @click="saveCaseFollowUp"><i class="bx bx-check me-1"></i>Guardar seguimiento</BButton></div>
           </div>
         </BCard>
       </div>
     </BModal>
   </Layout>
 </template>
+
+<style scoped>
+.convivencia-page {
+  --convivencia-primary: #4f63d9;
+  --convivencia-primary-dark: #3347b4;
+  --convivencia-teal: #2e9f83;
+  --convivencia-border: #e3e9f2;
+  --convivencia-muted: #6b7890;
+  --convivencia-soft: #f5f7fb;
+  color: var(--bs-body-color);
+}
+
+.convivencia-hero {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1.5rem;
+  min-height: 152px;
+  padding: 1.65rem 1.75rem;
+  overflow: hidden;
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 20px;
+  background:
+    radial-gradient(circle at 85% 10%, rgba(255, 255, 255, 0.2), transparent 28%),
+    linear-gradient(125deg, #263a8f 0%, var(--convivencia-primary) 54%, #318e89 100%);
+  box-shadow: 0 18px 42px rgba(43, 59, 132, 0.2);
+}
+
+.convivencia-hero::after {
+  position: absolute;
+  right: -65px;
+  bottom: -105px;
+  width: 260px;
+  height: 260px;
+  content: "";
+  border: 40px solid rgba(255, 255, 255, 0.07);
+  border-radius: 50%;
+}
+
+.convivencia-hero__main,
+.convivencia-hero__actions {
+  position: relative;
+  z-index: 1;
+}
+
+.convivencia-hero__main {
+  display: flex;
+  align-items: center;
+  gap: 1.15rem;
+  min-width: 0;
+}
+
+.convivencia-hero__icon {
+  display: grid;
+  flex: 0 0 64px;
+  width: 64px;
+  height: 64px;
+  font-size: 1.85rem;
+  color: #fff;
+  place-items: center;
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.14);
+  box-shadow: inset 0 1px rgba(255, 255, 255, 0.2);
+  backdrop-filter: blur(10px);
+}
+
+.convivencia-hero__copy {
+  min-width: 0;
+}
+
+.convivencia-hero__eyebrow {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin-bottom: 0.35rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  opacity: 0.78;
+}
+
+.convivencia-hero__title {
+  margin: 0;
+  color: #fff;
+  font-size: clamp(1.45rem, 2.2vw, 2rem);
+  font-weight: 700;
+  letter-spacing: -0.025em;
+}
+
+.convivencia-hero__subtitle {
+  max-width: 760px;
+  margin: 0.45rem 0 0;
+  color: rgba(255, 255, 255, 0.8);
+  font-size: 0.94rem;
+  line-height: 1.55;
+}
+
+.convivencia-hero__actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.convivencia-hero__status {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.55rem 0.8rem;
+  font-size: 0.75rem;
+  font-weight: 700;
+  white-space: nowrap;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 999px;
+  background: rgba(12, 24, 71, 0.2);
+}
+
+.convivencia-hero__status > span {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #73e6b9;
+  box-shadow: 0 0 0 4px rgba(115, 230, 185, 0.14);
+}
+
+.convivencia-hero :deep(.convivencia-help-button) {
+  min-height: 38px;
+  color: #263a8f;
+  font-weight: 700;
+  border: 0;
+  background: rgba(255, 255, 255, 0.92);
+}
+
+.convivencia-mobile-nav {
+  position: relative;
+  z-index: 1;
+  display: none;
+  width: 100%;
+}
+
+.convivencia-mobile-nav label {
+  margin-bottom: 0.35rem;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.78);
+}
+
+.convivencia-mobile-nav :deep(.form-select) {
+  color: #263a8f;
+  border: 0;
+  background-color: rgba(255, 255, 255, 0.95);
+}
+
+.convivencia-page :deep(.card) {
+  border: 1px solid var(--convivencia-border) !important;
+  border-radius: 16px;
+  background: var(--bs-body-bg);
+  box-shadow: 0 8px 24px rgba(42, 48, 66, 0.06) !important;
+}
+
+.convivencia-page :deep(.card-body) {
+  padding: 1.25rem;
+}
+
+.convivencia-page :deep(.form-label) {
+  margin-bottom: 0.42rem;
+  color: var(--bs-body-color);
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.convivencia-page :deep(.form-control),
+.convivencia-page :deep(.form-select) {
+  min-height: 42px;
+  border-color: #dce3ed;
+  border-radius: 10px;
+  background-color: var(--bs-body-bg);
+  box-shadow: none;
+  transition: border-color 0.18s ease, box-shadow 0.18s ease;
+}
+
+.convivencia-page :deep(textarea.form-control) {
+  min-height: auto;
+}
+
+.convivencia-page :deep(.form-control:focus),
+.convivencia-page :deep(.form-select:focus) {
+  border-color: rgba(79, 99, 217, 0.7);
+  box-shadow: 0 0 0 3px rgba(79, 99, 217, 0.12);
+}
+
+.convivencia-page :deep(.btn) {
+  min-height: 40px;
+  padding-inline: 0.95rem;
+  font-weight: 650;
+  border-radius: 10px;
+  transition: transform 0.16s ease, box-shadow 0.16s ease, background-color 0.16s ease;
+}
+
+.convivencia-page :deep(.btn:hover:not(:disabled)) {
+  transform: translateY(-1px);
+}
+
+.convivencia-page :deep(.btn-primary) {
+  border-color: var(--convivencia-primary);
+  background: var(--convivencia-primary);
+  box-shadow: 0 7px 16px rgba(79, 99, 217, 0.2);
+}
+
+.convivencia-page :deep(.btn-primary:hover) {
+  border-color: var(--convivencia-primary-dark);
+  background: var(--convivencia-primary-dark);
+}
+
+.convivencia-page :deep(.btn-success) {
+  border-color: #258a70;
+  background: #258a70;
+  box-shadow: 0 7px 16px rgba(37, 138, 112, 0.18);
+}
+
+.convivencia-page :deep(.btn-sm) {
+  min-height: 34px;
+  padding: 0.38rem 0.7rem;
+  font-size: 0.77rem;
+}
+
+.convivencia-page :deep(.table-responsive) {
+  overflow-x: auto;
+  border: 1px solid var(--convivencia-border);
+  border-radius: 12px;
+}
+
+.convivencia-page :deep(.table) {
+  min-width: 720px;
+  margin-bottom: 0;
+  vertical-align: middle;
+}
+
+.convivencia-page :deep(.table > :not(caption) > * > *) {
+  padding: 0.9rem 0.95rem;
+  border-bottom-color: var(--convivencia-border);
+}
+
+.convivencia-page :deep(.table thead th) {
+  color: var(--convivencia-muted);
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  white-space: nowrap;
+  text-transform: uppercase;
+  border-bottom-width: 1px;
+  background: var(--convivencia-soft);
+}
+
+.convivencia-page :deep(.table tbody tr) {
+  transition: background-color 0.16s ease;
+}
+
+.convivencia-page :deep(.table tbody tr:hover) {
+  background: rgba(79, 99, 217, 0.035);
+}
+
+.convivencia-page :deep(.table tbody tr:last-child td) {
+  border-bottom: 0;
+}
+
+.convivencia-page :deep(.table td:last-child) {
+  min-width: 150px;
+  white-space: nowrap;
+}
+
+.convivencia-page :deep(.badge) {
+  padding: 0.42rem 0.68rem;
+  font-weight: 700;
+}
+
+.convivencia-page :deep(.bg-light-subtle) {
+  background: var(--convivencia-soft) !important;
+}
+
+.convivencia-empty-state {
+  border-style: dashed !important;
+  background: var(--convivencia-soft) !important;
+}
+
+.convivencia-empty-state__icon {
+  display: grid;
+  width: 52px;
+  height: 52px;
+  margin: 0 auto;
+  color: var(--convivencia-primary);
+  font-size: 1.45rem;
+  place-items: center;
+  border-radius: 15px;
+  background: rgba(79, 99, 217, 0.1);
+}
+
+@media (max-width: 1199.98px) {
+  .convivencia-hero {
+    align-items: flex-start;
+  }
+
+  .convivencia-hero__actions {
+    flex-direction: column;
+    align-items: flex-end;
+  }
+}
+
+@media (max-width: 991.98px) {
+  .convivencia-hero {
+    flex-wrap: wrap;
+  }
+
+  .convivencia-mobile-nav {
+    display: block;
+  }
+}
+
+@media (max-width: 767.98px) {
+  .convivencia-hero {
+    min-height: auto;
+    padding: 1.25rem;
+    border-radius: 16px;
+  }
+
+  .convivencia-hero__main {
+    align-items: flex-start;
+  }
+
+  .convivencia-hero__icon {
+    flex-basis: 50px;
+    width: 50px;
+    height: 50px;
+    font-size: 1.45rem;
+    border-radius: 14px;
+  }
+
+  .convivencia-hero__actions {
+    width: 100%;
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .convivencia-page :deep(.card-body) {
+    padding: 1rem;
+  }
+
+  .convivencia-page :deep(.btn) {
+    white-space: nowrap;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .convivencia-page :deep(.btn),
+  .convivencia-page :deep(.table tbody tr) {
+    transition: none;
+  }
+}
+</style>
+
+<style>
+.convivencia-detail-modal .modal-dialog {
+  max-width: min(1120px, calc(100vw - 2rem));
+}
+
+.convivencia-detail-modal__content {
+  overflow: hidden;
+  border: 0;
+  border-radius: 20px;
+  box-shadow: 0 28px 80px rgba(25, 34, 78, 0.28);
+}
+
+.convivencia-detail-modal__header {
+  padding: 1.1rem 1.35rem;
+  border-bottom: 1px solid #e7ebf2;
+  background: #f8f9fc;
+}
+
+.convivencia-detail-modal__header .modal-title {
+  color: #273252;
+  font-size: 1rem;
+  font-weight: 750;
+}
+
+.convivencia-detail-modal__body {
+  padding: 1.35rem;
+  background: #f4f6fa;
+}
+
+.case-detail__hero {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 1.15rem 1.25rem;
+  color: #fff;
+  border-radius: 16px;
+  background: linear-gradient(125deg, #2b3f96, #5368db 58%, #34958c);
+}
+
+.case-detail__hero-icon {
+  display: grid;
+  flex: 0 0 52px;
+  width: 52px;
+  height: 52px;
+  font-size: 1.5rem;
+  place-items: center;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.14);
+}
+
+.case-detail__hero-copy {
+  flex: 1;
+  min-width: 0;
+}
+
+.case-detail__eyebrow {
+  margin-bottom: 0.2rem;
+  font-size: 0.7rem;
+  font-weight: 750;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  opacity: 0.75;
+}
+
+.case-detail__hero h5 {
+  margin: 0;
+  color: #fff;
+  font-size: 1.15rem;
+}
+
+.case-detail__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem 1rem;
+  margin-top: 0.45rem;
+  color: rgba(255, 255, 255, 0.78);
+  font-size: 0.78rem;
+}
+
+.case-detail__meta span {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.case-detail__hero .badge {
+  color: #273252 !important;
+  background: rgba(255, 255, 255, 0.92) !important;
+}
+
+.case-detail__section {
+  border: 1px solid #e3e8f1 !important;
+  border-radius: 15px;
+  box-shadow: 0 7px 22px rgba(42, 48, 66, 0.05) !important;
+}
+
+.case-detail__section--accent {
+  border-top: 3px solid #2e9f83 !important;
+}
+
+.case-detail__section-title {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  margin-bottom: 1rem;
+  color: #344162;
+}
+
+.case-detail__section-title i {
+  display: grid;
+  width: 32px;
+  height: 32px;
+  color: #4f63d9;
+  font-size: 1.05rem;
+  place-items: center;
+  border-radius: 9px;
+  background: rgba(79, 99, 217, 0.1);
+}
+
+.case-detail__section-title h6 {
+  margin: 0;
+  font-weight: 750;
+}
+
+.case-detail__text {
+  line-height: 1.65;
+}
+
+.swal2-popup.convivencia-swal {
+  padding: 1.75rem;
+  border-radius: 18px;
+  box-shadow: 0 24px 70px rgba(25, 34, 78, 0.24);
+}
+
+.convivencia-swal .swal2-title {
+  color: #273252;
+  font-size: 1.35rem;
+}
+
+.convivencia-swal .swal2-html-container {
+  color: #667085;
+  font-size: 0.92rem;
+  line-height: 1.55;
+}
+
+.convivencia-swal-confirm,
+.convivencia-swal-cancel {
+  min-height: 42px;
+  padding: 0.65rem 1rem;
+  font-weight: 700;
+  border: 0 !important;
+  border-radius: 10px !important;
+}
+
+.convivencia-swal-confirm {
+  background: #4f63d9 !important;
+}
+
+.convivencia-swal-cancel {
+  color: #59657a !important;
+  background: #edf0f5 !important;
+}
+
+@media (max-width: 575.98px) {
+  .convivencia-detail-modal .modal-dialog {
+    max-width: calc(100vw - 1rem);
+    margin: 0.5rem;
+  }
+
+  .convivencia-detail-modal__body {
+    padding: 0.85rem;
+  }
+
+  .case-detail__hero {
+    align-items: flex-start;
+    padding: 1rem;
+  }
+
+  .case-detail__hero-icon {
+    display: none;
+  }
+}
+</style>

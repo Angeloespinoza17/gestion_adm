@@ -14,75 +14,52 @@
   <section class="events section">
     <div class="container">
       <div class="row g-4">
-        <div class="col-lg-6" data-aos="fade-up" data-aos-delay="100">
-          <div class="event-card">
-            <div class="event-date">
-              <span class="month">MAY</span>
-              <span class="day">18</span>
-              <span class="year">2026</span>
-            </div>
-            <div class="event-content">
-              <div class="event-tag community">Pastoral</div>
-              <h3>Sacramento de Confirmación</h3>
-              <p>Celebración comunitaria junto a estudiantes, familias y equipo pastoral.</p>
-              <div class="event-meta">
-                <div class="meta-item"><i class="bi bi-geo-alt"></i><span>Parroquia Sagrado Corazón de Jesús</span></div>
+        @forelse($siteEvents as $event)
+          @php
+            $startsAt = $event->starts_at?->copy()->locale('es');
+            $delay = min($loop->iteration, 4) * 100;
+          @endphp
+          <div class="col-lg-6" data-aos="fade-up" data-aos-delay="{{ $delay }}">
+            <a href="{{ route('public.events.show', $event) }}" class="event-card-link">
+              <div class="event-card">
+                <div class="event-date">
+                  <span class="month">{{ $startsAt ? strtoupper($startsAt->translatedFormat('M')) : 'S/F' }}</span>
+                  <span class="day">{{ $startsAt ? $startsAt->format('d') : '--' }}</span>
+                  <span class="year">{{ $startsAt ? $startsAt->format('Y') : '' }}</span>
+                </div>
+                <div class="event-content">
+                  @if($event->category)
+                    <div class="event-tag community">{{ $event->category }}</div>
+                  @endif
+                  <h3>{{ $event->title }}</h3>
+                  <p>{{ \Illuminate\Support\Str::limit(strip_tags($event->summary ?: $event->body_html ?: ''), 180) }}</p>
+                  <div class="event-meta">
+                    @if($event->location)
+                      <div class="meta-item"><i class="bi bi-geo-alt"></i><span>{{ $event->location }}</span></div>
+                    @endif
+                    @if($startsAt)
+                      <div class="meta-item"><i class="bi bi-clock"></i><span>{{ $startsAt->translatedFormat('H:i') }} hrs.</span></div>
+                    @endif
+                  </div>
+                </div>
               </div>
+            </a>
+          </div>
+        @empty
+          <div class="col-12" data-aos="fade-up" data-aos-delay="100">
+            <div class="page-card text-center">
+              <h3>Eventos en preparación</h3>
+              <p class="mb-0">Pronto publicaremos nuevas actividades de la comunidad educativa pastoral.</p>
             </div>
           </div>
-        </div>
-        <div class="col-lg-6" data-aos="fade-up" data-aos-delay="200">
-          <div class="event-card">
-            <div class="event-date">
-              <span class="month">MAY</span>
-              <span class="day">08</span>
-              <span class="year">2026</span>
-            </div>
-            <div class="event-content">
-              <div class="event-tag academic">Comunidad</div>
-              <h3>Desayunos solidarios de M. Paulina</h3>
-              <p>Encuentro fraterno con participación de diferentes estamentos del colegio.</p>
-              <div class="event-meta">
-                <div class="meta-item"><i class="bi bi-geo-alt"></i><span>Dependencias del colegio</span></div>
-              </div>
-            </div>
-          </div>
-        </div>
-        <div class="col-lg-6" data-aos="fade-up" data-aos-delay="300">
-          <div class="event-card">
-            <div class="event-date">
-              <span class="month">ABR</span>
-              <span class="day">28</span>
-              <span class="year">2026</span>
-            </div>
-            <div class="event-content">
-              <div class="event-tag community">Pastoral</div>
-              <h3>Reunión de apoderados delegados de pastoral</h3>
-              <p>Inicio del trabajo conjunto entre familias y equipo pastoral de la institución.</p>
-              <div class="event-meta">
-                <div class="meta-item"><i class="bi bi-geo-alt"></i><span>Colegio Nuestra Señora del Carmen</span></div>
-              </div>
-            </div>
-          </div>
-        </div>
-        <div class="col-lg-6" data-aos="fade-up" data-aos-delay="400">
-          <div class="event-card">
-            <div class="event-date">
-              <span class="month">ABR</span>
-              <span class="day">21</span>
-              <span class="year">2026</span>
-            </div>
-            <div class="event-content">
-              <div class="event-tag arts">Fe</div>
-              <h3>Primeras Comuniones</h3>
-              <p>Celebración sacramental junto a estudiantes, familias y comunidades parroquiales.</p>
-              <div class="event-meta">
-                <div class="meta-item"><i class="bi bi-geo-alt"></i><span>Comunidad educativa pastoral</span></div>
-              </div>
-            </div>
-          </div>
-        </div>
+        @endforelse
       </div>
+
+      @if(method_exists($siteEvents, 'links') && $siteEvents->hasPages())
+        <div class="mt-5">
+          {{ $siteEvents->links('pagination::bootstrap-5') }}
+        </div>
+      @endif
     </div>
   </section>
 @endsection

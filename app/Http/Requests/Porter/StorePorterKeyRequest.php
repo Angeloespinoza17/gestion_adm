@@ -16,7 +16,7 @@ class StorePorterKeyRequest extends FormRequest
     {
         return [
             'maintenance_dependency_id' => ['nullable', 'integer', 'exists:maintenance_dependencies,id'],
-            'department_id' => ['nullable', 'integer', 'exists:departments,id'],
+            'porter_key_group_id' => ['nullable', 'integer', 'exists:porter_key_groups,id'],
             'code' => ['required', 'string', 'max:80', Rule::unique('porter_keys', 'code')],
             'name' => ['required', 'string', 'max:191'],
             'observations' => ['nullable', 'string'],

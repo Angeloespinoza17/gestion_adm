@@ -6,56 +6,9 @@ export const menuItems = [
     },
     {
         id: 2,
-        label: "menuitems.dashboards.text",
+        label: "Inicio",
         icon: "bx-home-circle",
-        subItems: [
-            {
-                id: 3,
-                label: "menuitems.dashboards.list.default",
-                link: "/inicio",
-                parentId: 2
-            },
-            {
-                id: 4,
-                label: "menuitems.dashboards.list.saas",
-                link: "/dashboard/saas",
-                parentId: 2
-            },
-            {
-                id: 131,
-                label: "test",
-                link: "/test",
-                parentId: 2
-            },
-            {
-                id: 132,
-                label: "Deploy",
-                link: "/deploy",
-                parentId: 2
-            },
-            {
-                id: 5,
-                label: "menuitems.dashboards.list.crypto",
-                link: "/dashboard/crypto",
-                parentId: 2
-            },
-            {
-                // id: 5,
-                label: "menuitems.dashboards.list.blog",
-                link: "/dashboard/blog",
-                parentId: 2
-            },
-            {
-                // id: 5,
-                label: "menuitems.dashboards.list.jobs.text",
-                link: "/dashboard/job",
-                parentId: 2,
-                badge: {
-                    variant: "success",
-                    text: "menuitems.dashboards.list.jobs.badge"
-                },
-            }
-        ]
+        link: "/inicio"
     },
     {
         id: 6,
@@ -105,7 +58,7 @@ export const menuItems = [
         subItems: [
             {
                 id: 931,
-                label: "Dependencias",
+                label: "Salas",
                 link: "/spaces/dependencies",
                 parentId: 930
             },
@@ -265,6 +218,18 @@ export const menuItems = [
                 id: 9056,
                 label: "Cambios y retiros",
                 link: "/students/movements",
+                parentId: 9050
+            },
+            {
+                id: 9057,
+                label: "Reportes",
+                link: "/students/reports",
+                parentId: 9050
+            },
+            {
+                id: 9058,
+                label: "Estadísticas de asistencia",
+                link: "/students/attendance-statistics",
                 parentId: 9050
             }
         ]

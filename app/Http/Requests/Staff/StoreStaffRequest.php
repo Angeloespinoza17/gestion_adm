@@ -57,18 +57,13 @@ class StoreStaffRequest extends FormRequest
         return [
             'full_name' => ['required', 'string', 'max:255'],
             'rut' => [
-                'nullable',
+                'required',
                 'string',
                 'max:20',
                 'unique:staff,rut',
-                function ($attribute, $value, $fail) {
-                    if ($value !== null && $value !== '' && !Rut::isValid($value)) {
-                        $fail('El RUT ingresado no es válido.');
-                    }
-                },
             ],
             'birth_date' => ['nullable', 'date'],
-            'institutional_email' => ['nullable', 'email', 'max:255', 'unique:staff,institutional_email'],
+            'institutional_email' => ['required', 'email', 'max:255', 'unique:staff,institutional_email', 'unique:users,email'],
             'personal_email' => ['nullable', 'email', 'max:255'],
             'phone' => ['nullable', 'string', 'max:50'],
             'address' => ['nullable', 'string', 'max:255'],

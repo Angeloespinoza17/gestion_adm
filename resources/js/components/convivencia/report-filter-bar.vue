@@ -24,7 +24,14 @@ export default {
 </script>
 
 <template>
-  <BCard class="border-0 shadow-sm">
+  <BCard class="convivencia-filter-card border-0 shadow-sm">
+    <div class="convivencia-filter-card__heading">
+      <div class="convivencia-filter-card__icon"><i class="bx bx-filter-alt"></i></div>
+      <div>
+        <h6>Filtros del informe</h6>
+        <p>Acota los resultados por período y curso.</p>
+      </div>
+    </div>
     <div class="row g-3 align-items-end">
       <div class="col-md-3">
         <label class="form-label">Año académico</label>
@@ -56,9 +63,41 @@ export default {
           <option value="2">2</option>
         </BFormSelect>
       </div>
-      <div class="col-md-1">
-        <BButton variant="primary" class="w-100" @click="submit">Filtrar</BButton>
+      <div :class="showSemester ? 'col-md-1' : 'col-md-2'">
+        <BButton variant="primary" class="w-100" @click="submit"><i class="bx bx-search me-1"></i>Aplicar</BButton>
       </div>
     </div>
   </BCard>
 </template>
+
+<style scoped>
+.convivencia-filter-card__heading {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.convivencia-filter-card__icon {
+  display: grid;
+  flex: 0 0 38px;
+  width: 38px;
+  height: 38px;
+  color: #4f63d9;
+  font-size: 1.15rem;
+  place-items: center;
+  border-radius: 11px;
+  background: rgba(79, 99, 217, 0.1);
+}
+
+.convivencia-filter-card__heading h6 {
+  margin: 0 0 0.15rem;
+  font-weight: 750;
+}
+
+.convivencia-filter-card__heading p {
+  margin: 0;
+  color: #7b8498;
+  font-size: 0.78rem;
+}
+</style>

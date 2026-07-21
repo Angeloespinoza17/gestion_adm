@@ -89,10 +89,10 @@ export default {
                     <BLink href="javascript:void(0);" class="right-bar-toggle float-end" @click="hide">
                         <i class="mdi mdi-close noti-icon"></i>
                     </BLink>
-                    <h5 class="m-0">Settings</h5>
+                    <h5 class="m-0">Configuración visual</h5>
                 </div>
                 <div class="p-3">
-                    <h6 class="mb-0">Layout</h6>
+                    <h6 class="mb-0">Diseño</h6>
                     <hr class="mt-1" />
                     <div class="d-flex">
                         <BFormRadio class="mb-2" v-model="layoutType" name="layoutSelect" value="vertical"
@@ -101,74 +101,74 @@ export default {
                             @input="changeLayout($event)"><span class="ms-1">Horizontal</span></BFormRadio>
                     </div>
 
-                    <h6 class="mt-3">Theme Modes</h6>
+                    <h6 class="mt-3">Tema</h6>
                     <hr class="mt-1" />
 
                     <div class="form-check form-check-inline">
                         <input class="form-check-input" type="radio" name="mode" id="mode-radio1" value="light"
                             @click="changeLayoutMode('light')" v-model="mode" />
-                        <label class="form-check-label" for="mode-radio1">Light</label>
+                        <label class="form-check-label" for="mode-radio1">Claro</label>
                     </div>
                     <div class="form-check form-check-inline">
                         <input class="form-check-input" type="radio" name="mode" id="mode-radio2" value="dark"
                             @click="changeLayoutMode('dark')" v-model="mode" />
-                        <label class="form-check-label" for="mode-radio2">Dark</label>
+                        <label class="form-check-label" for="mode-radio2">Oscuro</label>
                     </div>
 
                     <!-- Width -->
-                    <h6 class="mt-3">Width</h6>
+                    <h6 class="mt-3">Ancho</h6>
                     <hr class="mt-1" />
 
                     <BFormRadio class="mb-2" v-model="width" name="widthSelect" value="fluid"
-                        @input="changeLayoutWidth($event)">Fluid</BFormRadio>
+                        @input="changeLayoutWidth($event)">Fluido</BFormRadio>
                     <BFormRadio class="mb-2" v-model="width" name="widthSelect" value="boxed"
-                        @input="changeLayoutWidth($event)">Boxed</BFormRadio>
+                        @input="changeLayoutWidth($event)">En caja</BFormRadio>
 
                     <!-- Sidebar -->
                     <div v-if="layoutType === 'vertical'">
-                        <h6 class="mt-3">Sidebar</h6>
+                        <h6 class="mt-3">Barra lateral</h6>
 
                         <hr class="mt-1" />
                         <BFormRadio class="mb-2" v-model="sidebarType" name="sidebarSelect" value="dark"
-                            @input="changeType($event)">Dark</BFormRadio>
+                            @input="changeType($event)">Oscura</BFormRadio>
                         <BFormRadio class="mb-2" v-model="sidebarType" name="sidebarSelect" value="light"
-                            @input="changeType($event)">Light</BFormRadio>
+                            @input="changeType($event)">Clara</BFormRadio>
                         <BFormRadio class="mb-2" v-model="sidebarType" name="sidebarSelect" value="compact"
-                            @input="changeType($event)">Compact</BFormRadio>
+                            @input="changeType($event)">Compacta</BFormRadio>
                         <BFormRadio class="mb-2" v-model="sidebarType" name="sidebarSelect" value="icon"
-                            @input="changeType($event)">Icon</BFormRadio>
+                            @input="changeType($event)">Solo iconos</BFormRadio>
                         <BFormRadio class="mb-2" v-model="sidebarType" name="sidebarSelect" value="colored"
-                            @input="changeType($event)">Colored</BFormRadio>
+                            @input="changeType($event)">Con color</BFormRadio>
                         <BFormRadio class="mb-2" v-model="sidebarType" name="sidebarSelect" value="scrollable"
-                            @input="changeType($event)">Scrollable</BFormRadio>
+                            @input="changeType($event)">Desplazable</BFormRadio>
 
                     </div>
 
                     <!-- Topbar -->
                     <div v-if="layoutType === 'horizontal'">
-                        <h6 class="mt-3">Topbar</h6>
+                        <h6 class="mt-3">Barra superior</h6>
                         <hr class="mt-1" />
 
                         <BFormRadio class="mb-2" v-model="topbar" name="topbarbarSelect" value="dark"
-                            @input="changeTopbartype($event)">Dark</BFormRadio>
+                            @input="changeTopbartype($event)">Oscura</BFormRadio>
                         <BFormRadio class="mb-2" v-model="topbar" name="topbarbarSelect" value="light"
-                            @input="changeTopbartype($event)">Light</BFormRadio>
+                            @input="changeTopbartype($event)">Clara</BFormRadio>
                         <BFormRadio class="mb-2" v-model="topbar" name="topbarbarSelect" value="colored"
-                            @input="changeTopbartype($event)">Colored</BFormRadio>
+                            @input="changeTopbartype($event)">Con color</BFormRadio>
                         <BFormRadio class="mb-2" v-model="topbar" name="topbarbarSelect" value="scrollable"
-                            @input="changeTopbartype($event)">Scrollable</BFormRadio>
+                            @input="changeTopbartype($event)">Desplazable</BFormRadio>
 
                     </div>
 
-                    <h6 class="mt-3">Preloader</h6>
+                    <h6 class="mt-3">Pantalla de carga</h6>
                     <hr class="mt-1" />
                     <div class="form-check form-switch">
                         <input class="form-check-input" type="checkbox" id="is-loader" v-model="loader" @click="changeloader(loader)" />
-                        <label class="form-check-label" for="is-loader">Preloader</label>
+                        <label class="form-check-label" for="is-loader">Mostrar pantalla de carga</label>
                     </div>
                 </div>
                 <!-- Settings -->
-                <h6 class="text-center mb-0">Choose Mode</h6>
+                <h6 class="text-center mb-0">Elegir tema</h6>
 
                 <div class="p-4">
                     <div class="mb-2">

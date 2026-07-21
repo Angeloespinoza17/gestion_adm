@@ -2,6 +2,8 @@
 
 namespace App\Providers;
 
+use App\Services\Attendance\AttendanceParserRegistry;
+use App\Services\Attendance\LirmiAttendancePdfParser;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\ServiceProvider;
 use Laravel\Sanctum\Sanctum;
@@ -15,7 +17,9 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register()
     {
-        //
+        $this->app->singleton(AttendanceParserRegistry::class, fn ($app) => new AttendanceParserRegistry([
+            $app->make(LirmiAttendancePdfParser::class),
+        ]));
     }
 
     /**

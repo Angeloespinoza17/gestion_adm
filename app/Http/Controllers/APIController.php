@@ -65,7 +65,7 @@ class APIController extends Controller
         $token = $user->createToken('web')->plainTextToken;
 
         return $this->sendResponse([
-            'user' => $user,
+            'user' => $this->userPayload($user),
             'token' => $token,
         ], "success");
     }
@@ -93,7 +93,7 @@ class APIController extends Controller
             $token = $user->createToken('web')->plainTextToken;
 
             return $this->sendResponse([
-                'user' => $user,
+                'user' => $this->userPayload($user),
                 'token' => $token,
             ], "success");
         }
@@ -176,5 +176,17 @@ class APIController extends Controller
             'success' => true,
             'message' => 'logout',
         ]);
+    }
+
+    private function userPayload(User $user): array
+    {
+        $user->loadMissing('staff:id,profile_photo_path');
+
+        return [
+            'id' => $user->id,
+            'name' => $user->name,
+            'email' => $user->email,
+            'profile_photo_url' => $user->profile_photo_url,
+        ];
     }
 }

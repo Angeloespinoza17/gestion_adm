@@ -179,11 +179,8 @@ class MaintenanceDependencyController extends Controller
                 ->where('active', true)
                 ->orderBy('full_name')
                 ->get(['id', 'full_name', 'rut']),
-            'approver_users' => User::query()
-                ->with('staff:id,full_name,rut')
-                ->where('active', true)
-                ->orderBy('name')
-                ->get(['id', 'name', 'email', 'staff_id']),
+            'approver_users' => $this->approverUsersQuery()
+                ->get(['id', 'name', 'email', 'staff_id', 'user_type']),
             'distributions' => $this->distinct(request(), 'distribution'),
             'sectors' => $this->distinct(request(), 'sector'),
             'zones' => $this->distinct(request(), 'zone'),
@@ -217,7 +214,8 @@ class MaintenanceDependencyController extends Controller
                 ->with([
                     'type:id,name,color',
                     'responsibleStaff:id,full_name,rut',
-                    'approvers:id,name,email,staff_id',
+                    'approvers' => fn ($query) => $this->applyApproverUserFilter($query)
+                        ->select('users.id', 'users.name', 'users.email', 'users.staff_id', 'users.user_type'),
                     'approvers.staff:id,full_name,rut',
                 ])
                 ->when($search !== '', function ($query) use ($search) {
@@ -247,11 +245,8 @@ class MaintenanceDependencyController extends Controller
                 ->orderBy('sort_order')
                 ->orderBy('name')
                 ->get(['id', 'name', 'color']),
-            'approver_users' => User::query()
-                ->with('staff:id,full_name,rut')
-                ->where('active', true)
-                ->orderBy('name')
-                ->get(['id', 'name', 'email', 'staff_id']),
+            'approver_users' => $this->approverUsersQuery()
+                ->get(['id', 'name', 'email', 'staff_id', 'user_type']),
         ]);
     }
 
@@ -265,7 +260,7 @@ class MaintenanceDependencyController extends Controller
 
         $payload = $request->validate([
             'approver_user_ids' => ['nullable', 'array'],
-            'approver_user_ids.*' => ['integer', Rule::exists('users', 'id')],
+            'approver_user_ids.*' => ['integer', $this->approverUserExistsRule()],
             'requires_approval' => ['nullable', 'boolean'],
         ]);
 
@@ -302,7 +297,8 @@ class MaintenanceDependencyController extends Controller
             'type:id,name,color,description',
             'parentDependency:id,code,name,distribution,sector,zone',
             'responsibleStaff:id,full_name,rut',
-            'approvers:id,name,email,staff_id',
+            'approvers' => fn ($query) => $this->applyApproverUserFilter($query)
+                ->select('users.id', 'users.name', 'users.email', 'users.staff_id', 'users.user_type'),
             'approvers.staff:id,full_name,rut',
             'reservations' => fn ($query) => $query
                 ->with([
@@ -318,6 +314,33 @@ class MaintenanceDependencyController extends Controller
     private function syncApprovers(MaintenanceDependency $dependency, array $approverIds): void
     {
         $dependency->approvers()->sync(collect($approverIds)->filter()->unique()->values()->all());
+    }
+
+    private function approverUsersQuery()
+    {
+        return $this->applyApproverUserFilter(
+            User::query()->with('staff:id,full_name,rut')
+        )->orderBy('name');
+    }
+
+    private function applyApproverUserFilter($query)
+    {
+        return $query
+            ->where('users.active', true)
+            ->where('users.user_type', 'staff')
+            ->whereNotNull('users.staff_id')
+            ->whereHas('staff', fn ($query) => $query->where('active', true));
+    }
+
+    private function approverUserExistsRule()
+    {
+        return Rule::exists('users', 'id')->where(function ($query) {
+            $query
+                ->where('active', true)
+                ->where('user_type', 'staff')
+                ->whereNotNull('staff_id')
+                ->whereIn('staff_id', Staff::query()->where('active', true)->select('id'));
+        });
     }
 
     private function queryForContext(Request $request)

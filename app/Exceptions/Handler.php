@@ -3,6 +3,8 @@
 namespace App\Exceptions;
 
 use Illuminate\Foundation\Exceptions\Handler as ExceptionHandler;
+use Illuminate\Http\Exceptions\PostTooLargeException;
+use Illuminate\Http\Request;
 use Throwable;
 
 class Handler extends ExceptionHandler
@@ -34,6 +36,19 @@ class Handler extends ExceptionHandler
      */
     public function register()
     {
+        $this->renderable(function (PostTooLargeException $exception, Request $request) {
+            if (! $request->expectsJson()) {
+                return null;
+            }
+
+            return response()->json([
+                'message' => 'El archivo supera el límite de carga del servidor.',
+                'errors' => [
+                    'pdf' => ['El PDF es demasiado grande para una carga directa. Intenta importarlo nuevamente desde Estudiantes.'],
+                ],
+            ], 413);
+        });
+
         $this->reportable(function (Throwable $e) {
             //
         });

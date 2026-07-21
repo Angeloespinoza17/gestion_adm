@@ -5,7 +5,7 @@ export default {
   props: {
     title: { type: String, required: true },
     text: { type: String, required: true },
-    buttonText: { type: String, default: "?" },
+    buttonText: { type: String, default: "Ayuda" },
     variant: { type: String, default: "outline-secondary" },
     size: { type: String, default: "sm" },
   },
@@ -16,6 +16,10 @@ export default {
         text: this.text,
         icon: "info",
         confirmButtonText: "Entendido",
+        customClass: {
+          popup: "convivencia-swal",
+          confirmButton: "convivencia-swal-confirm",
+        },
       });
     },
   },
@@ -30,6 +34,7 @@ export default {
 
 <style scoped>
 .convivencia-help-button {
+  min-width: 88px;
   border-radius: 999px;
 }
 </style>

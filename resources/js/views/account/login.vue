@@ -14,9 +14,9 @@ export default {
         password: ""
       },
       highlights: [
-        "Acceso centralizado para equipos administrativos y de gestion.",
-        "Interfaz mas clara para revisar modulos, permisos y seguimiento.",
-        "Experiencia visual moderna sin alterar el flujo de autenticacion."
+        "Porteria, inventario, mantencion y espacios en un panel operativo.",
+        "Usuarios, roles y permisos ordenados por perfil de trabajo.",
+        "Seguimiento de noticias, eventos y solicitudes internas del colegio."
       ],
       profileImg, logo,
       processing: false,
@@ -40,6 +40,7 @@ export default {
           if (token) {
             localStorage.setItem('token', token);
             localStorage.removeItem('permissions');
+            localStorage.removeItem('impersonator_token');
             axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
             document.cookie = `cnsc_token=${encodeURIComponent(token)}; path=/; samesite=lax`;
           }
@@ -49,6 +50,7 @@ export default {
             user_id: user.id,
             name: user.name,
             email: user.email,
+            profile_photo_url: user.profile_photo_url || null,
           }
           localStorage.setItem('user', JSON.stringify(logged_user));
           this.$router.push('/inicio');
@@ -79,11 +81,11 @@ export default {
               <BCol lg="5" class="d-none d-lg-block">
                 <div class="auth-premium-aside h-100 d-flex flex-column justify-content-between">
                   <div>
-                    <span class="dashboard-hero__eyebrow bg-white text-primary">Acceso seguro</span>
-                    <h2 class="mt-4 mb-3 text-white">Bienvenido de vuelta</h2>
+                    <span class="dashboard-hero__eyebrow bg-white text-primary">Portal interno CNSC</span>
+                    <h2 class="mt-4 mb-3 text-white">Gestion institucional</h2>
                     <p class="mb-0 text-white-50">
-                      Ingresa al panel administrativo con una experiencia visual mas limpia,
-                      moderna y consistente con Skote.
+                      Accede a las herramientas de trabajo del colegio con tu
+                      cuenta institucional autorizada.
                     </p>
                   </div>
 
@@ -112,9 +114,9 @@ export default {
                   </router-link>
 
                   <div class="mb-4">
-                    <h3 class="mb-2">Iniciar sesion</h3>
+                    <h3 class="mb-2">Acceso al panel CNSC</h3>
                     <p class="text-muted mb-0">
-                      Accede para continuar con la gestion diaria del sistema.
+                      Ingresa con tus credenciales para continuar con tus modulos asignados.
                     </p>
                   </div>
 
@@ -122,48 +124,34 @@ export default {
 
                   <BForm class="auth-premium-form" action="javascript:void(0)" method="POST" @submit.prevent="login">
                     <slot />
-                    <BFormGroup id="input-group-1" label="Correo electronico" label-for="input-1" class="mb-3">
-                      <BFormInput id="input-1" name="email" v-model="auth.email" type="text" placeholder="Ingresa tu correo"></BFormInput>
+                    <BFormGroup id="input-group-1" label="Correo institucional" label-for="input-1" class="mb-3">
+                      <BFormInput id="input-1" name="email" v-model="auth.email" type="text" placeholder="nombre@cnscvaldivia.cl"></BFormInput>
                     </BFormGroup>
 
-                    <BFormGroup id="input-group-2" label="Contrasena" label-for="input-2" class="mb-3">
-                      <BFormInput id="input-2" v-model="auth.password" name="password" type="password" placeholder="Ingresa tu contrasena"></BFormInput>
+                    <BFormGroup id="input-group-2" label="Clave de acceso" label-for="input-2" class="mb-3">
+                      <BFormInput id="input-2" v-model="auth.password" name="password" type="password" placeholder="Ingresa tu clave"></BFormInput>
                     </BFormGroup>
 
                     <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-3">
                       <BFormCheckbox id="customControlInline" name="checkbox-1" value="accepted" unchecked-value="not_accepted">
-                        Recordarme
+                        Mantener sesion
                       </BFormCheckbox>
                       <router-link to="/forget-password" class="text-muted">
-                        <i class="mdi mdi-lock me-1"></i>Recuperar acceso
+                        <i class="mdi mdi-lock me-1"></i>Recuperar clave
                       </router-link>
                     </div>
 
                     <div class="d-grid">
                       <BButton variant="primary" type="submit" :disabled="processing" class="premium-button btn-block">
-                        {{ processing ? "Ingresando..." : "Entrar al sistema" }}
+                        {{ processing ? "Validando acceso..." : "Ingresar al panel" }}
                       </BButton>
                     </div>
 
                     <div class="mt-4 text-center">
-                      <h6 class="text-muted mb-3">Acceso social</h6>
-                      <ul class="list-inline mb-0">
-                        <li class="list-inline-item">
-                          <BLink href="javascript: void(0);" class="social-list-item bg-primary text-white border-primary">
-                            <i class="mdi mdi-facebook"></i>
-                          </BLink>
-                        </li>
-                        <li class="list-inline-item">
-                          <BLink href="javascript: void(0);" class="social-list-item bg-info text-white border-info">
-                            <i class="mdi mdi-twitter"></i>
-                          </BLink>
-                        </li>
-                        <li class="list-inline-item">
-                          <BLink href="javascript: void(0);" class="social-list-item bg-danger text-white border-danger">
-                            <i class="mdi mdi-google"></i>
-                          </BLink>
-                        </li>
-                      </ul>
+                      <h6 class="text-muted mb-1">Solo cuentas institucionales</h6>
+                      <p class="text-muted mb-0">
+                        El ingreso esta reservado para funcionarios autorizados.
+                      </p>
                     </div>
                   </BForm>
                 </BCardBody>
@@ -173,11 +161,11 @@ export default {
 
           <div class="mt-4 text-center">
             <p>
-              No tienes una cuenta?
-              <router-link to="/auth/register" class="fw-medium text-primary">Solicitar acceso</router-link>
+              Necesitas acceso al panel?
+              <router-link to="/auth/register" class="fw-medium text-primary">Solicitar credenciales</router-link>
             </p>
             <p>
-              © {{ new Date().getFullYear() }} Skote. Interfaz administrativa modernizada sobre la base existente.
+              © {{ new Date().getFullYear() }} CNSC Gestion. Portal interno del Colegio Nuestra Senora del Carmen.
             </p>
           </div>
         </BCol>

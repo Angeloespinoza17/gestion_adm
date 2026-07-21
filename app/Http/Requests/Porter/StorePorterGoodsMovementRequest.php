@@ -16,8 +16,13 @@ class StorePorterGoodsMovementRequest extends FormRequest
 
     protected function prepareForValidation(): void
     {
+        $contactRut = $this->input('contact_rut');
+        $contactRut = is_null($contactRut) ? null : trim((string) $contactRut);
+
         $this->merge([
-            'contact_rut' => Rut::normalize($this->input('contact_rut')),
+            'contact_rut' => $contactRut === null || $contactRut === ''
+                ? null
+                : (Rut::normalize($contactRut) ?: $contactRut),
         ]);
     }
 
@@ -28,11 +33,7 @@ class StorePorterGoodsMovementRequest extends FormRequest
             'department_id' => ['nullable', 'integer', 'exists:departments,id'],
             'responsible_staff_id' => ['nullable', 'integer', 'exists:staff,id'],
             'contact_name' => ['required', 'string', 'max:191'],
-            'contact_rut' => ['nullable', 'string', 'max:20', function ($attribute, $value, $fail) {
-                if ($value !== null && $value !== '' && !Rut::isValid($value)) {
-                    $fail('El RUT ingresado no es válido.');
-                }
-            }],
+            'contact_rut' => ['nullable', 'string', 'max:20'],
             'company' => ['nullable', 'string', 'max:191'],
             'phone' => ['nullable', 'string', 'max:50'],
             'vehicle_plate' => ['nullable', 'string', 'max:20'],

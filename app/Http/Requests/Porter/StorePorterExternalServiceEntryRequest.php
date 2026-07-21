@@ -14,8 +14,11 @@ class StorePorterExternalServiceEntryRequest extends FormRequest
 
     protected function prepareForValidation(): void
     {
+        $contactRut = $this->input('contact_rut');
+        $contactRut = is_string($contactRut) ? trim($contactRut) : null;
+
         $this->merge([
-            'contact_rut' => Rut::normalize($this->input('contact_rut')),
+            'contact_rut' => $contactRut === '' ? null : (Rut::normalize($contactRut) ?: $contactRut),
             'vehicle_plate' => $this->filled('vehicle_plate') ? strtoupper(trim((string) $this->input('vehicle_plate'))) : null,
         ]);
     }
@@ -26,11 +29,7 @@ class StorePorterExternalServiceEntryRequest extends FormRequest
             'service_type' => ['required', 'string', 'max:191'],
             'company_name' => ['nullable', 'string', 'max:191'],
             'contact_name' => ['required', 'string', 'max:191'],
-            'contact_rut' => ['nullable', 'string', 'max:20', function ($attribute, $value, $fail) {
-                if ($value !== null && $value !== '' && !Rut::isValid($value)) {
-                    $fail('El RUT ingresado no es válido.');
-                }
-            }],
+            'contact_rut' => ['nullable', 'string', 'max:20'],
             'phone' => ['nullable', 'string', 'max:50'],
             'vehicle_plate' => ['nullable', 'string', 'max:20'],
             'responsible_staff_id' => ['nullable', 'integer', 'exists:staff,id'],

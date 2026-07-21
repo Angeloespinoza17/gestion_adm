@@ -12,6 +12,7 @@ use Illuminate\Notifications\Notifiable;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Facades\Storage;
 use Laravel\Sanctum\HasApiTokens;
 
 class User extends Authenticatable
@@ -33,6 +34,7 @@ class User extends Authenticatable
         'name',
         'email',
         'password',
+        'profile_photo_path',
     ];
 
     /**
@@ -42,6 +44,7 @@ class User extends Authenticatable
      */
     protected $hidden = [
         'password',
+        'profile_photo_path',
         'remember_token',
     ];
 
@@ -73,6 +76,24 @@ class User extends Authenticatable
     public function roles(): BelongsToMany
     {
         return $this->belongsToMany(Role::class)->withTimestamps();
+    }
+
+    public function getProfilePhotoUrlAttribute(): ?string
+    {
+        $path = $this->profile_photo_path ?: $this->staff?->profile_photo_path;
+
+        if (!$path) {
+            return null;
+        }
+
+        $url = Storage::disk('public')->url($path);
+        $parts = parse_url((string) $url);
+
+        if (is_array($parts) && isset($parts['path'])) {
+            return $parts['path'] . (isset($parts['query']) ? '?' . $parts['query'] : '');
+        }
+
+        return $url;
     }
 
     public function createdReservations(): HasMany
@@ -196,12 +217,14 @@ class User extends Authenticatable
 
         $roles = $this->relationLoaded('roles')
             ? $this->roles
-            : $this->roles()->with('permissions')->get();
+            : $this->roles()->with(['permissions' => fn ($query) => $query->where('active', true)])->get();
 
         return $roles
             ->pluck('permissions')
             ->flatten()
-            ->filter(fn ($permission) => $permission && $permission->active)
+            ->filter(fn ($permission) => $permission && (
+                ! array_key_exists('active', $permission->getAttributes()) || $permission->active
+            ))
             ->pluck('slug')
             ->unique()
             ->values()

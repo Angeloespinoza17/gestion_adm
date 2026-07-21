@@ -3,11 +3,16 @@
 namespace App\Http\Controllers;
 
 use App\Models\SystemModule;
+use App\Services\Rbac\RoleModuleSyncService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
 class MeController extends Controller
 {
+    public function __construct(private readonly RoleModuleSyncService $roleModuleSyncService)
+    {
+    }
+
     public function modules(Request $request): JsonResponse
     {
         $user = $request->user();
@@ -24,7 +29,7 @@ class MeController extends Controller
                 ->orderBy('sort_order')
                 ->get(['id', 'parent_id', 'name', 'slug', 'frontend_route', 'icon', 'sort_order']);
 
-            return response()->json(['data' => $modules]);
+            return response()->json(['data' => $this->normalizeHomeModule($modules)]);
         }
 
         $directModules = SystemModule::query()
@@ -34,23 +39,10 @@ class MeController extends Controller
             })
             ->get(['id', 'parent_id', 'name', 'slug', 'frontend_route', 'icon', 'sort_order']);
 
-        $moduleIds = $directModules->pluck('id')->all();
-        $parentIds = $directModules->pluck('parent_id')->filter()->unique()->values()->all();
-
-        while (!empty($parentIds)) {
-            $parents = SystemModule::query()
-                ->where('active', true)
-                ->whereIn('id', $parentIds)
-                ->get(['id', 'parent_id', 'name', 'slug', 'frontend_route', 'icon', 'sort_order']);
-
-            foreach ($parents as $parent) {
-                if (!in_array($parent->id, $moduleIds, true)) {
-                    $moduleIds[] = $parent->id;
-                }
-            }
-
-            $parentIds = $parents->pluck('parent_id')->filter()->unique()->values()->all();
-        }
+        $moduleIds = array_values(array_unique(array_merge(
+            $this->roleModuleSyncService->expandModuleIds($directModules->pluck('id')->all(), includeDescendants: false, includeAncestors: true),
+            $this->roleModuleSyncService->moduleIdsForUserPermissions($user),
+        )));
 
         $modules = SystemModule::query()
             ->whereIn('id', $moduleIds)
@@ -59,7 +51,7 @@ class MeController extends Controller
             ->orderBy('sort_order')
             ->get(['id', 'parent_id', 'name', 'slug', 'frontend_route', 'icon', 'sort_order']);
 
-        return response()->json(['data' => $modules]);
+        return response()->json(['data' => $this->normalizeHomeModule($modules)]);
     }
 
     public function permissions(Request $request): JsonResponse
@@ -75,5 +67,17 @@ class MeController extends Controller
                 ? array_values(array_unique(array_merge(['__superadmin__'], $user->permissionSlugs())))
                 : $user->permissionSlugs(),
         ]);
+    }
+
+    private function normalizeHomeModule($modules)
+    {
+        return $modules->map(function (SystemModule $module) {
+            if ($module->slug === 'dashboard') {
+                $module->name = 'Inicio';
+                $module->frontend_route = '/inicio';
+            }
+
+            return $module;
+        });
     }
 }

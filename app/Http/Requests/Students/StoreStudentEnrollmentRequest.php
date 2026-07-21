@@ -29,6 +29,7 @@ class StoreStudentEnrollmentRequest extends FormRequest
             'academic_year_id' => ['required', 'integer', 'exists:academic_years,id'],
             'course_section_id' => ['required', 'integer', 'exists:course_sections,id'],
             'enrollment_status' => ['required', Rule::in(array_column(StudentEnrollment::STATUS_OPTIONS, 'value'))],
+            'registration_number' => ['nullable', 'string', 'max:50'],
             'enrolled_at' => ['nullable', 'date'],
             'withdrawn_at' => ['nullable', 'date', 'after_or_equal:enrolled_at'],
             'observations' => ['nullable', 'string'],

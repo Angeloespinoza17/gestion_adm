@@ -18,7 +18,14 @@ class SaveItEquipmentRequest extends FormRequest
         $equipmentId = $this->route('equipment')?->id;
 
         return [
-            'internal_code' => ['required', 'string', 'max:80', Rule::unique('it_equipment', 'internal_code')->ignore($equipmentId)],
+            'inventory_item_id' => [
+                'nullable',
+                'integer',
+                'exists:inventory_items,id',
+                Rule::unique('it_equipment', 'inventory_item_id')->ignore($equipmentId),
+            ],
+            'create_inventory_item' => ['nullable', 'boolean'],
+            'internal_code' => [Rule::requiredIf(!$this->boolean('create_inventory_item')), 'nullable', 'string', 'max:80', Rule::unique('it_equipment', 'internal_code')->ignore($equipmentId)],
             'equipment_type' => ['required', Rule::in(ItEquipment::TYPE_OPTIONS)],
             'brand' => ['nullable', 'string', 'max:120'],
             'model' => ['nullable', 'string', 'max:160'],

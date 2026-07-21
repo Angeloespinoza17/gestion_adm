@@ -46,7 +46,6 @@ class InformaticaReportService
                 'overdue_loans' => ItEquipmentLoan::query()->overdue()->count(),
                 'closed_maintenance' => ItEquipmentMaintenanceReport::query()->closed()->count(),
                 'pending_maintenance' => ItEquipmentMaintenanceReport::query()->pending()->count(),
-                'maintenance_cost_total' => round((float) $maintenance->sum('cost_amount'), 2),
             ],
             'sections' => [
                 'equipment_by_status' => ItEquipment::query()
@@ -73,13 +72,10 @@ class InformaticaReportService
                     ->values(),
                 'maintenance_by_month' => $maintenance
                     ->groupBy(fn (ItEquipmentMaintenanceReport $report) => optional($report->maintenance_date)->format('Y-m'))
-                    ->map(function ($items, $label) {
-                        return [
-                            'label' => $label ?: 'Sin fecha',
-                            'total' => $items->count(),
-                            'cost' => round((float) $items->sum('cost_amount'), 2),
-                        ];
-                    })
+                    ->map(fn ($items, $label) => [
+                        'label' => $label ?: 'Sin fecha',
+                        'total' => $items->count(),
+                    ])
                     ->values(),
                 'top_maintenance_equipment' => $maintenance
                     ->groupBy(fn (ItEquipmentMaintenanceReport $report) => $report->equipment?->internal_code ?: 'Sin código')

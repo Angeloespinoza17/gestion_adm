@@ -65,6 +65,9 @@ export default {
     };
   },
   computed: {
+    canManage() {
+      return Boolean(this.catalogs.capabilities?.can_manage_inventory);
+    },
     categoryOptions() {
       return normalizeOptions(this.catalogs.supply_categories || []);
     },
@@ -265,7 +268,7 @@ export default {
           title="Ayuda: inventario de insumos"
           text="Aquí se registran y actualizan los insumos del pañol de librería, controlando stock, vencimientos, proveedor, ubicación y estado de disponibilidad."
         />
-        <BButton variant="primary" @click="openCreate">Nuevo insumo</BButton>
+        <BButton v-if="canManage" variant="primary" @click="openCreate"><i class="bx bx-plus me-1"></i>Nuevo insumo</BButton>
       </div>
     </div>
 
@@ -300,6 +303,8 @@ export default {
       <BTable
         v-else
         responsive
+        show-empty
+        empty-text="No hay insumos que coincidan con los filtros."
         :items="items"
         :fields="[
           { key: 'name', label: 'Insumo' },
@@ -331,8 +336,8 @@ export default {
         <template #cell(actions)="{ item }">
           <div class="d-flex flex-wrap gap-2">
             <BButton size="sm" variant="outline-info" @click="openDetail(item)">Ver</BButton>
-            <BButton size="sm" variant="outline-primary" @click="openEdit(item)">Editar</BButton>
-            <BButton size="sm" variant="outline-danger" @click="destroy(item)">Eliminar</BButton>
+            <BButton v-if="canManage" size="sm" variant="outline-primary" @click="openEdit(item)">Editar</BButton>
+            <BButton v-if="canManage" size="sm" variant="outline-danger" @click="destroy(item)">Eliminar</BButton>
           </div>
         </template>
       </BTable>

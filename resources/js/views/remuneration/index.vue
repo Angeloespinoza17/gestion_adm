@@ -4,7 +4,7 @@ import Swal from "sweetalert2";
 import Layout from "../../layouts/main.vue";
 import PageHeader from "../../components/page-header.vue";
 import LoadingState from "../../components/ui/loading-state.vue";
-import RemunerationHelpButton from "../../components/remuneration/help-button.vue";
+import BookAnalyticsPanel from "../../components/remuneration/book-analytics-panel.vue";
 import { formatRemunerationError, money, shortDate } from "../../components/remuneration/module-utils";
 import { getPdfMake } from "../../utils/pdfmake";
 
@@ -17,12 +17,17 @@ const routeMap = {
   "/remuneraciones/conceptos": "concepts",
   "/remuneraciones/movimientos": "movements",
   "/remuneraciones/liquidaciones": "payrolls",
+  "/remuneraciones/importaciones": "imports",
+  "/remuneraciones/libro-importado": "import-rows",
+  "/remuneraciones/estadisticas-libro": "book-analytics",
   "/remuneraciones/pagos": "payments",
   "/remuneraciones/centralizacion": "accounting-exports",
   "/remuneraciones/reportes": "reports",
   "/remuneraciones/licencias-medicas": "medical-leaves",
   "/remuneraciones/cumpleanos": "birthdays",
   "/remuneraciones/permisos": "permissions",
+  "/remuneraciones/departamentos": "departments",
+  "/remuneraciones/funciones": "functions",
   "/remuneraciones/gestion-funcionarios": "staff-management",
   "/remuneraciones/control-documental": "document-controls",
   "/remuneraciones/induccion": "onboarding",
@@ -36,39 +41,15 @@ const routeMap = {
   "/remuneraciones/auditoria": "audit-logs",
 };
 
-const navItems = [
-  { route: "/remuneraciones", key: "dashboard", label: "Dashboard" },
-  { route: "/remuneraciones/trabajadores", key: "profiles", label: "Trabajadores" },
-  { route: "/remuneraciones/contratos", key: "contract-settings", label: "Contratos" },
-  { route: "/remuneraciones/periodos", key: "periods", label: "Períodos" },
-  { route: "/remuneraciones/parametros", key: "parameters", label: "Parámetros" },
-  { route: "/remuneraciones/conceptos", key: "concepts", label: "Conceptos" },
-  { route: "/remuneraciones/movimientos", key: "movements", label: "Movimientos" },
-  { route: "/remuneraciones/liquidaciones", key: "payrolls", label: "Liquidaciones" },
-  { route: "/remuneraciones/pagos", key: "payments", label: "Pagos" },
-  { route: "/remuneraciones/centralizacion", key: "accounting-exports", label: "Centralización" },
-  { route: "/remuneraciones/reportes", key: "reports", label: "Reportes" },
-  { route: "/remuneraciones/licencias-medicas", key: "medical-leaves", label: "Licencias médicas" },
-  { route: "/remuneraciones/cumpleanos", key: "birthdays", label: "Cumpleaños" },
-  { route: "/remuneraciones/permisos", key: "permissions", label: "Permisos" },
-  { route: "/remuneraciones/gestion-funcionarios", key: "staff-management", label: "Funcionarios" },
-  { route: "/remuneraciones/control-documental", key: "document-controls", label: "Documentos" },
-  { route: "/remuneraciones/induccion", key: "onboarding", label: "Inducción" },
-  { route: "/remuneraciones/clima-laboral", key: "climate-surveys", label: "Clima" },
-  { route: "/remuneraciones/planes-clima", key: "climate-action-plans", label: "Planes clima" },
-  { route: "/remuneraciones/dotacion-carga", key: "workload", label: "Dotación" },
-  { route: "/remuneraciones/banco-cv", key: "cv-bank", label: "Banco CV" },
-  { route: "/remuneraciones/reemplazos", key: "replacement-pool", label: "Reemplazos" },
-  { route: "/remuneraciones/perfiles-cargo", key: "job-profiles", label: "Perfiles cargo" },
-  { route: "/remuneraciones/certificados", key: "labor-certificates", label: "Certificados" },
-  { route: "/remuneraciones/auditoria", key: "audit-logs", label: "Auditoría" },
-];
-
 const statusBadge = {
   abierto: "success",
   reabierto: "warning",
   cerrado: "dark",
   calculada: "info",
+  imported: "success",
+  importing: "info",
+  replaced: "secondary",
+  preview: "warning",
   observada: "warning",
   aprobada: "primary",
   pagada: "success",
@@ -114,6 +95,62 @@ const statusBadge = {
   medio: "warning",
   alto: "danger",
   critico: "dark",
+};
+
+const statusLabels = {
+  abierto: "Abierto",
+  reabierto: "Reabierto",
+  cerrado: "Cerrado",
+  calculada: "Calculada",
+  imported: "Importado",
+  importing: "Importando",
+  replaced: "Reemplazado",
+  preview: "Vista previa",
+  observada: "Observada",
+  aprobada: "Aprobada",
+  pagada: "Pagada",
+  anulada: "Anulada",
+  aprobado: "Aprobado",
+  ejecutado: "Ejecutado",
+  borrador: "Borrador",
+  generado: "Generado",
+  reversado: "Reversado",
+  ingresada: "Ingresada",
+  enviada: "Enviada",
+  liquidada: "Liquidada",
+  vigente: "Vigente",
+  por_vencer: "Por vencer",
+  vencido: "Vencido",
+  pendiente: "Pendiente",
+  observado: "Observado",
+  archivado: "Archivado",
+  en_proceso: "En proceso",
+  completo: "Completo",
+  abierta: "Abierta",
+  cerrada: "Cerrada",
+  reportada: "Reportada",
+  plan_accion: "Plan de acción",
+  atrasado: "Atrasado",
+  cancelado: "Cancelado",
+  planificada: "Planificada",
+  reemplazo: "Reemplazo",
+  postulante: "Postulante",
+  preseleccionado: "Preseleccionado",
+  entrevistado: "Entrevistado",
+  descartado: "Descartado",
+  contratado: "Contratado",
+  disponible: "Disponible",
+  ocupado: "Ocupado",
+  no_disponible: "No disponible",
+  en_revision: "En revisión",
+  obsoleto: "Obsoleto",
+  solicitado: "Solicitado",
+  emitido: "Emitido",
+  entregado: "Entregado",
+  bajo: "Bajo",
+  medio: "Medio",
+  alto: "Alto",
+  critico: "Crítico",
 };
 
 const fields = {
@@ -237,6 +274,18 @@ const fields = {
     { key: "status", label: "Estado", type: "select", statusKey: "permission_requests" },
     { key: "payroll_status", label: "Estado remuneraciones", type: "select", typeKey: "payroll_statuses" },
     { key: "internal_observations", label: "Observaciones internas", type: "textarea" },
+  ],
+  departments: [
+    { key: "name", label: "Departamento", type: "text", required: true },
+    { key: "description", label: "Descripción", type: "textarea" },
+    { key: "color", label: "Color", type: "text" },
+    { key: "sort_order", label: "Orden", type: "number" },
+    { key: "active", label: "Activo", type: "checkbox", default: true },
+  ],
+  functions: [
+    { key: "name", label: "Función", type: "text", required: true },
+    { key: "description", label: "Descripción", type: "textarea" },
+    { key: "active", label: "Activo", type: "checkbox", default: true },
   ],
   "staff-management": [
     { key: "full_name", label: "Nombre completo", type: "text", required: true },
@@ -498,8 +547,48 @@ const panels = {
       { key: "gross_total", label: "Haberes", format: "currency" },
       { key: "total_deductions", label: "Descuentos", format: "currency" },
       { key: "net_amount", label: "Líquido", format: "currency" },
+      { key: "source", label: "Origen" },
       { key: "status", label: "Estado", format: "badge" },
     ],
+  },
+  imports: {
+    title: "Importador de Libro",
+    help: "Carga mensual de libro externo, conciliación por RUT y trazabilidad de liquidaciones importadas.",
+    kind: "imports",
+    resource: "imports",
+    readOnlyForm: true,
+    columns: [
+      { key: "period.name", label: "Período" },
+      { key: "original_filename", label: "Archivo" },
+      { key: "row_count", label: "Filas" },
+      { key: "gross_total", label: "Haberes", format: "currency" },
+      { key: "net_total", label: "Líquido", format: "currency" },
+      { key: "status", label: "Estado", format: "badge" },
+    ],
+  },
+  "import-rows": {
+    title: "Libro Importado",
+    help: "Consulta directa de todas las filas cargadas desde libros externos, incluyendo RUT sin funcionario asociado.",
+    kind: "resource",
+    resource: "import-rows",
+    readOnlyForm: true,
+    columns: [
+      { key: "import.period.name", label: "Período" },
+      { key: "row_number", label: "Fila" },
+      { key: "rut", label: "RUT libro" },
+      { key: "employee_name", label: "Funcionario libro" },
+      { key: "staff.full_name", label: "Funcionario sistema" },
+      { key: "employee_type", label: "Tipo" },
+      { key: "gross_total", label: "Haberes", format: "currency" },
+      { key: "total_deductions", label: "Descuentos", format: "currency" },
+      { key: "employer_contributions", label: "Aportes", format: "currency" },
+      { key: "net_amount", label: "Líquido", format: "currency" },
+    ],
+  },
+  "book-analytics": {
+    title: "Datos y Estadísticas",
+    help: "Indicadores, tendencias, composición, alertas y detalle derivados de libros de remuneraciones importados.",
+    kind: "book-analytics",
   },
   payments: {
     title: "Pagos",
@@ -575,6 +664,33 @@ const panels = {
       { key: "reason", label: "Motivo" },
       { key: "payroll_status", label: "Remuneraciones", format: "badge" },
       { key: "status", label: "Estado", format: "badge" },
+    ],
+  },
+  departments: {
+    title: "Departamentos",
+    help: "Catálogo de departamentos institucionales usado para dotación, carga horaria y procesos de RR.HH.",
+    kind: "resource",
+    resource: "departments",
+    fields: fields.departments,
+    columns: [
+      { key: "name", label: "Departamento" },
+      { key: "slug", label: "Slug" },
+      { key: "description", label: "Descripción" },
+      { key: "sort_order", label: "Orden" },
+      { key: "active", label: "Activo", format: "boolean" },
+    ],
+  },
+  functions: {
+    title: "Funciones",
+    help: "Catálogo de funciones/cargos institucionales para clasificar funcionarios y perfiles.",
+    kind: "resource",
+    resource: "functions",
+    fields: fields.functions,
+    columns: [
+      { key: "name", label: "Función" },
+      { key: "slug", label: "Slug" },
+      { key: "description", label: "Descripción" },
+      { key: "active", label: "Activo", format: "boolean" },
     ],
   },
   "staff-management": {
@@ -753,10 +869,9 @@ const panels = {
 };
 
 export default {
-  components: { Layout, PageHeader, LoadingState, RemunerationHelpButton },
+  components: { Layout, PageHeader, LoadingState, BookAnalyticsPanel },
   data() {
     return {
-      navItems,
       catalogs: { statuses: {}, types: {}, data: {}, permissions: [] },
       dashboard: null,
       resources: {},
@@ -768,6 +883,16 @@ export default {
       pdfModalVisible: false,
       pdfMode: "complete",
       pdfExporting: false,
+      importFile: null,
+      importReplace: false,
+      importPreview: null,
+      importLoading: false,
+      importCommitting: false,
+      importBookModalVisible: false,
+      importBookLoading: false,
+      importBookPdfExporting: false,
+      selectedImport: null,
+      importBookRows: [],
       editingId: null,
       form: {},
       calculationForm: {
@@ -802,6 +927,29 @@ export default {
     canMutateActive() {
       return this.activePanel.kind === "resource" && !this.activePanel.readOnlyForm;
     },
+    importBookSortedRows() {
+      return [...this.importBookRows].sort((left, right) => Number(left.row_number || 0) - Number(right.row_number || 0));
+    },
+    importBookEarningsColumns() {
+      return this.collectImportBookColumns("raw_earnings_columns");
+    },
+    importBookDeductionsColumns() {
+      return this.collectImportBookColumns("raw_deductions_columns");
+    },
+    dashboardTrendSeries() {
+      const rows = this.dashboard?.analytics?.trend || [];
+      return [
+        { name: "Haberes", data: rows.map((item) => Number(item.gross_total || 0)) },
+        { name: "Líquido", data: rows.map((item) => Number(item.net_total || 0)) },
+        { name: "Descuentos", data: rows.map((item) => Number(item.total_deductions || 0)) },
+      ];
+    },
+    dashboardTypeSeries() {
+      return (this.dashboard?.analytics?.by_type || []).map((item) => Number(item.count || 0));
+    },
+    dashboardTypeLabels() {
+      return (this.dashboard?.analytics?.by_type || []).map((item) => item.type || "Sin tipo");
+    },
   },
   watch: {
     "$route.path"() {
@@ -815,6 +963,36 @@ export default {
   methods: {
     money,
     shortDate,
+    compactMoney(value) {
+      return new Intl.NumberFormat("es-CL", { notation: "compact", maximumFractionDigits: 1 }).format(Number(value || 0));
+    },
+    dashboardTrendOptions() {
+      return {
+        chart: { toolbar: { show: false }, zoom: { enabled: false }, fontFamily: "inherit" },
+        colors: ["#556ee6", "#34c38f", "#f1b44c"],
+        stroke: { curve: "smooth", width: 3 },
+        dataLabels: { enabled: false },
+        grid: { borderColor: "#edf1f7", strokeDashArray: 4 },
+        xaxis: {
+          categories: (this.dashboard?.analytics?.trend || []).map((item) => item.period),
+          axisBorder: { show: false }, axisTicks: { show: false },
+        },
+        yaxis: { labels: { formatter: (value) => this.compactMoney(value) } },
+        tooltip: { y: { formatter: (value) => money(value) } },
+        legend: { position: "top", horizontalAlign: "right" },
+      };
+    },
+    dashboardTypeOptions() {
+      return {
+        chart: { fontFamily: "inherit" },
+        labels: this.dashboardTypeLabels,
+        colors: ["#556ee6", "#34c38f", "#50a5f1", "#f1b44c", "#f46a6a", "#74788d"],
+        legend: { position: "bottom", fontSize: "12px" },
+        dataLabels: { enabled: true, formatter: (value) => `${Math.round(value)}%` },
+        plotOptions: { pie: { donut: { size: "68%", labels: { show: true, total: { show: true, label: "Dotación" } } } } },
+        stroke: { width: 3, colors: ["#fff"] },
+      };
+    },
     async loadInitial() {
       await this.loadCatalogs();
       await this.loadActive();
@@ -830,7 +1008,7 @@ export default {
         if (this.activePanel.kind === "dashboard" || this.activePanel.kind === "reports") {
           await this.loadDashboard();
         }
-        if (this.activePanel.kind === "resource") {
+        if (this.activePanel.kind === "resource" || this.activePanel.kind === "imports") {
           await this.loadResource(this.activePanel.resource);
         }
         if (!this.resources.payrolls) {
@@ -886,6 +1064,10 @@ export default {
       this.editingId = null;
       this.form = {};
       (this.activePanel.fields || []).forEach((field) => {
+        if (Object.prototype.hasOwnProperty.call(field, "default")) {
+          this.form[field.key] = field.default;
+          return;
+        }
         this.form[field.key] = field.type === "checkbox" ? false : field.type === "json" ? "[]" : "";
       });
       this.modalVisible = true;
@@ -1031,6 +1213,249 @@ export default {
     },
     async exportReport() {
       window.location.href = "/api/remuneraciones/export";
+    },
+    handleImportFile(event) {
+      this.importFile = event.target.files?.[0] || null;
+      this.importPreview = null;
+    },
+    importFormData() {
+      const formData = new FormData();
+      formData.append("file", this.importFile);
+      formData.append("replace", this.importReplace ? "1" : "0");
+      return formData;
+    },
+    async previewImport() {
+      if (!this.importFile) {
+        Swal.fire("Falta archivo", "Seleccione un libro XLSX.", "warning");
+        return;
+      }
+      this.importLoading = true;
+      try {
+        const response = await axios.post("/api/remuneraciones/imports/preview", this.importFormData(), {
+          headers: { "Content-Type": "multipart/form-data" },
+        });
+        this.importPreview = response.data;
+      } catch (error) {
+        Swal.fire("Error", formatRemunerationError(error), "error");
+      } finally {
+        this.importLoading = false;
+      }
+    },
+    async commitImport() {
+      if (!this.importFile || !this.importPreview) return;
+      if (this.importPreview.summary?.error_count > 0) {
+        Swal.fire("Validación pendiente", "Corrija los errores detectados antes de importar.", "warning");
+        return;
+      }
+
+      const result = await Swal.fire({
+        title: "Importar libro",
+        text: "Se crearán liquidaciones importadas para el período detectado.",
+        icon: "question",
+        showCancelButton: true,
+        confirmButtonText: "Importar",
+        cancelButtonText: "Cancelar",
+      });
+      if (!result.isConfirmed) return;
+
+      this.importCommitting = true;
+      try {
+        await axios.post("/api/remuneraciones/imports", this.importFormData(), {
+          headers: { "Content-Type": "multipart/form-data" },
+        });
+        this.importPreview = null;
+        this.importFile = null;
+        await this.loadCatalogs();
+        await this.loadActive();
+        Swal.fire("Importado", "Libro de remuneraciones importado correctamente.", "success");
+      } catch (error) {
+        Swal.fire("Error", formatRemunerationError(error), "error");
+      } finally {
+        this.importCommitting = false;
+      }
+    },
+    async openImportBookModal(item) {
+      this.selectedImport = item;
+      this.importBookRows = [];
+      this.importBookModalVisible = true;
+      this.importBookLoading = true;
+      try {
+        const response = await axios.get("/api/remuneraciones/resources/import-rows", {
+          params: {
+            book_import_id: item.id,
+            all: true,
+          },
+        });
+        this.importBookRows = response.data.data || [];
+      } catch (error) {
+        Swal.fire("Error", formatRemunerationError(error, "No fue posible cargar el libro importado."), "error");
+      } finally {
+        this.importBookLoading = false;
+      }
+    },
+    collectImportBookColumns(field) {
+      const columns = new Map();
+      this.importBookSortedRows.forEach((row) => {
+        (row[field] || []).forEach((column) => {
+          const key = Number(column.column);
+          if (!columns.has(key)) {
+            columns.set(key, column);
+          }
+        });
+      });
+      return Array.from(columns.values()).sort((left, right) => Number(left.column || 0) - Number(right.column || 0));
+    },
+    importBookColumnLabel(column) {
+      return column.header_display || column.header || column.letter || column.column;
+    },
+    importBookRawCell(row, field, column) {
+      return (row[field] || []).find((cell) => Number(cell.column) === Number(column.column))?.value ?? null;
+    },
+    importBookCellValue(value) {
+      if (value === null || value === undefined || value === "") return "";
+      if (typeof value === "number") return new Intl.NumberFormat("es-CL", { maximumFractionDigits: 2 }).format(value);
+      return String(value);
+    },
+    importBookPdfIdentityColumns(field, sourceColumns) {
+      const identityColumns = sourceColumns.filter((column) => Number(column.column) <= 6);
+      const rutIndex = identityColumns.findIndex((column) => this.importBookColumnLabel(column).toLowerCase() === "rut");
+      const printableIdentityColumns = rutIndex >= 0 ? identityColumns.slice(rutIndex) : identityColumns;
+
+      return printableIdentityColumns.map((column) => ({ section: "Identificación", field, column }));
+    },
+    importBookPdfSectionColumns(section, field, sourceColumns) {
+      const identityColumns = this.importBookPdfIdentityColumns(field, sourceColumns);
+      const dataColumns = sourceColumns
+        .filter((column) => Number(column.column) > 6)
+        .map((column) => ({ section, field, column }));
+
+      return [...identityColumns, ...dataColumns];
+    },
+    importBookPdfSections() {
+      return [
+        {
+          title: "Haberes",
+          columns: this.importBookPdfSectionColumns("Haberes", "raw_earnings_columns", this.importBookEarningsColumns),
+        },
+        {
+          title: "Descuentos",
+          columns: this.importBookPdfSectionColumns("Descuentos", "raw_deductions_columns", this.importBookDeductionsColumns),
+        },
+      ].filter((section) => section.columns.length);
+    },
+    importBookPdfColumns() {
+      return this.importBookPdfSections().flatMap((section) => section.columns);
+    },
+    importBookPdfGroupHeader(columns) {
+      const header = [];
+      let index = 0;
+      while (index < columns.length) {
+        const section = columns[index].section;
+        const span = columns.slice(index).findIndex((column) => column.section !== section);
+        const colSpan = span === -1 ? columns.length - index : span;
+        header.push({ text: section, style: "bookSectionHeader", colSpan });
+        for (let offset = 1; offset < colSpan; offset++) header.push({});
+        index += colSpan;
+      }
+      return header;
+    },
+    importBookPdfWidth(columnDefinition) {
+      const header = this.importBookColumnLabel(columnDefinition.column).toLowerCase();
+      if (header === "rut") return 50;
+      if (header.includes("empleado")) return 78;
+      if (header.includes("tipo funcionario")) return 62;
+      if (["nº", "no", "dt"].includes(header)) return 24;
+      if (header.includes("carga horaria")) return 34;
+      return 32;
+    },
+    importBookPdfUnifiedTable(columns) {
+      return {
+        margin: [0, 8, 0, 10],
+        table: {
+          headerRows: 2,
+          widths: columns.map((column) => this.importBookPdfWidth(column)),
+          body: [
+            this.importBookPdfGroupHeader(columns),
+            columns.map((column) => ({
+              text: this.importBookColumnLabel(column.column),
+              style: "bookHeader",
+            })),
+            ...this.importBookSortedRows.map((row) =>
+              columns.map((column) => ({
+                text: this.importBookCellValue(this.importBookRawCell(row, column.field, column.column)),
+                style: "bookCell",
+              }))
+            ),
+          ],
+        },
+        layout: {
+          hLineColor: () => "#d9dee8",
+          vLineColor: () => "#d9dee8",
+          paddingLeft: () => 1.5,
+          paddingRight: () => 1.5,
+          paddingTop: () => 1,
+          paddingBottom: () => 1,
+        },
+      };
+    },
+    exportImportBookPdf() {
+      if (!this.importBookSortedRows.length) {
+        Swal.fire("Sin datos", "No hay filas importadas para exportar.", "warning");
+        return;
+      }
+      if (!this.importBookPdfColumns().length) {
+        Swal.fire("Sin columnas", "Esta importación no tiene columnas de haberes o descuentos guardadas.", "warning");
+        return;
+      }
+
+      this.importBookPdfExporting = true;
+      try {
+        const pdfMake = getPdfMake();
+        const fileBase = (this.selectedImport?.original_filename || `libro_${this.selectedImport?.id || ""}`)
+          .replace(/\.[^.]+$/, "")
+          .replace(/[^a-z0-9_-]+/gi, "_");
+        const content = [
+          { text: "Libro de remuneraciones importado", style: "title" },
+          {
+            text: `${this.selectedImport?.period?.name || this.selectedImport?.book_period || "-"} · ${this.selectedImport?.original_filename || "-"}`,
+            style: "subtitle",
+          },
+        ];
+        const sections = this.importBookPdfSections();
+        sections.forEach((section, index) => {
+          if (index > 0) content.push({ text: "", pageBreak: "before" });
+          content.push(
+            { text: `Hoja ${index + 1}: ${section.title}`, style: "blockTitle" },
+            this.importBookPdfUnifiedTable(section.columns)
+          );
+        });
+
+        pdfMake.createPdf({
+          pageSize: "A2",
+          pageOrientation: "landscape",
+          pageMargins: [14, 18, 14, 18],
+          content,
+          defaultStyle: { fontSize: 4.6 },
+          styles: {
+            title: { fontSize: 11, bold: true },
+            subtitle: { fontSize: 6, color: "#6c757d", margin: [0, 2, 0, 8] },
+            blockTitle: { fontSize: 6, bold: true, color: "#495057", margin: [0, 4, 0, 2] },
+            bookSectionHeader: { bold: true, alignment: "center", fillColor: "#dfe7f3", fontSize: 5.3 },
+            bookHeader: { bold: true, fillColor: "#f8fafc", fontSize: 4.5 },
+            bookCell: { fontSize: 4.3 },
+          },
+          footer: (currentPage, pageCount) => ({
+            text: `Página ${currentPage} de ${pageCount}`,
+            alignment: "center",
+            fontSize: 5,
+            color: "#6c757d",
+          }),
+        }).download(`libro_remuneraciones_${fileBase}.pdf`);
+      } catch (error) {
+        Swal.fire("Error", "No fue posible generar el PDF del libro importado.", "error");
+      } finally {
+        this.importBookPdfExporting = false;
+      }
     },
     openPayrollPdfModal(mode = "complete") {
       this.pdfMode = mode;
@@ -1271,6 +1696,12 @@ export default {
     badgeVariant(value) {
       return statusBadge[value] || "secondary";
     },
+    statusLabel(value) {
+      if (!value) return "-";
+      if (statusLabels[value]) return statusLabels[value];
+      const text = String(value).replace(/_/g, " ");
+      return text.charAt(0).toUpperCase() + text.slice(1);
+    },
   },
 };
 </script>
@@ -1280,21 +1711,6 @@ export default {
     <PageHeader :title="pageTitle" page-title="Remuneraciones" />
 
     <div class="d-flex flex-column gap-3 remuneration-shell">
-      <div class="d-flex flex-wrap justify-content-between align-items-center gap-2">
-        <div class="d-flex flex-wrap gap-2">
-          <router-link
-            v-for="item in navItems"
-            :key="item.key"
-            :to="item.route"
-            class="btn btn-sm"
-            :class="activeKey === item.key ? 'btn-primary' : 'btn-outline-secondary'"
-          >
-            {{ item.label }}
-          </router-link>
-        </div>
-        <RemunerationHelpButton :title="`Ayuda: ${activePanel.title}`" :text="activePanel.help" />
-      </div>
-
       <BAlert v-if="error" show variant="danger">{{ error }}</BAlert>
 
       <BCard v-if="isLoading" class="border-0 shadow-sm">
@@ -1302,35 +1718,47 @@ export default {
       </BCard>
 
       <template v-else>
+        <section class="remuneration-heading">
+          <div>
+            <div class="remuneration-eyebrow"><i class="bx bx-wallet"></i> Gestión de personas</div>
+            <h2>{{ pageTitle }}</h2>
+            <p>{{ activePanel.help }}</p>
+          </div>
+          <div class="remuneration-heading-status">
+            <span class="status-dot"></span>
+            Información actualizada
+          </div>
+        </section>
+
         <div v-if="activePanel.kind === 'dashboard' || activePanel.kind === 'reports'" class="d-flex flex-column gap-3">
           <div class="row g-3">
             <div class="col-md-3">
-              <BCard class="metric-card border-0 shadow-sm">
-                <span>Liquidaciones</span>
-                <strong>{{ dashboard?.metrics?.payrolls || 0 }}</strong>
+              <BCard class="metric-card metric-card--primary border-0">
+                <div class="metric-icon"><i class="bx bx-receipt"></i></div>
+                <div><span>Liquidaciones</span><strong>{{ dashboard?.metrics?.payrolls || 0 }}</strong></div>
               </BCard>
             </div>
             <div class="col-md-3">
-              <BCard class="metric-card border-0 shadow-sm">
-                <span>Haberes</span>
-                <strong>{{ money(dashboard?.metrics?.gross_total) }}</strong>
+              <BCard class="metric-card metric-card--info border-0">
+                <div class="metric-icon"><i class="bx bx-trending-up"></i></div>
+                <div><span>Total haberes</span><strong>{{ money(dashboard?.metrics?.gross_total) }}</strong></div>
               </BCard>
             </div>
             <div class="col-md-3">
-              <BCard class="metric-card border-0 shadow-sm">
-                <span>Líquido</span>
-                <strong>{{ money(dashboard?.metrics?.net_total) }}</strong>
+              <BCard class="metric-card metric-card--success border-0">
+                <div class="metric-icon"><i class="bx bx-money"></i></div>
+                <div><span>Líquido a pago</span><strong>{{ money(dashboard?.metrics?.net_total) }}</strong></div>
               </BCard>
             </div>
             <div class="col-md-3">
-              <BCard class="metric-card border-0 shadow-sm">
-                <span>Costo total</span>
-                <strong>{{ money(dashboard?.metrics?.total_cost) }}</strong>
+              <BCard class="metric-card metric-card--warning border-0">
+                <div class="metric-icon"><i class="bx bx-building-house"></i></div>
+                <div><span>Costo empleador</span><strong>{{ money(dashboard?.metrics?.total_cost) }}</strong></div>
               </BCard>
             </div>
           </div>
 
-          <BCard class="border-0 shadow-sm">
+          <BCard class="border-0 shadow-sm remuneration-card">
             <div class="d-flex justify-content-between align-items-center mb-3">
               <h5 class="mb-0">Últimas liquidaciones</h5>
               <BButton v-if="activePanel.kind === 'reports'" size="sm" variant="outline-primary" @click="exportReport">
@@ -1354,7 +1782,7 @@ export default {
                     <td>{{ item.staff?.full_name }}</td>
                     <td>{{ item.period?.name }}</td>
                     <td>{{ money(item.net_amount) }}</td>
-                    <td><span class="badge" :class="`bg-${badgeVariant(item.status)}`">{{ item.status }}</span></td>
+                    <td><span class="badge" :class="`bg-${badgeVariant(item.status)}`">{{ statusLabel(item.status) }}</span></td>
                   </tr>
                   <tr v-if="!dashboard?.recent?.length">
                     <td colspan="5" class="text-center text-muted py-4">Sin liquidaciones registradas.</td>
@@ -1363,13 +1791,260 @@ export default {
               </table>
             </div>
           </BCard>
+
+          <div class="row g-3">
+            <div class="col-xl-7">
+              <BCard class="border-0 shadow-sm h-100 remuneration-card">
+                <div class="card-heading"><div><span>Evolución</span><h5>Tendencia mensual</h5></div><i class="bx bx-line-chart"></i></div>
+                <apexchart v-if="dashboard?.analytics?.trend?.length" type="area" height="310" :options="dashboardTrendOptions()" :series="dashboardTrendSeries" />
+                <div v-else class="empty-state"><i class="bx bx-bar-chart-alt-2"></i><strong>Sin datos históricos</strong><span>Los gráficos aparecerán al procesar liquidaciones.</span></div>
+              </BCard>
+            </div>
+            <div class="col-xl-5">
+              <BCard class="border-0 shadow-sm h-100 remuneration-card">
+                <div class="card-heading"><div><span>Composición</span><h5>Dotación por tipo</h5></div><i class="bx bx-group"></i></div>
+                <apexchart v-if="dashboardTypeSeries.length" type="donut" height="310" :options="dashboardTypeOptions()" :series="dashboardTypeSeries" />
+                <div v-else class="empty-state"><i class="bx bx-group"></i><strong>Sin dotación disponible</strong></div>
+              </BCard>
+            </div>
+          </div>
+
+          <div class="row g-3">
+            <div class="col-xl-6">
+              <BCard class="border-0 shadow-sm h-100">
+                <h5 class="mb-3">Conceptos principales</h5>
+                <div class="table-responsive">
+                  <table class="table table-sm align-middle">
+                    <thead>
+                      <tr>
+                        <th>Código</th>
+                        <th>Concepto</th>
+                        <th>Tipo</th>
+                        <th>Monto</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr v-for="item in dashboard?.analytics?.top_concepts || []" :key="`${item.line_type}-${item.code}`">
+                        <td>{{ item.code }}</td>
+                        <td>{{ item.name }}</td>
+                        <td><span class="badge bg-secondary">{{ item.line_type }}</span></td>
+                        <td>{{ money(item.amount) }}</td>
+                      </tr>
+                      <tr v-if="!dashboard?.analytics?.top_concepts?.length">
+                        <td colspan="4" class="text-center text-muted py-4">Sin conceptos.</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </BCard>
+            </div>
+            <div class="col-xl-6">
+              <BCard class="border-0 shadow-sm h-100">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                  <h5 class="mb-0">Variación líquida</h5>
+                  <span v-if="dashboard?.analytics?.period_movement?.previous_period" class="text-muted small">
+                    vs {{ dashboard.analytics.period_movement.previous_period.name }}
+                  </span>
+                </div>
+                <div class="d-flex gap-3 mb-3">
+                  <div><span class="text-muted d-block small">Altas</span><strong>{{ dashboard?.analytics?.period_movement?.new_count || 0 }}</strong></div>
+                  <div><span class="text-muted d-block small">Bajas</span><strong>{{ dashboard?.analytics?.period_movement?.missing_count || 0 }}</strong></div>
+                </div>
+                <div class="table-responsive">
+                  <table class="table table-sm align-middle">
+                    <thead>
+                      <tr>
+                        <th>Funcionario</th>
+                        <th>Anterior</th>
+                        <th>Actual</th>
+                        <th>Delta</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr v-for="item in dashboard?.analytics?.period_movement?.largest_net_changes || []" :key="item.staff_id">
+                        <td>{{ item.staff }}</td>
+                        <td>{{ money(item.previous_net) }}</td>
+                        <td>{{ money(item.current_net) }}</td>
+                        <td>{{ money(item.delta_net) }}</td>
+                      </tr>
+                      <tr v-if="!dashboard?.analytics?.period_movement?.largest_net_changes?.length">
+                        <td colspan="4" class="text-center text-muted py-4">Sin variaciones comparables.</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </BCard>
+            </div>
+          </div>
         </div>
 
-        <BCard v-if="activePanel.kind === 'resource'" class="border-0 shadow-sm">
-          <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+        <BookAnalyticsPanel v-if="activePanel.kind === 'book-analytics'" />
+
+        <div v-if="activePanel.kind === 'imports'" class="d-flex flex-column gap-3 import-view">
+          <BCard class="border-0 shadow-sm import-uploader-card">
+            <div class="d-flex flex-wrap justify-content-between align-items-start gap-3 mb-3">
+              <div>
+                <h5 class="mb-1">Nuevo libro</h5>
+                <div class="text-muted small">{{ importFile?.name || "Sin archivo seleccionado" }}</div>
+              </div>
+              <div class="d-flex flex-wrap align-items-center gap-3">
+                <div class="form-check form-switch mb-0">
+                  <input v-model="importReplace" class="form-check-input" type="checkbox" />
+                  <label class="form-check-label">Reemplazar</label>
+                </div>
+                <div class="d-flex gap-2">
+                  <BButton variant="outline-primary" :disabled="!importFile || importLoading" @click="previewImport">
+                    <i class="bx bx-search me-1"></i> {{ importLoading ? "Revisando..." : "Vista previa" }}
+                  </BButton>
+                  <BButton variant="primary" :disabled="!importPreview || importPreview.summary?.error_count > 0 || importCommitting" @click="commitImport">
+                    <i class="bx bx-upload me-1"></i> {{ importCommitting ? "Importando..." : "Importar" }}
+                  </BButton>
+                </div>
+              </div>
+            </div>
+            <div class="row g-3 align-items-end">
+              <div class="col-xl-7 col-lg-8">
+                <label class="form-label">Libro XLSX</label>
+                <input class="form-control" type="file" accept=".xlsx" @change="handleImportFile" />
+              </div>
+            </div>
+          </BCard>
+
+          <BCard v-if="importPreview" class="border-0 shadow-sm">
+            <div class="d-flex flex-wrap justify-content-between gap-3 mb-3">
+              <div>
+                <h5 class="mb-1">{{ importPreview.period?.name }}</h5>
+                <div class="text-muted small">{{ importPreview.file?.name }}</div>
+              </div>
+              <div class="d-flex flex-wrap gap-3">
+                <div><span class="text-muted d-block small">Filas</span><strong>{{ importPreview.summary?.row_count || 0 }}</strong></div>
+                <div><span class="text-muted d-block small">Calzadas</span><strong>{{ importPreview.summary?.matched_count || 0 }}</strong></div>
+                <div><span class="text-muted d-block small">Sin match</span><strong>{{ importPreview.summary?.unmatched_count || 0 }}</strong></div>
+                <div><span class="text-muted d-block small">Errores</span><strong>{{ importPreview.summary?.error_count || 0 }}</strong></div>
+                <div><span class="text-muted d-block small">Alertas</span><strong>{{ importPreview.summary?.warning_count || 0 }}</strong></div>
+                <div><span class="text-muted d-block small">Líquido</span><strong>{{ money(importPreview.summary?.net_total) }}</strong></div>
+              </div>
+            </div>
+
+            <BAlert v-if="importPreview.file?.already_imported" show variant="warning">
+              Este archivo ya fue importado para el período detectado.
+            </BAlert>
+
+            <div v-if="importPreview.errors?.length" class="table-responsive mb-3">
+              <table class="table table-sm table-danger align-middle">
+                <thead>
+                  <tr>
+                    <th>Fila</th>
+                    <th>RUT</th>
+                    <th>Error</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="(error, index) in importPreview.errors" :key="index">
+                    <td>{{ error.row_number }}</td>
+                    <td>{{ error.rut }}</td>
+                    <td>{{ error.message }}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <div v-if="importPreview.warnings?.length" class="table-responsive mb-3">
+              <table class="table table-sm table-warning align-middle">
+                <thead>
+                  <tr>
+                    <th>Fila</th>
+                    <th>RUT</th>
+                    <th>Alerta</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="(warning, index) in importPreview.warnings" :key="index">
+                    <td>{{ warning.row_number }}</td>
+                    <td>{{ warning.rut }}</td>
+                    <td>{{ warning.message }}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <div class="table-responsive">
+              <table class="table table-sm align-middle remuneration-table">
+                <thead>
+                  <tr>
+                    <th>Fila</th>
+                    <th>RUT</th>
+                    <th>Funcionario libro</th>
+                    <th>Funcionario sistema</th>
+                    <th>Tipo</th>
+                    <th>Haberes</th>
+                    <th>Descuentos</th>
+                    <th>Líquido</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="row in importPreview.rows || []" :key="`${row.row_number}-${row.rut}`" :class="{ 'table-danger': row.errors?.length, 'table-warning': !row.errors?.length && row.warnings?.length }">
+                    <td>{{ row.row_number }}</td>
+                    <td>{{ row.rut }}</td>
+                    <td>{{ row.employee_name }}</td>
+                    <td>{{ row.matched_staff || "-" }}</td>
+                    <td>{{ row.employee_type }}</td>
+                    <td>{{ money(row.gross_total) }}</td>
+                    <td>{{ money(row.total_deductions) }}</td>
+                    <td>{{ money(row.net_amount) }}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </BCard>
+
+          <BCard class="border-0 shadow-sm import-history-card">
+            <div class="mb-3">
+              <div>
+                <h5 class="mb-1">Historial de importaciones</h5>
+                <div class="text-muted small">{{ activeRows.length }} importaciones registradas</div>
+              </div>
+            </div>
+            <div class="table-responsive">
+              <table class="table table-hover table-sm align-middle remuneration-table">
+                <thead>
+                  <tr>
+                    <th v-for="column in activePanel.columns" :key="column.key">{{ column.label }}</th>
+                    <th class="text-end">Acciones</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="item in activeRows" :key="item.id">
+                    <td v-for="column in activePanel.columns" :key="column.key">
+                      <span v-if="column.format === 'badge'" class="badge" :class="`bg-${badgeVariant(getValue(item, column.key))}`">
+                        {{ statusLabel(getValue(item, column.key)) }}
+                      </span>
+                      <span v-else>{{ formatCell(item, column) }}</span>
+                    </td>
+                    <td class="text-end">
+                      <BButton size="sm" variant="outline-primary" title="Ver libro importado" @click="openImportBookModal(item)">
+                        <i class="bx bx-show"></i>
+                      </BButton>
+                    </td>
+                  </tr>
+                  <tr v-if="activeRows.length === 0">
+                    <td :colspan="activePanel.columns.length + 1" class="text-center text-muted py-4">Sin importaciones registradas.</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </BCard>
+        </div>
+
+        <BCard v-if="activePanel.kind === 'resource'" class="border-0 shadow-sm remuneration-card resource-card">
+          <div class="resource-toolbar">
+            <div>
+              <h5 class="mb-1">Listado de {{ pageTitle.toLowerCase() }}</h5>
+              <span>{{ activeRows.length }} registros encontrados</span>
+            </div>
             <div class="input-group input-group-sm remuneration-search">
               <span class="input-group-text"><i class="bx bx-search"></i></span>
-              <input v-model="search" type="search" class="form-control" placeholder="Buscar" @keyup.enter="loadActive" />
+              <input v-model="search" type="search" class="form-control" :placeholder="`Buscar en ${pageTitle.toLowerCase()}...`" @keyup.enter="loadActive" />
               <BButton variant="outline-secondary" @click="loadActive">Filtrar</BButton>
             </div>
             <div class="d-flex flex-wrap gap-2">
@@ -1400,7 +2075,7 @@ export default {
                 <tr v-for="item in activeRows" :key="item.id">
                   <td v-for="column in activePanel.columns" :key="column.key">
                     <span v-if="column.format === 'badge'" class="badge" :class="`bg-${badgeVariant(getValue(item, column.key))}`">
-                      {{ getValue(item, column.key) || "-" }}
+                      {{ statusLabel(getValue(item, column.key)) }}
                     </span>
                     <span v-else>{{ formatCell(item, column) }}</span>
                   </td>
@@ -1452,7 +2127,91 @@ export default {
       </template>
     </div>
 
-    <BModal v-model="modalVisible" :title="editingId ? 'Editar registro' : 'Nuevo registro'" hide-footer size="lg">
+    <BModal
+      v-model="importBookModalVisible"
+      :title="`Libro importado${selectedImport?.period?.name ? ' · ' + selectedImport.period.name : ''}`"
+      hide-footer
+      size="xl"
+      scrollable
+      modal-class="import-book-modal"
+    >
+      <LoadingState v-if="importBookLoading" message="Cargando libro importado..." />
+
+      <div v-else class="import-book-modal-shell">
+        <div class="import-book-modal-summary">
+          <div class="min-w-0">
+            <div class="text-muted small mb-1">{{ selectedImport?.period?.name || selectedImport?.book_period || "-" }}</div>
+            <h5 class="mb-1 text-truncate">{{ selectedImport?.original_filename || "-" }}</h5>
+            <div class="text-muted small">{{ importBookSortedRows.length }} filas importadas</div>
+          </div>
+          <div class="import-book-stats">
+            <div>
+              <span>Haberes</span>
+              <strong>{{ importBookEarningsColumns.length }}</strong>
+            </div>
+            <div>
+              <span>Descuentos</span>
+              <strong>{{ importBookDeductionsColumns.length }}</strong>
+            </div>
+          </div>
+          <BButton variant="danger" size="sm" :disabled="importBookPdfExporting || importBookSortedRows.length === 0" @click="exportImportBookPdf">
+            <i class="bx bxs-file-pdf me-1"></i> {{ importBookPdfExporting ? "Generando..." : "PDF por hojas" }}
+          </BButton>
+        </div>
+
+        <BTabs pills nav-class="import-book-tabs" content-class="pt-3">
+          <BTab title="Haberes" active>
+            <div class="import-book-table-wrap">
+              <table class="table table-bordered table-sm align-middle import-book-table">
+                <thead>
+                  <tr>
+                    <th v-for="column in importBookEarningsColumns" :key="`earning-${column.column}`">
+                      {{ importBookColumnLabel(column) }}
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="row in importBookSortedRows" :key="`earnings-row-${row.id}`">
+                    <td v-for="column in importBookEarningsColumns" :key="`earnings-${row.id}-${column.column}`">
+                      {{ importBookCellValue(importBookRawCell(row, "raw_earnings_columns", column)) }}
+                    </td>
+                  </tr>
+                  <tr v-if="importBookSortedRows.length === 0 || importBookEarningsColumns.length === 0">
+                    <td :colspan="Math.max(importBookEarningsColumns.length, 1)" class="text-center text-muted py-4">Sin haberes importados.</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </BTab>
+
+          <BTab title="Descuentos">
+            <div class="import-book-table-wrap">
+              <table class="table table-bordered table-sm align-middle import-book-table">
+                <thead>
+                  <tr>
+                    <th v-for="column in importBookDeductionsColumns" :key="`deduction-${column.column}`">
+                      {{ importBookColumnLabel(column) }}
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="row in importBookSortedRows" :key="`deductions-row-${row.id}`">
+                    <td v-for="column in importBookDeductionsColumns" :key="`deductions-${row.id}-${column.column}`">
+                      {{ importBookCellValue(importBookRawCell(row, "raw_deductions_columns", column)) }}
+                    </td>
+                  </tr>
+                  <tr v-if="importBookSortedRows.length === 0 || importBookDeductionsColumns.length === 0">
+                    <td :colspan="Math.max(importBookDeductionsColumns.length, 1)" class="text-center text-muted py-4">Sin descuentos importados.</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </BTab>
+        </BTabs>
+      </div>
+    </BModal>
+
+    <BModal v-model="modalVisible" :title="`${editingId ? 'Editar' : 'Nuevo'} · ${pageTitle}`" hide-footer size="lg" modal-class="remuneration-form-modal">
       <form class="row g-3" @submit.prevent="saveRecord">
         <div v-for="field in activePanel.fields || []" :key="field.key" class="col-md-6" :class="{ 'col-md-12': ['textarea', 'json'].includes(field.type) }">
           <label class="form-label">{{ field.label }}</label>
@@ -1475,7 +2234,7 @@ export default {
       </form>
     </BModal>
 
-    <BModal v-model="calculationModalVisible" title="Calcular liquidación" hide-footer>
+    <BModal v-model="calculationModalVisible" title="Calcular liquidación" hide-footer modal-class="remuneration-form-modal">
       <form class="row g-3" @submit.prevent="calculatePayroll">
         <div class="col-12">
           <label class="form-label">Período</label>
@@ -1508,7 +2267,7 @@ export default {
       </form>
     </BModal>
 
-    <BModal v-model="pdfModalVisible" :title="pdfMode === 'staff' ? 'PDF liquidaciones por trabajador' : 'PDF completo de liquidaciones'" hide-footer>
+    <BModal v-model="pdfModalVisible" :title="pdfMode === 'staff' ? 'PDF liquidaciones por trabajador' : 'PDF completo de liquidaciones'" hide-footer modal-class="remuneration-form-modal">
       <form class="row g-3" @submit.prevent="exportPayrollPdfFromModal">
         <div v-if="pdfMode === 'staff'" class="col-12">
           <label class="form-label">Funcionario</label>
@@ -1564,11 +2323,73 @@ export default {
 <style scoped>
 .remuneration-shell {
   min-height: 520px;
+  --rem-primary: #556ee6;
+  --rem-border: #e6eaf2;
+  --rem-text: #293042;
+  --rem-muted: #74788d;
 }
 
 .remuneration-search {
   max-width: 460px;
 }
+
+.remuneration-heading {
+  align-items: center;
+  background: linear-gradient(125deg, #ffffff 0%, #f4f6ff 100%);
+  border: 1px solid var(--rem-border);
+  border-radius: 14px;
+  display: flex;
+  justify-content: space-between;
+  overflow: hidden;
+  padding: 1.25rem 1.4rem;
+  position: relative;
+}
+
+.remuneration-heading::after {
+  background: rgba(85, 110, 230, 0.07);
+  border-radius: 50%;
+  content: "";
+  height: 150px;
+  position: absolute;
+  right: -45px;
+  top: -75px;
+  width: 150px;
+}
+
+.remuneration-eyebrow {
+  align-items: center;
+  color: var(--rem-primary);
+  display: flex;
+  font-size: 0.7rem;
+  font-weight: 800;
+  gap: 0.35rem;
+  letter-spacing: 0.08em;
+  margin-bottom: 0.35rem;
+  text-transform: uppercase;
+}
+
+.remuneration-heading h2 { color: var(--rem-text); font-size: 1.35rem; margin: 0 0 0.25rem; }
+.remuneration-heading p { color: var(--rem-muted); margin: 0; }
+.remuneration-heading-status { align-items: center; color: var(--rem-muted); display: flex; font-size: 0.78rem; gap: 0.45rem; padding-right: 1.25rem; white-space: nowrap; }
+.status-dot { background: #34c38f; border: 3px solid rgba(52, 195, 143, 0.18); border-radius: 50%; height: 10px; width: 10px; }
+
+:deep(.remuneration-card),
+:deep(.metric-card) { border-radius: 14px; }
+
+:deep(.metric-card .card-body) {
+  align-items: center;
+  display: flex;
+  gap: 0.9rem;
+  min-height: 104px;
+  padding: 1rem;
+}
+
+.metric-card { box-shadow: 0 5px 18px rgba(42, 48, 66, 0.07); }
+.metric-card .metric-icon { align-items: center; border-radius: 12px; display: flex; flex: 0 0 44px; font-size: 1.35rem; height: 44px; justify-content: center; }
+.metric-card--primary .metric-icon { background: rgba(85,110,230,.12); color: #556ee6; }
+.metric-card--info .metric-icon { background: rgba(80,165,241,.12); color: #50a5f1; }
+.metric-card--success .metric-icon { background: rgba(52,195,143,.12); color: #34c38f; }
+.metric-card--warning .metric-icon { background: rgba(241,180,76,.14); color: #d99520; }
 
 .metric-card span {
   display: block;
@@ -1578,12 +2399,244 @@ export default {
 
 .metric-card strong {
   display: block;
-  font-size: 1.25rem;
+  color: var(--rem-text);
+  font-size: 1.18rem;
   line-height: 1.4;
 }
+
+.card-heading { align-items: center; display: flex; justify-content: space-between; margin-bottom: 0.75rem; }
+.card-heading span { color: var(--rem-muted); font-size: .68rem; font-weight: 800; letter-spacing: .07em; text-transform: uppercase; }
+.card-heading h5 { margin: .15rem 0 0; }
+.card-heading > i { align-items: center; background: #f2f4ff; border-radius: 10px; color: var(--rem-primary); display: flex; font-size: 1.25rem; height: 38px; justify-content: center; width: 38px; }
+.empty-state { align-items: center; color: var(--rem-muted); display: flex; flex-direction: column; justify-content: center; min-height: 280px; text-align: center; }
+.empty-state i { color: #c8cfdd; font-size: 3rem; margin-bottom: .65rem; }
+.empty-state strong { color: var(--rem-text); }
+.empty-state span { font-size: .8rem; margin-top: .25rem; }
+
+.resource-toolbar { align-items: center; display: grid; gap: 1rem; grid-template-columns: minmax(180px, 1fr) minmax(260px, 460px) auto; margin-bottom: 1rem; }
+.resource-toolbar > div:first-child > span { color: var(--rem-muted); font-size: .78rem; }
+.remuneration-search .input-group-text { background: #f7f8fb; border-color: var(--rem-border); color: var(--rem-muted); }
+.remuneration-search .form-control { border-color: var(--rem-border); }
 
 .remuneration-table th,
 .remuneration-table td {
   white-space: nowrap;
+}
+
+.remuneration-table { border-collapse: separate; border-spacing: 0; margin: 0; }
+.remuneration-table thead th { background: #f7f8fb; border-bottom: 1px solid var(--rem-border); color: #62697a; font-size: .69rem; font-weight: 800; letter-spacing: .035em; padding: .8rem .75rem; text-transform: uppercase; }
+.remuneration-table tbody td { border-color: #eef1f6; color: #3d4352; padding: .78rem .75rem; }
+.remuneration-table tbody tr { transition: background-color .15s ease; }
+.remuneration-table tbody tr:hover td { background: #f8f9ff; }
+.remuneration-table .badge { border-radius: 999px; font-size: .68rem; font-weight: 700; padding: .38rem .62rem; }
+.remuneration-table .btn-group { background: #fff; border-radius: 8px; box-shadow: 0 2px 8px rgba(42,48,66,.06); }
+
+:deep(.remuneration-form-modal .modal-content) { border: 0; border-radius: 16px; box-shadow: 0 18px 55px rgba(31,38,56,.2); overflow: hidden; }
+:deep(.remuneration-form-modal .modal-header) { background: linear-gradient(120deg, #556ee6, #6f7fe8); border: 0; color: #fff; padding: 1.15rem 1.3rem; }
+:deep(.remuneration-form-modal .modal-title) { color: #fff; font-size: 1.05rem; }
+:deep(.remuneration-form-modal .btn-close) { filter: brightness(0) invert(1); opacity: .8; }
+:deep(.remuneration-form-modal .modal-body) { background: #fbfcfe; padding: 1.3rem; }
+:deep(.remuneration-form-modal .form-label) { color: #5b6272; font-size: .72rem; font-weight: 750; margin-bottom: .35rem; }
+:deep(.remuneration-form-modal .form-control), :deep(.remuneration-form-modal .form-select) { border-color: #dfe4ed; border-radius: 8px; min-height: 40px; }
+:deep(.remuneration-form-modal .form-control:focus), :deep(.remuneration-form-modal .form-select:focus) { border-color: #8091ed; box-shadow: 0 0 0 3px rgba(85,110,230,.12); }
+
+.import-view .form-label {
+  color: #5f6678;
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.import-uploader-card,
+.import-history-card {
+  border-radius: 10px;
+}
+
+.import-history-card .remuneration-table th {
+  color: #6b7280;
+  font-size: 0.72rem;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.import-history-card .remuneration-table td {
+  padding-top: 0.85rem;
+  padding-bottom: 0.85rem;
+}
+
+.import-history-card .btn {
+  align-items: center;
+  display: inline-flex;
+  height: 34px;
+  justify-content: center;
+  width: 34px;
+}
+
+:deep(.import-book-modal .modal-xl) {
+  max-width: min(1680px, calc(100vw - 56px));
+}
+
+:deep(.import-book-modal .modal-body) {
+  padding: 1.25rem;
+}
+
+.import-book-modal-shell {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.import-book-modal-summary {
+  align-items: center;
+  background: #f8fafc;
+  border: 1px solid #e9edf3;
+  border-radius: 8px;
+  display: flex;
+  gap: 1rem;
+  justify-content: space-between;
+  padding: 1rem;
+}
+
+.import-book-stats {
+  display: flex;
+  gap: 0.65rem;
+  margin-left: auto;
+}
+
+.import-book-stats div {
+  background: #ffffff;
+  border: 1px solid #e9edf3;
+  border-radius: 8px;
+  min-width: 104px;
+  padding: 0.55rem 0.75rem;
+}
+
+.import-book-stats span {
+  color: #6c757d;
+  display: block;
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.import-book-stats strong {
+  color: #343a40;
+  display: block;
+  font-size: 1rem;
+  line-height: 1.25;
+}
+
+:deep(.import-book-tabs) {
+  border-bottom: 1px solid #e9edf3;
+  gap: 0.35rem;
+  padding-bottom: 0.75rem;
+}
+
+:deep(.import-book-tabs .nav-link) {
+  border-radius: 999px;
+  color: #5f6678;
+  font-weight: 700;
+  padding: 0.45rem 0.95rem;
+}
+
+:deep(.import-book-tabs .nav-link.active) {
+  background: #556ee6;
+  color: #ffffff;
+}
+
+.import-book-table-wrap {
+  background: #ffffff;
+  max-height: calc(100vh - 350px);
+  min-height: 420px;
+  overflow: auto;
+  border: 1px solid #e9edf3;
+  border-radius: 8px;
+}
+
+.import-book-table {
+  border-color: #edf1f7;
+  margin-bottom: 0;
+  font-size: 0.76rem;
+}
+
+.import-book-table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  min-width: 92px;
+  background: #f5f7fb;
+  color: #5f6678;
+  font-size: 0.68rem;
+  font-weight: 800;
+  line-height: 1.15;
+  padding: 0.55rem 0.65rem;
+  white-space: normal;
+  vertical-align: middle;
+}
+
+.import-book-table td {
+  background: #ffffff;
+  border-color: #edf1f7;
+  padding: 0.5rem 0.65rem;
+  white-space: nowrap;
+}
+
+.import-book-table tbody tr:nth-child(even) td {
+  background: #fbfcfe;
+}
+
+.import-book-table th:first-child,
+.import-book-table td:first-child {
+  left: 0;
+  min-width: 56px;
+  position: sticky;
+  width: 56px;
+  z-index: 2;
+}
+
+.import-book-table th:nth-child(2),
+.import-book-table td:nth-child(2) {
+  box-shadow: 1px 0 0 #e9edf3;
+  left: 56px;
+  min-width: 118px;
+  position: sticky;
+  z-index: 2;
+}
+
+.import-book-table thead th:first-child,
+.import-book-table thead th:nth-child(2) {
+  background: #f5f7fb;
+  z-index: 4;
+}
+
+.import-book-table tbody td:first-child,
+.import-book-table tbody td:nth-child(2) {
+  background: #ffffff;
+}
+
+.import-book-table tbody tr:nth-child(even) td:first-child,
+.import-book-table tbody tr:nth-child(even) td:nth-child(2) {
+  background: #fbfcfe;
+}
+
+@media (max-width: 767.98px) {
+  .remuneration-heading { align-items: flex-start; flex-direction: column; gap: .75rem; }
+  .remuneration-heading-status { padding: 0; }
+  .resource-toolbar { grid-template-columns: 1fr; }
+  .remuneration-search { max-width: none; }
+
+  .import-book-modal-summary {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .import-book-stats {
+    margin-left: 0;
+    width: 100%;
+  }
+
+  .import-book-stats div {
+    flex: 1;
+  }
 }
 </style>

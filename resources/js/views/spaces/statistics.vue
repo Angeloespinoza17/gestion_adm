@@ -3,6 +3,7 @@ import axios from "axios";
 import Layout from "../../layouts/main.vue";
 import Multiselect from "@vueform/multiselect";
 import { getPdfMake } from "../../utils/pdfmake";
+import "./shared.css";
 
 const defaultRange = () => {
   const current = new Date();
@@ -113,21 +114,29 @@ export default {
           title: "Reservas en rango",
           value: this.formatInteger(this.stats.summary.total_reservations),
           help: "Incluye todas las reservas que tocan el período filtrado.",
+          icon: "bx-calendar",
+          tone: "blue",
         },
         {
           title: "Horas de uso",
           value: this.formatHours(this.stats.summary.total_usage_hours),
           help: "Solo considera reservas aprobadas o finalizadas.",
+          icon: "bx-time-five",
+          tone: "green",
         },
         {
           title: "Espacios activos",
           value: this.formatInteger(this.stats.summary.active_spaces),
           help: "Cantidad de dependencias utilizadas en el período.",
+          icon: "bx-buildings",
+          tone: "amber",
         },
         {
           title: "Solicitantes activos",
           value: this.formatInteger(this.stats.summary.active_requesters),
           help: "Personas que generaron uso efectivo de espacios.",
+          icon: "bx-group",
+          tone: "slate",
         },
       ];
     },
@@ -496,307 +505,363 @@ export default {
 
 <template>
   <Layout>
-    <div class="d-sm-flex justify-content-between align-items-center mb-4">
-      <div class="mb-3 mb-sm-0">
-        <h4 class="mb-1">Estadísticas de espacios</h4>
-        <div class="text-muted">Uso de dependencias por período, solicitante y tipología de espacio.</div>
-      </div>
-      <div class="d-flex gap-2">
-        <router-link to="/spaces/calendar" class="btn btn-outline-secondary">Calendario</router-link>
-        <BButton v-if="canExport" variant="outline-danger" :disabled="exporting || loading" @click="exportPdf">
-          Exportar PDF
-        </BButton>
-      </div>
-    </div>
-
-    <BAlert v-if="error" variant="danger" show class="mb-3">
-      {{ error }}
-    </BAlert>
-
-    <BCard class="stats-filter-card mb-4">
-      <div class="row g-3 align-items-end">
-        <div class="col-md-2">
-          <label class="form-label">Unidad de tiempo</label>
-          <Multiselect v-model="filters.granularity" :options="granularityOptions" :searchable="false" />
-          <div class="text-muted small mt-2">Puedes filtrar por primer semestre, segundo semestre o año completo.</div>
+    <div class="spaces-shell">
+      <section class="spaces-hero">
+        <div class="spaces-hero__body">
+          <div class="spaces-eyebrow">Dependencias y reservas</div>
+          <h4>Estadísticas de espacios</h4>
+          <p>Uso de dependencias por período, solicitante y tipología de espacio.</p>
         </div>
-        <div class="col-md-2">
-          <label class="form-label">Desde</label>
-          <BFormInput v-model="filters.date_from" type="date" />
+        <div class="spaces-actions">
+          <router-link to="/spaces/calendar" class="btn btn-outline-secondary">
+            <i class="bx bx-calendar-event"></i>
+            <span>Calendario</span>
+          </router-link>
+          <BButton v-if="canExport" variant="outline-danger" :disabled="exporting || loading" @click="exportPdf">
+            <i class="bx bx-file"></i>
+            <span>Exportar PDF</span>
+          </BButton>
         </div>
-        <div class="col-md-2">
-          <label class="form-label">Hasta</label>
-          <BFormInput v-model="filters.date_to" type="date" />
+      </section>
+
+      <BAlert v-if="error" variant="danger" show class="mb-0">
+        {{ error }}
+      </BAlert>
+
+      <section class="spaces-panel">
+        <div class="spaces-panel-header">
+          <div>
+            <div class="spaces-eyebrow">Filtros</div>
+            <h5 class="spaces-panel-title">Segmentar estadísticas</h5>
+          </div>
         </div>
-        <div class="col-md-2">
-          <label class="form-label">Dependencia</label>
-          <Multiselect v-model="filters.dependency_id" :options="dependencyOptions" :searchable="true" />
+        <div class="spaces-filter-grid spaces-filter-grid--wide">
+          <label class="spaces-field">
+            <span>Unidad de tiempo</span>
+            <Multiselect v-model="filters.granularity" :options="granularityOptions" :searchable="false" />
+          </label>
+          <label class="spaces-field">
+            <span>Desde</span>
+            <BFormInput v-model="filters.date_from" type="date" />
+          </label>
+          <label class="spaces-field">
+            <span>Hasta</span>
+            <BFormInput v-model="filters.date_to" type="date" />
+          </label>
+          <label class="spaces-field">
+            <span>Dependencia</span>
+            <Multiselect v-model="filters.dependency_id" :options="dependencyOptions" :searchable="true" />
+          </label>
+          <label class="spaces-field">
+            <span>Tipo</span>
+            <Multiselect v-model="filters.dependency_type_id" :options="typeOptions" :searchable="true" />
+          </label>
+          <label class="spaces-field">
+            <span>Solicitante</span>
+            <Multiselect v-model="filters.staff_id" :options="staffOptions" :searchable="true" />
+          </label>
+          <div class="spaces-filter-actions">
+            <BButton variant="primary" :disabled="loading" @click="applyFilters">
+              <i class="bx bx-refresh"></i>
+              <span>Actualizar</span>
+            </BButton>
+            <BButton variant="outline-secondary" :disabled="loading" @click="resetFilters">
+              <i class="bx bx-x"></i>
+              <span>Limpiar</span>
+            </BButton>
+          </div>
         </div>
-        <div class="col-md-2">
-          <label class="form-label">Tipo</label>
-          <Multiselect v-model="filters.dependency_type_id" :options="typeOptions" :searchable="true" />
+      </section>
+
+      <div class="spaces-summary-grid">
+        <div
+          v-for="card in summaryCards"
+          :key="card.title"
+          class="spaces-summary-card"
+          :class="`spaces-summary-card--${card.tone}`"
+        >
+          <div class="spaces-summary-icon">
+            <i :class="`bx ${card.icon}`"></i>
+          </div>
+          <div>
+            <span>{{ card.title }}</span>
+            <strong>{{ card.value }}</strong>
+            <small>{{ card.help }}</small>
+          </div>
         </div>
-        <div class="col-md-2">
-          <label class="form-label">Solicitante</label>
-          <Multiselect v-model="filters.staff_id" :options="staffOptions" :searchable="true" />
+      </div>
+
+      <div class="row g-3">
+        <div class="col-xl-8">
+          <section class="spaces-panel spaces-chart-panel">
+            <div class="spaces-panel-header">
+              <div>
+                <div class="spaces-eyebrow">Tendencia</div>
+                <h5 class="spaces-panel-title">Uso por período</h5>
+                <p class="spaces-panel-subtitle">Comportamiento del uso aprobado/finalizado en el rango seleccionado.</p>
+              </div>
+              <div class="spaces-panel-meta">{{ exportRangeLabel }}</div>
+            </div>
+            <div v-if="loading" class="spaces-empty-state">Cargando estadísticas...</div>
+            <div v-else-if="(stats.time_series || []).length === 0" class="spaces-empty-state">
+              <i class="bx bx-bar-chart-alt-2"></i>
+              <strong>Sin datos para el rango</strong>
+              <span>Ajusta las fechas o filtros aplicados.</span>
+            </div>
+            <apexchart
+              v-else
+              type="line"
+              height="320"
+              :series="usageChartSeries"
+              :options="usageChartOptions"
+            />
+          </section>
         </div>
-        <div class="col-12 d-flex gap-2">
-          <BButton variant="primary" :disabled="loading" @click="applyFilters">Actualizar</BButton>
-          <BButton variant="outline-secondary" :disabled="loading" @click="resetFilters">Limpiar</BButton>
+
+        <div class="col-xl-4">
+          <section class="spaces-panel spaces-chart-panel">
+            <div class="spaces-panel-header">
+              <div>
+                <div class="spaces-eyebrow">Estados</div>
+                <h5 class="spaces-panel-title">Resumen operativo</h5>
+              </div>
+            </div>
+            <div class="stats-kpi-list">
+              <div class="stats-kpi-item">
+                <span>Pendientes</span>
+                <strong>{{ formatInteger(stats.summary.pending_count) }}</strong>
+              </div>
+              <div class="stats-kpi-item">
+                <span>Aprobadas</span>
+                <strong>{{ formatInteger(stats.summary.approved_count) }}</strong>
+              </div>
+              <div class="stats-kpi-item">
+                <span>Finalizadas</span>
+                <strong>{{ formatInteger(stats.summary.finished_count) }}</strong>
+              </div>
+              <div class="stats-kpi-item">
+                <span>Rechazadas</span>
+                <strong>{{ formatInteger(stats.summary.rejected_count) }}</strong>
+              </div>
+              <div class="stats-kpi-item">
+                <span>Canceladas</span>
+                <strong>{{ formatInteger(stats.summary.cancelled_count) }}</strong>
+              </div>
+              <div class="stats-kpi-item">
+                <span>Duración promedio</span>
+                <strong>{{ formatHours(stats.summary.average_duration_hours) }}</strong>
+              </div>
+            </div>
+            <div class="border-top mt-4 pt-4">
+              <h6 class="mb-3">Distribución por estado</h6>
+              <div v-if="(stats.by_status || []).some((item) => item.count > 0)">
+                <apexchart type="donut" height="260" :series="statusChartSeries" :options="statusChartOptions" />
+              </div>
+              <div v-else class="spaces-muted">Sin estados para mostrar.</div>
+            </div>
+          </section>
         </div>
       </div>
-    </BCard>
 
-    <div class="row g-3 mb-4">
-      <div v-for="card in summaryCards" :key="card.title" class="col-md-6 col-xl-3">
-        <BCard class="stats-summary-card h-100">
-          <div class="text-muted small text-uppercase fw-semibold mb-2">{{ card.title }}</div>
-          <div class="stats-summary-value mb-2">{{ card.value }}</div>
-          <div class="text-muted small mb-0">{{ card.help }}</div>
-        </BCard>
-      </div>
-    </div>
+      <div class="row g-3">
+        <div class="col-xl-4">
+          <section class="spaces-panel">
+            <div class="spaces-panel-header">
+              <div>
+                <div class="spaces-eyebrow">Top 8</div>
+                <h5 class="spaces-panel-title">Dependencias más usadas</h5>
+              </div>
+            </div>
+            <div class="spaces-table-wrap">
+              <table class="table spaces-data-table spaces-data-table--compact">
+                <thead>
+                  <tr>
+                    <th>Dependencia</th>
+                    <th class="text-end">Horas</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="item in (stats.by_dependency || []).slice(0, 8)" :key="`dependency-${item.label}`">
+                    <td>
+                      <div class="spaces-table-title">{{ item.label }}</div>
+                      <span class="spaces-table-subtitle">{{ item.secondary_label || "Sin tipo" }}</span>
+                    </td>
+                    <td class="text-end">
+                      <div class="spaces-table-title">{{ formatHours(item.hours_used) }}</div>
+                      <span class="spaces-table-subtitle">{{ formatInteger(item.reservations_count) }} reservas</span>
+                    </td>
+                  </tr>
+                  <tr v-if="(stats.by_dependency || []).length === 0">
+                    <td colspan="2">
+                      <div class="spaces-empty-state">Sin uso registrado.</div>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+        </div>
 
-    <div class="row g-4 mb-4">
-      <div class="col-xl-8">
-        <BCard class="h-100">
-          <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-3">
-            <div>
-              <h5 class="mb-1">Uso por período</h5>
-              <div class="text-muted small">Comportamiento del uso aprobado/finalizado en el rango seleccionado.</div>
+        <div class="col-xl-4">
+          <section class="spaces-panel">
+            <div class="spaces-panel-header">
+              <div>
+                <div class="spaces-eyebrow">Top 8</div>
+                <h5 class="spaces-panel-title">Tipos de espacios</h5>
+              </div>
             </div>
-            <div class="text-muted small">{{ exportRangeLabel }}</div>
-          </div>
-          <div v-if="loading" class="text-muted py-5 text-center">Cargando estadísticas...</div>
-          <div v-else-if="(stats.time_series || []).length === 0" class="text-muted py-5 text-center">
-            No hay datos para el rango seleccionado.
-          </div>
-          <apexchart
-            v-else
-            type="line"
-            height="320"
-            :series="usageChartSeries"
-            :options="usageChartOptions"
-          />
-        </BCard>
-      </div>
+            <div class="spaces-table-wrap">
+              <table class="table spaces-data-table spaces-data-table--compact">
+                <thead>
+                  <tr>
+                    <th>Tipo</th>
+                    <th class="text-end">% uso</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="item in (stats.by_dependency_type || []).slice(0, 8)" :key="`type-${item.label}`">
+                    <td>
+                      <div class="spaces-table-title">{{ item.label }}</div>
+                      <span class="spaces-table-subtitle">{{ formatInteger(item.reservations_count) }} reservas</span>
+                    </td>
+                    <td class="text-end">
+                      <div class="spaces-table-title">{{ formatNumber(item.share_percent) }}%</div>
+                      <span class="spaces-table-subtitle">{{ formatHours(item.hours_used) }}</span>
+                    </td>
+                  </tr>
+                  <tr v-if="(stats.by_dependency_type || []).length === 0">
+                    <td colspan="2">
+                      <div class="spaces-empty-state">Sin uso registrado.</div>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+        </div>
 
-      <div class="col-xl-4">
-        <BCard class="h-100">
-          <h5 class="mb-3">Resumen operativo</h5>
-          <div class="stats-kpi-list">
-            <div class="stats-kpi-item">
-              <span>Pendientes</span>
-              <strong>{{ formatInteger(stats.summary.pending_count) }}</strong>
+        <div class="col-xl-4">
+          <section class="spaces-panel">
+            <div class="spaces-panel-header">
+              <div>
+                <div class="spaces-eyebrow">Top 8</div>
+                <h5 class="spaces-panel-title">Solicitantes</h5>
+              </div>
             </div>
-            <div class="stats-kpi-item">
-              <span>Aprobadas</span>
-              <strong>{{ formatInteger(stats.summary.approved_count) }}</strong>
+            <div class="spaces-table-wrap">
+              <table class="table spaces-data-table spaces-data-table--compact">
+                <thead>
+                  <tr>
+                    <th>Solicitante</th>
+                    <th class="text-end">Horas</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="item in (stats.by_requester || []).slice(0, 8)" :key="`requester-${item.label}`">
+                    <td>
+                      <div class="spaces-table-title">{{ item.label }}</div>
+                      <span class="spaces-table-subtitle">{{ item.secondary_label || "Sin tipo" }}</span>
+                    </td>
+                    <td class="text-end">
+                      <div class="spaces-table-title">{{ formatHours(item.hours_used) }}</div>
+                      <span class="spaces-table-subtitle">{{ formatInteger(item.reservations_count) }} reservas</span>
+                    </td>
+                  </tr>
+                  <tr v-if="(stats.by_requester || []).length === 0">
+                    <td colspan="2">
+                      <div class="spaces-empty-state">Sin uso registrado.</div>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
             </div>
-            <div class="stats-kpi-item">
-              <span>Finalizadas</span>
-              <strong>{{ formatInteger(stats.summary.finished_count) }}</strong>
-            </div>
-            <div class="stats-kpi-item">
-              <span>Rechazadas</span>
-              <strong>{{ formatInteger(stats.summary.rejected_count) }}</strong>
-            </div>
-            <div class="stats-kpi-item">
-              <span>Canceladas</span>
-              <strong>{{ formatInteger(stats.summary.cancelled_count) }}</strong>
-            </div>
-            <div class="stats-kpi-item">
-              <span>Duración promedio</span>
-              <strong>{{ formatHours(stats.summary.average_duration_hours) }}</strong>
-            </div>
-          </div>
-          <div class="border-top mt-4 pt-4">
-            <h6 class="mb-3">Distribución por estado</h6>
-            <div v-if="(stats.by_status || []).some((item) => item.count > 0)">
-              <apexchart type="donut" height="280" :series="statusChartSeries" :options="statusChartOptions" />
-            </div>
-            <div v-else class="text-muted small">Sin estados para mostrar.</div>
-          </div>
-        </BCard>
-      </div>
-    </div>
-
-    <div class="row g-4 mb-4">
-      <div class="col-xl-4">
-        <BCard class="h-100">
-          <div class="d-flex justify-content-between align-items-center mb-3">
-            <h5 class="mb-0">Dependencias más usadas</h5>
-            <span class="text-muted small">Top 8</span>
-          </div>
-          <div class="table-responsive">
-            <table class="table table-borderless align-middle mb-0">
-              <thead class="table-light">
-                <tr>
-                  <th>Dependencia</th>
-                  <th class="text-end">Horas</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr v-for="item in (stats.by_dependency || []).slice(0, 8)" :key="`dependency-${item.label}`">
-                  <td>
-                    <div class="fw-semibold">{{ item.label }}</div>
-                    <div class="text-muted small">{{ item.secondary_label || "Sin tipo" }}</div>
-                  </td>
-                  <td class="text-end">
-                    <div class="fw-semibold">{{ formatHours(item.hours_used) }}</div>
-                    <div class="text-muted small">{{ formatInteger(item.reservations_count) }} reservas</div>
-                  </td>
-                </tr>
-                <tr v-if="(stats.by_dependency || []).length === 0">
-                  <td colspan="2" class="text-center text-muted py-4">Sin uso registrado.</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </BCard>
-      </div>
-
-      <div class="col-xl-4">
-        <BCard class="h-100">
-          <div class="d-flex justify-content-between align-items-center mb-3">
-            <h5 class="mb-0">Tipos de espacios</h5>
-            <span class="text-muted small">Top 8</span>
-          </div>
-          <div class="table-responsive">
-            <table class="table table-borderless align-middle mb-0">
-              <thead class="table-light">
-                <tr>
-                  <th>Tipo</th>
-                  <th class="text-end">% uso</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr v-for="item in (stats.by_dependency_type || []).slice(0, 8)" :key="`type-${item.label}`">
-                  <td>
-                    <div class="fw-semibold">{{ item.label }}</div>
-                    <div class="text-muted small">{{ formatInteger(item.reservations_count) }} reservas</div>
-                  </td>
-                  <td class="text-end">
-                    <div class="fw-semibold">{{ formatNumber(item.share_percent) }}%</div>
-                    <div class="text-muted small">{{ formatHours(item.hours_used) }}</div>
-                  </td>
-                </tr>
-                <tr v-if="(stats.by_dependency_type || []).length === 0">
-                  <td colspan="2" class="text-center text-muted py-4">Sin uso registrado.</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </BCard>
+          </section>
+        </div>
       </div>
 
-      <div class="col-xl-4">
-        <BCard class="h-100">
-          <div class="d-flex justify-content-between align-items-center mb-3">
-            <h5 class="mb-0">Solicitantes</h5>
-            <span class="text-muted small">Top 8</span>
-          </div>
-          <div class="table-responsive">
-            <table class="table table-borderless align-middle mb-0">
-              <thead class="table-light">
-                <tr>
-                  <th>Solicitante</th>
-                  <th class="text-end">Horas</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr v-for="item in (stats.by_requester || []).slice(0, 8)" :key="`requester-${item.label}`">
-                  <td>
-                    <div class="fw-semibold">{{ item.label }}</div>
-                    <div class="text-muted small">{{ item.secondary_label || "Sin tipo" }}</div>
-                  </td>
-                  <td class="text-end">
-                    <div class="fw-semibold">{{ formatHours(item.hours_used) }}</div>
-                    <div class="text-muted small">{{ formatInteger(item.reservations_count) }} reservas</div>
-                  </td>
-                </tr>
-                <tr v-if="(stats.by_requester || []).length === 0">
-                  <td colspan="2" class="text-center text-muted py-4">Sin uso registrado.</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </BCard>
-      </div>
-    </div>
+      <div class="row g-3">
+        <div class="col-xl-6">
+          <section class="spaces-panel h-100">
+            <div class="spaces-panel-header">
+              <div>
+                <div class="spaces-eyebrow">Detalle</div>
+                <h5 class="spaces-panel-title">Dependencia filtrada</h5>
+              </div>
+            </div>
+            <div v-if="stats.selected_dependency" class="stats-detail-grid">
+              <div class="stats-detail-row">
+                <span>Dependencia</span>
+                <strong>{{ stats.selected_dependency.name || "-" }}</strong>
+              </div>
+              <div class="stats-detail-row">
+                <span>Tipo</span>
+                <strong>{{ stats.selected_dependency.type_name || "-" }}</strong>
+              </div>
+              <div class="stats-detail-row">
+                <span>Capacidad máxima</span>
+                <strong>{{ formatInteger(stats.selected_dependency.capacity_max || 0) }}</strong>
+              </div>
+              <div class="stats-detail-row">
+                <span>Reservas en rango</span>
+                <strong>{{ formatInteger(stats.selected_dependency.total_reservations || 0) }}</strong>
+              </div>
+              <div class="stats-detail-row">
+                <span>Horas utilizadas</span>
+                <strong>{{ formatHours(stats.selected_dependency.hours_used || 0) }}</strong>
+              </div>
+              <div class="stats-detail-row">
+                <span>Duración promedio</span>
+                <strong>{{ formatHours(stats.selected_dependency.average_duration_hours || 0) }}</strong>
+              </div>
+              <div class="stats-detail-row">
+                <span>Principal solicitante</span>
+                <strong>{{ stats.selected_dependency.top_requester?.name || "-" }}</strong>
+              </div>
+            </div>
+            <div v-else class="spaces-muted">
+              Selecciona una dependencia para revisar su comportamiento específico dentro del período.
+            </div>
+          </section>
+        </div>
 
-    <div class="row g-4">
-      <div class="col-xl-6">
-        <BCard class="h-100">
-          <h5 class="mb-3">Detalle de dependencia</h5>
-          <div v-if="stats.selected_dependency" class="stats-detail-grid">
-            <div class="stats-detail-row">
-              <span>Dependencia</span>
-              <strong>{{ stats.selected_dependency.name || "-" }}</strong>
+        <div class="col-xl-6">
+          <section class="spaces-panel h-100">
+            <div class="spaces-panel-header">
+              <div>
+                <div class="spaces-eyebrow">Lectura</div>
+                <h5 class="spaces-panel-title">Resumen rápido</h5>
+              </div>
             </div>
-            <div class="stats-detail-row">
-              <span>Tipo</span>
-              <strong>{{ stats.selected_dependency.type_name || "-" }}</strong>
-            </div>
-            <div class="stats-detail-row">
-              <span>Capacidad máxima</span>
-              <strong>{{ formatInteger(stats.selected_dependency.capacity_max || 0) }}</strong>
-            </div>
-            <div class="stats-detail-row">
-              <span>Reservas en rango</span>
-              <strong>{{ formatInteger(stats.selected_dependency.total_reservations || 0) }}</strong>
-            </div>
-            <div class="stats-detail-row">
-              <span>Horas utilizadas</span>
-              <strong>{{ formatHours(stats.selected_dependency.hours_used || 0) }}</strong>
-            </div>
-            <div class="stats-detail-row">
-              <span>Duración promedio</span>
-              <strong>{{ formatHours(stats.selected_dependency.average_duration_hours || 0) }}</strong>
-            </div>
-            <div class="stats-detail-row">
-              <span>Principal solicitante</span>
-              <strong>{{ stats.selected_dependency.top_requester?.name || "-" }}</strong>
-            </div>
-          </div>
-          <div v-else class="text-muted">
-            Selecciona una dependencia para revisar su comportamiento específico dentro del período.
-          </div>
-        </BCard>
-      </div>
-
-      <div class="col-xl-6">
-        <BCard class="h-100">
-          <h5 class="mb-3">Lectura rápida</h5>
-          <ul class="stats-insights mb-0">
-            <li>
-              <strong>{{ formatInteger(stats.summary.active_spaces) }}</strong>
-              espacios muestran uso efectivo en el rango filtrado.
-            </li>
-            <li>
-              Se registran
-              <strong>{{ formatHours(stats.summary.total_usage_hours) }}</strong>
-              de uso aprobado/finalizado.
-            </li>
-            <li>
-              La duración promedio por reserva efectiva es de
-              <strong>{{ formatHours(stats.summary.average_duration_hours) }}</strong>.
-            </li>
-            <li v-if="(stats.by_dependency || [])[0]">
-              La dependencia más utilizada es
-              <strong>{{ stats.by_dependency[0].label }}</strong>
-              con
-              <strong>{{ formatHours(stats.by_dependency[0].hours_used) }}</strong>.
-            </li>
-            <li v-if="(stats.by_requester || [])[0]">
-              El principal solicitante es
-              <strong>{{ stats.by_requester[0].label }}</strong>
-              con
-              <strong>{{ formatInteger(stats.by_requester[0].reservations_count) }}</strong>
-              reservas.
-            </li>
-          </ul>
-        </BCard>
+            <ul class="stats-insights mb-0">
+              <li>
+                <strong>{{ formatInteger(stats.summary.active_spaces) }}</strong>
+                espacios muestran uso efectivo en el rango filtrado.
+              </li>
+              <li>
+                Se registran
+                <strong>{{ formatHours(stats.summary.total_usage_hours) }}</strong>
+                de uso aprobado/finalizado.
+              </li>
+              <li>
+                La duración promedio por reserva efectiva es de
+                <strong>{{ formatHours(stats.summary.average_duration_hours) }}</strong>.
+              </li>
+              <li v-if="(stats.by_dependency || [])[0]">
+                La dependencia más utilizada es
+                <strong>{{ stats.by_dependency[0].label }}</strong>
+                con
+                <strong>{{ formatHours(stats.by_dependency[0].hours_used) }}</strong>.
+              </li>
+              <li v-if="(stats.by_requester || [])[0]">
+                El principal solicitante es
+                <strong>{{ stats.by_requester[0].label }}</strong>
+                con
+                <strong>{{ formatInteger(stats.by_requester[0].reservations_count) }}</strong>
+                reservas.
+              </li>
+            </ul>
+          </section>
+        </div>
       </div>
     </div>
   </Layout>

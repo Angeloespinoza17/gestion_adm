@@ -26,6 +26,7 @@ class PorterDailyLogEntryController extends Controller
         $search = trim((string) $request->query('search'));
         $category = trim((string) $request->query('category'));
         $priority = trim((string) $request->query('priority'));
+        $status = trim((string) $request->query('status'));
 
         $query = PorterDailyLogEntry::query()
             ->with(['registeredBy:id,name'])
@@ -38,6 +39,7 @@ class PorterDailyLogEntryController extends Controller
             })
             ->when($category !== '', fn (Builder $query) => $query->where('category', $category))
             ->when($priority !== '', fn (Builder $query) => $query->where('priority', $priority))
+            ->when($status !== '', fn (Builder $query) => $query->where('status', $status))
             ->when($request->query('date_from'), fn (Builder $query, $value) => $query->whereDate('logged_on', '>=', $value))
             ->when($request->query('date_to'), fn (Builder $query, $value) => $query->whereDate('logged_on', '<=', $value));
 

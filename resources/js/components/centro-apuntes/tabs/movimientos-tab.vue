@@ -56,6 +56,9 @@ export default {
     };
   },
   computed: {
+    canCreate() {
+      return Boolean(this.catalogs.capabilities?.can_register_stock_movements);
+    },
     supplyOptions() {
       return normalizeOptions((this.catalogs.supplies || []).map((item) => ({
         value: item.id,
@@ -150,7 +153,7 @@ export default {
           title="Ayuda: movimientos de stock"
           text="Aquí se registran ingresos, salidas, ajustes, pérdidas, devoluciones, vencimientos y bajas del pañol, con impacto inmediato en stock."
         />
-        <BButton variant="primary" @click="openCreate">Nuevo movimiento</BButton>
+        <BButton v-if="canCreate" variant="primary" @click="openCreate"><i class="bx bx-plus me-1"></i>Nuevo movimiento</BButton>
       </div>
     </div>
 
@@ -186,6 +189,8 @@ export default {
       <BTable
         v-else
         responsive
+        show-empty
+        empty-text="No hay movimientos que coincidan con los filtros."
         :items="items"
         :fields="[
           { key: 'moved_at', label: 'Fecha' },
