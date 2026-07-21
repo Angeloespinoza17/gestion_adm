@@ -112,7 +112,10 @@ class BackupDatabase extends Command
     private function mysqlCommand(array $connection): array
     {
         return array_values(array_filter([
-            'mysqldump', '--single-transaction', '--quick', '--routines', '--triggers',
+            // El servidor puede tener credenciales globales en /root/.my.cnf.
+            // Debe ser el primer argumento para que mysqldump use únicamente
+            // la conexión validada por Laravel y no reemplace su contraseña.
+            'mysqldump', '--no-defaults', '--single-transaction', '--quick', '--routines', '--triggers',
             '--host='.($connection['host'] ?? '127.0.0.1'),
             '--port='.($connection['port'] ?? 3306),
             '--user='.($connection['username'] ?? ''),
