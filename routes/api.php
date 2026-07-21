@@ -10,7 +10,6 @@ use App\Http\Controllers\Attendance\AttendanceStatisticsController;
 use App\Http\Controllers\Attendance\AttendanceStatisticsExportController;
 use App\Http\Controllers\Attendance\AttendanceStatisticsManagementController;
 use App\Http\Controllers\ContactMessageController;
-use App\Http\Controllers\DeployController;
 use App\Http\Controllers\HomeDashboardController;
 use App\Http\Controllers\MeController;
 use App\Http\Controllers\MaintenanceAnnualPlanController;
@@ -91,7 +90,6 @@ use App\Http\Controllers\SystemModuleController;
 use App\Http\Controllers\Tasks\TaskAssignerController;
 use App\Http\Controllers\Tasks\TaskController;
 use App\Http\Controllers\UserController;
-use App\Http\Controllers\DebugAuthController;
 use App\Http\Controllers\Inventory\InventoryCategoryController;
 use App\Http\Controllers\Inventory\InventorySubcategoryController;
 use App\Http\Controllers\Inventory\SupplierController as InventorySupplierController;
@@ -204,12 +202,8 @@ Route::middleware('auth:sanctum')->get('/user', function (Request $request) {
 });
 
 Route::post('/login', [APIController::class, 'login']);
-Route::post('/register', [APIController::class, 'register']);
 Route::post('/forget-password', [APIController::class, 'forget_pass']);
 Route::post('/reset-password', [APIController::class, 'reset_pass']);
-Route::get('/_debug/auth', [DebugAuthController::class, 'auth']);
-Route::get('/deploy/status', [DeployController::class, 'status']);
-Route::post('/deploy', [DeployController::class, 'run']);
 Route::prefix('convivencia/public')->middleware('convivencia.installed')->group(function () {
     Route::post('/complaints', [ConvivenciaPublicComplaintController::class, 'store']);
     Route::get('/complaints/{folio}', [ConvivenciaPublicComplaintController::class, 'show']);

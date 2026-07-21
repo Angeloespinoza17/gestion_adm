@@ -161,8 +161,7 @@ export default {
 
           <div class="mt-4 text-center">
             <p>
-              Necesitas acceso al panel?
-              <router-link to="/auth/register" class="fw-medium text-primary">Solicitar credenciales</router-link>
+              ¿Necesitas acceso al panel? Solicita tus credenciales a un administrador.
             </p>
             <p>
               © {{ new Date().getFullYear() }} CNSC Gestion. Portal interno del Colegio Nuestra Senora del Carmen.

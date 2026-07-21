@@ -8,7 +8,10 @@ use App\Models\Role;
 use App\Models\SystemModule;
 use App\Models\User;
 use Database\Seeders\Support\PreventsProductionSeeding;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Seeder;
+use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 
 class RbacSeeder extends Seeder
@@ -23,6 +26,38 @@ class RbacSeeder extends Seeder
         $this->seedModules();
         $this->seedRolesAndAssignments();
         $this->seedSuperAdminUser();
+    }
+
+    /**
+     * Restaura el perfil base sin eliminar permisos o módulos agregados por
+     * funcionalidades posteriores ni personalizaciones existentes.
+     */
+    public function reconcileRoleAssignmentsAdditively(): void
+    {
+        $snapshots = Role::query()
+            ->with(['permissions:id', 'modules:id'])
+            ->get()
+            ->mapWithKeys(fn (Role $role) => [
+                $role->id => [
+                    'permissions' => $role->permissions->pluck('id')->all(),
+                    'modules' => $role->modules->pluck('id')->all(),
+                ],
+            ]);
+
+        DB::transaction(function () use ($snapshots): void {
+            $this->seedRolesAndAssignments();
+
+            Role::query()->get()->each(function (Role $role) use ($snapshots): void {
+                $snapshot = $snapshots->get($role->id);
+
+                if (! $snapshot) {
+                    return;
+                }
+
+                $role->permissions()->syncWithoutDetaching($snapshot['permissions']);
+                $role->modules()->syncWithoutDetaching($snapshot['modules']);
+            });
+        });
     }
 
     private function seedCargos(): void
@@ -310,7 +345,7 @@ class RbacSeeder extends Seeder
 
         foreach ($modules as $module) {
             $parentId = null;
-            if (!empty($module['parent'])) {
+            if (! empty($module['parent'])) {
                 $parent = SystemModule::query()->firstWhere('slug', $module['parent']);
                 $parentId = $parent?->id;
             }
@@ -1158,8 +1193,8 @@ class RbacSeeder extends Seeder
     }
 
     /**
-     * @param \Illuminate\Support\Collection<string, \Illuminate\Database\Eloquent\Model> $collection
-     * @param array<int, string> $slugs
+     * @param  Collection<string, Model>  $collection
+     * @param  array<int, string>  $slugs
      * @return array<int, int>
      */
     private function ids($collection, array $slugs): array

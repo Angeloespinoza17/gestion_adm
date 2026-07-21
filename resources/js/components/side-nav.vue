@@ -9,22 +9,9 @@ import avatar1 from "@/assets/images/users/avatar-1.jpg";
 
 const cnscLogo = "/brand/logo-cnsc.png";
 
-const modulesCache = new Map();
-const modulesRequests = new Map();
-const permissionsCache = new Map();
-const permissionsRequests = new Map();
-
 const fetchMenuModules = (token) => {
-  if (modulesCache.has(token)) {
-    return Promise.resolve(modulesCache.get(token));
-  }
-
-  if (modulesRequests.has(token)) {
-    return modulesRequests.get(token);
-  }
-
   const auth = `Bearer ${token}`;
-  const request = axios
+  return axios
     .get("/api/me/modules", {
       headers: {
         Authorization: auth,
@@ -32,30 +19,12 @@ const fetchMenuModules = (token) => {
         "X-Api-Token": token,
       },
     })
-    .then((response) => {
-      const modules = response.data.data || [];
-      modulesCache.set(token, modules);
-      return modules;
-    })
-    .finally(() => {
-      modulesRequests.delete(token);
-    });
-  modulesRequests.set(token, request);
-
-  return request;
+    .then((response) => response.data.data || []);
 };
 
 const fetchMenuPermissions = (token) => {
-  if (permissionsCache.has(token)) {
-    return Promise.resolve(permissionsCache.get(token));
-  }
-
-  if (permissionsRequests.has(token)) {
-    return permissionsRequests.get(token);
-  }
-
   const auth = `Bearer ${token}`;
-  const request = axios
+  return axios
     .get("/api/me/permissions", {
       headers: {
         Authorization: auth,
@@ -65,16 +34,9 @@ const fetchMenuPermissions = (token) => {
     })
     .then((response) => {
       const permissions = response.data.data || [];
-      permissionsCache.set(token, permissions);
       localStorage.setItem("permissions", JSON.stringify(permissions));
       return permissions;
-    })
-    .finally(() => {
-      permissionsRequests.delete(token);
     });
-
-  permissionsRequests.set(token, request);
-  return request;
 };
 
 const MENU_ICON_BY_SLUG = {
@@ -646,7 +608,7 @@ export default {
       return this.reorderTopMenuSections(
         this.normalizeMenuLinks(
           this.normalizeConvivenciaSection(
-            this.normalizeInfirmarySection(this.normalizeStudentsSection(items))
+            this.normalizeStudentsSection(items)
           )
         )
       );

@@ -14,7 +14,7 @@ class PermissionGroupSeeder extends Seeder
         $modulesBySlug = SystemModule::query()->get()->keyBy('slug');
         $permissionsBySlug = Permission::query()->where('active', true)->get()->keyBy('slug');
 
-        foreach ($this->groups() as $index => $definition) {
+        foreach (self::definitions() as $index => $definition) {
             $group = PermissionGroup::query()->updateOrCreate(
                 ['slug' => $definition['slug']],
                 [
@@ -39,7 +39,7 @@ class PermissionGroupSeeder extends Seeder
     /**
      * @return array<int, array{slug:string,module_slug:string,name:string,description:string,sort_order:int,permissions:array<int,string>}>
      */
-    private function groups(): array
+    public static function definitions(): array
     {
         return [
             [
@@ -216,6 +216,7 @@ class PermissionGroupSeeder extends Seeder
                     'exportar_enfermeria',
                     'administrar_inventario_enfermeria',
                     'administrar_medicamentos_enfermeria',
+                    'administrar_catalogos_enfermeria',
                     'gestionar_accidentes_enfermeria',
                     'ver_reportes_enfermeria',
                 ],

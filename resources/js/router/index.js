@@ -93,11 +93,6 @@ const routes = [
         component: () => import('../views/dashboard/test.vue'),
     },
     {
-        path: '/deploy',
-        meta: { authRequired: true, title: 'Deploy' },
-        component: () => import('../views/dashboard/deploy.vue'),
-    },
-    {
         path: '/maintenance/dependencies',
         meta: { authRequired: true, title: 'Áreas técnicas', permission: 'ver_mantencion' },
         component: () => import('../views/maintenance/dependencies.vue'),
@@ -1067,22 +1062,6 @@ const routes = [
         path: '/auth/login-2',
         meta: { authRequired: true, title: 'Login' },
         component: () => import('../views/sample-pages/login-2.vue')
-    },
-    {
-        path: '/auth/register',
-        name: 'register',
-        meta: { title: 'Register' },
-        component: () => import('../views/account/register.vue')
-    },
-    {
-        path: '/auth/register-1',
-        meta: { title: 'Register' },
-        component: () => import('../views/sample-pages/register-sample.vue')
-    },
-    {
-        path: '/auth/register-2',
-        meta: { authRequired: true, title: 'Register' },
-        component: () => import('../views/sample-pages/register-2.vue')
     },
     {
         path: '/forget-password',

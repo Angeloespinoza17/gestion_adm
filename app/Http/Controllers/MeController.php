@@ -9,15 +9,13 @@ use Illuminate\Http\Request;
 
 class MeController extends Controller
 {
-    public function __construct(private readonly RoleModuleSyncService $roleModuleSyncService)
-    {
-    }
+    public function __construct(private readonly RoleModuleSyncService $roleModuleSyncService) {}
 
     public function modules(Request $request): JsonResponse
     {
         $user = $request->user();
 
-        if (!$user) {
+        if (! $user) {
             return response()->json(['message' => 'Unauthenticated.'], 401);
         }
 
@@ -29,7 +27,7 @@ class MeController extends Controller
                 ->orderBy('sort_order')
                 ->get(['id', 'parent_id', 'name', 'slug', 'frontend_route', 'icon', 'sort_order']);
 
-            return response()->json(['data' => $this->normalizeHomeModule($modules)]);
+            return $this->noStoreResponse($this->normalizeHomeModule($modules));
         }
 
         $directModules = SystemModule::query()
@@ -51,14 +49,14 @@ class MeController extends Controller
             ->orderBy('sort_order')
             ->get(['id', 'parent_id', 'name', 'slug', 'frontend_route', 'icon', 'sort_order']);
 
-        return response()->json(['data' => $this->normalizeHomeModule($modules)]);
+        return $this->noStoreResponse($this->normalizeHomeModule($modules));
     }
 
     public function permissions(Request $request): JsonResponse
     {
         $user = $request->user();
 
-        if (!$user) {
+        if (! $user) {
             return response()->json(['message' => 'Unauthenticated.'], 401);
         }
 
@@ -66,7 +64,7 @@ class MeController extends Controller
             'data' => $user->isSuperAdmin()
                 ? array_values(array_unique(array_merge(['__superadmin__'], $user->permissionSlugs())))
                 : $user->permissionSlugs(),
-        ]);
+        ])->header('Cache-Control', 'no-store, no-cache, must-revalidate, private');
     }
 
     private function normalizeHomeModule($modules)
@@ -79,5 +77,11 @@ class MeController extends Controller
 
             return $module;
         });
+    }
+
+    private function noStoreResponse($modules): JsonResponse
+    {
+        return response()->json(['data' => $modules])
+            ->header('Cache-Control', 'no-store, no-cache, must-revalidate, private');
     }
 }

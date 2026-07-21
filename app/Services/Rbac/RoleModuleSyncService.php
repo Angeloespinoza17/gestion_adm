@@ -11,7 +11,7 @@ use App\Models\User;
 class RoleModuleSyncService
 {
     /**
-     * @param array<int, int|string> $permissionIds
+     * @param  array<int, int|string>  $permissionIds
      * @return array<int, int>
      */
     public function moduleIdsForPermissionIds(array $permissionIds): array
@@ -33,7 +33,9 @@ class RoleModuleSyncService
             ->pluck('system_module_id')
             ->all();
 
-        return $this->expandModuleIds($moduleIds, includeDescendants: true, includeAncestors: true);
+        // Un permiso de un grupo habilita su módulo padre, no todos los hijos.
+        // Los submódulos se asignan explícitamente según el perfil del rol.
+        return $this->expandModuleIds($moduleIds, includeDescendants: false, includeAncestors: true);
     }
 
     /**
@@ -69,7 +71,7 @@ class RoleModuleSyncService
     }
 
     /**
-     * @param array<int, int|string> $requestedModuleIds
+     * @param  array<int, int|string>  $requestedModuleIds
      * @return array<int, int>
      */
     public function syncRoleModulesFromPermissions(Role $role, ?array $requestedModuleIds = null): array
@@ -94,7 +96,7 @@ class RoleModuleSyncService
     }
 
     /**
-     * @param array<int, int|string> $moduleIds
+     * @param  array<int, int|string>  $moduleIds
      * @return array<int, int>
      */
     public function expandModuleIds(array $moduleIds, bool $includeDescendants = true, bool $includeAncestors = true): array
@@ -141,10 +143,10 @@ class RoleModuleSyncService
             if ($includeDescendants) {
                 $stack = $children[$moduleId] ?? [];
 
-                while (!empty($stack)) {
+                while (! empty($stack)) {
                     $childId = array_pop($stack);
 
-                    if (!$activeIds->has($childId) || isset($expanded[$childId])) {
+                    if (! $activeIds->has($childId) || isset($expanded[$childId])) {
                         continue;
                     }
 

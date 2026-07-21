@@ -16,26 +16,7 @@ class AttendancePermissionSeeder extends Seeder
 {
     public function run(): void
     {
-        $definitions = [
-            ['slug' => 'ver_asistencia', 'name' => 'Ver asistencia', 'description' => 'Permite consultar estadísticas, calendarios y detalle de asistencia.'],
-            ['slug' => 'importar_asistencia', 'name' => 'Importar asistencia', 'description' => 'Permite previsualizar y confirmar importaciones mensuales de asistencia.'],
-            ['slug' => 'editar_asistencia', 'name' => 'Editar asistencia', 'description' => 'Permite corregir registros de asistencia con trazabilidad.'],
-            ['slug' => 'gestionar_alertas_asistencia', 'name' => 'Gestionar alertas de asistencia', 'description' => 'Permite reconocer, asignar, resolver y registrar seguimientos.'],
-            ['slug' => 'proyectar_ingresos_asistencia', 'name' => 'Proyectar ingresos por asistencia', 'description' => 'Permite consultar y configurar escenarios financieros de asistencia.'],
-            ['slug' => 'attendance_statistics.view', 'name' => 'Ver estadísticas avanzadas de asistencia', 'description' => 'Permite acceder al dashboard y análisis agregados.'],
-            ['slug' => 'attendance_statistics.view_global', 'name' => 'Ver asistencia institucional', 'description' => 'Permite analizar todos los niveles y cursos.'],
-            ['slug' => 'attendance_statistics.view_course', 'name' => 'Ver asistencia por curso', 'description' => 'Permite consultar dashboards y matrices por curso.'],
-            ['slug' => 'attendance_statistics.view_student', 'name' => 'Ver asistencia individual', 'description' => 'Permite consultar fichas nominales de asistencia.'],
-            ['slug' => 'attendance_statistics.view_financial', 'name' => 'Ver impacto financiero de asistencia', 'description' => 'Permite consultar estimaciones financieras.'],
-            ['slug' => 'attendance_statistics.view_sensitive_segments', 'name' => 'Ver segmentos sensibles de asistencia', 'description' => 'Permite segmentar por atributos personales autorizados.'],
-            ['slug' => 'attendance_statistics.export', 'name' => 'Exportar estadísticas de asistencia', 'description' => 'Permite generar PDF, Excel y CSV.'],
-            ['slug' => 'attendance_statistics.configure', 'name' => 'Configurar estadísticas de asistencia', 'description' => 'Permite gestionar reglas, riesgos, motivos y parámetros.'],
-            ['slug' => 'attendance_statistics.manage_goals', 'name' => 'Gestionar metas de asistencia', 'description' => 'Permite crear y mantener metas institucionales e individuales.'],
-            ['slug' => 'attendance_statistics.manage_alerts', 'name' => 'Gestionar alertas avanzadas de asistencia', 'description' => 'Permite asignar y resolver alertas.'],
-            ['slug' => 'attendance_statistics.manage_interventions', 'name' => 'Gestionar intervenciones de asistencia', 'description' => 'Permite crear y cerrar intervenciones.'],
-            ['slug' => 'attendance_statistics.manage_reports', 'name' => 'Gestionar reportes de asistencia', 'description' => 'Permite programar y administrar reportes.'],
-            ['slug' => 'attendance_statistics.view_audit', 'name' => 'Ver auditoría de asistencia', 'description' => 'Permite consultar trazabilidad y accesos sensibles.'],
-        ];
+        $definitions = self::definitions();
 
         $permissions = collect($definitions)->map(fn (array $definition) => Permission::query()->updateOrCreate(
             ['slug' => $definition['slug']],
@@ -66,6 +47,33 @@ class AttendancePermissionSeeder extends Seeder
             ->each(fn (Role $role) => $role->permissions()->syncWithoutDetaching($permissions->pluck('id')));
 
         $this->seedStatisticsConfiguration();
+    }
+
+    /**
+     * @return array<int, array{slug:string,name:string,description:string}>
+     */
+    public static function definitions(): array
+    {
+        return [
+            ['slug' => 'ver_asistencia', 'name' => 'Ver asistencia', 'description' => 'Permite consultar estadísticas, calendarios y detalle de asistencia.'],
+            ['slug' => 'importar_asistencia', 'name' => 'Importar asistencia', 'description' => 'Permite previsualizar y confirmar importaciones mensuales de asistencia.'],
+            ['slug' => 'editar_asistencia', 'name' => 'Editar asistencia', 'description' => 'Permite corregir registros de asistencia con trazabilidad.'],
+            ['slug' => 'gestionar_alertas_asistencia', 'name' => 'Gestionar alertas de asistencia', 'description' => 'Permite reconocer, asignar, resolver y registrar seguimientos.'],
+            ['slug' => 'proyectar_ingresos_asistencia', 'name' => 'Proyectar ingresos por asistencia', 'description' => 'Permite consultar y configurar escenarios financieros de asistencia.'],
+            ['slug' => 'attendance_statistics.view', 'name' => 'Ver estadísticas avanzadas de asistencia', 'description' => 'Permite acceder al dashboard y análisis agregados.'],
+            ['slug' => 'attendance_statistics.view_global', 'name' => 'Ver asistencia institucional', 'description' => 'Permite analizar todos los niveles y cursos.'],
+            ['slug' => 'attendance_statistics.view_course', 'name' => 'Ver asistencia por curso', 'description' => 'Permite consultar dashboards y matrices por curso.'],
+            ['slug' => 'attendance_statistics.view_student', 'name' => 'Ver asistencia individual', 'description' => 'Permite consultar fichas nominales de asistencia.'],
+            ['slug' => 'attendance_statistics.view_financial', 'name' => 'Ver impacto financiero de asistencia', 'description' => 'Permite consultar estimaciones financieras.'],
+            ['slug' => 'attendance_statistics.view_sensitive_segments', 'name' => 'Ver segmentos sensibles de asistencia', 'description' => 'Permite segmentar por atributos personales autorizados.'],
+            ['slug' => 'attendance_statistics.export', 'name' => 'Exportar estadísticas de asistencia', 'description' => 'Permite generar PDF, Excel y CSV.'],
+            ['slug' => 'attendance_statistics.configure', 'name' => 'Configurar estadísticas de asistencia', 'description' => 'Permite gestionar reglas, riesgos, motivos y parámetros.'],
+            ['slug' => 'attendance_statistics.manage_goals', 'name' => 'Gestionar metas de asistencia', 'description' => 'Permite crear y mantener metas institucionales e individuales.'],
+            ['slug' => 'attendance_statistics.manage_alerts', 'name' => 'Gestionar alertas avanzadas de asistencia', 'description' => 'Permite asignar y resolver alertas.'],
+            ['slug' => 'attendance_statistics.manage_interventions', 'name' => 'Gestionar intervenciones de asistencia', 'description' => 'Permite crear y cerrar intervenciones.'],
+            ['slug' => 'attendance_statistics.manage_reports', 'name' => 'Gestionar reportes de asistencia', 'description' => 'Permite programar y administrar reportes.'],
+            ['slug' => 'attendance_statistics.view_audit', 'name' => 'Ver auditoría de asistencia', 'description' => 'Permite consultar trazabilidad y accesos sensibles.'],
+        ];
     }
 
     private function seedStatisticsConfiguration(): void

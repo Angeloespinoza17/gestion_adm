@@ -255,26 +255,17 @@ export default {
             slug: this.form.slug,
             description: this.form.description || null,
             active: this.form.active,
-          });
-          await axios.put(`/api/admin/roles/${this.form.id}/permissions`, {
             permissions: this.normalizeIdList(this.form.permissions),
-          });
-          await axios.put(`/api/admin/roles/${this.form.id}/modules`, {
             modules: this.normalizeIdList(this.form.modules),
           });
           this.success = "Rol actualizado.";
         } else {
-          const response = await axios.post(`/api/admin/roles`, {
+          await axios.post(`/api/admin/roles`, {
             name: this.form.name,
             slug: this.form.slug,
             description: this.form.description || null,
             active: this.form.active,
-          });
-          const id = response.data.data.id;
-          await axios.put(`/api/admin/roles/${id}/permissions`, {
             permissions: this.normalizeIdList(this.form.permissions),
-          });
-          await axios.put(`/api/admin/roles/${id}/modules`, {
             modules: this.normalizeIdList(this.form.modules),
           });
           this.success = "Rol creado.";

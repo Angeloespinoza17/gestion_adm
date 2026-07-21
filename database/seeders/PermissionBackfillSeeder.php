@@ -49,6 +49,7 @@ class PermissionBackfillSeeder extends Seeder
             ['slug' => 'exportar_enfermeria', 'name' => 'Exportar Enfermeria', 'description' => 'Permite descargar reportes o listados generados por el modulo Enfermeria.'],
             ['slug' => 'administrar_inventario_enfermeria', 'name' => 'Administrar inventario de Enfermeria', 'description' => 'Permite gestionar stock, movimientos y productos del inventario de Enfermeria.'],
             ['slug' => 'administrar_medicamentos_enfermeria', 'name' => 'Administrar medicamentos de Enfermeria', 'description' => 'Permite gestionar medicamentos, autorizaciones y administraciones dentro de Enfermeria.'],
+            ['slug' => 'administrar_catalogos_enfermeria', 'name' => 'Administrar catalogos de Enfermeria', 'description' => 'Permite gestionar categorias y catalogos operativos del modulo Enfermeria.'],
             ['slug' => 'gestionar_accidentes_enfermeria', 'name' => 'Gestionar accidentes de Enfermeria', 'description' => 'Permite registrar, editar y dar seguimiento a accidentes escolares desde Enfermeria.'],
             ['slug' => 'ver_reportes_enfermeria', 'name' => 'Ver reportes de Enfermeria', 'description' => 'Permite consultar indicadores y reportes del modulo Enfermeria.'],
 
