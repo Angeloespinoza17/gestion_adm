@@ -8,6 +8,16 @@ use Tests\TestCase;
 
 class StudentPdfChunkUploadServiceTest extends TestCase
 {
+    public function test_chunk_limits_cover_a_100_mb_pdf(): void
+    {
+        $requiredChunks = (int) ceil(
+            StudentPdfChunkUploadService::MAX_FILE_BYTES / StudentPdfChunkUploadService::MAX_CHUNK_BYTES,
+        );
+
+        $this->assertSame(100 * 1024 * 1024, StudentPdfChunkUploadService::MAX_FILE_BYTES);
+        $this->assertLessThanOrEqual(StudentPdfChunkUploadService::MAX_CHUNKS, $requiredChunks);
+    }
+
     public function test_it_assembles_and_cleans_a_pdf_uploaded_in_chunks(): void
     {
         Storage::fake('local');

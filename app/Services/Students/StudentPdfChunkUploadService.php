@@ -10,7 +10,9 @@ class StudentPdfChunkUploadService
 {
     public const MAX_CHUNK_BYTES = 896 * 1024;
 
-    public const MAX_FILE_BYTES = 40 * 1024 * 1024;
+    public const MAX_FILE_BYTES = 100 * 1024 * 1024;
+
+    public const MAX_CHUNKS = 128;
 
     /**
      * @return array{completed: bool, progress: int, path?: string, directory?: string}

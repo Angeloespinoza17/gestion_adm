@@ -6,7 +6,7 @@ import LoadingState from "../../components/ui/loading-state.vue";
 import { getPdfMake } from "../../utils/pdfmake";
 
 const STUDENT_PDF_CHUNK_BYTES = 896 * 1024;
-const STUDENT_PDF_MAX_BYTES = 40 * 1024 * 1024;
+const STUDENT_PDF_MAX_BYTES = 100 * 1024 * 1024;
 
 const baseColumns = [
   { key: "name", label: "Nombre" },
@@ -444,7 +444,7 @@ export default {
         : "";
       const selection = await Swal.fire({
         title: "Curso de destino",
-        text: "Todas las estudiantes del PDF quedarán matriculadas en el curso seleccionado.",
+        text: "Todas las estudiantes del PDF quedarán matriculadas en el curso seleccionado. Se admiten archivos PDF de hasta 100 MB.",
         input: "select",
         inputOptions,
         inputValue: suggestedCourseId,
@@ -532,7 +532,7 @@ export default {
       if (file.size > STUDENT_PDF_MAX_BYTES) {
         this.pdfImportCourseId = null;
         input.value = "";
-        await this.showErrorAlert("El libro PDF no puede superar los 40 MB.");
+        await this.showErrorAlert("El libro PDF no puede superar los 100 MB.");
         return;
       }
 
@@ -1106,7 +1106,6 @@ export default {
           </template>
           <template #cell(full_name)="{ item }">
             <div class="student-list-person">
-              <div class="student-list-avatar">{{ String(item.full_name || "?").charAt(0).toUpperCase() }}</div>
               <div>
                 <div class="fw-semibold">{{ item.full_name }}</div>
                 <div class="text-muted small">{{ item.email || item.user?.email || "-" }}</div>
@@ -1394,24 +1393,7 @@ export default {
 }
 
 .student-list-person {
-  align-items: center;
-  display: flex;
-  gap: 0.75rem;
   min-width: 15rem;
-}
-
-.student-list-avatar {
-  align-items: center;
-  background: #eef2ff;
-  border: 1px solid rgba(85, 110, 230, 0.14);
-  border-radius: 8px;
-  color: #556ee6;
-  display: inline-flex;
-  flex: 0 0 2.25rem;
-  font-weight: 800;
-  height: 2.25rem;
-  justify-content: center;
-  width: 2.25rem;
 }
 
 .student-list-chip {

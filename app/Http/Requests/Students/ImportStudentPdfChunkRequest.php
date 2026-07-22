@@ -17,8 +17,8 @@ class ImportStudentPdfChunkRequest extends FormRequest
     {
         return [
             'upload_id' => ['required', 'string', 'regex:/^[a-zA-Z0-9-]{20,64}$/'],
-            'chunk_index' => ['required', 'integer', 'min:0', 'max:63'],
-            'chunk_total' => ['required', 'integer', 'min:1', 'max:64'],
+            'chunk_index' => ['required', 'integer', 'min:0', 'max:'.(StudentPdfChunkUploadService::MAX_CHUNKS - 1)],
+            'chunk_total' => ['required', 'integer', 'min:1', 'max:'.StudentPdfChunkUploadService::MAX_CHUNKS],
             'file_name' => ['required', 'string', 'max:255', 'regex:/\.pdf$/i'],
             'file_size' => ['required', 'integer', 'min:1', 'max:'.StudentPdfChunkUploadService::MAX_FILE_BYTES],
             'course_section_id' => ['required', 'integer', 'exists:course_sections,id'],
@@ -54,7 +54,7 @@ class ImportStudentPdfChunkRequest extends FormRequest
     {
         return [
             'file_name.regex' => 'El archivo debe tener extensión PDF.',
-            'file_size.max' => 'El libro PDF no puede superar los 40 MB.',
+            'file_size.max' => 'El libro PDF no puede superar los 100 MB.',
             'course_section_id.required' => 'Debes seleccionar el curso de destino antes de importar el PDF.',
             'course_section_id.exists' => 'El curso seleccionado ya no está disponible.',
         ];
