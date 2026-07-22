@@ -706,9 +706,9 @@ export default {
       }
 
       const result = await this.confirmAction({
-        title: "Eliminar funcionario",
-        text: `Se eliminará a ${this.staff.full_name}.`,
-        confirmButtonText: "Sí, eliminar",
+        title: "Eliminar funcionario y cuenta",
+        text: `Se eliminará a ${this.staff.full_name}, su cuenta de acceso y sus registros asociados, incluidas las reservas. Esta acción no se puede deshacer.`,
+        confirmButtonText: "Sí, eliminar todo",
       });
 
       if (!result.isConfirmed) {
@@ -717,7 +717,7 @@ export default {
 
       try {
         await axios.delete(`/api/staff/${this.staff.id}`);
-        this.showSuccessAlert("Funcionario eliminado", "El funcionario fue eliminado correctamente.");
+        this.showSuccessAlert("Eliminación completada", "El funcionario y su cuenta de acceso fueron eliminados correctamente.");
         this.$router.push("/staff");
       } catch (error) {
         this.error = this.formatError(error);

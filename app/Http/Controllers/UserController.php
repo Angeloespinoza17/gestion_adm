@@ -2,14 +2,14 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\User;
 use App\Models\Cargo;
 use App\Models\Role;
+use App\Models\User;
+use App\Services\Staff\StaffDeletionService;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
@@ -76,7 +76,7 @@ class UserController extends Controller
         $payload['password'] = Hash::make($payload['password']);
 
         $user = User::create($payload);
-        if (!empty($roles)) {
+        if (! empty($roles)) {
             $user->roles()->sync($roles);
         }
 
@@ -118,17 +118,28 @@ class UserController extends Controller
         ]);
     }
 
-    public function destroy(User $user): JsonResponse
+    public function destroy(User $user, StaffDeletionService $deletionService): JsonResponse
     {
         $this->assertUsersCanBeDeleted(collect([$user]), request()->user());
-        $user->delete();
+
+        try {
+            $result = $deletionService->deleteUsers(collect([$user]));
+        } catch (QueryException $exception) {
+            report($exception);
+
+            return response()->json([
+                'message' => 'No se eliminó el usuario. La cuenta o su ficha de funcionario tienen registros protegidos que deben conservarse.',
+            ], 409);
+        }
 
         return response()->json([
-            'message' => 'Usuario eliminado correctamente.',
+            'message' => $result['staff'] > 0
+                ? 'Usuario y ficha de funcionario eliminados correctamente.'
+                : 'Usuario eliminado correctamente.',
         ]);
     }
 
-    public function bulkDestroy(Request $request): JsonResponse
+    public function bulkDestroy(Request $request, StaffDeletionService $deletionService): JsonResponse
     {
         $payload = $request->validate([
             'users' => ['required', 'array', 'min:1', 'max:100'],
@@ -148,11 +159,7 @@ class UserController extends Controller
         $this->assertUsersCanBeDeleted($users, $request->user());
 
         try {
-            DB::transaction(function () use ($users): void {
-                foreach ($users as $user) {
-                    $user->delete();
-                }
-            });
+            $result = $deletionService->deleteUsers($users);
         } catch (QueryException $exception) {
             report($exception);
 
@@ -166,6 +173,7 @@ class UserController extends Controller
                 ? 'Usuario eliminado correctamente.'
                 : "{$users->count()} usuarios eliminados correctamente.",
             'deleted_count' => $users->count(),
+            'deleted_staff_count' => $result['staff'],
         ]);
     }
 

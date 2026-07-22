@@ -201,8 +201,10 @@ export default {
     async remove(user) {
       const result = await Swal.fire({
         icon: "warning",
-        title: "Eliminar usuario",
-        text: `Se eliminará ${user.email}.`,
+        title: user.staff_id ? "Eliminar usuario y funcionario" : "Eliminar usuario",
+        text: user.staff_id
+          ? `Se eliminarán ${user.email}, su ficha de funcionario y sus registros asociados. Esta acción no se puede deshacer.`
+          : `Se eliminará ${user.email}. Esta acción no se puede deshacer.`,
         showCancelButton: true,
         confirmButtonText: "Sí, eliminar",
         cancelButtonText: "Cancelar",
@@ -259,7 +261,7 @@ export default {
       const result = await Swal.fire({
         icon: "warning",
         title: `Eliminar ${count} ${count === 1 ? "usuario" : "usuarios"}`,
-        text: `Se eliminarán ${preview}${remaining > 0 ? ` y ${remaining} más` : ""}. Esta acción no se puede deshacer.`,
+        text: `Se eliminarán ${preview}${remaining > 0 ? ` y ${remaining} más` : ""}. Si están vinculados a funcionarios, también se eliminarán sus fichas y registros asociados. Esta acción no se puede deshacer.`,
         showCancelButton: true,
         confirmButtonText: `Sí, eliminar ${count}`,
         cancelButtonText: "Cancelar",

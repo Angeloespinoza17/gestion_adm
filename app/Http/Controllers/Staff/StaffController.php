@@ -9,10 +9,12 @@ use App\Models\Cargo;
 use App\Models\Commune;
 use App\Models\Department;
 use App\Models\Region;
-use App\Models\Staff;
 use App\Models\Role;
+use App\Models\Staff;
 use App\Models\User;
+use App\Services\Staff\StaffDeletionService;
 use App\Support\Rut;
+use Illuminate\Database\QueryException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\UploadedFile;
@@ -179,17 +181,31 @@ class StaffController extends Controller
         ]);
     }
 
-    public function destroy(Staff $staff): JsonResponse
+    public function destroy(Staff $staff, StaffDeletionService $deletionService): JsonResponse
     {
-        DB::transaction(function () use ($staff) {
-            User::query()->where('staff_id', $staff->id)->update(['staff_id' => null]);
-            $staff->delete();
-        });
+        $linkedUser = $staff->user()->with('roles:id,slug')->first();
 
-        Storage::disk('public')->deleteDirectory(sprintf('staff/%d', $staff->id));
+        if ($linkedUser && (
+            $linkedUser->id === request()->user()?->id
+            || $linkedUser->roles->contains(fn (Role $role) => $role->slug === 'super_admin')
+        )) {
+            throw ValidationException::withMessages([
+                'staff' => 'La cuenta actual y las cuentas Super Admin no pueden eliminarse.',
+            ]);
+        }
+
+        try {
+            $deletionService->deleteStaff($staff);
+        } catch (QueryException $exception) {
+            report($exception);
+
+            return response()->json([
+                'message' => 'No se eliminó el funcionario. La cuenta o la ficha tienen registros protegidos que deben conservarse.',
+            ], 409);
+        }
 
         return response()->json([
-            'message' => 'Funcionario eliminado correctamente.',
+            'message' => 'Funcionario y cuenta de acceso eliminados correctamente.',
         ]);
     }
 
@@ -205,7 +221,7 @@ class StaffController extends Controller
             $data['status'] = 'activo';
         }
 
-        if (!$payload['active'] && $staff->status === 'activo') {
+        if (! $payload['active'] && $staff->status === 'activo') {
             $data['status'] = 'inactivo';
         }
 
@@ -225,7 +241,7 @@ class StaffController extends Controller
             $currentUser->update(['staff_id' => null]);
         }
 
-        if (!$userId) {
+        if (! $userId) {
             return;
         }
 
@@ -258,7 +274,7 @@ class StaffController extends Controller
             ]);
         }
 
-        if (!$rut) {
+        if (! $rut) {
             throw ValidationException::withMessages([
                 'rut' => 'El RUT es obligatorio para crear la clave inicial del usuario.',
             ]);
@@ -293,7 +309,7 @@ class StaffController extends Controller
 
         $path = $photo->storePubliclyAs(
             sprintf('staff/%d/profile', $staff->id),
-            now()->format('Ymd_His') . '_' . uniqid() . '.' . $photo->getClientOriginalExtension(),
+            now()->format('Ymd_His').'_'.uniqid().'.'.$photo->getClientOriginalExtension(),
             ['disk' => 'public']
         );
 
