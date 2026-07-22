@@ -63,8 +63,10 @@ export default {
       permissionModeLabels,
       showModal: false,
       form: emptyForm(),
+      expandedModuleGroups: [],
       filters: {
         roleSearch: "",
+        moduleSearch: "",
         groupSearch: "",
         userSearch: "",
       },
@@ -124,11 +126,31 @@ export default {
         label: `${permission.name} (${permission.slug})`,
       }));
     },
-    moduleOptions() {
-      return (this.catalogs.modules || []).map((module) => ({
-        value: module.id,
-        label: module.parent_id ? `↳ ${module.name}` : module.name,
-      }));
+    moduleGroups() {
+      const modules = this.catalogs.modules || [];
+      const moduleIds = new Set(modules.map((module) => Number(module.id)));
+
+      return modules.filter(
+        (module) => !module.parent_id || !moduleIds.has(Number(module.parent_id))
+      );
+    },
+    filteredModuleGroups() {
+      const search = this.filters.moduleSearch.trim().toLowerCase();
+      if (!search) return this.moduleGroups;
+
+      return this.moduleGroups.filter((group) =>
+        this.moduleGroupItems(group).some((module) =>
+          [module.name, module.slug, module.frontend_route]
+            .filter(Boolean)
+            .some((value) => String(value).toLowerCase().includes(search))
+        )
+      );
+    },
+    incompleteModuleGroups() {
+      return this.moduleGroups.filter((group) => {
+        const stats = this.moduleGroupStats(group);
+        return stats.selected > 0 && stats.selected < stats.total;
+      });
     },
     permissionGroups() {
       return (this.catalogs.permission_groups || []).map((group) => ({
@@ -222,6 +244,7 @@ export default {
     },
     async openEdit(role) {
       this.error = null;
+      this.filters.moduleSearch = "";
       this.filters.groupSearch = "";
       this.filters.userSearch = "";
       const response = await axios.get(`/api/admin/roles/${role.id}`);
@@ -237,10 +260,18 @@ export default {
         modules: (data.modules || []).map((module) => module.id),
         users: data.users || [],
       };
+      this.expandedModuleGroups = this.moduleGroups
+        .filter((group) => {
+          const stats = this.moduleGroupStats(group);
+          return stats.selected > 0 && stats.selected < stats.total;
+        })
+        .map((group) => Number(group.id));
       this.showModal = true;
     },
     openCreate() {
       this.form = emptyForm();
+      this.expandedModuleGroups = [];
+      this.filters.moduleSearch = "";
       this.filters.groupSearch = "";
       this.showModal = true;
     },
@@ -309,6 +340,86 @@ export default {
     isModuleSelected(moduleId) {
       return this.selectedModuleSet.has(Number(moduleId));
     },
+    directChildModules(moduleId) {
+      const parentId = Number(moduleId);
+
+      return (this.catalogs.modules || [])
+        .filter((module) => Number(module.parent_id) === parentId)
+        .sort((left, right) =>
+          Number(left.sort_order || 0) - Number(right.sort_order || 0) ||
+          String(left.name || "").localeCompare(String(right.name || ""))
+        );
+    },
+    moduleDescendants(moduleId, depth = 1) {
+      return this.directChildModules(moduleId).flatMap((module) => [
+        { ...module, depth },
+        ...this.moduleDescendants(module.id, depth + 1),
+      ]);
+    },
+    moduleGroupItems(group) {
+      return [{ ...group, depth: 0 }, ...this.moduleDescendants(group.id)];
+    },
+    moduleGroupStats(group) {
+      const ids = this.moduleGroupItems(group).map((module) => Number(module.id));
+      const selected = ids.filter((id) => this.selectedModuleSet.has(id)).length;
+
+      return {
+        selected,
+        total: ids.length,
+        complete: ids.length > 0 && selected === ids.length,
+        partial: selected > 0 && selected < ids.length,
+      };
+    },
+    isModuleGroupExpanded(moduleId) {
+      return this.filters.moduleSearch.trim() !== "" || this.expandedModuleGroups.includes(Number(moduleId));
+    },
+    toggleModuleGroupExpanded(moduleId) {
+      const id = Number(moduleId);
+      const expanded = new Set(this.expandedModuleGroups.map(Number));
+
+      if (expanded.has(id)) {
+        expanded.delete(id);
+      } else {
+        expanded.add(id);
+      }
+
+      this.expandedModuleGroups = Array.from(expanded);
+    },
+    removeModules(moduleIds) {
+      const ids = new Set(moduleIds.map(Number));
+      this.form.modules = this.normalizeIdList(this.form.modules).filter((id) => !ids.has(id));
+    },
+    toggleModule(module) {
+      const id = Number(module.id);
+      const moduleIds = [id, ...this.childModuleIds(id)];
+      const selected = this.selectedModuleSet;
+
+      if (moduleIds.every((moduleId) => selected.has(moduleId))) {
+        this.removeModules(moduleIds);
+        return;
+      }
+
+      this.addModule(id, true);
+    },
+    toggleModuleGroup(group) {
+      const ids = this.moduleGroupItems(group).map((module) => Number(module.id));
+
+      if (this.moduleGroupStats(group).complete) {
+        this.removeModules(ids);
+        return;
+      }
+
+      const selected = new Set(this.normalizeIdList(this.form.modules));
+      ids.forEach((id) => selected.add(id));
+      this.form.modules = Array.from(selected);
+      this.expandedModuleGroups = Array.from(new Set([...this.expandedModuleGroups, Number(group.id)]));
+    },
+    selectAllModules() {
+      this.form.modules = (this.catalogs.modules || []).map((module) => Number(module.id));
+    },
+    clearAllModules() {
+      this.form.modules = [];
+    },
     togglePermission(permissionId) {
       const id = Number(permissionId);
       const selected = new Set(this.normalizeIdList(this.form.permissions));
@@ -340,9 +451,10 @@ export default {
         this.childModuleIds(id).forEach((childId) => selected.add(childId));
       }
 
-      const module = this.moduleLookup[id];
-      if (module?.parent_id) {
-        selected.add(Number(module.parent_id));
+      let parentId = Number(this.moduleLookup[id]?.parent_id || 0);
+      while (parentId > 0) {
+        selected.add(parentId);
+        parentId = Number(this.moduleLookup[parentId]?.parent_id || 0);
       }
 
       this.form.modules = Array.from(selected);
@@ -620,15 +732,102 @@ export default {
               <i class="bx bx-grid-alt"></i>
               <span>Módulos visibles</span>
             </div>
-            <span class="text-muted small">{{ selectedModulesCount }} seleccionados</span>
+            <span class="module-selection-count">{{ selectedModulesCount }} de {{ (catalogs.modules || []).length }}</span>
           </div>
-          <Multiselect
-            v-model="form.modules"
-            :options="moduleOptions"
-            mode="multiple"
-            :close-on-select="false"
-            :searchable="true"
-          />
+
+          <p class="module-picker-help">
+            Selecciona un área completa o abre el grupo para elegir sus submódulos. Los módulos marcados son los que aparecerán en el menú lateral.
+          </p>
+
+          <div class="module-picker-toolbar">
+            <div class="module-search">
+              <i class="bx bx-search"></i>
+              <BFormInput v-model="filters.moduleSearch" size="sm" placeholder="Buscar módulo o ruta" />
+            </div>
+            <div class="module-picker-actions">
+              <BButton size="sm" variant="outline-primary" @click="selectAllModules">Seleccionar todos</BButton>
+              <BButton size="sm" variant="outline-secondary" @click="clearAllModules">Quitar todos</BButton>
+            </div>
+          </div>
+
+          <BAlert v-if="incompleteModuleGroups.length" variant="warning" show class="module-picker-alert">
+            <i class="bx bx-info-circle"></i>
+            <span>
+              Hay {{ incompleteModuleGroups.length }}
+              {{ incompleteModuleGroups.length === 1 ? "área incompleta" : "áreas incompletas" }}.
+              Revisa sus submódulos antes de guardar.
+            </span>
+          </BAlert>
+
+          <div v-if="filteredModuleGroups.length" class="module-picker-grid">
+            <article
+              v-for="group in filteredModuleGroups"
+              :key="group.id"
+              :class="[
+                'module-group-card',
+                { 'module-group-card--complete': moduleGroupStats(group).complete },
+                { 'module-group-card--partial': moduleGroupStats(group).partial },
+              ]"
+            >
+              <div class="module-group-card__header">
+                <button
+                  type="button"
+                  class="module-group-card__toggle"
+                  :aria-expanded="isModuleGroupExpanded(group.id)"
+                  @click="toggleModuleGroupExpanded(group.id)"
+                >
+                  <span class="module-group-card__icon"><i class="bx bx-grid-alt"></i></span>
+                  <span class="module-group-card__identity">
+                    <strong>{{ group.name }}</strong>
+                    <small>{{ moduleGroupStats(group).selected }} de {{ moduleGroupStats(group).total }} visibles</small>
+                  </span>
+                  <i
+                    v-if="moduleGroupStats(group).total > 1"
+                    :class="['bx', isModuleGroupExpanded(group.id) ? 'bx-chevron-up' : 'bx-chevron-down']"
+                  ></i>
+                </button>
+                <BButton
+                  size="sm"
+                  :variant="moduleGroupStats(group).complete ? 'outline-danger' : 'outline-success'"
+                  @click="toggleModuleGroup(group)"
+                >
+                  <i :class="moduleGroupStats(group).complete ? 'bx bx-x me-1' : 'bx bx-check me-1'"></i>
+                  {{
+                    moduleGroupStats(group).complete
+                      ? "Quitar"
+                      : moduleGroupStats(group).total === 1
+                        ? "Seleccionar"
+                        : "Área completa"
+                  }}
+                </BButton>
+              </div>
+
+              <div v-if="isModuleGroupExpanded(group.id)" class="module-group-card__items">
+                <label
+                  v-for="module in moduleGroupItems(group)"
+                  :key="module.id"
+                  class="module-option"
+                  :class="{ 'module-option--parent': module.depth === 0 }"
+                  :style="{ '--module-depth': module.depth }"
+                >
+                  <input
+                    type="checkbox"
+                    :checked="isModuleSelected(module.id)"
+                    @change="toggleModule(module)"
+                  />
+                  <span class="module-option__check"><i class="bx bx-check"></i></span>
+                  <span class="module-option__body">
+                    <span class="module-option__name">{{ module.name }}</span>
+                    <span class="module-option__meta">
+                      {{ module.depth === 0 && moduleGroupStats(group).total > 1 ? "Módulo principal" : module.frontend_route || module.slug }}
+                    </span>
+                  </span>
+                </label>
+              </div>
+            </article>
+          </div>
+
+          <BAlert v-else variant="light" show class="mb-0 mt-3">No hay módulos para la búsqueda actual.</BAlert>
         </section>
 
         <section class="role-panel mt-3">
@@ -906,6 +1105,236 @@ export default {
   min-width: 0;
 }
 
+.module-selection-count {
+  background: #eef1ff;
+  border-radius: 999px;
+  color: #556ee6;
+  font-size: 0.78rem;
+  font-weight: 700;
+  padding: 0.3rem 0.65rem;
+}
+
+.module-picker-help {
+  color: #74788d;
+  font-size: 0.86rem;
+  margin: 0.55rem 0 0;
+}
+
+.module-picker-toolbar {
+  align-items: center;
+  display: flex;
+  gap: 0.75rem;
+  justify-content: space-between;
+  margin-top: 1rem;
+}
+
+.module-search {
+  position: relative;
+  width: min(420px, 100%);
+}
+
+.module-search i {
+  color: #74788d;
+  left: 0.75rem;
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 2;
+}
+
+.module-search :deep(input) {
+  padding-left: 2.1rem;
+}
+
+.module-picker-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.module-picker-alert {
+  align-items: center;
+  display: flex;
+  gap: 0.45rem;
+  margin: 0.85rem 0 0;
+  padding: 0.65rem 0.8rem;
+}
+
+.module-picker-grid {
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin-top: 0.85rem;
+}
+
+.module-group-card {
+  align-self: start;
+  border: 1px solid #e9ecf5;
+  border-left: 4px solid #ced4da;
+  border-radius: 10px;
+  min-width: 0;
+  overflow: hidden;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.module-group-card--partial {
+  border-left-color: #f1b44c;
+}
+
+.module-group-card--complete {
+  border-left-color: #34c38f;
+}
+
+.module-group-card__header {
+  align-items: center;
+  background: #fff;
+  display: flex;
+  gap: 0.6rem;
+  justify-content: space-between;
+  padding: 0.75rem;
+}
+
+.module-group-card__toggle {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  color: inherit;
+  display: flex;
+  flex: 1;
+  gap: 0.65rem;
+  min-width: 0;
+  padding: 0;
+  text-align: left;
+}
+
+.module-group-card__toggle:focus-visible {
+  border-radius: 6px;
+  outline: 2px solid rgba(85, 110, 230, 0.35);
+  outline-offset: 3px;
+}
+
+.module-group-card__icon {
+  align-items: center;
+  background: #eef1ff;
+  border-radius: 8px;
+  color: #556ee6;
+  display: inline-flex;
+  flex: 0 0 34px;
+  height: 34px;
+  justify-content: center;
+  width: 34px;
+}
+
+.module-group-card__identity {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.module-group-card__identity strong {
+  color: #2a3042;
+  font-size: 0.88rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.module-group-card__identity small {
+  color: #74788d;
+  font-size: 0.74rem;
+}
+
+.module-group-card__items {
+  background: #f8f9fc;
+  border-top: 1px solid #eff2f7;
+  display: grid;
+  gap: 0.45rem;
+  max-height: 320px;
+  overflow-y: auto;
+  padding: 0.7rem;
+}
+
+.module-option {
+  --module-depth: 0;
+  align-items: center;
+  background: #fff;
+  border: 1px solid #e9ecf5;
+  border-radius: 8px;
+  cursor: pointer;
+  display: flex;
+  gap: 0.55rem;
+  margin: 0;
+  margin-left: calc(var(--module-depth) * 0.8rem);
+  min-width: 0;
+  padding: 0.55rem 0.65rem;
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+
+.module-option:hover {
+  background: #f5f7ff;
+  border-color: #cfd6fb;
+}
+
+.module-option--parent {
+  background: #f5f7ff;
+}
+
+.module-option input {
+  height: 1px;
+  opacity: 0;
+  position: absolute;
+  width: 1px;
+}
+
+.module-option__check {
+  align-items: center;
+  border: 2px solid #adb5bd;
+  border-radius: 5px;
+  color: transparent;
+  display: inline-flex;
+  flex: 0 0 20px;
+  height: 20px;
+  justify-content: center;
+  transition: all 0.15s ease;
+  width: 20px;
+}
+
+.module-option input:checked + .module-option__check {
+  background: #556ee6;
+  border-color: #556ee6;
+  color: #fff;
+}
+
+.module-option input:focus-visible + .module-option__check {
+  box-shadow: 0 0 0 3px rgba(85, 110, 230, 0.2);
+}
+
+.module-option__body,
+.module-option__name,
+.module-option__meta {
+  display: block;
+  min-width: 0;
+}
+
+.module-option__body {
+  flex: 1;
+}
+
+.module-option__name {
+  color: #2a3042;
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.module-option__meta {
+  color: #74788d;
+  font-size: 0.7rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .permission-group-grid {
   display: grid;
   gap: 0.85rem;
@@ -1027,6 +1456,7 @@ export default {
 
 @media (max-width: 991.98px) {
   .role-form-grid,
+  .module-picker-grid,
   .permission-group-grid {
     grid-template-columns: 1fr;
   }
@@ -1035,13 +1465,15 @@ export default {
 @media (max-width: 767.98px) {
   .roles-header,
   .roles-card__header,
-  .role-panel__header {
+  .role-panel__header,
+  .module-picker-toolbar {
     align-items: stretch;
     flex-direction: column;
   }
 
   .roles-header .btn,
   .roles-search,
+  .module-search,
   .permission-group-search {
     width: 100%;
   }
@@ -1053,6 +1485,15 @@ export default {
 
   .role-user-item > .d-flex {
     justify-content: space-between;
+  }
+
+  .module-picker-actions .btn {
+    flex: 1;
+  }
+
+  .module-group-card__header {
+    align-items: stretch;
+    flex-direction: column;
   }
 }
 </style>
