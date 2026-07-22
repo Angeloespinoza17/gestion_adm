@@ -29,15 +29,34 @@ class StudentAccountService
         return DB::transaction(function () use ($student, $profilePayload, $accountPayload, $actor) {
             $profilePayload['updated_by'] = $actor?->id;
             $student->update($profilePayload);
-            $this->syncUser($student->fresh(), $accountPayload, $actor);
+            $student = $student->fresh();
+
+            if ($student->user()->exists()) {
+                $this->syncUser($student, $accountPayload, $actor);
+            }
 
             return $student->fresh();
         });
     }
 
+    public function restoreAccount(StudentProfile $student, ?User $actor = null): User
+    {
+        return DB::transaction(function () use ($student, $actor): User {
+            $lockedStudent = StudentProfile::query()->lockForUpdate()->findOrFail($student->getKey());
+
+            if ($lockedStudent->user()->exists()) {
+                return $lockedStudent->user()->firstOrFail();
+            }
+
+            $this->syncUser($lockedStudent, ['account_active' => true], $actor);
+
+            return $lockedStudent->user()->firstOrFail();
+        });
+    }
+
     private function syncUser(StudentProfile $student, array $accountPayload, ?User $actor = null): void
     {
-        $user = $student->user ?: new User();
+        $user = $student->user ?: new User;
         $plainPassword = trim((string) ($accountPayload['password'] ?? ''));
         $defaultPassword = $student->rut ?: Str::random(20);
 
@@ -49,7 +68,7 @@ class StudentAccountService
             ? (bool) $accountPayload['account_active']
             : ($user->exists ? (bool) $user->active : true);
 
-        if (!$user->exists || $plainPassword !== '') {
+        if (! $user->exists || $plainPassword !== '') {
             $user->password = Hash::make($plainPassword !== '' ? $plainPassword : $defaultPassword);
         }
 
@@ -65,7 +84,7 @@ class StudentAccountService
     {
         $firstName = $this->normalizeEmailPart($this->firstToken($student->first_name));
         $lastName = $this->normalizeEmailPart($this->firstToken($student->last_name));
-        $base = trim($firstName . '.' . $lastName, '.');
+        $base = trim($firstName.'.'.$lastName, '.');
 
         if ($base === '') {
             $base = $student->rut

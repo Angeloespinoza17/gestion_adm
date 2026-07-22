@@ -389,6 +389,9 @@ Route::middleware('auth:sanctum')->group(function () {
 
         Route::get('/', [StudentController::class, 'index'])->middleware('permission:ver_estudiantes');
         Route::post('/', [StudentController::class, 'store'])->middleware('permission:crear_estudiantes');
+        Route::get('/{studentProfile}/deletion-impact', [StudentController::class, 'deletionImpact'])->middleware('permission:eliminar_estudiantes');
+        Route::delete('/{studentProfile}', [StudentController::class, 'destroy'])->middleware('permission:eliminar_estudiantes');
+        Route::post('/{studentProfile}/account', [StudentController::class, 'restoreAccount'])->middleware('permission:editar_estudiantes');
         Route::get('/{studentProfile}', [StudentController::class, 'show'])->middleware('permission:ver_ficha_estudiante');
         Route::put('/{studentProfile}', [StudentController::class, 'update'])->middleware('permission:editar_estudiantes');
 

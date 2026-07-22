@@ -199,11 +199,12 @@ export default {
       }
     },
     async remove(user) {
+      const linkedRecord = user.staff_id ? "funcionario" : user.student_id ? "estudiante" : null;
       const result = await Swal.fire({
         icon: "warning",
-        title: user.staff_id ? "Eliminar usuario y funcionario" : "Eliminar usuario",
-        text: user.staff_id
-          ? `Se eliminarán ${user.email}, su ficha de funcionario y sus registros asociados. Esta acción no se puede deshacer.`
+        title: linkedRecord ? `Eliminar usuario y ${linkedRecord}` : "Eliminar usuario",
+        text: linkedRecord
+          ? `Se eliminarán ${user.email}, su ficha de ${linkedRecord} y sus registros asociados. Esta acción no se puede deshacer.`
           : `Se eliminará ${user.email}. Esta acción no se puede deshacer.`,
         showCancelButton: true,
         confirmButtonText: "Sí, eliminar",
@@ -261,7 +262,7 @@ export default {
       const result = await Swal.fire({
         icon: "warning",
         title: `Eliminar ${count} ${count === 1 ? "usuario" : "usuarios"}`,
-        text: `Se eliminarán ${preview}${remaining > 0 ? ` y ${remaining} más` : ""}. Si están vinculados a funcionarios, también se eliminarán sus fichas y registros asociados. Esta acción no se puede deshacer.`,
+        text: `Se eliminarán ${preview}${remaining > 0 ? ` y ${remaining} más` : ""}. Si están vinculados a funcionarios o estudiantes, también se eliminarán sus fichas y registros asociados. Esta acción no se puede deshacer.`,
         showCancelButton: true,
         confirmButtonText: `Sí, eliminar ${count}`,
         cancelButtonText: "Cancelar",

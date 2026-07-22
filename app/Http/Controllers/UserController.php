@@ -5,7 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Cargo;
 use App\Models\Role;
 use App\Models\User;
-use App\Services\Staff\StaffDeletionService;
+use App\Services\Users\UserDeletionService;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -118,7 +118,7 @@ class UserController extends Controller
         ]);
     }
 
-    public function destroy(User $user, StaffDeletionService $deletionService): JsonResponse
+    public function destroy(User $user, UserDeletionService $deletionService): JsonResponse
     {
         $this->assertUsersCanBeDeleted(collect([$user]), request()->user());
 
@@ -133,13 +133,15 @@ class UserController extends Controller
         }
 
         return response()->json([
-            'message' => $result['staff'] > 0
-                ? 'Usuario y ficha de funcionario eliminados correctamente.'
-                : 'Usuario eliminado correctamente.',
+            'message' => match (true) {
+                $result['staff'] > 0 => 'Usuario y ficha de funcionario eliminados correctamente.',
+                $result['students'] > 0 => 'Usuario y ficha de estudiante eliminados correctamente.',
+                default => 'Usuario eliminado correctamente.',
+            },
         ]);
     }
 
-    public function bulkDestroy(Request $request, StaffDeletionService $deletionService): JsonResponse
+    public function bulkDestroy(Request $request, UserDeletionService $deletionService): JsonResponse
     {
         $payload = $request->validate([
             'users' => ['required', 'array', 'min:1', 'max:100'],
@@ -174,6 +176,7 @@ class UserController extends Controller
                 : "{$users->count()} usuarios eliminados correctamente.",
             'deleted_count' => $users->count(),
             'deleted_staff_count' => $result['staff'],
+            'deleted_student_count' => $result['students'],
         ]);
     }
 

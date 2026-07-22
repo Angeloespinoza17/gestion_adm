@@ -9,14 +9,17 @@ use App\Http\Requests\Students\StoreStudentRequest;
 use App\Http\Requests\Students\UpdateStudentRequest;
 use App\Models\AcademicYear;
 use App\Models\EducationLevel;
+use App\Models\Role;
 use App\Models\StudentEnrollment;
 use App\Models\StudentEnrollmentMovement;
 use App\Models\StudentProfile;
 use App\Models\StudentPromotion;
 use App\Services\Students\StudentAccountService;
+use App\Services\Students\StudentDeletionService;
 use App\Services\Students\StudentPdfChunkUploadService;
 use App\Services\Students\StudentPdfImportService;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\QueryException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
@@ -27,6 +30,7 @@ class StudentController extends Controller
 {
     public function __construct(
         private readonly StudentAccountService $studentAccountService,
+        private readonly StudentDeletionService $studentDeletionService,
     ) {}
 
     public function catalogs(): JsonResponse
@@ -182,6 +186,56 @@ class StudentController extends Controller
             'message' => 'Estudiante actualizada correctamente.',
             'data' => $this->loadStudent($student),
         ]);
+    }
+
+    public function deletionImpact(StudentProfile $studentProfile): JsonResponse
+    {
+        return response()->json([
+            'data' => $this->studentDeletionService->impact($studentProfile),
+        ]);
+    }
+
+    public function destroy(Request $request, StudentProfile $studentProfile): JsonResponse
+    {
+        $linkedUser = $studentProfile->user()->with('roles:id,slug')->first();
+
+        if ($linkedUser && (
+            $linkedUser->id === $request->user()?->id
+            || $linkedUser->roles->contains(fn (Role $role) => $role->slug === 'super_admin')
+        )) {
+            throw ValidationException::withMessages([
+                'student' => 'La cuenta actual y las cuentas Super Admin no pueden eliminarse.',
+            ]);
+        }
+
+        try {
+            $result = $this->studentDeletionService->deleteStudent($studentProfile);
+        } catch (QueryException $exception) {
+            report($exception);
+
+            return response()->json([
+                'message' => 'No se eliminó la estudiante. Existen registros protegidos que deben conservarse.',
+            ], 409);
+        }
+
+        return response()->json([
+            'message' => $result['account_deleted']
+                ? 'Estudiante y cuenta de acceso eliminadas correctamente.'
+                : 'Ficha de estudiante eliminada correctamente.',
+        ]);
+    }
+
+    public function restoreAccount(Request $request, StudentProfile $studentProfile): JsonResponse
+    {
+        $hadAccount = $studentProfile->user()->exists();
+        $user = $this->studentAccountService->restoreAccount($studentProfile, $request->user());
+
+        return response()->json([
+            'message' => $hadAccount
+                ? 'La estudiante ya tenía una cuenta asociada.'
+                : 'Cuenta de estudiante creada correctamente.',
+            'data' => $user->only(['id', 'student_id', 'name', 'email', 'active']),
+        ], $hadAccount ? 200 : 201);
     }
 
     private function loadStudent(StudentProfile $student): StudentProfile

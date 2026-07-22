@@ -34,6 +34,7 @@ const permissionTooltipBySlug = {
   ver_estudiantes: "Permite ver el listado de estudiantes, catálogos, niveles, años académicos, cursos y exportación básica de estudiantes.",
   crear_estudiantes: "Permite crear nuevas fichas de estudiantes.",
   editar_estudiantes: "Permite actualizar datos de la ficha de estudiante.",
+  eliminar_estudiantes: "Permite revisar el impacto y eliminar definitivamente una ficha de estudiante, su cuenta y registros dependientes.",
   ver_ficha_estudiante: "Permite abrir y consultar la ficha detallada de un estudiante.",
   administrar_anos_academicos: "Permite crear, editar y activar años académicos.",
   administrar_cursos_academicos: "Permite administrar niveles y cursos académicos: crear, editar y eliminar niveles, y crear o editar cursos.",

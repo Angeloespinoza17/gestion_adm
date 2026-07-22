@@ -130,6 +130,8 @@ export default {
       loading: false,
       exporting: false,
       importingPdf: false,
+      deletingStudentId: null,
+      restoringStudentId: null,
       pdfImportProgress: 0,
       pdfImportCourseId: null,
       error: null,
@@ -152,6 +154,19 @@ export default {
     };
   },
   computed: {
+    permissions() {
+      try {
+        return JSON.parse(localStorage.getItem("permissions") || "[]");
+      } catch (error) {
+        return [];
+      }
+    },
+    canDelete() {
+      return this.permissions.includes("eliminar_estudiantes");
+    },
+    canEdit() {
+      return this.permissions.includes("editar_estudiantes");
+    },
     academicYearOptions() {
       return [{ value: null, text: "Todos" }].concat(
         (this.catalogs.academic_years || []).map((year) => ({
@@ -302,6 +317,84 @@ export default {
         this.error = this.formatError(error);
       } finally {
         this.loading = false;
+      }
+    },
+    async restoreStudentAccount(student) {
+      if (!this.canEdit || student.user || this.restoringStudentId) return;
+
+      const result = await Swal.fire({
+        icon: "question",
+        title: "Crear cuenta de acceso",
+        text: `Se creará una cuenta activa para ${student.full_name}. La contraseña inicial será su RUT; si no tiene RUT, el sistema generará una clave segura.`,
+        showCancelButton: true,
+        confirmButtonText: "Sí, crear cuenta",
+        cancelButtonText: "Cancelar",
+        confirmButtonColor: "#34c38f",
+        focusCancel: true,
+        reverseButtons: true,
+      });
+
+      if (!result.isConfirmed) return;
+
+      this.restoringStudentId = student.id;
+      try {
+        const response = await axios.post(`/api/students/${student.id}/account`);
+        await this.showSuccessAlert("Cuenta creada", response.data.message || "La cuenta fue creada correctamente.");
+        await this.loadStudents(this.pagination.current_page);
+      } catch (error) {
+        await this.showErrorAlert(this.formatError(error));
+      } finally {
+        this.restoringStudentId = null;
+      }
+    },
+    async removeStudent(student) {
+      if (!this.canDelete || this.deletingStudentId) return;
+
+      this.deletingStudentId = student.id;
+      try {
+        const response = await axios.get(`/api/students/${student.id}/deletion-impact`);
+        const impact = response.data.data || {};
+        const deleteRows = impact.will_delete || [];
+        const preserveRows = impact.will_preserve || [];
+        const deleteDetails = deleteRows.length
+          ? `<ul style="margin:8px 0 0;padding-left:20px;text-align:left">${deleteRows
+              .map((row) => `<li>${this.escapeHtml(row.label)}: <strong>${this.formatNumber(row.count)}</strong></li>`)
+              .join("")}</ul>`
+          : '<p style="margin:8px 0 0">No hay registros dependientes adicionales.</p>';
+        const preserveDetails = preserveRows.length
+          ? `<p style="margin:12px 0 4px;text-align:left"><strong>Se conservarán como historial:</strong> ${preserveRows
+              .map((row) => `${this.escapeHtml(row.label)} (${this.formatNumber(row.count)})`)
+              .join(", ")}.</p>`
+          : "";
+        const accountText = impact.account?.exists
+          ? `También se eliminará la cuenta <strong>${this.escapeHtml(impact.account.email || "asociada")}</strong>.`
+          : "Esta ficha no tiene una cuenta de acceso asociada.";
+
+        const result = await Swal.fire({
+          icon: "warning",
+          title: "Eliminar estudiante definitivamente",
+          html: `<p>Se eliminará la ficha de <strong>${this.escapeHtml(student.full_name)}</strong>. ${accountText}</p><p style="margin-bottom:0;text-align:left"><strong>Registros que se eliminarán:</strong></p>${deleteDetails}${preserveDetails}<p style="margin:14px 0 0;color:#f46a6a"><strong>Esta acción no se puede deshacer.</strong></p>`,
+          showCancelButton: true,
+          confirmButtonText: "Sí, eliminar definitivamente",
+          cancelButtonText: "Cancelar",
+          confirmButtonColor: "#f46a6a",
+          focusCancel: true,
+          reverseButtons: true,
+          width: 620,
+        });
+
+        if (!result.isConfirmed) return;
+
+        const deletion = await axios.delete(`/api/students/${student.id}`);
+        await this.showSuccessAlert("Estudiante eliminada", deletion.data.message || "La ficha fue eliminada correctamente.");
+        await this.loadStudents(this.pagination.current_page);
+        if (this.students.length === 0 && this.pagination.current_page > 1) {
+          await this.loadStudents(this.pagination.current_page - 1);
+        }
+      } catch (error) {
+        await this.showErrorAlert(this.formatError(error));
+      } finally {
+        this.deletingStudentId = null;
       }
     },
     async onAcademicYearChange() {
@@ -862,6 +955,14 @@ export default {
         "Error desconocido"
       );
     },
+    escapeHtml(value) {
+      return String(value ?? "")
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#039;");
+    },
   },
 };
 </script>
@@ -1034,17 +1135,49 @@ export default {
           <template #cell(account)="{ item }">
             <span
               class="student-list-chip"
-              :class="item.user?.active ? 'student-list-chip--success' : 'student-list-chip--neutral'"
+              :class="{
+                'student-list-chip--success': item.user?.active,
+                'student-list-chip--neutral': item.user && !item.user.active,
+                'student-list-chip--warning': !item.user,
+              }"
             >
               <span class="student-list-chip__dot"></span>
-              <span>{{ item.user?.active ? "Activa" : "Inactiva" }}</span>
+              <span>{{ !item.user ? "Sin cuenta" : item.user.active ? "Activa" : "Inactiva" }}</span>
             </span>
           </template>
           <template #cell(actions)="{ item }">
-            <router-link :to="`/students/${item.id}`" class="btn btn-sm btn-outline-primary student-list-action">
-              <i class="bx bx-show"></i>
-              <span>Ver ficha</span>
-            </router-link>
+            <div class="student-list-actions">
+              <router-link :to="`/students/${item.id}`" class="btn btn-sm btn-outline-primary student-list-action">
+                <i class="bx bx-show"></i>
+                <span>Ver ficha</span>
+              </router-link>
+              <BButton
+                v-if="!item.user && canEdit"
+                size="sm"
+                variant="outline-success"
+                class="student-list-action"
+                :disabled="restoringStudentId === item.id || deletingStudentId === item.id"
+                title="Crear nuevamente la cuenta de acceso"
+                @click="restoreStudentAccount(item)"
+              >
+                <span v-if="restoringStudentId === item.id" class="spinner-border spinner-border-sm"></span>
+                <i v-else class="bx bx-user-plus"></i>
+                <span>Crear cuenta</span>
+              </BButton>
+              <BButton
+                v-if="canDelete"
+                size="sm"
+                variant="outline-danger"
+                class="student-list-action"
+                :disabled="deletingStudentId === item.id || restoringStudentId === item.id"
+                title="Revisar impacto y eliminar estudiante"
+                @click="removeStudent(item)"
+              >
+                <span v-if="deletingStudentId === item.id" class="spinner-border spinner-border-sm"></span>
+                <i v-else class="bx bx-trash"></i>
+                <span>Eliminar</span>
+              </BButton>
+            </div>
           </template>
         </BTable>
 
@@ -1324,7 +1457,24 @@ export default {
   border-color: rgba(116, 120, 141, 0.18);
 }
 
+.student-list-chip--warning {
+  color: #b76e00;
+  background: linear-gradient(180deg, rgba(241, 180, 76, 0.18) 0%, rgba(241, 180, 76, 0.1) 100%);
+  border-color: rgba(241, 180, 76, 0.3);
+}
+
+.student-list-actions {
+  align-items: center;
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  justify-content: flex-end;
+}
+
 .student-list-action {
+  align-items: center;
+  display: inline-flex;
+  gap: 0.3rem;
   min-height: 31px;
 }
 

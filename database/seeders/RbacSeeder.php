@@ -101,6 +101,7 @@ class RbacSeeder extends Seeder
             ['slug' => 'ver_estudiantes', 'name' => 'Ver Estudiantes'],
             ['slug' => 'crear_estudiantes', 'name' => 'Crear Estudiantes'],
             ['slug' => 'editar_estudiantes', 'name' => 'Editar Estudiantes'],
+            ['slug' => 'eliminar_estudiantes', 'name' => 'Eliminar Estudiantes'],
             ['slug' => 'ver_ficha_estudiante', 'name' => 'Ver Ficha Estudiante'],
             ['slug' => 'administrar_anos_academicos', 'name' => 'Administrar Años Académicos'],
             ['slug' => 'administrar_cursos_academicos', 'name' => 'Administrar Cursos Académicos'],

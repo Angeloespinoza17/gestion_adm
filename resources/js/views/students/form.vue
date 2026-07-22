@@ -1065,21 +1065,27 @@ export default {
                 <label class="form-label">Teléfono</label>
                 <BFormInput v-model="form.phone" />
               </div>
-              <div class="col-md-3">
+              <div v-if="!isNew && student && !student.user" class="col-12">
+                <BAlert show variant="warning" class="mb-0">
+                  <strong>Esta ficha no tiene cuenta de acceso.</strong>
+                  Puedes guardar los datos sin crearla. Para recuperarla, usa “Crear cuenta” en el listado de estudiantes.
+                </BAlert>
+              </div>
+              <div v-if="isNew || student?.user" class="col-md-3">
                 <label class="form-label">Cuenta activa</label>
                 <div class="pt-2">
                   <BFormCheckbox v-model="form.account_active">Permitir acceso</BFormCheckbox>
                 </div>
               </div>
-              <div class="col-md-6">
+              <div v-if="isNew || student?.user" class="col-md-6">
                 <label class="form-label">Cuenta plataforma</label>
                 <BFormInput :model-value="generatedPlatformEmail" disabled />
               </div>
-              <div class="col-md-3">
+              <div v-if="isNew || student?.user" class="col-md-3">
                 <label class="form-label">Clave automática inicial</label>
                 <BFormInput :model-value="generatedPlatformPassword" disabled />
               </div>
-              <div class="col-md-3">
+              <div v-if="isNew || student?.user" class="col-md-3">
                 <label class="form-label">Restablecer contraseña</label>
                 <BFormInput v-model="form.password" type="password" placeholder="Opcional" />
               </div>

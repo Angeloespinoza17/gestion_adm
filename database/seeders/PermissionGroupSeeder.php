@@ -90,6 +90,7 @@ class PermissionGroupSeeder extends Seeder
                     'ver_estudiantes',
                     'crear_estudiantes',
                     'editar_estudiantes',
+                    'eliminar_estudiantes',
                     'ver_ficha_estudiante',
                     'administrar_anos_academicos',
                     'administrar_cursos_academicos',

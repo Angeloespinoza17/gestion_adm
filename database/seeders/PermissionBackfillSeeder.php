@@ -38,6 +38,9 @@ class PermissionBackfillSeeder extends Seeder
     private function permissions(): array
     {
         return [
+            // Estudiantes
+            ['slug' => 'eliminar_estudiantes', 'name' => 'Eliminar Estudiantes', 'description' => 'Permite revisar el impacto y eliminar de forma definitiva la ficha de una estudiante junto con su cuenta y registros dependientes.'],
+
             // Funcionarios
             ['slug' => 'exportar_funcionarios', 'name' => 'Exportar Funcionarios', 'description' => 'Permite exportar listados y fichas de funcionarios desde el modulo de personal.'],
 
