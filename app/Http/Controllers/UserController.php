@@ -5,10 +5,14 @@ namespace App\Http\Controllers;
 use App\Models\User;
 use App\Models\Cargo;
 use App\Models\Role;
+use Illuminate\Database\QueryException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 
 class UserController extends Controller
 {
@@ -38,6 +42,17 @@ class UserController extends Controller
             })
             ->orderBy('name')
             ->paginate((int) $request->query('per_page', 15));
+
+        $actorId = $request->user()?->id;
+        $users->getCollection()->transform(function (User $user) use ($actorId): User {
+            $user->setAttribute(
+                'can_delete',
+                $user->id !== $actorId
+                    && ! $user->roles->contains(fn (Role $role) => $role->slug === 'super_admin')
+            );
+
+            return $user;
+        });
 
         return response()->json($users);
     }
@@ -105,10 +120,52 @@ class UserController extends Controller
 
     public function destroy(User $user): JsonResponse
     {
+        $this->assertUsersCanBeDeleted(collect([$user]), request()->user());
         $user->delete();
 
         return response()->json([
             'message' => 'Usuario eliminado correctamente.',
+        ]);
+    }
+
+    public function bulkDestroy(Request $request): JsonResponse
+    {
+        $payload = $request->validate([
+            'users' => ['required', 'array', 'min:1', 'max:100'],
+            'users.*' => ['required', 'integer', 'distinct', 'exists:users,id'],
+        ]);
+
+        $userIds = collect($payload['users'])
+            ->map(fn ($id) => (int) $id)
+            ->unique()
+            ->values();
+
+        $users = User::query()
+            ->with('roles:id,name,slug')
+            ->whereIn('id', $userIds)
+            ->get();
+
+        $this->assertUsersCanBeDeleted($users, $request->user());
+
+        try {
+            DB::transaction(function () use ($users): void {
+                foreach ($users as $user) {
+                    $user->delete();
+                }
+            });
+        } catch (QueryException $exception) {
+            report($exception);
+
+            return response()->json([
+                'message' => 'No se eliminaron usuarios. Uno o más tienen registros relacionados que deben conservarse.',
+            ], 409);
+        }
+
+        return response()->json([
+            'message' => $users->count() === 1
+                ? 'Usuario eliminado correctamente.'
+                : "{$users->count()} usuarios eliminados correctamente.",
+            'deleted_count' => $users->count(),
         ]);
     }
 
@@ -152,6 +209,22 @@ class UserController extends Controller
         return response()->json([
             'message' => 'Cargo actualizado correctamente.',
             'data' => $user->load('cargo:id,name,slug', 'roles:id,name,slug'),
+        ]);
+    }
+
+    private function assertUsersCanBeDeleted(Collection $users, ?User $actor): void
+    {
+        $protectedUsers = $users->filter(function (User $user) use ($actor): bool {
+            return $user->id === $actor?->id
+                || $user->roles->contains(fn (Role $role) => $role->slug === 'super_admin');
+        });
+
+        if ($protectedUsers->isEmpty()) {
+            return;
+        }
+
+        throw ValidationException::withMessages([
+            'users' => 'La cuenta actual y las cuentas Super Admin no pueden eliminarse.',
         ]);
     }
 }

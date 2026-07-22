@@ -241,6 +241,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/users/catalogs', [UserController::class, 'catalogs'])->middleware('permission:administrar_usuarios');
         Route::get('/users', [UserController::class, 'index'])->middleware('permission:administrar_usuarios');
         Route::post('/users', [UserController::class, 'store'])->middleware('permission:administrar_usuarios');
+        Route::delete('/users/bulk', [UserController::class, 'bulkDestroy'])->middleware('permission:administrar_usuarios');
         Route::get('/users/{user}', [UserController::class, 'show'])->middleware('permission:administrar_usuarios');
         Route::put('/users/{user}', [UserController::class, 'update'])->middleware('permission:administrar_usuarios');
         Route::delete('/users/{user}', [UserController::class, 'destroy'])->middleware('permission:administrar_usuarios');
