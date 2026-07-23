@@ -1296,6 +1296,10 @@ Route::middleware('auth:sanctum')->group(function () {
         ->middleware('permission:ver_funcionarios');
     Route::get('/staff', [StaffController::class, 'index'])
         ->middleware('permission:ver_funcionarios');
+    Route::get('/staff/import-template', [StaffController::class, 'importTemplate'])
+        ->middleware('permission:gestionar_funcionarios');
+    Route::post('/staff/import', [StaffController::class, 'import'])
+        ->middleware('permission:gestionar_funcionarios');
     Route::post('/staff', [StaffController::class, 'store'])
         ->middleware('permission:gestionar_funcionarios');
     Route::get('/staff/departments/catalogs', [DepartmentController::class, 'catalogs'])

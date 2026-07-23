@@ -1,6 +1,7 @@
 <script>
 import axios from "axios";
 import CentroApuntesHelpButton from "../help-button.vue";
+import CentroApuntesSectionToolbar from "../section-toolbar.vue";
 import CentroApuntesStatusBadge from "../status-badge.vue";
 import LoadingState from "../../ui/loading-state.vue";
 import {
@@ -15,6 +16,7 @@ import {
 export default {
   components: {
     CentroApuntesHelpButton,
+    CentroApuntesSectionToolbar,
     CentroApuntesStatusBadge,
     LoadingState,
   },
@@ -65,7 +67,7 @@ export default {
         { label: "Consumo oficio", value: metrics.month_officio_consumption || 0, icon: "bx-spreadsheet", tone: "secondary" },
         { label: "Stock crítico", value: metrics.critical_stock || 0, icon: "bx-error-circle", tone: "warning" },
         { label: "Materiales entregados", value: metrics.delivered_materials || 0, icon: "bx-transfer-alt", tone: "primary" },
-        { label: "Costo estimado mes", value: `$${Number(metrics.month_estimated_costs || 0).toLocaleString("es-CL")}`, icon: "bx-dollar-circle", tone: "success" },
+        { label: "Próximos a agotarse", value: metrics.supplies_near_depletion || 0, icon: "bx-trending-down", tone: "warning" },
       ];
     },
     alertCards() {
@@ -168,20 +170,22 @@ export default {
 </script>
 
 <template>
-  <div class="d-flex flex-column gap-3">
-    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
-      <div>
-        <div class="fw-semibold">Panel operativo del Centro de Apuntes</div>
-        <small v-if="dashboard.generated_at" class="text-muted">Actualizado {{ formatCentroApuntesDateTime(dashboard.generated_at) }}</small>
-      </div>
+  <div class="centro-apuntes-tab d-flex flex-column gap-3">
+    <CentroApuntesSectionToolbar
+      title="Panel operativo"
+      description="Prioriza tareas, disponibilidad de equipos, consumos y alertas del pañol."
+      icon="bx-pulse"
+      eyebrow="Resumen en tiempo real"
+    >
       <div class="d-flex gap-2 flex-wrap">
         <CentroApuntesHelpButton
           title="Ayuda: dashboard operativo"
-          text="Este panel resume solicitudes de impresión, urgencias, stock crítico, consumo de insumos, costos estimados y entregas de materiales para priorizar la operación diaria."
+          text="Este panel resume solicitudes de impresión, urgencias, stock crítico, consumo de insumos y entregas de materiales para priorizar la operación diaria."
         />
         <BButton variant="primary" :disabled="loading" @click="loadDashboard"><i class="bx bx-refresh me-1" :class="{ 'bx-spin': loading }"></i>Actualizar</BButton>
       </div>
-    </div>
+      <small v-if="dashboard.generated_at" class="visually-hidden">Actualizado {{ formatCentroApuntesDateTime(dashboard.generated_at) }}</small>
+    </CentroApuntesSectionToolbar>
 
     <BAlert v-if="error" show variant="danger">{{ error }}</BAlert>
     <BCard v-if="loading" class="border-0 shadow-sm">

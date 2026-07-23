@@ -164,7 +164,7 @@ class CentroApuntesSolicitudService
         return [
             'requester:id,name,email,user_type,staff_id',
             'subject:id,name,code,area,education_level,status',
-            'machine:id,name,internal_code,type,status,estimated_cost_letter,estimated_cost_officio',
+            'machine:id,name,internal_code,type,status',
             'receivedBy:id,name,email',
             'attachments.uploadedBy:id,name',
             'history.performedBy:id,name',
@@ -183,11 +183,9 @@ class CentroApuntesSolicitudService
 
         $sheetCount = (int) $payload['sheet_count'];
         $copiesCount = (int) $payload['copies_count'];
-        $costPerSheet = (float) ($payload['paper_size'] === 'oficio'
-            ? $machine->estimated_cost_officio
-            : $machine->estimated_cost_letter);
-        $costPerCopy = $sheetCount * $costPerSheet;
         $totalImpressions = $sheetCount * $copiesCount;
+        $metadata = $current?->metadata ?? [];
+        unset($metadata['machine_cost_reference']);
 
         return [
             'request_code' => $current?->request_code ?? $this->nextRequestCode(),
@@ -212,17 +210,11 @@ class CentroApuntesSolicitudService
             'internal_observations' => $payload['internal_observations'] ?? $current?->internal_observations,
             'status' => $current?->status ?? 'pendiente',
             'estimated_total_impressions' => $totalImpressions,
-            'estimated_cost_per_sheet' => $costPerSheet,
-            'estimated_cost_per_copy' => $costPerCopy,
-            'estimated_cost_total' => $costPerCopy * $copiesCount,
+            'estimated_cost_per_sheet' => 0,
+            'estimated_cost_per_copy' => 0,
+            'estimated_cost_total' => 0,
             'status_changed_at' => $current?->status_changed_at ?? Carbon::now(),
-            'metadata' => array_merge($current?->metadata ?? [], [
-                'machine_cost_reference' => [
-                    'paper_size' => $payload['paper_size'],
-                    'estimated_cost_letter' => (float) $machine->estimated_cost_letter,
-                    'estimated_cost_officio' => (float) $machine->estimated_cost_officio,
-                ],
-            ]),
+            'metadata' => $metadata,
             'created_by' => $current?->created_by ?? $actor->id,
             'updated_by' => $actor->id,
         ];

@@ -39,7 +39,6 @@ class CentroApuntesDashboardService
                 ->where('current_stock', '>', 0)
                 ->whereRaw('current_stock <= GREATEST(minimum_stock * 1.2, minimum_stock + 1)')
                 ->count(),
-            'month_estimated_costs' => (float) CentroApuntesSolicitud::query()->whereDate('requested_at', '>=', $monthStart)->sum('estimated_cost_total'),
         ];
 
         $alerts = $this->refreshAlerts($today);

@@ -33,6 +33,11 @@ class CentroApuntesMaquina extends Model
 
     protected $table = 'centro_apuntes_maquinas';
 
+    protected $hidden = [
+        'estimated_cost_letter',
+        'estimated_cost_officio',
+    ];
+
     protected $fillable = [
         'name',
         'internal_code',

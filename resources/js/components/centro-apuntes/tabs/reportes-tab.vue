@@ -1,6 +1,7 @@
 <script>
 import axios from "axios";
 import CentroApuntesHelpButton from "../help-button.vue";
+import CentroApuntesSectionToolbar from "../section-toolbar.vue";
 import LoadingState from "../../ui/loading-state.vue";
 import {
   basicApexOptions,
@@ -16,6 +17,7 @@ import {
 export default {
   components: {
     CentroApuntesHelpButton,
+    CentroApuntesSectionToolbar,
     LoadingState,
   },
   props: {
@@ -216,23 +218,22 @@ export default {
 </script>
 
 <template>
-  <div class="d-flex flex-column gap-3">
-    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
-      <div class="fw-semibold">Reportes operativos y costeo estimado</div>
+  <div class="centro-apuntes-tab d-flex flex-column gap-3">
+    <CentroApuntesSectionToolbar title="Reportes operativos" description="Analiza actividad, demanda, consumo y distribución por período." icon="bx-bar-chart-alt-2" eyebrow="Análisis y exportación">
       <div class="d-flex gap-2">
         <CentroApuntesHelpButton
-          title="Ayuda: reportes y costeo"
+          title="Ayuda: reportes operativos"
           text="Aquí se consolidan solicitudes, movimientos y entregas por período, con exportación a Excel, PDF e impresión para seguimiento y toma de decisiones."
         />
         <BButton v-if="canExport" variant="outline-success" :disabled="loading" @click="exportExcel"><i class="bx bx-spreadsheet me-1"></i>Excel</BButton>
         <BButton v-if="canExport" variant="outline-danger" :disabled="loading" @click="exportPdf"><i class="bx bxs-file-pdf me-1"></i>PDF</BButton>
         <BButton v-if="canExport" variant="outline-dark" :disabled="loading" @click="printReport"><i class="bx bx-printer me-1"></i>Imprimir</BButton>
       </div>
-    </div>
+    </CentroApuntesSectionToolbar>
 
     <BAlert v-if="error" show variant="danger">{{ error }}</BAlert>
 
-    <BCard class="border-0 shadow-sm">
+    <BCard class="filter-card border-0 shadow-sm">
       <div class="row g-3 align-items-end">
         <div class="col-md-2">
           <label class="form-label">Período</label>
@@ -299,28 +300,22 @@ export default {
 
     <template v-else>
       <div class="row g-3">
-        <div class="col-md-6 col-xl-3">
+        <div class="col-md-6 col-xl-4">
           <BCard class="border-0 shadow-sm h-100">
             <div class="text-muted small">Solicitudes</div>
             <div class="display-6 fw-semibold">{{ report.summary?.requests_total || 0 }}</div>
           </BCard>
         </div>
-        <div class="col-md-6 col-xl-3">
+        <div class="col-md-6 col-xl-4">
           <BCard class="border-0 shadow-sm h-100">
             <div class="text-muted small">Urgentes</div>
             <div class="display-6 fw-semibold">{{ report.summary?.urgent_total || 0 }}</div>
           </BCard>
         </div>
-        <div class="col-md-6 col-xl-3">
+        <div class="col-md-6 col-xl-4">
           <BCard class="border-0 shadow-sm h-100">
             <div class="text-muted small">Entregadas</div>
             <div class="display-6 fw-semibold">{{ report.summary?.delivered_total || 0 }}</div>
-          </BCard>
-        </div>
-        <div class="col-md-6 col-xl-3">
-          <BCard class="border-0 shadow-sm h-100">
-            <div class="text-muted small">Costo estimado</div>
-            <div class="display-6 fw-semibold">${{ Number(report.summary?.estimated_cost_total || 0).toLocaleString("es-CL") }}</div>
           </BCard>
         </div>
       </div>

@@ -1,6 +1,8 @@
 <script>
 import axios from "axios";
 import CentroApuntesHelpButton from "../help-button.vue";
+import CentroApuntesModalIntro from "../modal-intro.vue";
+import CentroApuntesSectionToolbar from "../section-toolbar.vue";
 import CentroApuntesStatusBadge from "../status-badge.vue";
 import LoadingState from "../../ui/loading-state.vue";
 import {
@@ -8,6 +10,7 @@ import {
   confirmCentroApuntesCancel,
   formatCentroApuntesDateTime,
   formatCentroApuntesError,
+  normalizeCentroApuntesNullableFields,
   normalizeOptions,
   showCentroApuntesSuccess,
 } from "../module-utils";
@@ -17,19 +20,19 @@ const emptyForm = () => ({
   name: "",
   internal_code: "",
   type: "impresora",
-  brand: "",
-  model: "",
-  location: "",
+  brand: null,
+  model: null,
+  location: null,
   responsible_user_id: null,
   status: "activa",
-  estimated_cost_letter: 0,
-  estimated_cost_officio: 0,
-  observations: "",
+  observations: null,
 });
 
 export default {
   components: {
     CentroApuntesHelpButton,
+    CentroApuntesModalIntro,
+    CentroApuntesSectionToolbar,
     CentroApuntesStatusBadge,
     LoadingState,
   },
@@ -109,14 +112,12 @@ export default {
         name: item.name,
         internal_code: item.internal_code,
         type: item.type,
-        brand: item.brand || "",
-        model: item.model || "",
-        location: item.location || "",
+        brand: item.brand ?? null,
+        model: item.model ?? null,
+        location: item.location ?? null,
         responsible_user_id: item.responsible_user_id || null,
         status: item.status,
-        estimated_cost_letter: item.estimated_cost_letter,
-        estimated_cost_officio: item.estimated_cost_officio,
-        observations: item.observations || "",
+        observations: item.observations ?? null,
       };
       this.showModal = true;
     },
@@ -145,10 +146,17 @@ export default {
 
       this.saving = true;
       try {
+        const payload = normalizeCentroApuntesNullableFields(this.form, [
+          "brand",
+          "model",
+          "location",
+          "responsible_user_id",
+          "observations",
+        ]);
         if (this.form.id) {
-          await axios.put(`/api/centro-apuntes/maquinas/${this.form.id}`, this.form);
+          await axios.put(`/api/centro-apuntes/maquinas/${this.form.id}`, payload);
         } else {
-          await axios.post("/api/centro-apuntes/maquinas", this.form);
+          await axios.post("/api/centro-apuntes/maquinas", payload);
         }
         this.showModal = false;
         this.$emit("refresh-catalogs");
@@ -198,21 +206,20 @@ export default {
 </script>
 
 <template>
-  <div class="d-flex flex-column gap-3">
-    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
-      <div class="fw-semibold">Administración de máquinas</div>
+  <div class="centro-apuntes-tab d-flex flex-column gap-3">
+    <CentroApuntesSectionToolbar title="Administración de máquinas" description="Controla disponibilidad, responsables y uso de los equipos de impresión." icon="bx-devices">
       <div class="d-flex gap-2">
         <CentroApuntesHelpButton
           title="Ayuda: máquinas"
-          text="Aquí se gestionan impresoras, fotocopiadoras y equipos del centro de apuntes, incluyendo su estado, responsable y costo estimado por hoja."
+          text="Aquí se gestionan impresoras, fotocopiadoras y equipos del centro de apuntes, incluyendo su estado, ubicación, responsable e historial de uso."
         />
         <BButton v-if="canManage" variant="primary" @click="openCreate"><i class="bx bx-plus me-1"></i>Nueva máquina</BButton>
       </div>
-    </div>
+    </CentroApuntesSectionToolbar>
 
     <BAlert v-if="error" show variant="danger">{{ error }}</BAlert>
 
-    <BCard class="border-0 shadow-sm">
+    <BCard class="filter-card border-0 shadow-sm">
       <div class="row g-3 align-items-end">
         <div class="col-md-6">
           <label class="form-label">Buscar</label>
@@ -233,7 +240,7 @@ export default {
       </div>
     </BCard>
 
-    <BCard class="border-0 shadow-sm">
+    <BCard class="data-card border-0 shadow-sm">
       <LoadingState v-if="loading || detailLoading" message="Cargando máquinas..." compact />
       <BTable
         v-else
@@ -247,7 +254,6 @@ export default {
           { key: 'location', label: 'Ubicación' },
           { key: 'responsibleUser', label: 'Responsable' },
           { key: 'solicitudes_count', label: 'Tareas' },
-          { key: 'solicitudes_sum_estimated_cost_total', label: 'Costo asociado' },
           { key: 'status', label: 'Estado' },
           { key: 'actions', label: 'Acciones' },
         ]"
@@ -261,9 +267,6 @@ export default {
         </template>
         <template #cell(responsibleUser)="{ item }">
           {{ item.responsible_user?.name || item.responsibleUser?.name || "-" }}
-        </template>
-        <template #cell(solicitudes_sum_estimated_cost_total)="{ item }">
-          ${{ Number(item.solicitudes_sum_estimated_cost_total || 0).toLocaleString("es-CL") }}
         </template>
         <template #cell(status)="{ item }">
           <CentroApuntesStatusBadge :status="item.status" />
@@ -286,68 +289,60 @@ export default {
       </div>
     </BCard>
 
-    <BModal v-model="showModal" title="Máquina" hide-footer>
-      <div class="d-flex justify-content-end mb-3">
+    <BModal v-model="showModal" :title="form.id ? 'Editar máquina' : 'Nueva máquina'" hide-footer centered scrollable modal-class="centro-apuntes-modal">
+      <CentroApuntesModalIntro title="Ficha del equipo" text="Registra la identificación del equipo; marca, modelo, ubicación y responsable son opcionales." icon="bx-devices">
         <CentroApuntesHelpButton
           title="Ayuda: formulario de máquina"
-          text="Use este formulario para registrar impresoras, fotocopiadoras y equipos del centro de apuntes, indicando su ubicación, responsable, estado y costos estimados."
+          text="Use este formulario para registrar impresoras, fotocopiadoras y equipos del centro de apuntes, indicando su ubicación, responsable y estado operativo."
         />
-      </div>
-      <div class="row g-3">
+      </CentroApuntesModalIntro>
+      <div class="modal-form-grid row g-3">
         <div class="col-md-8">
-          <label class="form-label">Nombre</label>
+          <label class="form-label">Nombre <span class="field-required">*</span></label>
           <BFormInput v-model="form.name" />
         </div>
         <div class="col-md-4">
-          <label class="form-label">Código interno</label>
+          <label class="form-label">Código interno <span class="field-required">*</span></label>
           <BFormInput v-model="form.internal_code" />
         </div>
         <div class="col-md-6">
-          <label class="form-label">Tipo</label>
+          <label class="form-label">Tipo <span class="field-required">*</span></label>
           <BFormSelect v-model="form.type" :options="typeOptions.map((item) => ({ value: item.value, text: item.label }))" />
         </div>
         <div class="col-md-6">
-          <label class="form-label">Estado</label>
+          <label class="form-label">Estado <span class="field-required">*</span></label>
           <BFormSelect v-model="form.status" :options="statusOptions.map((item) => ({ value: item.value, text: item.label }))" />
         </div>
         <div class="col-md-6">
-          <label class="form-label">Marca</label>
+          <label class="form-label">Marca <span class="field-optional">Opcional</span></label>
           <BFormInput v-model="form.brand" />
         </div>
         <div class="col-md-6">
-          <label class="form-label">Modelo</label>
+          <label class="form-label">Modelo <span class="field-optional">Opcional</span></label>
           <BFormInput v-model="form.model" />
         </div>
         <div class="col-md-6">
-          <label class="form-label">Ubicación</label>
+          <label class="form-label">Ubicación <span class="field-optional">Opcional</span></label>
           <BFormInput v-model="form.location" />
         </div>
         <div class="col-md-6">
-          <label class="form-label">Responsable</label>
+          <label class="form-label">Responsable <span class="field-optional">Opcional</span></label>
           <BFormSelect v-model="form.responsible_user_id" :options="[{ value: null, text: 'Sin responsable' }].concat(userOptions.map((item) => ({ value: item.value, text: item.label })))" />
         </div>
-        <div class="col-md-6">
-          <label class="form-label">Costo estimado carta</label>
-          <BFormInput v-model="form.estimated_cost_letter" type="number" min="0" step="0.01" />
-        </div>
-        <div class="col-md-6">
-          <label class="form-label">Costo estimado oficio</label>
-          <BFormInput v-model="form.estimated_cost_officio" type="number" min="0" step="0.01" />
-        </div>
         <div class="col-md-12">
-          <label class="form-label">Observaciones</label>
+          <label class="form-label">Observaciones <span class="field-optional">Opcional</span></label>
           <BFormTextarea v-model="form.observations" rows="3" />
         </div>
       </div>
-      <div class="d-flex justify-content-end gap-2 mt-4">
+      <div class="modal-actions">
         <BButton variant="light" @click="closeModal">Cancelar</BButton>
         <BButton variant="primary" :disabled="saving" @click="save">{{ saving ? "Guardando..." : "Guardar" }}</BButton>
       </div>
     </BModal>
 
-    <BModal v-model="showDetailModal" size="xl" title="Uso e historial de máquina" hide-footer>
+    <BModal v-model="showDetailModal" size="xl" title="Uso e historial de máquina" hide-footer centered scrollable modal-class="centro-apuntes-modal">
       <template v-if="selectedMachine">
-        <div class="row g-3">
+        <div class="detail-grid row g-3">
           <div class="col-md-4">
             <div class="text-muted small">Máquina</div>
             <div class="fw-semibold">{{ selectedMachine.name }}</div>
@@ -363,7 +358,7 @@ export default {
         </div>
 
         <div class="mt-4">
-          <div class="fw-semibold mb-2">Últimas tareas asignadas</div>
+          <div class="modal-section-title">Últimas tareas asignadas</div>
           <div class="table-responsive">
             <table class="table table-sm align-middle mb-0">
               <thead>
@@ -372,7 +367,7 @@ export default {
                   <th>Solicitante</th>
                   <th>Fecha</th>
                   <th>Estado</th>
-                  <th>Costo</th>
+                  <th>Volumen</th>
                 </tr>
               </thead>
               <tbody>
@@ -381,7 +376,7 @@ export default {
                   <td>{{ request.requested_by_name_snapshot }}</td>
                   <td>{{ formatCentroApuntesDateTime(request.requested_at) }}</td>
                   <td><CentroApuntesStatusBadge :status="request.status" /></td>
-                  <td>${{ Number(request.estimated_cost_total || 0).toLocaleString("es-CL") }}</td>
+                  <td>{{ request.sheet_count }} hoja(s) · {{ request.copies_count }} copia(s)</td>
                 </tr>
               </tbody>
             </table>

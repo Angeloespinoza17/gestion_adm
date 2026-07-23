@@ -13,6 +13,7 @@ export function formatCentroApuntesError(error, fallback = "No se pudo completar
 
 export function showCentroApuntesSuccess(text, title = "Operación realizada") {
   return Swal.fire({
+    customClass: { popup: "centro-apuntes-alert" },
     title,
     text,
     icon: "success",
@@ -23,6 +24,7 @@ export function showCentroApuntesSuccess(text, title = "Operación realizada") {
 
 export function showCentroApuntesError(text, title = "Error") {
   return Swal.fire({
+    customClass: { popup: "centro-apuntes-alert" },
     title,
     text,
     icon: "error",
@@ -32,6 +34,7 @@ export function showCentroApuntesError(text, title = "Error") {
 
 export function showCentroApuntesWarning(text, title = "Advertencia") {
   return Swal.fire({
+    customClass: { popup: "centro-apuntes-alert" },
     title,
     text,
     icon: "warning",
@@ -41,6 +44,7 @@ export function showCentroApuntesWarning(text, title = "Advertencia") {
 
 export function showCentroApuntesInfo(text, title = "Información") {
   return Swal.fire({
+    customClass: { popup: "centro-apuntes-alert" },
     title,
     text,
     icon: "info",
@@ -55,6 +59,7 @@ export function confirmCentroApuntesAction({
   icon = "question",
 }) {
   return Swal.fire({
+    customClass: { popup: "centro-apuntes-alert" },
     title,
     text,
     icon,
@@ -157,6 +162,19 @@ export function normalizeOptions(options, includeEmpty = false, emptyLabel = "To
   });
 
   return includeEmpty ? [{ value: null, label: emptyLabel }].concat(items) : items;
+}
+
+export function normalizeCentroApuntesNullableFields(payload, fields = []) {
+  const normalized = { ...payload };
+
+  fields.forEach((field) => {
+    const value = normalized[field];
+    if (value === undefined || value === null || (typeof value === "string" && value.trim() === "")) {
+      normalized[field] = null;
+    }
+  });
+
+  return normalized;
 }
 
 export function basicApexOptions({ categories = [], colors = ["#2f7cf6"], horizontal = false } = {}) {

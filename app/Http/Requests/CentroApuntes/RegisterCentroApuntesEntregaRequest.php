@@ -2,11 +2,19 @@
 
 namespace App\Http\Requests\CentroApuntes;
 
+use App\Http\Requests\CentroApuntes\Concerns\NormalizesNullableFields;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
 class RegisterCentroApuntesEntregaRequest extends FormRequest
 {
+    use NormalizesNullableFields;
+
+    protected function prepareForValidation(): void
+    {
+        $this->normalizeNullableFields(['notes']);
+    }
+
     public function authorize(): bool
     {
         return true;

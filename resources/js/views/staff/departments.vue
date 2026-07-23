@@ -4,11 +4,15 @@ import Layout from "../../layouts/main.vue";
 import LoadingState from "../../components/ui/loading-state.vue";
 import Multiselect from "@vueform/multiselect";
 import Swal from "sweetalert2";
+import StaffFieldLabel from "../../components/staff/field-label.vue";
+import StaffModalIntro from "../../components/staff/modal-intro.vue";
+import StaffPageHeader from "../../components/staff/page-header.vue";
+import "../../components/staff/staff-ui.css";
 
 const emptyForm = () => ({
   id: null,
   name: "",
-  description: "",
+  description: null,
   responsible_staff_id: null,
   active: true,
   color: "#0d6efd",
@@ -16,7 +20,7 @@ const emptyForm = () => ({
 });
 
 export default {
-  components: { Layout, LoadingState, Multiselect },
+  components: { Layout, LoadingState, Multiselect, StaffFieldLabel, StaffModalIntro, StaffPageHeader },
   data() {
     return {
       loading: false,
@@ -38,7 +42,7 @@ export default {
       return [{ value: null, label: "Sin encargado" }].concat(
         (this.catalogs.responsible_staff || []).map((staff) => ({
           value: staff.id,
-          label: `${staff.full_name} (${staff.rut})`,
+          label: staff.rut ? `${staff.full_name} (${staff.rut})` : staff.full_name,
         }))
       );
     },
@@ -75,7 +79,7 @@ export default {
       this.form = {
         id: department.id,
         name: department.name,
-        description: department.description || "",
+        description: department.description ?? null,
         responsible_staff_id: department.responsible_staff_id ?? null,
         active: Boolean(department.active),
         color: department.color || "#0d6efd",
@@ -170,6 +174,7 @@ export default {
         confirmButtonText,
         cancelButtonText: "Cancelar",
         reverseButtons: true,
+        customClass: { popup: "staff-alert" },
       });
     },
     showSuccessAlert(title, text) {
@@ -179,6 +184,7 @@ export default {
         icon: "success",
         timer: 1800,
         showConfirmButton: false,
+        customClass: { popup: "staff-alert" },
       });
     },
     showErrorAlert(text) {
@@ -186,6 +192,7 @@ export default {
         title: "Error",
         text,
         icon: "error",
+        customClass: { popup: "staff-alert" },
       });
     },
     formatError(error) {
@@ -203,31 +210,38 @@ export default {
 
 <template>
   <Layout>
-    <div class="d-flex justify-content-between align-items-center mb-3">
-      <div>
-        <h4 class="mb-0">Departamentos</h4>
-        <div class="text-muted">Catálogo editable de áreas institucionales.</div>
-      </div>
-      <BButton variant="primary" @click="openCreate">Nuevo departamento</BButton>
-    </div>
+    <StaffPageHeader
+      eyebrow="Funcionarios · Organización"
+      title="Departamentos"
+      subtitle="Organiza áreas institucionales, responsables y equipos asociados."
+      icon="bx-buildings"
+    >
+      <template #actions>
+        <router-link to="/staff" class="btn btn-outline-secondary">
+          <i class="bx bx-arrow-back me-1"></i>Funcionarios
+        </router-link>
+        <BButton variant="primary" @click="openCreate">
+          <i class="bx bx-plus me-1"></i>Nuevo departamento
+        </BButton>
+      </template>
+    </StaffPageHeader>
 
     <BAlert v-if="error" variant="danger" show class="mb-3">{{ error }}</BAlert>
     <BAlert v-if="success" variant="success" show class="mb-3">{{ success }}</BAlert>
 
-    <BCard class="mb-3">
+    <BCard class="mb-3 staff-department-card">
       <div class="row g-3">
         <div class="col-md-4">
           <label class="form-label">Buscar</label>
           <BFormInput v-model="search" placeholder="Nombre o descripción" @keyup.enter="load" />
         </div>
         <div class="col-md-4 d-flex align-items-end gap-2">
-          <BButton variant="secondary" @click="load">Buscar</BButton>
-          <router-link to="/staff" class="btn btn-outline-secondary">Volver a funcionarios</router-link>
+          <BButton variant="primary" @click="load"><i class="bx bx-search me-1"></i>Buscar</BButton>
         </div>
       </div>
     </BCard>
 
-    <BCard>
+    <BCard class="staff-department-card">
       <BTable
         :items="departments"
         :busy="loading"
@@ -262,51 +276,82 @@ export default {
         </template>
         <template #cell(actions)="{ item }">
           <div class="d-flex gap-2">
-            <BButton size="sm" variant="info" @click="openEdit(item)">Editar</BButton>
+            <BButton size="sm" variant="outline-primary" @click="openEdit(item)"><i class="bx bx-edit"></i></BButton>
             <BButton size="sm" :variant="item.active ? 'warning' : 'success'" @click="toggleActive(item)">
-              {{ item.active ? "Desactivar" : "Activar" }}
+              <i :class="item.active ? 'bx bx-pause' : 'bx bx-play'"></i>
             </BButton>
-            <BButton size="sm" variant="danger" @click="remove(item)">Eliminar</BButton>
+            <BButton size="sm" variant="outline-danger" @click="remove(item)"><i class="bx bx-trash"></i></BButton>
           </div>
         </template>
       </BTable>
     </BCard>
 
-    <BModal v-model="showModal" :title="isEditing ? 'Editar departamento' : 'Nuevo departamento'" size="lg" hide-footer>
+    <BModal
+      v-model="showModal"
+      :title="isEditing ? 'Editar departamento' : 'Nuevo departamento'"
+      size="lg"
+      centered
+      scrollable
+      hide-footer
+      modal-class="staff-modal"
+    >
       <BAlert v-if="error" variant="danger" show class="mb-3">{{ error }}</BAlert>
+
+      <StaffModalIntro
+        title="Datos del departamento"
+        text="El nombre es obligatorio. Encargado, descripción y color pueden dejarse sin información."
+        icon="bx-buildings"
+      />
 
       <div class="row g-3">
         <div class="col-md-8">
-          <label class="form-label">Nombre del departamento</label>
+          <StaffFieldLabel label="Nombre del departamento" required />
           <BFormInput v-model="form.name" />
         </div>
         <div class="col-md-4">
-          <label class="form-label">Orden</label>
+          <StaffFieldLabel label="Orden" :optional="false" />
           <BFormInput v-model="form.sort_order" type="number" min="0" />
         </div>
         <div class="col-md-6">
-          <label class="form-label">Encargado</label>
+          <StaffFieldLabel label="Encargado" />
           <Multiselect v-model="form.responsible_staff_id" :options="responsibleOptions" :searchable="true" />
         </div>
         <div class="col-md-3">
-          <label class="form-label">Color</label>
+          <StaffFieldLabel label="Color" />
           <input v-model="form.color" type="color" class="form-control form-control-color" />
         </div>
         <div class="col-md-3 d-flex align-items-end">
           <BFormCheckbox v-model="form.active">Activo</BFormCheckbox>
         </div>
         <div class="col-12">
-          <label class="form-label">Descripción</label>
+          <StaffFieldLabel label="Descripción" />
           <BFormTextarea v-model="form.description" rows="3" />
         </div>
       </div>
 
-      <div class="d-flex justify-content-end gap-2 mt-3">
-        <BButton variant="secondary" @click="showModal = false">Cancelar</BButton>
+      <div class="staff-modal-actions">
+        <BButton variant="light" @click="showModal = false">Cancelar</BButton>
         <BButton variant="primary" :disabled="saving" @click="save">
+          <i :class="saving ? 'bx bx-loader-alt bx-spin me-1' : 'bx bx-save me-1'"></i>
           {{ saving ? "Guardando..." : "Guardar" }}
         </BButton>
       </div>
     </BModal>
   </Layout>
 </template>
+
+<style scoped>
+.staff-department-card {
+  border: 1px solid #e7ebf3;
+  border-radius: 14px;
+  box-shadow: 0 10px 28px rgba(42, 48, 66, 0.05);
+}
+
+:deep(.staff-department-card .table) {
+  margin-bottom: 0;
+}
+
+:deep(.staff-department-card .table > :not(caption) > * > *) {
+  padding: 0.9rem 0.75rem;
+}
+</style>

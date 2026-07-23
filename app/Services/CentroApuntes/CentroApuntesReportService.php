@@ -40,7 +40,6 @@ class CentroApuntesReportService
                 'urgent_total' => $requests->where('is_urgent', true)->count(),
                 'immediate_total' => $requests->where('is_immediate', true)->count(),
                 'delivered_total' => $requests->where('status', 'entregada')->count(),
-                'estimated_cost_total' => round((float) $requests->sum('estimated_cost_total'), 2),
                 'supplies_out_total' => round((float) $movements->whereIn('movement_type', ['salida', 'perdida', 'vencimiento', 'baja'])->sum('quantity'), 2),
                 'deliveries_total' => $deliveries->count(),
             ],
@@ -54,7 +53,7 @@ class CentroApuntesReportService
             'sections' => [
                 [
                     'title' => 'Solicitudes de impresión',
-                    'headers' => ['Código', 'Solicitante', 'Asignatura', 'Máquina', 'Tipo', 'Estado', 'Entrega', 'Costo estimado'],
+                    'headers' => ['Código', 'Solicitante', 'Asignatura', 'Máquina', 'Tipo', 'Estado', 'Entrega'],
                     'rows' => $requests->map(fn (CentroApuntesSolicitud $item) => [
                         $item->request_code,
                         $item->requested_by_name_snapshot,
@@ -63,19 +62,17 @@ class CentroApuntesReportService
                         $item->task_type === 'otro' ? ($item->task_type_other ?: 'Otro') : str($item->task_type)->replace('_', ' ')->title()->toString(),
                         str($item->status)->replace('_', ' ')->title()->toString(),
                         optional($item->delivery_date)->format('Y-m-d'),
-                        $item->estimated_cost_total,
                     ])->all(),
                 ],
                 [
                     'title' => 'Entregas de materiales',
-                    'headers' => ['Código', 'Solicitante', 'Área', 'Estado', 'Fecha', 'Costo estimado'],
+                    'headers' => ['Código', 'Solicitante', 'Área', 'Estado', 'Fecha'],
                     'rows' => $deliveries->map(fn (PanolEntrega $item) => [
                         $item->delivery_code,
                         $item->requested_by_name_snapshot,
                         $item->department_name_snapshot ?: 'Sin área',
                         str($item->status)->replace('_', ' ')->title()->toString(),
                         optional($item->requested_at)->format('Y-m-d H:i'),
-                        $item->total_estimated_cost,
                     ])->all(),
                 ],
                 [

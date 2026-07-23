@@ -4,6 +4,9 @@ import Layout from "../../layouts/main.vue";
 import Multiselect from "@vueform/multiselect";
 import Swal from "sweetalert2";
 import { getPdfMake } from "../../utils/pdfmake";
+import StaffModalIntro from "../../components/staff/modal-intro.vue";
+import StaffPageHeader from "../../components/staff/page-header.vue";
+import "../../components/staff/staff-ui.css";
 
 const exportableColumns = [
   { value: "full_name", label: "Nombre completo" },
@@ -43,13 +46,20 @@ const perPageOptions = [
 ];
 
 export default {
-  components: { Layout, Multiselect },
+  components: { Layout, Multiselect, StaffModalIntro, StaffPageHeader },
   data() {
     return {
       loading: false,
       exporting: false,
       error: null,
       showExportModal: false,
+      showImportModal: false,
+      importing: false,
+      downloadingTemplate: false,
+      importFile: null,
+      importResult: null,
+      importFileKey: 0,
+      updateExisting: true,
       catalogs: {
         cargos: [],
         departments: [],
@@ -357,6 +367,72 @@ export default {
       };
       this.showExportModal = true;
     },
+    openImportModal() {
+      this.importFile = null;
+      this.importResult = null;
+      this.importFileKey += 1;
+      this.updateExisting = true;
+      this.showImportModal = true;
+    },
+    onImportFile(event) {
+      this.importFile = event?.target?.files?.[0] || null;
+      this.importResult = null;
+    },
+    async downloadImportTemplate() {
+      this.downloadingTemplate = true;
+      try {
+        const response = await axios.get("/api/staff/import-template", { responseType: "blob" });
+        const url = URL.createObjectURL(response.data);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = "plantilla_importacion_funcionarios.xlsx";
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        URL.revokeObjectURL(url);
+      } catch (error) {
+        this.showErrorAlert(this.formatError(error));
+      } finally {
+        this.downloadingTemplate = false;
+      }
+    },
+    async importStaff() {
+      if (!this.importFile) {
+        this.showErrorAlert("Selecciona una plantilla XLSX o un archivo CSV para continuar.");
+        return;
+      }
+
+      this.importing = true;
+      this.importResult = null;
+      try {
+        const payload = new FormData();
+        payload.append("file", this.importFile);
+        payload.append("update_existing", this.updateExisting ? "1" : "0");
+
+        const response = await axios.post("/api/staff/import", payload);
+        this.importResult = response.data.data;
+        await this.loadStaff(1);
+
+        if (this.importResult.error_count > 0) {
+          Swal.fire({
+            title: "Importación con observaciones",
+            text: `Se procesaron ${this.importResult.processed} filas. Revisa el detalle de las filas omitidas.`,
+            icon: "warning",
+            confirmButtonText: "Revisar resultado",
+            customClass: { popup: "staff-alert" },
+          });
+        } else {
+          this.showSuccessAlert(
+            "Importación completada",
+            `${this.importResult.created} creados y ${this.importResult.updated} actualizados.`
+          );
+        }
+      } catch (error) {
+        this.showErrorAlert(this.formatError(error));
+      } finally {
+        this.importing = false;
+      }
+    },
     async exportList() {
       if (!this.exportForm.columns.length) {
         this.showErrorAlert("Selecciona al menos una columna para exportar.");
@@ -619,6 +695,7 @@ export default {
         confirmButtonText,
         cancelButtonText: "Cancelar",
         reverseButtons: true,
+        customClass: { popup: "staff-alert" },
       });
     },
     showSuccessAlert(title, text) {
@@ -628,6 +705,7 @@ export default {
         icon: "success",
         timer: 1800,
         showConfirmButton: false,
+        customClass: { popup: "staff-alert" },
       });
     },
     showErrorAlert(text) {
@@ -635,6 +713,7 @@ export default {
         title: "Error",
         text,
         icon: "error",
+        customClass: { popup: "staff-alert" },
       });
     },
     departmentNames(item) {
@@ -702,23 +781,26 @@ export default {
 
 <template>
   <Layout>
-    <div class="d-flex align-items-start justify-content-between flex-wrap gap-3 mb-4 staff-page-header">
-      <div>
-        <span class="staff-eyebrow">Funcionarios</span>
-        <h4 class="mb-1">Gestión de Funcionarios</h4>
-        <div class="text-muted">Registro personal, laboral e institucional.</div>
-      </div>
-      <div class="d-flex flex-wrap gap-2">
+    <StaffPageHeader
+      title="Gestión de funcionarios"
+      subtitle="Registro personal, laboral e institucional en un solo lugar."
+      icon="bx-group"
+    >
+      <template #actions>
         <router-link to="/staff/departments" class="btn btn-outline-secondary">
           <i class="bx bx-buildings me-1"></i>
           Departamentos
         </router-link>
+        <BButton v-if="canEdit" variant="outline-primary" @click="openImportModal">
+          <i class="bx bx-import me-1"></i>
+          Importación masiva
+        </BButton>
         <router-link v-if="canEdit" to="/staff/new" class="btn btn-primary">
           <i class="mdi mdi-account-plus-outline me-1"></i>
           Nuevo funcionario
         </router-link>
-      </div>
-    </div>
+      </template>
+    </StaffPageHeader>
 
     <BAlert v-if="error" variant="danger" show class="mb-3">{{ error }}</BAlert>
 
@@ -967,16 +1049,30 @@ export default {
       </div>
     </BCard>
 
-    <BModal v-model="showExportModal" title="Exportar listado de funcionarios" centered hide-footer>
-      <div class="mb-3">
+    <BModal
+      v-model="showExportModal"
+      title="Exportar listado de funcionarios"
+      centered
+      scrollable
+      hide-footer
+      modal-class="staff-modal"
+    >
+      <StaffModalIntro
+        title="Configura tu archivo"
+        text="Elige el formato y las columnas que necesitas. Se respetarán los filtros activos del listado."
+        icon="bx-export"
+      />
+
+      <div class="row g-3">
+        <div class="col-md-5">
         <label class="form-label">Formato</label>
         <BFormSelect
           v-model="exportForm.format"
           :options="exportFormatOptions"
         />
-      </div>
+        </div>
 
-      <div class="mb-3">
+        <div class="col-md-7">
         <label class="form-label">Columnas a exportar</label>
         <Multiselect
           v-model="exportForm.columns"
@@ -989,12 +1085,121 @@ export default {
         <small class="text-muted d-block mt-2">
           Debes seleccionar al menos una columna. Por defecto se exportan nombre y RUT.
         </small>
+        </div>
       </div>
 
-      <div class="d-flex justify-content-end gap-2">
+      <div class="staff-modal-actions">
         <BButton variant="light" @click="showExportModal = false">Cancelar</BButton>
         <BButton variant="primary" :disabled="exporting" @click="exportList">
+          <i class="bx bx-download me-1"></i>
           {{ exporting ? "Exportando..." : "Exportar archivo" }}
+        </BButton>
+      </div>
+    </BModal>
+
+    <BModal
+      v-model="showImportModal"
+      title="Importación masiva de funcionarios"
+      size="xl"
+      centered
+      scrollable
+      hide-footer
+      modal-class="staff-modal"
+    >
+      <StaffModalIntro
+        title="Carga segura desde Excel"
+        text="Descarga la plantilla, completa una fila por funcionario y vuelve a cargarla. Solo el nombre completo es obligatorio."
+        icon="bx-spreadsheet"
+      >
+        <BButton
+          size="sm"
+          variant="outline-primary"
+          :disabled="downloadingTemplate"
+          @click="downloadImportTemplate"
+        >
+          <i class="bx bx-download me-1"></i>
+          {{ downloadingTemplate ? "Descargando..." : "Descargar plantilla" }}
+        </BButton>
+      </StaffModalIntro>
+
+      <div class="row g-3">
+        <div class="col-lg-7">
+          <div class="staff-import-dropzone">
+            <span class="staff-import-dropzone__icon"><i class="bx bx-cloud-upload"></i></span>
+            <h6 class="mb-1">Selecciona el archivo completado</h6>
+            <p class="text-muted small mb-3">Formatos admitidos: XLSX o CSV · máximo 10 MB · hasta 2.000 filas.</p>
+            <input
+              :key="importFileKey"
+              type="file"
+              class="form-control"
+              accept=".xlsx,.csv,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+              @change="onImportFile"
+            />
+            <div v-if="importFile" class="mt-3 fw-semibold text-primary">
+              <i class="bx bx-file me-1"></i>{{ importFile.name }}
+            </div>
+          </div>
+        </div>
+
+        <div class="col-lg-5">
+          <div class="staff-import-settings h-100">
+            <h6 class="mb-2">Comportamiento de la carga</h6>
+            <BFormCheckbox v-model="updateExisting" switch>
+              Actualizar funcionarios existentes
+            </BFormCheckbox>
+            <p class="text-muted small mt-2 mb-3">
+              Se identifica a cada funcionario por RUT y luego por correo institucional. Si desactivas esta opción, los duplicados se omitirán.
+            </p>
+            <div class="alert alert-light border mb-0 small">
+              <strong class="d-block mb-1">Cuenta de acceso</strong>
+              Se crea automáticamente solo cuando la fila contiene RUT y correo institucional. Los demás datos pueden quedar vacíos.
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div v-if="importResult" class="mt-4">
+        <h6 class="mb-3">Resultado de la importación</h6>
+        <div class="staff-import-result-grid">
+          <div class="staff-import-result-card">
+            <span class="text-muted small">Procesados</span>
+            <strong>{{ importResult.processed }}</strong>
+          </div>
+          <div class="staff-import-result-card">
+            <span class="text-muted small">Creados</span>
+            <strong class="text-success">{{ importResult.created }}</strong>
+          </div>
+          <div class="staff-import-result-card">
+            <span class="text-muted small">Actualizados</span>
+            <strong class="text-info">{{ importResult.updated }}</strong>
+          </div>
+          <div class="staff-import-result-card">
+            <span class="text-muted small">Omitidos</span>
+            <strong :class="importResult.skipped ? 'text-danger' : ''">{{ importResult.skipped }}</strong>
+          </div>
+        </div>
+
+        <div v-if="importResult.errors?.length" class="staff-import-errors">
+          <table class="table table-sm align-middle">
+            <thead class="table-light">
+              <tr><th>Fila</th><th>Campo</th><th>Observación</th></tr>
+            </thead>
+            <tbody>
+              <tr v-for="(item, index) in importResult.errors" :key="`${item.row}-${item.field}-${index}`">
+                <td class="fw-semibold">{{ item.row }}</td>
+                <td><code>{{ item.field }}</code></td>
+                <td>{{ item.message }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="staff-modal-actions">
+        <BButton variant="light" @click="showImportModal = false">Cerrar</BButton>
+        <BButton variant="primary" :disabled="importing || !importFile" @click="importStaff">
+          <i :class="importing ? 'bx bx-loader-alt bx-spin me-1' : 'bx bx-import me-1'"></i>
+          {{ importing ? "Importando..." : "Importar funcionarios" }}
         </BButton>
       </div>
     </BModal>

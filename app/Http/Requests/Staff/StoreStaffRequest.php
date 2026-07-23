@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests\Staff;
 
+use App\Http\Requests\Staff\Concerns\NormalizesNullableFields;
 use App\Models\Commune;
 use App\Models\Staff;
 use App\Models\User;
@@ -12,6 +13,8 @@ use Illuminate\Validation\Rule;
 
 class StoreStaffRequest extends FormRequest
 {
+    use NormalizesNullableFields;
+
     public function authorize(): bool
     {
         return true;
@@ -19,6 +22,29 @@ class StoreStaffRequest extends FormRequest
 
     protected function prepareForValidation(): void
     {
+        $this->normalizeNullableFields([
+            'rut',
+            'birth_date',
+            'institutional_email',
+            'personal_email',
+            'phone',
+            'address',
+            'region_id',
+            'commune_id',
+            'cargo_id',
+            'contract_type',
+            'start_date',
+            'end_date',
+            'workday',
+            'contract_hours',
+            'professional_title',
+            'specialty',
+            'professional_registration',
+            'internal_notes',
+            'maintenance_role',
+            'associated_user_id',
+        ]);
+
         $institutionalEmail = $this->input('institutional_email');
         $personalEmail = $this->input('personal_email');
         $departmentIds = $this->input('department_ids');
@@ -57,13 +83,13 @@ class StoreStaffRequest extends FormRequest
         return [
             'full_name' => ['required', 'string', 'max:255'],
             'rut' => [
-                'required',
+                'nullable',
                 'string',
                 'max:20',
                 'unique:staff,rut',
             ],
             'birth_date' => ['nullable', 'date'],
-            'institutional_email' => ['required', 'email', 'max:255', 'unique:staff,institutional_email', 'unique:users,email'],
+            'institutional_email' => ['nullable', 'email', 'max:255', 'unique:staff,institutional_email', 'unique:users,email'],
             'personal_email' => ['nullable', 'email', 'max:255'],
             'phone' => ['nullable', 'string', 'max:50'],
             'address' => ['nullable', 'string', 'max:255'],

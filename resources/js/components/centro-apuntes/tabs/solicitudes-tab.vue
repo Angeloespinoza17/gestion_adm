@@ -2,6 +2,8 @@
 import axios from "axios";
 import Swal from "sweetalert2";
 import CentroApuntesHelpButton from "../help-button.vue";
+import CentroApuntesModalIntro from "../modal-intro.vue";
+import CentroApuntesSectionToolbar from "../section-toolbar.vue";
 import CentroApuntesStatusBadge from "../status-badge.vue";
 import LoadingState from "../../ui/loading-state.vue";
 import {
@@ -11,6 +13,7 @@ import {
   formatCentroApuntesDateTime,
   formatCentroApuntesError,
   humanizeCentroApuntesStatus,
+  normalizeCentroApuntesNullableFields,
   normalizeOptions,
   showCentroApuntesSuccess,
   toInputDateTime,
@@ -22,22 +25,24 @@ const emptyForm = () => ({
   subject_id: null,
   machine_id: null,
   task_type: "guia",
-  task_type_other: "",
+  task_type_other: null,
   requested_at: "",
   delivery_date: "",
   sheet_count: 1,
   copies_count: 1,
   paper_size: "carta",
   priority: "normal",
-  instructions: "",
-  observations: "",
-  internal_observations: "",
+  instructions: null,
+  observations: null,
+  internal_observations: null,
   attachment: null,
 });
 
 export default {
   components: {
     CentroApuntesHelpButton,
+    CentroApuntesModalIntro,
+    CentroApuntesSectionToolbar,
     CentroApuntesStatusBadge,
     LoadingState,
   },
@@ -156,16 +161,16 @@ export default {
           subject_id: this.selectedRequest.subject_id,
           machine_id: this.selectedRequest.machine_id,
           task_type: this.selectedRequest.task_type,
-          task_type_other: this.selectedRequest.task_type_other || "",
+          task_type_other: this.selectedRequest.task_type_other ?? null,
           requested_at: toInputDateTime(this.selectedRequest.requested_at),
           delivery_date: String(this.selectedRequest.delivery_date || "").slice(0, 10),
           sheet_count: this.selectedRequest.sheet_count,
           copies_count: this.selectedRequest.copies_count,
           paper_size: this.selectedRequest.paper_size,
           priority: this.selectedRequest.priority,
-          instructions: this.selectedRequest.instructions || "",
-          observations: this.selectedRequest.observations || "",
-          internal_observations: this.selectedRequest.internal_observations || "",
+          instructions: this.selectedRequest.instructions ?? null,
+          observations: this.selectedRequest.observations ?? null,
+          internal_observations: this.selectedRequest.internal_observations ?? null,
           attachment: null,
         };
         this.showModal = true;
@@ -195,6 +200,13 @@ export default {
     buildFormData() {
       const formData = new FormData();
       const attachment = Array.isArray(this.form.attachment) ? this.form.attachment[0] : this.form.attachment;
+      const normalized = normalizeCentroApuntesNullableFields(this.form, [
+        "task_type_other",
+        "requested_at",
+        "instructions",
+        "observations",
+        "internal_observations",
+      ]);
       [
         "requested_by_user_id",
         "subject_id",
@@ -211,7 +223,7 @@ export default {
         "observations",
         "internal_observations",
       ].forEach((field) => {
-        const value = this.form[field];
+        const value = normalized[field];
         formData.append(field, value ?? "");
       });
 
@@ -264,6 +276,7 @@ export default {
         .join("");
 
       const result = await Swal.fire({
+        customClass: { popup: "centro-apuntes-alert" },
         title: "Cambiar estado",
         html: `
           <div class="text-start">
@@ -299,6 +312,7 @@ export default {
         .join("");
 
       const result = await Swal.fire({
+        customClass: { popup: "centro-apuntes-alert" },
         title: "Registrar entrega",
         html: `
           <div class="text-start">
@@ -372,9 +386,8 @@ export default {
 </script>
 
 <template>
-  <div class="d-flex flex-column gap-3">
-    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
-      <div class="fw-semibold">Gestión de solicitudes de impresión</div>
+  <div class="centro-apuntes-tab d-flex flex-column gap-3">
+    <CentroApuntesSectionToolbar title="Solicitudes de impresión" description="Registra, prioriza y sigue cada trabajo desde su ingreso hasta la entrega." icon="bx-printer">
       <div class="d-flex gap-2 flex-wrap">
         <CentroApuntesHelpButton
           title="Ayuda: solicitudes de impresión"
@@ -382,11 +395,11 @@ export default {
         />
         <BButton v-if="capabilities.can_create_request" variant="primary" @click="openCreate"><i class="bx bx-plus me-1"></i>Nueva solicitud</BButton>
       </div>
-    </div>
+    </CentroApuntesSectionToolbar>
 
     <BAlert v-if="error" show variant="danger">{{ error }}</BAlert>
 
-    <BCard class="border-0 shadow-sm">
+    <BCard class="filter-card border-0 shadow-sm">
       <div class="row g-3 align-items-end">
         <div class="col-md-4">
           <label class="form-label">Buscar</label>
@@ -431,7 +444,7 @@ export default {
       </div>
     </BCard>
 
-    <BCard class="border-0 shadow-sm">
+    <BCard class="data-card border-0 shadow-sm">
       <LoadingState v-if="loading || detailLoading" message="Cargando solicitudes..." compact />
       <BTable
         v-else
@@ -448,7 +461,6 @@ export default {
           { key: 'priority', label: 'Prioridad' },
           { key: 'status', label: 'Estado' },
           { key: 'delivery_date', label: 'Entrega' },
-          { key: 'estimated_cost_total', label: 'Costo est.' },
           { key: 'actions', label: 'Acciones' },
         ]"
       >
@@ -468,9 +480,6 @@ export default {
         </template>
         <template #cell(delivery_date)="{ item }">
           {{ formatCentroApuntesDate(item.delivery_date) }}
-        </template>
-        <template #cell(estimated_cost_total)="{ item }">
-          ${{ Number(item.estimated_cost_total || 0).toLocaleString("es-CL") }}
         </template>
         <template #cell(actions)="{ item }">
           <div class="d-flex flex-wrap gap-2">
@@ -493,26 +502,25 @@ export default {
       </div>
     </BCard>
 
-    <BModal v-model="showModal" size="xl" :title="form.id ? 'Editar solicitud' : 'Nueva solicitud'" hide-footer>
-      <div class="d-flex justify-content-between align-items-center mb-3">
-        <div class="text-muted small">Registro rápido de trabajos de impresión.</div>
+    <BModal v-model="showModal" size="xl" :title="form.id ? 'Editar solicitud' : 'Nueva solicitud'" hide-footer centered scrollable modal-class="centro-apuntes-modal">
+      <CentroApuntesModalIntro title="Trabajo de impresión" text="Los detalles, observaciones y el archivo adjunto son opcionales; los datos operativos marcados con * son necesarios." icon="bx-printer">
         <CentroApuntesHelpButton
           title="Ayuda: formulario de solicitud"
           text="Use este formulario para registrar solicitudes de impresión, asignando solicitante, asignatura, máquina, hojas, copias, prioridad y observaciones internas."
         />
-      </div>
+      </CentroApuntesModalIntro>
 
-      <div class="row g-3">
+      <div class="modal-form-grid row g-3">
         <div class="col-md-6">
-          <label class="form-label">Solicitante</label>
+          <label class="form-label">Solicitante <span class="field-required">*</span></label>
           <BFormSelect v-model="form.requested_by_user_id" :options="userOptions.map((item) => ({ value: item.value, text: item.label }))" />
         </div>
         <div class="col-md-6">
-          <label class="form-label">Asignatura</label>
+          <label class="form-label">Asignatura <span class="field-required">*</span></label>
           <BFormSelect v-model="form.subject_id" :options="subjectOptions.map((item) => ({ value: item.value, text: item.label }))" />
         </div>
         <div class="col-md-4">
-          <label class="form-label">Tipo de tarea</label>
+          <label class="form-label">Tipo de tarea <span class="field-required">*</span></label>
           <BFormSelect v-model="form.task_type" :options="taskTypeOptions.map((item) => ({ value: item.value, text: item.label }))" />
         </div>
         <div v-if="form.task_type === 'otro'" class="col-md-8">
@@ -520,47 +528,47 @@ export default {
           <BFormInput v-model="form.task_type_other" placeholder="Describa el trabajo solicitado" />
         </div>
         <div class="col-md-4">
-          <label class="form-label">Fecha de solicitud</label>
+          <label class="form-label">Fecha de solicitud <span class="field-optional">Opcional</span></label>
           <BFormInput v-model="form.requested_at" type="datetime-local" />
         </div>
         <div class="col-md-4">
-          <label class="form-label">Fecha de entrega</label>
+          <label class="form-label">Fecha de entrega <span class="field-required">*</span></label>
           <BFormInput v-model="form.delivery_date" type="date" />
         </div>
         <div class="col-md-4">
-          <label class="form-label">Máquina</label>
+          <label class="form-label">Máquina <span class="field-required">*</span></label>
           <BFormSelect v-model="form.machine_id" :options="machineOptions.map((item) => ({ value: item.value, text: item.label }))" />
         </div>
         <div class="col-md-3">
-          <label class="form-label">Cantidad de hojas</label>
+          <label class="form-label">Cantidad de hojas <span class="field-required">*</span></label>
           <BFormInput v-model="form.sheet_count" type="number" min="1" />
         </div>
         <div class="col-md-3">
-          <label class="form-label">Cantidad de copias</label>
+          <label class="form-label">Cantidad de copias <span class="field-required">*</span></label>
           <BFormInput v-model="form.copies_count" type="number" min="1" />
         </div>
         <div class="col-md-3">
-          <label class="form-label">Tamaño de papel</label>
+          <label class="form-label">Tamaño de papel <span class="field-required">*</span></label>
           <BFormSelect v-model="form.paper_size" :options="paperSizeOptions.map((item) => ({ value: item.value, text: item.label }))" />
         </div>
         <div class="col-md-3">
-          <label class="form-label">Prioridad</label>
+          <label class="form-label">Prioridad <span class="field-required">*</span></label>
           <BFormSelect v-model="form.priority" :options="priorityOptions.map((item) => ({ value: item.value, text: item.label }))" />
         </div>
         <div class="col-md-12">
-          <label class="form-label">Detalle del trabajo</label>
+          <label class="form-label">Detalle del trabajo <span class="field-optional">Opcional</span></label>
           <BFormTextarea v-model="form.instructions" rows="3" placeholder="Instrucciones de impresión, curso, color, anillado u observaciones de producción" />
         </div>
         <div class="col-md-6">
-          <label class="form-label">Observaciones</label>
+          <label class="form-label">Observaciones <span class="field-optional">Opcional</span></label>
           <BFormTextarea v-model="form.observations" rows="2" placeholder="Observaciones generales visibles para seguimiento" />
         </div>
         <div class="col-md-6">
-          <label class="form-label">Observaciones internas</label>
+          <label class="form-label">Observaciones internas <span class="field-optional">Opcional</span></label>
           <BFormTextarea v-model="form.internal_observations" rows="2" placeholder="Comentarios internos del equipo del centro de apuntes" />
         </div>
         <div class="col-md-12">
-          <label class="form-label">Archivo adjunto</label>
+          <label class="form-label">Archivo adjunto <span class="field-optional">Opcional</span></label>
           <BFormFile v-model="form.attachment" browse-text="Seleccionar" placeholder="Adjuntar archivo de la solicitud" />
         </div>
       </div>
@@ -574,15 +582,15 @@ export default {
         </ul>
       </div>
 
-      <div class="d-flex justify-content-end gap-2 mt-4">
+      <div class="modal-actions">
         <BButton variant="light" @click="closeModal">Cancelar</BButton>
         <BButton variant="primary" :disabled="saving" @click="save">{{ saving ? "Guardando..." : "Guardar" }}</BButton>
       </div>
     </BModal>
 
-    <BModal v-model="showDetailModal" size="xl" title="Detalle de solicitud" hide-footer>
+    <BModal v-model="showDetailModal" size="xl" title="Detalle de solicitud" hide-footer centered scrollable modal-class="centro-apuntes-modal">
       <template v-if="selectedRequest">
-        <div class="row g-3">
+        <div class="detail-grid row g-3">
           <div class="col-md-4">
             <div class="text-muted small">Código</div>
             <div class="fw-semibold">{{ selectedRequest.request_code }}</div>
@@ -612,10 +620,6 @@ export default {
             <div>{{ selectedRequest.sheet_count }} hoja(s) x {{ selectedRequest.copies_count }} copia(s)</div>
           </div>
           <div class="col-md-4">
-            <div class="text-muted small">Costo estimado</div>
-            <div>${{ Number(selectedRequest.estimated_cost_total || 0).toLocaleString("es-CL") }}</div>
-          </div>
-          <div class="col-md-4">
             <div class="text-muted small">Fecha de entrega</div>
             <div>{{ formatCentroApuntesDate(selectedRequest.delivery_date) }}</div>
           </div>
@@ -631,7 +635,7 @@ export default {
 
         <div class="mt-4">
           <div class="d-flex justify-content-between align-items-center mb-2">
-            <div class="fw-semibold">Adjuntos</div>
+            <div class="modal-section-title mb-0">Adjuntos</div>
             <CentroApuntesHelpButton
               title="Ayuda: adjuntos e historial"
               text="Esta sección muestra los archivos asociados a la solicitud y la trazabilidad completa de los cambios de estado realizados por el equipo."
@@ -647,7 +651,7 @@ export default {
         </div>
 
         <div class="mt-4">
-          <div class="fw-semibold mb-2">Historial de cambios</div>
+          <div class="modal-section-title">Historial de cambios</div>
           <div class="table-responsive">
             <table class="table table-sm align-middle mb-0">
               <thead>

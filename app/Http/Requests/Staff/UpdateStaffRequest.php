@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests\Staff;
 
+use App\Http\Requests\Staff\Concerns\NormalizesNullableFields;
 use App\Models\Commune;
 use App\Models\Staff;
 use App\Models\User;
@@ -12,6 +13,8 @@ use Illuminate\Validation\Rule;
 
 class UpdateStaffRequest extends FormRequest
 {
+    use NormalizesNullableFields;
+
     public function authorize(): bool
     {
         return true;
@@ -19,6 +22,29 @@ class UpdateStaffRequest extends FormRequest
 
     protected function prepareForValidation(): void
     {
+        $this->normalizeNullableFields([
+            'rut',
+            'birth_date',
+            'institutional_email',
+            'personal_email',
+            'phone',
+            'address',
+            'region_id',
+            'commune_id',
+            'cargo_id',
+            'contract_type',
+            'start_date',
+            'end_date',
+            'workday',
+            'contract_hours',
+            'professional_title',
+            'specialty',
+            'professional_registration',
+            'internal_notes',
+            'maintenance_role',
+            'associated_user_id',
+        ]);
+
         $data = [];
         $departmentIds = $this->input('department_ids');
 

@@ -2,6 +2,8 @@
 import axios from "axios";
 import Swal from "sweetalert2";
 import CentroApuntesHelpButton from "../help-button.vue";
+import CentroApuntesModalIntro from "../modal-intro.vue";
+import CentroApuntesSectionToolbar from "../section-toolbar.vue";
 import CentroApuntesStatusBadge from "../status-badge.vue";
 import LoadingState from "../../ui/loading-state.vue";
 import {
@@ -9,6 +11,7 @@ import {
   confirmCentroApuntesCancel,
   formatCentroApuntesDateTime,
   formatCentroApuntesError,
+  normalizeCentroApuntesNullableFields,
   normalizeOptions,
   printCentroApuntesHtml,
   showCentroApuntesSuccess,
@@ -17,7 +20,7 @@ import {
 const emptyDetail = () => ({
   insumo_id: null,
   quantity: 1,
-  notes: "",
+  notes: null,
 });
 
 const emptyForm = () => ({
@@ -26,14 +29,16 @@ const emptyForm = () => ({
   withdrawn_by_user_id: null,
   department_id: null,
   requested_at: new Date().toISOString().slice(0, 16),
-  observations: "",
-  receipt_notes: "",
+  observations: null,
+  receipt_notes: null,
   details: [emptyDetail()],
 });
 
 export default {
   components: {
     CentroApuntesHelpButton,
+    CentroApuntesModalIntro,
+    CentroApuntesSectionToolbar,
     CentroApuntesStatusBadge,
     LoadingState,
   },
@@ -138,12 +143,12 @@ export default {
           withdrawn_by_user_id: this.selectedDelivery.withdrawn_by_user_id || null,
           department_id: this.selectedDelivery.department_id || null,
           requested_at: String(this.selectedDelivery.requested_at || "").replace(" ", "T").slice(0, 16),
-          observations: this.selectedDelivery.observations || "",
-          receipt_notes: this.selectedDelivery.receipt_notes || "",
+          observations: this.selectedDelivery.observations ?? null,
+          receipt_notes: this.selectedDelivery.receipt_notes ?? null,
           details: (this.selectedDelivery.details || []).map((detail) => ({
             insumo_id: detail.insumo_id,
             quantity: detail.quantity,
-            notes: detail.notes || "",
+            notes: detail.notes ?? null,
           })),
         };
         this.showModal = true;
@@ -179,10 +184,18 @@ export default {
 
       this.saving = true;
       try {
+        const payload = normalizeCentroApuntesNullableFields(this.form, [
+          "withdrawn_by_user_id",
+          "department_id",
+          "requested_at",
+          "observations",
+          "receipt_notes",
+        ]);
+        payload.details = this.form.details.map((detail) => normalizeCentroApuntesNullableFields(detail, ["notes"]));
         if (this.form.id) {
-          await axios.put(`/api/centro-apuntes/entregas/${this.form.id}`, this.form);
+          await axios.put(`/api/centro-apuntes/entregas/${this.form.id}`, payload);
         } else {
-          await axios.post("/api/centro-apuntes/entregas", this.form);
+          await axios.post("/api/centro-apuntes/entregas", payload);
         }
         this.showModal = false;
         await this.load(this.pagination.current_page);
@@ -208,6 +221,7 @@ export default {
         .join("");
 
       const result = await Swal.fire({
+        customClass: { popup: "centro-apuntes-alert" },
         title: "Registrar entrega de materiales",
         html: `
           <div class="text-start">
@@ -238,6 +252,7 @@ export default {
     },
     async transition(item, action, title, text, confirmButtonText) {
       const result = await Swal.fire({
+        customClass: { popup: "centro-apuntes-alert" },
         title,
         input: "textarea",
         inputLabel: text,
@@ -292,10 +307,10 @@ export default {
           </tbody>
         </table>
         <table>
-          <thead><tr><th>Insumo</th><th>Cantidad</th><th>Costo unitario</th><th>Total</th></tr></thead>
+          <thead><tr><th>Insumo</th><th>Cantidad</th><th>Notas</th></tr></thead>
           <tbody>
             ${(this.selectedDelivery.details || [])
-              .map((detail) => `<tr><td>${detail.insumo_name_snapshot || detail.insumo?.name}</td><td>${detail.quantity}</td><td>${detail.unit_cost_estimated}</td><td>${detail.line_total_estimated}</td></tr>`)
+              .map((detail) => `<tr><td>${detail.insumo_name_snapshot || detail.insumo?.name}</td><td>${detail.quantity}</td><td>${detail.notes || "-"}</td></tr>`)
               .join("")}
           </tbody>
         </table>
@@ -323,9 +338,8 @@ export default {
 </script>
 
 <template>
-  <div class="d-flex flex-column gap-3">
-    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
-      <div class="fw-semibold">Solicitudes y entregas de materiales</div>
+  <div class="centro-apuntes-tab d-flex flex-column gap-3">
+    <CentroApuntesSectionToolbar title="Entregas de materiales" description="Coordina solicitudes, aprobaciones, retiros y comprobantes del pañol." icon="bx-package">
       <div class="d-flex gap-2">
         <CentroApuntesHelpButton
           title="Ayuda: entregas de materiales"
@@ -333,11 +347,11 @@ export default {
         />
         <BButton v-if="capabilities.can_request_materials" variant="primary" @click="openCreate"><i class="bx bx-plus me-1"></i>Nueva solicitud de materiales</BButton>
       </div>
-    </div>
+    </CentroApuntesSectionToolbar>
 
     <BAlert v-if="error" show variant="danger">{{ error }}</BAlert>
 
-    <BCard class="border-0 shadow-sm">
+    <BCard class="filter-card border-0 shadow-sm">
       <div class="row g-3 align-items-end">
         <div class="col-md-4">
           <label class="form-label">Buscar</label>
@@ -362,7 +376,7 @@ export default {
       </div>
     </BCard>
 
-    <BCard class="border-0 shadow-sm">
+    <BCard class="data-card border-0 shadow-sm">
       <LoadingState v-if="loading || detailLoading" message="Cargando entregas..." compact />
       <BTable
         v-else
@@ -375,7 +389,6 @@ export default {
           { key: 'requested_by_name_snapshot', label: 'Solicitante' },
           { key: 'department_name_snapshot', label: 'Área' },
           { key: 'details_count', label: 'Insumos' },
-          { key: 'total_estimated_cost', label: 'Costo est.' },
           { key: 'status', label: 'Estado' },
           { key: 'actions', label: 'Acciones' },
         ]"
@@ -383,9 +396,6 @@ export default {
         <template #cell(delivery_code)="{ item }">
           <div class="fw-semibold">{{ item.delivery_code }}</div>
           <div class="small text-muted">{{ formatCentroApuntesDateTime(item.requested_at) }}</div>
-        </template>
-        <template #cell(total_estimated_cost)="{ item }">
-          ${{ Number(item.total_estimated_cost || 0).toLocaleString("es-CL") }}
         </template>
         <template #cell(status)="{ item }">
           <CentroApuntesStatusBadge :status="item.status" />
@@ -412,52 +422,52 @@ export default {
       </div>
     </BCard>
 
-    <BModal v-model="showModal" size="xl" title="Solicitud de materiales" hide-footer>
-      <div class="d-flex justify-content-end mb-3">
+    <BModal v-model="showModal" size="xl" :title="form.id ? 'Editar solicitud de materiales' : 'Nueva solicitud de materiales'" hide-footer centered scrollable modal-class="centro-apuntes-modal">
+      <CentroApuntesModalIntro title="Solicitud al pañol" text="Solo el solicitante y al menos un insumo con cantidad son obligatorios. Retiro, área, fecha y observaciones pueden quedar vacíos." icon="bx-package">
         <CentroApuntesHelpButton
           title="Ayuda: formulario de entrega"
           text="Use este formulario para solicitar materiales desde el pañol, indicando solicitante, área, funcionario que retira e insumos requeridos."
         />
-      </div>
-      <div class="row g-3">
+      </CentroApuntesModalIntro>
+      <div class="modal-form-grid row g-3">
         <div class="col-md-4">
-          <label class="form-label">Solicitante</label>
+          <label class="form-label">Solicitante <span class="field-required">*</span></label>
           <BFormSelect v-model="form.requested_by_user_id" :options="userOptions.map((item) => ({ value: item.value, text: item.label }))" />
         </div>
         <div class="col-md-4">
-          <label class="form-label">Funcionario que retira</label>
+          <label class="form-label">Funcionario que retira <span class="field-optional">Opcional</span></label>
           <BFormSelect v-model="form.withdrawn_by_user_id" :options="[{ value: null, text: 'Sin definir' }].concat(userOptions.map((item) => ({ value: item.value, text: item.label })))" />
         </div>
         <div class="col-md-4">
-          <label class="form-label">Área</label>
+          <label class="form-label">Área <span class="field-optional">Opcional</span></label>
           <BFormSelect v-model="form.department_id" :options="[{ value: null, text: 'Sin área' }].concat(departmentOptions.map((item) => ({ value: item.value, text: item.label })))" />
         </div>
         <div class="col-md-4">
-          <label class="form-label">Fecha de solicitud</label>
+          <label class="form-label">Fecha de solicitud <span class="field-optional">Opcional</span></label>
           <BFormInput v-model="form.requested_at" type="datetime-local" />
         </div>
         <div class="col-md-8">
-          <label class="form-label">Observaciones</label>
+          <label class="form-label">Observaciones <span class="field-optional">Opcional</span></label>
           <BFormInput v-model="form.observations" />
         </div>
       </div>
 
       <div class="mt-4">
         <div class="d-flex justify-content-between align-items-center mb-2">
-          <div class="fw-semibold">Insumos solicitados</div>
+          <div class="modal-section-title mb-0">Insumos solicitados</div>
           <BButton size="sm" variant="outline-primary" @click="addDetail">Agregar insumo</BButton>
         </div>
-        <div v-for="(detail, index) in form.details" :key="index" class="row g-3 align-items-end border rounded p-3 mb-3">
+        <div v-for="(detail, index) in form.details" :key="index" class="modal-line-item row g-3 align-items-end mb-3">
           <div class="col-md-6">
-            <label class="form-label">Insumo</label>
+            <label class="form-label">Insumo <span class="field-required">*</span></label>
             <BFormSelect v-model="detail.insumo_id" :options="supplyOptions.map((item) => ({ value: item.value, text: item.label }))" />
           </div>
           <div class="col-md-2">
-            <label class="form-label">Cantidad</label>
+            <label class="form-label">Cantidad <span class="field-required">*</span></label>
             <BFormInput v-model="detail.quantity" type="number" min="1" step="0.01" />
           </div>
           <div class="col-md-3">
-            <label class="form-label">Observación línea</label>
+            <label class="form-label">Observación <span class="field-optional">Opcional</span></label>
             <BFormInput v-model="detail.notes" />
           </div>
           <div class="col-md-1">
@@ -466,13 +476,13 @@ export default {
         </div>
       </div>
 
-      <div class="d-flex justify-content-end gap-2 mt-4">
+      <div class="modal-actions">
         <BButton variant="light" @click="closeModal">Cancelar</BButton>
         <BButton variant="primary" :disabled="saving" @click="save">{{ saving ? "Guardando..." : "Guardar" }}</BButton>
       </div>
     </BModal>
 
-    <BModal v-model="showDetailModal" size="xl" title="Detalle de entrega" hide-footer>
+    <BModal v-model="showDetailModal" size="xl" title="Detalle de entrega" hide-footer centered scrollable modal-class="centro-apuntes-modal">
       <template v-if="selectedDelivery">
         <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
           <div>
@@ -485,7 +495,7 @@ export default {
           </div>
         </div>
 
-        <div class="row g-3">
+        <div class="detail-grid row g-3">
           <div class="col-md-4">
             <div class="text-muted small">Solicitante</div>
             <div>{{ selectedDelivery.requested_by_name_snapshot }}</div>
@@ -501,15 +511,13 @@ export default {
         </div>
 
         <div class="mt-4">
-          <div class="fw-semibold mb-2">Detalle de insumos</div>
+          <div class="modal-section-title">Detalle de insumos</div>
           <div class="table-responsive">
             <table class="table table-sm align-middle mb-0">
               <thead>
                 <tr>
                   <th>Insumo</th>
                   <th>Cantidad</th>
-                  <th>Costo unitario</th>
-                  <th>Total</th>
                   <th>Notas</th>
                 </tr>
               </thead>
@@ -517,8 +525,6 @@ export default {
                 <tr v-for="detail in selectedDelivery.details || []" :key="detail.id">
                   <td>{{ detail.insumo_name_snapshot || detail.insumo?.name }}</td>
                   <td>{{ detail.quantity }}</td>
-                  <td>${{ Number(detail.unit_cost_estimated || 0).toLocaleString("es-CL") }}</td>
-                  <td>${{ Number(detail.line_total_estimated || 0).toLocaleString("es-CL") }}</td>
                   <td>{{ detail.notes || "-" }}</td>
                 </tr>
               </tbody>

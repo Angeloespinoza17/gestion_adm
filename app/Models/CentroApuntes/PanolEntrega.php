@@ -23,6 +23,10 @@ class PanolEntrega extends Model
 
     protected $table = 'panol_entregas';
 
+    protected $hidden = [
+        'total_estimated_cost',
+    ];
+
     protected $fillable = [
         'delivery_code',
         'requested_by_user_id',

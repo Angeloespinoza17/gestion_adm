@@ -2,12 +2,20 @@
 
 namespace App\Http\Requests\CentroApuntes;
 
+use App\Http\Requests\CentroApuntes\Concerns\NormalizesNullableFields;
 use App\Models\CentroApuntes\CentroApuntesMaquina;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
 class SaveCentroApuntesMaquinaRequest extends FormRequest
 {
+    use NormalizesNullableFields;
+
+    protected function prepareForValidation(): void
+    {
+        $this->normalizeNullableFields(['brand', 'model', 'location', 'responsible_user_id', 'observations']);
+    }
+
     public function authorize(): bool
     {
         return true;
@@ -26,8 +34,6 @@ class SaveCentroApuntesMaquinaRequest extends FormRequest
             'location' => ['nullable', 'string', 'max:160'],
             'responsible_user_id' => ['nullable', Rule::exists('users', 'id')->where(fn ($query) => $query->where('user_type', 'staff')->where('active', true))],
             'status' => ['required', Rule::in(CentroApuntesMaquina::STATUS_OPTIONS)],
-            'estimated_cost_letter' => ['required', 'numeric', 'min:0'],
-            'estimated_cost_officio' => ['required', 'numeric', 'min:0'],
             'observations' => ['nullable', 'string'],
         ];
     }

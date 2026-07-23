@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Staff;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Staff\ImportStaffRequest;
 use App\Http\Requests\Staff\StoreStaffRequest;
 use App\Http\Requests\Staff\UpdateStaffRequest;
 use App\Models\Cargo;
@@ -13,11 +14,13 @@ use App\Models\Role;
 use App\Models\Staff;
 use App\Models\User;
 use App\Services\Staff\StaffDeletionService;
+use App\Services\Staff\StaffImportService;
 use App\Support\Rut;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\UploadedFile;
+use Symfony\Component\HttpFoundation\BinaryFileResponse;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Storage;
@@ -105,6 +108,33 @@ class StaffController extends Controller
         return response()->json($items);
     }
 
+    public function import(ImportStaffRequest $request, StaffImportService $importService): JsonResponse
+    {
+        $result = $importService->import(
+            $request->file('file'),
+            (bool) $request->validated('update_existing'),
+            $request->user(),
+        );
+
+        return response()->json([
+            'message' => $result['error_count'] > 0
+                ? 'Importación finalizada con observaciones.'
+                : 'Importación de funcionarios completada correctamente.',
+            'data' => $result,
+        ]);
+    }
+
+    public function importTemplate(): BinaryFileResponse
+    {
+        $path = public_path('templates/plantilla_importacion_funcionarios.xlsx');
+
+        abort_unless(is_file($path), 404, 'La plantilla de importación no está disponible.');
+
+        return response()->download($path, 'plantilla_importacion_funcionarios.xlsx', [
+            'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        ]);
+    }
+
     public function store(StoreStaffRequest $request): JsonResponse
     {
         $payload = $this->applyLocationSnapshot($request->validated());
@@ -127,7 +157,7 @@ class StaffController extends Controller
 
             if ($associatedUserId) {
                 $this->syncAssociatedUser($staff, $associatedUserId, $payload['cargo_id'] ?? null);
-            } else {
+            } elseif ($staff->rut && $staff->institutional_email) {
                 $this->createUserForStaff($staff);
             }
 

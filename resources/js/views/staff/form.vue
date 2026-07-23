@@ -4,6 +4,9 @@ import Layout from "../../layouts/main.vue";
 import Multiselect from "@vueform/multiselect";
 import Swal from "sweetalert2";
 import { getPdfMake } from "../../utils/pdfmake";
+import StaffFieldLabel from "../../components/staff/field-label.vue";
+import { normalizeStaffNullableFields } from "../../components/staff/staff-utils";
+import "../../components/staff/staff-ui.css";
 
 const maintenanceRoleCatalog = [
   { value: "encargado_mantencion", label: "Encargado/a de mantención" },
@@ -15,25 +18,25 @@ const maintenanceRoleCatalog = [
 
 const emptyForm = () => ({
   full_name: "",
-  rut: "",
-  birth_date: "",
-  institutional_email: "",
-  personal_email: "",
-  phone: "",
-  address: "",
+  rut: null,
+  birth_date: null,
+  institutional_email: null,
+  personal_email: null,
+  phone: null,
+  address: null,
   region_id: null,
   commune_id: null,
   cargo_id: null,
   contract_type: null,
-  start_date: "",
-  end_date: "",
+  start_date: null,
+  end_date: null,
   status: "activo",
   workday: null,
-  contract_hours: "",
-  professional_title: "",
-  specialty: "",
-  professional_registration: "",
-  internal_notes: "",
+  contract_hours: null,
+  professional_title: null,
+  specialty: null,
+  professional_registration: null,
+  internal_notes: null,
   active: true,
   can_receive_maintenance_orders: false,
   maintenance_role: null,
@@ -51,7 +54,7 @@ const emptyPermissionWatcher = () => ({
 });
 
 export default {
-  components: { Layout, Multiselect },
+  components: { Layout, Multiselect, StaffFieldLabel },
   data() {
     return {
       loading: false,
@@ -95,7 +98,7 @@ export default {
     },
     pageSubtitle() {
       if (this.isNew) {
-        return "Completa los datos base para crear la ficha institucional.";
+        return "Crea la ficha con el nombre y completa los demás datos cuando estén disponibles.";
       }
 
       if (this.staff) {
@@ -291,13 +294,6 @@ export default {
         { label: "Estado laboral", complete: Boolean(this.form.status) },
       ];
 
-      if (this.isNew) {
-        fields.push(
-          { label: "RUT", complete: Boolean(String(this.form.rut || "").trim()) },
-          { label: "Correo institucional", complete: Boolean(String(this.form.institutional_email || "").trim()) }
-        );
-      }
-
       return fields.filter((item) => !item.complete);
     },
     documentTypes() {
@@ -340,7 +336,7 @@ export default {
     },
     "form.contract_type"(value) {
       if (value === "indefinido") {
-        this.form.end_date = "";
+        this.form.end_date = null;
       }
     },
     "form.region_id"() {
@@ -420,25 +416,25 @@ export default {
           }));
           this.form = {
             full_name: this.staff.full_name || "",
-            rut: this.staff.rut || "",
-            birth_date: this.staff.birth_date || "",
-            institutional_email: this.staff.institutional_email || "",
-            personal_email: this.staff.personal_email || "",
-            phone: this.staff.phone || "",
-            address: this.staff.address || "",
+            rut: this.staff.rut ?? null,
+            birth_date: this.staff.birth_date ?? null,
+            institutional_email: this.staff.institutional_email ?? null,
+            personal_email: this.staff.personal_email ?? null,
+            phone: this.staff.phone ?? null,
+            address: this.staff.address ?? null,
             region_id: this.staff.region_id ?? this.staff.region_record?.id ?? null,
             commune_id: this.staff.commune_id ?? this.staff.commune_record?.id ?? null,
             cargo_id: this.staff.cargo_id ?? null,
             contract_type: this.staff.contract_type || null,
-            start_date: this.staff.start_date || "",
-            end_date: this.staff.end_date || "",
+            start_date: this.staff.start_date ?? null,
+            end_date: this.staff.end_date ?? null,
             status: this.staff.status || "activo",
             workday: this.staff.workday || null,
-            contract_hours: this.staff.contract_hours || "",
-            professional_title: this.staff.professional_title || "",
-            specialty: this.staff.specialty || "",
-            professional_registration: this.staff.professional_registration || "",
-            internal_notes: this.staff.internal_notes || "",
+            contract_hours: this.staff.contract_hours ?? null,
+            professional_title: this.staff.professional_title ?? null,
+            specialty: this.staff.specialty ?? null,
+            professional_registration: this.staff.professional_registration ?? null,
+            internal_notes: this.staff.internal_notes ?? null,
             active: Boolean(this.staff.active),
             can_receive_maintenance_orders: Boolean(this.staff.can_receive_maintenance_orders),
             maintenance_role: this.staff.maintenance_role || null,
@@ -536,8 +532,30 @@ export default {
     },
     buildPayload() {
       const formData = new FormData();
+      const normalizedForm = normalizeStaffNullableFields(this.form, [
+        "rut",
+        "birth_date",
+        "institutional_email",
+        "personal_email",
+        "phone",
+        "address",
+        "region_id",
+        "commune_id",
+        "cargo_id",
+        "contract_type",
+        "start_date",
+        "end_date",
+        "workday",
+        "contract_hours",
+        "professional_title",
+        "specialty",
+        "professional_registration",
+        "internal_notes",
+        "maintenance_role",
+        "associated_user_id",
+      ]);
 
-      Object.entries(this.form).forEach(([key, value]) => {
+      Object.entries(normalizedForm).forEach(([key, value]) => {
         if (key === "department_ids") {
           formData.append(key, JSON.stringify(value || []));
           return;
@@ -576,6 +594,7 @@ export default {
         html: `<div class="text-start"><p class="mb-2">Completa estos campos antes de guardar:</p><ul class="mb-0">${items}</ul></div>`,
         icon: "warning",
         confirmButtonText: "Revisar formulario",
+        customClass: { popup: "staff-alert" },
       });
 
       return false;
@@ -593,6 +612,7 @@ export default {
         confirmButtonText: this.isNew ? "Sí, crear" : "Sí, guardar",
         cancelButtonText: "Cancelar",
         reverseButtons: true,
+        customClass: { popup: "staff-alert" },
       });
 
       return result.isConfirmed;
@@ -881,6 +901,7 @@ export default {
         confirmButtonText,
         cancelButtonText: "Cancelar",
         reverseButtons: true,
+        customClass: { popup: "staff-alert" },
       });
     },
     showSuccessAlert(title, text) {
@@ -890,6 +911,7 @@ export default {
         icon: "success",
         timer: 1800,
         showConfirmButton: false,
+        customClass: { popup: "staff-alert" },
       });
     },
     showErrorAlert(text) {
@@ -897,6 +919,7 @@ export default {
         title: "Error",
         text,
         icon: "error",
+        customClass: { popup: "staff-alert" },
       });
     },
     formatDate(value) {
@@ -994,6 +1017,13 @@ export default {
           {{ field.label }}
         </div>
       </div>
+
+      <div v-if="isNew" class="staff-nullable-note mt-3">
+        <i class="bx bx-info-circle"></i>
+        <span>
+          Solo el nombre y el estado laboral son obligatorios. La cuenta de acceso se crea cuando completes RUT y correo institucional.
+        </span>
+      </div>
     </div>
 
     <BAlert v-if="error" variant="danger" show class="mb-3">{{ error }}</BAlert>
@@ -1039,7 +1069,7 @@ export default {
           </div>
 
           <div class="mb-3">
-            <label class="form-label">Foto de perfil</label>
+            <StaffFieldLabel label="Foto de perfil" />
             <input
               class="form-control"
               type="file"
@@ -1050,10 +1080,7 @@ export default {
           </div>
 
           <div class="mb-3">
-            <label class="form-label">
-              Estado laboral
-              <span class="staff-required-dot">*</span>
-            </label>
+            <StaffFieldLabel label="Estado laboral" required />
             <Multiselect
               v-model="form.status"
               class="staff-multiselect"
@@ -1078,7 +1105,7 @@ export default {
           </div>
 
           <div v-if="form.can_receive_maintenance_orders" class="mb-3">
-            <label class="form-label">Rol operativo</label>
+            <StaffFieldLabel label="Rol operativo" required />
             <Multiselect
               v-model="form.maintenance_role"
               class="staff-role-multiselect"
@@ -1101,28 +1128,19 @@ export default {
         <BCard title="Datos personales" class="staff-form-card">
           <div class="row g-3">
             <div class="col-md-8">
-              <label class="form-label">
-                Nombre completo
-                <span class="staff-required-dot">*</span>
-              </label>
+              <StaffFieldLabel label="Nombre completo" required />
               <BFormInput v-model="form.full_name" placeholder="Nombre y apellidos" :disabled="!canEdit" />
             </div>
             <div class="col-md-4">
-              <label class="form-label">
-                RUT
-                <span v-if="isNew" class="staff-required-dot">*</span>
-              </label>
+              <StaffFieldLabel label="RUT" />
               <BFormInput v-model="form.rut" placeholder="12.345.678-9" :disabled="!canEdit" />
             </div>
             <div class="col-md-4">
-              <label class="form-label">Fecha de nacimiento</label>
+              <StaffFieldLabel label="Fecha de nacimiento" />
               <BFormInput v-model="form.birth_date" type="date" :disabled="!canEdit" />
             </div>
             <div class="col-md-4">
-              <label class="form-label">
-                Correo institucional
-                <span v-if="isNew" class="staff-required-dot">*</span>
-              </label>
+              <StaffFieldLabel label="Correo institucional" />
               <BFormInput
                 v-model="form.institutional_email"
                 type="email"
@@ -1131,7 +1149,7 @@ export default {
               />
             </div>
             <div class="col-md-4">
-              <label class="form-label">Correo personal</label>
+              <StaffFieldLabel label="Correo personal" />
               <BFormInput
                 v-model="form.personal_email"
                 type="email"
@@ -1140,15 +1158,15 @@ export default {
               />
             </div>
             <div class="col-md-4">
-              <label class="form-label">Teléfono</label>
+              <StaffFieldLabel label="Teléfono" />
               <BFormInput v-model="form.phone" placeholder="+569..." :disabled="!canEdit" />
             </div>
             <div class="col-md-8">
-              <label class="form-label">Dirección</label>
+              <StaffFieldLabel label="Dirección" />
               <BFormInput v-model="form.address" placeholder="Calle, número, sector" :disabled="!canEdit" />
             </div>
             <div class="col-md-6">
-              <label class="form-label">Región</label>
+              <StaffFieldLabel label="Región" />
               <Multiselect
                 v-model="form.region_id"
                 class="staff-multiselect"
@@ -1158,7 +1176,7 @@ export default {
               />
             </div>
             <div class="col-md-6">
-              <label class="form-label">Comuna</label>
+              <StaffFieldLabel label="Comuna" />
               <Multiselect
                 v-model="form.commune_id"
                 class="staff-multiselect"
@@ -1173,7 +1191,7 @@ export default {
         <BCard title="Datos laborales" class="staff-form-card mt-3">
           <div class="row g-3">
             <div class="col-md-6">
-              <label class="form-label">Cargo</label>
+              <StaffFieldLabel label="Cargo" />
               <Multiselect
                 v-model="form.cargo_id"
                 class="staff-multiselect"
@@ -1183,7 +1201,7 @@ export default {
               />
             </div>
             <div class="col-md-6">
-              <label class="form-label">Tipo de contrato</label>
+              <StaffFieldLabel label="Tipo de contrato" />
               <Multiselect
                 v-model="form.contract_type"
                 class="staff-multiselect"
@@ -1193,11 +1211,11 @@ export default {
               />
             </div>
             <div class="col-md-4">
-              <label class="form-label">Fecha de ingreso</label>
+              <StaffFieldLabel label="Fecha de ingreso" />
               <BFormInput v-model="form.start_date" type="date" :disabled="!canEdit" />
             </div>
             <div class="col-md-4">
-              <label class="form-label">Fecha de término</label>
+              <StaffFieldLabel label="Fecha de término" />
               <BFormInput
                 v-model="form.end_date"
                 type="date"
@@ -1209,7 +1227,7 @@ export default {
               </div>
             </div>
             <div class="col-md-4">
-              <label class="form-label">Jornada</label>
+              <StaffFieldLabel label="Jornada" />
               <Multiselect
                 v-model="form.workday"
                 class="staff-multiselect"
@@ -1219,7 +1237,7 @@ export default {
               />
             </div>
             <div class="col-md-4">
-              <label class="form-label">Horas de contrato</label>
+              <StaffFieldLabel label="Horas de contrato" />
               <BFormInput
                 v-model="form.contract_hours"
                 type="number"
@@ -1230,15 +1248,15 @@ export default {
               />
             </div>
             <div class="col-md-4">
-              <label class="form-label">Título profesional</label>
+              <StaffFieldLabel label="Título profesional" />
               <BFormInput v-model="form.professional_title" placeholder="Título o grado" :disabled="!canEdit" />
             </div>
             <div class="col-md-4">
-              <label class="form-label">Especialidad</label>
+              <StaffFieldLabel label="Especialidad" />
               <BFormInput v-model="form.specialty" placeholder="Especialidad" :disabled="!canEdit" />
             </div>
             <div :class="isNew ? 'col-12' : 'col-md-6'">
-              <label class="form-label">Registro profesional</label>
+              <StaffFieldLabel label="Registro profesional" />
               <BFormInput
                 v-model="form.professional_registration"
                 placeholder="Número de registro"
@@ -1246,7 +1264,7 @@ export default {
               />
             </div>
             <div v-if="!isNew" class="col-md-6">
-              <label class="form-label">Usuario asociado</label>
+              <StaffFieldLabel label="Usuario asociado" />
               <Multiselect
                 v-model="form.associated_user_id"
                 class="staff-multiselect"
@@ -1256,14 +1274,14 @@ export default {
               />
             </div>
             <div class="col-12">
-              <label class="form-label">Observaciones internas</label>
+              <StaffFieldLabel label="Observaciones internas" />
               <BFormTextarea v-model="form.internal_notes" rows="3" :disabled="!canEdit" />
             </div>
           </div>
         </BCard>
 
         <BCard title="Departamentos asociados" class="staff-form-card mt-3">
-          <label class="form-label">Asignación de departamentos</label>
+          <StaffFieldLabel label="Asignación de departamentos" />
           <Multiselect
             v-model="form.department_ids"
             class="staff-multiselect"
@@ -1284,7 +1302,7 @@ export default {
           <div class="row g-3">
             <div class="col-md-3">
               <div class="text-muted small">RUT</div>
-              <div class="fw-semibold">{{ staff.rut }}</div>
+              <div class="fw-semibold">{{ staff.rut || "-" }}</div>
             </div>
             <div class="col-md-3">
               <div class="text-muted small">Ingreso</div>
@@ -1695,6 +1713,23 @@ export default {
   background: #e8f7ef;
   border-color: #c9ecd8;
   color: #16855b;
+}
+
+.staff-nullable-note {
+  align-items: center;
+  background: linear-gradient(135deg, rgba(85, 110, 230, 0.08), rgba(52, 195, 143, 0.06));
+  border: 1px solid rgba(85, 110, 230, 0.14);
+  border-radius: 10px;
+  color: #586174;
+  display: flex;
+  font-size: 0.84rem;
+  gap: 0.6rem;
+  padding: 0.7rem 0.85rem;
+}
+
+.staff-nullable-note i {
+  color: #556ee6;
+  font-size: 1.15rem;
 }
 
 .staff-form-card {

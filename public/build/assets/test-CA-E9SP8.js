@@ -1,0 +1,1 @@
+import{b as e,L as s,f as a,af as n,V as r,e as c}from"../js/app-zQpBwHkj.js";/* empty css                                                                      */const p={};function f(l,t,u,_,d,i){const o=r("Layout");return s(),a(o,null,{default:n(()=>[...t[0]||(t[0]=[c("div",null,"ok",-1)])]),_:1})}const $=e(p,[["render",f]]);export{$ as default};

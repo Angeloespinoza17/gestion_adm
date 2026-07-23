@@ -2,12 +2,29 @@
 
 namespace App\Http\Requests\CentroApuntes;
 
+use App\Http\Requests\CentroApuntes\Concerns\NormalizesNullableFields;
 use App\Models\CentroApuntes\PanolMovimiento;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
 class SavePanolMovimientoRequest extends FormRequest
 {
+    use NormalizesNullableFields;
+
+    protected function prepareForValidation(): void
+    {
+        $this->normalizeNullableFields([
+            'moved_at',
+            'responsible_user_id',
+            'requested_by_user_id',
+            'department_id',
+            'reason',
+            'document_reference',
+            'observations',
+            'adjustment_mode',
+        ]);
+    }
+
     public function authorize(): bool
     {
         return true;

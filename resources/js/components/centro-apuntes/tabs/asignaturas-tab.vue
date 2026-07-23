@@ -1,12 +1,15 @@
 <script>
 import axios from "axios";
 import CentroApuntesHelpButton from "../help-button.vue";
+import CentroApuntesModalIntro from "../modal-intro.vue";
+import CentroApuntesSectionToolbar from "../section-toolbar.vue";
 import CentroApuntesStatusBadge from "../status-badge.vue";
 import LoadingState from "../../ui/loading-state.vue";
 import {
   confirmCentroApuntesAction,
   confirmCentroApuntesCancel,
   formatCentroApuntesError,
+  normalizeCentroApuntesNullableFields,
   normalizeOptions,
   showCentroApuntesSuccess,
 } from "../module-utils";
@@ -15,15 +18,17 @@ const emptyForm = () => ({
   id: null,
   name: "",
   code: "",
-  area: "",
-  education_level: "",
+  area: null,
+  education_level: null,
   status: "activa",
-  observations: "",
+  observations: null,
 });
 
 export default {
   components: {
     CentroApuntesHelpButton,
+    CentroApuntesModalIntro,
+    CentroApuntesSectionToolbar,
     CentroApuntesStatusBadge,
     LoadingState,
   },
@@ -99,10 +104,10 @@ export default {
         id: item.id,
         name: item.name,
         code: item.code,
-        area: item.area || "",
-        education_level: item.education_level || "",
+        area: item.area ?? null,
+        education_level: item.education_level ?? null,
         status: item.status,
-        observations: item.observations || "",
+        observations: item.observations ?? null,
       };
       this.showModal = true;
     },
@@ -119,10 +124,15 @@ export default {
 
       this.saving = true;
       try {
+        const payload = normalizeCentroApuntesNullableFields(this.form, [
+          "area",
+          "education_level",
+          "observations",
+        ]);
         if (this.form.id) {
-          await axios.put(`/api/centro-apuntes/asignaturas/${this.form.id}`, this.form);
+          await axios.put(`/api/centro-apuntes/asignaturas/${this.form.id}`, payload);
         } else {
-          await axios.post("/api/centro-apuntes/asignaturas", this.form);
+          await axios.post("/api/centro-apuntes/asignaturas", payload);
         }
         this.showModal = false;
         this.$emit("refresh-catalogs");
@@ -173,9 +183,8 @@ export default {
 </script>
 
 <template>
-  <div class="d-flex flex-column gap-3">
-    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
-      <div class="fw-semibold">Administración de asignaturas</div>
+  <div class="centro-apuntes-tab d-flex flex-column gap-3">
+    <CentroApuntesSectionToolbar title="Administración de asignaturas" description="Mantén ordenado el catálogo pedagógico usado en solicitudes y reportes." icon="bx-book-open">
       <div class="d-flex gap-2">
         <CentroApuntesHelpButton
           title="Ayuda: asignaturas"
@@ -183,11 +192,11 @@ export default {
         />
         <BButton v-if="canManage" variant="primary" @click="openCreate"><i class="bx bx-plus me-1"></i>Nueva asignatura</BButton>
       </div>
-    </div>
+    </CentroApuntesSectionToolbar>
 
     <BAlert v-if="error" show variant="danger">{{ error }}</BAlert>
 
-    <BCard class="border-0 shadow-sm">
+    <BCard class="filter-card border-0 shadow-sm">
       <div class="row g-3 align-items-end">
         <div class="col-md-4">
           <label class="form-label">Buscar</label>
@@ -212,7 +221,7 @@ export default {
       </div>
     </BCard>
 
-    <BCard class="border-0 shadow-sm">
+    <BCard class="data-card border-0 shadow-sm">
       <LoadingState v-if="loading" message="Cargando asignaturas..." compact />
       <BTable
         v-else
@@ -254,40 +263,40 @@ export default {
       </div>
     </BCard>
 
-    <BModal v-model="showModal" title="Asignatura" hide-footer>
-      <div class="d-flex justify-content-end mb-3">
+    <BModal v-model="showModal" :title="form.id ? 'Editar asignatura' : 'Nueva asignatura'" hide-footer centered scrollable modal-class="centro-apuntes-modal">
+      <CentroApuntesModalIntro title="Datos de la asignatura" text="Los campos marcados como opcionales pueden dejarse sin información." icon="bx-book-open">
         <CentroApuntesHelpButton
           title="Ayuda: formulario de asignatura"
           text="Use este formulario para crear o editar asignaturas, manteniendo su código, área, nivel educativo y estado operativo."
         />
-      </div>
-      <div class="row g-3">
+      </CentroApuntesModalIntro>
+      <div class="modal-form-grid row g-3">
         <div class="col-md-8">
-          <label class="form-label">Nombre</label>
+          <label class="form-label">Nombre <span class="field-required">*</span></label>
           <BFormInput v-model="form.name" />
         </div>
         <div class="col-md-4">
-          <label class="form-label">Código</label>
+          <label class="form-label">Código <span class="field-required">*</span></label>
           <BFormInput v-model="form.code" />
         </div>
         <div class="col-md-6">
-          <label class="form-label">Área</label>
-          <BFormSelect v-model="form.area" :options="areaOptions.map((item) => ({ value: item.value, text: item.label }))" />
+          <label class="form-label">Área <span class="field-optional">Opcional</span></label>
+          <BFormSelect v-model="form.area" :options="[{ value: null, text: 'Sin especificar' }].concat(areaOptions.map((item) => ({ value: item.value, text: item.label })))" />
         </div>
         <div class="col-md-6">
-          <label class="form-label">Nivel educativo</label>
-          <BFormSelect v-model="form.education_level" :options="levelOptions.map((item) => ({ value: item.value, text: item.label }))" />
+          <label class="form-label">Nivel educativo <span class="field-optional">Opcional</span></label>
+          <BFormSelect v-model="form.education_level" :options="[{ value: null, text: 'Sin especificar' }].concat(levelOptions.map((item) => ({ value: item.value, text: item.label })))" />
         </div>
         <div class="col-md-6">
-          <label class="form-label">Estado</label>
+          <label class="form-label">Estado <span class="field-required">*</span></label>
           <BFormSelect v-model="form.status" :options="statusOptions.map((item) => ({ value: item.value, text: item.label }))" />
         </div>
         <div class="col-md-12">
-          <label class="form-label">Observaciones</label>
+          <label class="form-label">Observaciones <span class="field-optional">Opcional</span></label>
           <BFormTextarea v-model="form.observations" rows="3" />
         </div>
       </div>
-      <div class="d-flex justify-content-end gap-2 mt-4">
+      <div class="modal-actions">
         <BButton variant="light" @click="closeModal">Cancelar</BButton>
         <BButton variant="primary" :disabled="saving" @click="save">{{ saving ? "Guardando..." : "Guardar" }}</BButton>
       </div>

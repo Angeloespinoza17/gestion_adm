@@ -2,12 +2,28 @@
 
 namespace App\Http\Requests\CentroApuntes;
 
+use App\Http\Requests\CentroApuntes\Concerns\NormalizesNullableFields;
 use App\Models\CentroApuntes\PanolInsumo;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
 class SavePanolInsumoRequest extends FormRequest
 {
+    use NormalizesNullableFields;
+
+    protected function prepareForValidation(): void
+    {
+        $this->normalizeNullableFields([
+            'maximum_stock',
+            'location',
+            'supplier_id',
+            'last_purchase_at',
+            'expires_at',
+            'status',
+            'observations',
+        ]);
+    }
+
     public function authorize(): bool
     {
         return true;
@@ -24,7 +40,6 @@ class SavePanolInsumoRequest extends FormRequest
             'maximum_stock' => ['nullable', 'numeric', 'gte:minimum_stock'],
             'location' => ['nullable', 'string', 'max:160'],
             'supplier_id' => ['nullable', 'exists:suppliers,id'],
-            'unit_price_estimated' => ['required', 'numeric', 'min:0'],
             'last_purchase_at' => ['nullable', 'date'],
             'expires_at' => ['nullable', 'date'],
             'status' => ['nullable', Rule::in(PanolInsumo::STATUS_OPTIONS)],

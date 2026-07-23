@@ -180,8 +180,6 @@ class PanolDeliveryService
         }
 
         $delivery->details()->delete();
-        $totalEstimatedCost = 0;
-
         foreach ($details as $detail) {
             $insumo = PanolInsumo::query()->findOrFail($detail['insumo_id']);
             $quantity = round((float) $detail['quantity'], 2);
@@ -192,22 +190,19 @@ class PanolDeliveryService
                 ]);
             }
 
-            $lineTotal = round($quantity * (float) $insumo->unit_price_estimated, 2);
-            $totalEstimatedCost += $lineTotal;
-
             PanolEntregaDetalle::query()->create([
                 'panol_entrega_id' => $delivery->id,
                 'insumo_id' => $insumo->id,
                 'insumo_name_snapshot' => $insumo->name,
                 'quantity' => $quantity,
-                'unit_cost_estimated' => $insumo->unit_price_estimated,
-                'line_total_estimated' => $lineTotal,
+                'unit_cost_estimated' => 0,
+                'line_total_estimated' => 0,
                 'notes' => $detail['notes'] ?? null,
             ]);
         }
 
         $delivery->forceFill([
-            'total_estimated_cost' => $totalEstimatedCost,
+            'total_estimated_cost' => 0,
         ])->save();
     }
 

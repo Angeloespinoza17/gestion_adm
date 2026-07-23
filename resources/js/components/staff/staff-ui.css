@@ -1,0 +1,223 @@
+.staff-page-hero {
+  align-items: center;
+  background: linear-gradient(135deg, #ffffff 0%, #f7f9ff 62%, #f1fbf7 100%);
+  border: 1px solid #e6ebf5;
+  border-radius: 16px;
+  box-shadow: 0 14px 34px rgba(42, 48, 66, 0.07);
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 1.5rem;
+  min-height: 108px;
+  padding: 1.25rem 1.35rem;
+}
+
+.staff-page-hero__content {
+  align-items: center;
+  display: flex;
+  gap: 1rem;
+  min-width: 0;
+}
+
+.staff-page-hero__icon {
+  align-items: center;
+  background: linear-gradient(135deg, #556ee6, #7185ec);
+  border-radius: 14px;
+  box-shadow: 0 10px 20px rgba(85, 110, 230, 0.24);
+  color: #fff;
+  display: inline-flex;
+  flex: 0 0 3.4rem;
+  font-size: 1.55rem;
+  height: 3.4rem;
+  justify-content: center;
+}
+
+.staff-page-hero__eyebrow {
+  color: #556ee6;
+  display: block;
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  margin-bottom: 0.28rem;
+  text-transform: uppercase;
+}
+
+.staff-page-hero__title {
+  color: #2a3042;
+  font-weight: 750;
+  margin: 0;
+}
+
+.staff-page-hero__subtitle {
+  color: #74788d;
+  margin: 0.28rem 0 0;
+}
+
+.staff-page-hero__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+  justify-content: flex-end;
+}
+
+.staff-page-hero__actions .btn {
+  align-items: center;
+  border-radius: 9px;
+  display: inline-flex;
+  font-weight: 650;
+  min-height: 2.65rem;
+}
+
+.staff-modal .modal-content {
+  border: 0;
+  border-radius: 18px;
+  box-shadow: 0 28px 80px rgba(42, 48, 66, 0.24);
+  overflow: hidden;
+}
+
+.staff-modal .modal-header {
+  background: linear-gradient(135deg, #f8f9ff 0%, #f2f6ff 100%);
+  border-bottom: 1px solid #e6ebf5;
+  padding: 1.05rem 1.25rem;
+}
+
+.staff-modal .modal-title {
+  color: #2a3042;
+  font-size: 1.05rem;
+  font-weight: 750;
+}
+
+.staff-modal .btn-close {
+  background-color: #fff;
+  border-radius: 9px;
+  box-shadow: 0 5px 14px rgba(42, 48, 66, 0.09);
+  opacity: 0.72;
+  padding: 0.62rem;
+}
+
+.staff-modal .modal-body {
+  background: #fff;
+  padding: 1.25rem;
+}
+
+.staff-modal .form-label {
+  color: #3f4858;
+  font-size: 0.83rem;
+  font-weight: 700;
+}
+
+.staff-modal .form-control,
+.staff-modal .form-select {
+  border-color: #dde4f1;
+  border-radius: 10px;
+  min-height: 2.72rem;
+}
+
+.staff-modal .form-control:focus,
+.staff-modal .form-select:focus {
+  border-color: #8d9ff5;
+  box-shadow: 0 0 0 0.2rem rgba(85, 110, 230, 0.12);
+}
+
+.staff-modal-actions {
+  align-items: center;
+  border-top: 1px solid #edf0f5;
+  display: flex;
+  gap: 0.65rem;
+  justify-content: flex-end;
+  margin-top: 1.25rem;
+  padding-top: 1rem;
+}
+
+.staff-modal-actions .btn {
+  border-radius: 9px;
+  font-weight: 650;
+  min-height: 2.65rem;
+  min-width: 108px;
+}
+
+.staff-import-dropzone {
+  background: #fafbfe;
+  border: 1.5px dashed #b9c4e9;
+  border-radius: 14px;
+  padding: 1.15rem;
+  text-align: center;
+}
+
+.staff-import-dropzone__icon {
+  align-items: center;
+  background: #eef1ff;
+  border-radius: 12px;
+  color: #556ee6;
+  display: inline-flex;
+  font-size: 1.45rem;
+  height: 3rem;
+  justify-content: center;
+  margin-bottom: 0.65rem;
+  width: 3rem;
+}
+
+.staff-import-result-grid {
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin-bottom: 1rem;
+}
+
+.staff-import-result-card {
+  background: #f8fafc;
+  border: 1px solid #e8edf5;
+  border-radius: 12px;
+  padding: 0.85rem;
+}
+
+.staff-import-result-card strong {
+  color: #2a3042;
+  display: block;
+  font-size: 1.35rem;
+}
+
+.staff-import-errors {
+  border: 1px solid #f2d7d7;
+  border-radius: 12px;
+  max-height: 260px;
+  overflow: auto;
+}
+
+.staff-import-errors .table {
+  margin: 0;
+}
+
+.staff-alert {
+  border-radius: 16px !important;
+}
+
+@media (max-width: 767.98px) {
+  .staff-page-hero {
+    align-items: flex-start;
+    flex-direction: column;
+    padding: 1rem;
+  }
+
+  .staff-page-hero__actions {
+    justify-content: stretch;
+    width: 100%;
+  }
+
+  .staff-page-hero__actions .btn {
+    flex: 1 1 100%;
+    justify-content: center;
+  }
+
+  .staff-import-result-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .staff-modal-actions {
+    align-items: stretch;
+    flex-direction: column-reverse;
+  }
+
+  .staff-modal-actions .btn {
+    width: 100%;
+  }
+}

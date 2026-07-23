@@ -53,6 +53,10 @@ class PanolInsumo extends Model
 
     protected $table = 'panol_insumos';
 
+    protected $hidden = [
+        'unit_price_estimated',
+    ];
+
     protected $appends = [
         'photo_url',
     ];

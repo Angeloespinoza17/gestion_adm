@@ -12,6 +12,7 @@ export default {
   methods: {
     openHelp() {
       return Swal.fire({
+        customClass: { popup: "centro-apuntes-alert" },
         title: this.title,
         text: this.text,
         icon: "info",

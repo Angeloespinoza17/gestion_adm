@@ -2,12 +2,20 @@
 
 namespace App\Http\Requests\CentroApuntes;
 
+use App\Http\Requests\CentroApuntes\Concerns\NormalizesNullableFields;
 use App\Models\CentroApuntes\CentroApuntesAsignatura;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
 class SaveCentroApuntesAsignaturaRequest extends FormRequest
 {
+    use NormalizesNullableFields;
+
+    protected function prepareForValidation(): void
+    {
+        $this->normalizeNullableFields(['area', 'education_level', 'observations']);
+    }
+
     public function authorize(): bool
     {
         return true;

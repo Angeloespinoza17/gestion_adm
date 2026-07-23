@@ -67,6 +67,37 @@ class StaffCreationTest extends TestCase
         $this->assertTrue(Hash::check('12345678-9', $user->password));
     }
 
+    public function test_creating_staff_with_only_a_name_keeps_optional_fields_null(): void
+    {
+        Sanctum::actingAs($this->userWithPermissions(['gestionar_funcionarios']));
+
+        $response = $this->postJson('/api/staff', [
+            'full_name' => 'Funcionario sin datos opcionales',
+            'rut' => '',
+            'institutional_email' => '',
+            'personal_email' => '   ',
+            'phone' => '',
+            'status' => 'activo',
+            'active' => true,
+        ]);
+
+        $response
+            ->assertCreated()
+            ->assertJsonPath('data.full_name', 'Funcionario sin datos opcionales')
+            ->assertJsonPath('data.rut', null)
+            ->assertJsonPath('data.institutional_email', null)
+            ->assertJsonPath('data.personal_email', null)
+            ->assertJsonPath('data.user', null);
+
+        $staff = Staff::query()->where('full_name', 'Funcionario sin datos opcionales')->firstOrFail();
+
+        $this->assertNull($staff->rut);
+        $this->assertNull($staff->institutional_email);
+        $this->assertNull($staff->personal_email);
+        $this->assertNull($staff->phone);
+        $this->assertFalse(User::query()->where('staff_id', $staff->id)->exists());
+    }
+
     private function userWithPermissions(array $permissionSlugs): User
     {
         $role = Role::query()->create([

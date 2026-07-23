@@ -12,6 +12,11 @@ class PanolEntregaDetalle extends Model
 
     protected $table = 'panol_entrega_detalles';
 
+    protected $hidden = [
+        'unit_cost_estimated',
+        'line_total_estimated',
+    ];
+
     protected $fillable = [
         'panol_entrega_id',
         'insumo_id',

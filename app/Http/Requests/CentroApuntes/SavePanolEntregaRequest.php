@@ -2,11 +2,39 @@
 
 namespace App\Http\Requests\CentroApuntes;
 
+use App\Http\Requests\CentroApuntes\Concerns\NormalizesNullableFields;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
 class SavePanolEntregaRequest extends FormRequest
 {
+    use NormalizesNullableFields;
+
+    protected function prepareForValidation(): void
+    {
+        $this->normalizeNullableFields([
+            'withdrawn_by_user_id',
+            'department_id',
+            'requested_at',
+            'observations',
+            'receipt_notes',
+        ]);
+
+        $details = collect($this->input('details', []))
+            ->map(function ($detail) {
+                if (is_array($detail) && isset($detail['notes']) && is_string($detail['notes']) && trim($detail['notes']) === '') {
+                    $detail['notes'] = null;
+                }
+
+                return $detail;
+            })
+            ->all();
+
+        if ($details !== []) {
+            $this->merge(['details' => $details]);
+        }
+    }
+
     public function authorize(): bool
     {
         return true;

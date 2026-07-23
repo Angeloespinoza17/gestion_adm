@@ -19,7 +19,6 @@ class CentroApuntesMaquinaController extends Controller
         $items = CentroApuntesMaquina::query()
             ->with('responsibleUser:id,name,email')
             ->withCount('solicitudes')
-            ->withSum('solicitudes', 'estimated_cost_total')
             ->when($search !== '', function ($builder) use ($search) {
                 $builder->where(function ($query) use ($search) {
                     $query

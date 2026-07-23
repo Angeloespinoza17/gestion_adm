@@ -1,6 +1,8 @@
 <script>
 import axios from "axios";
 import CentroApuntesHelpButton from "../help-button.vue";
+import CentroApuntesModalIntro from "../modal-intro.vue";
+import CentroApuntesSectionToolbar from "../section-toolbar.vue";
 import CentroApuntesStatusBadge from "../status-badge.vue";
 import LoadingState from "../../ui/loading-state.vue";
 import {
@@ -9,6 +11,7 @@ import {
   formatCentroApuntesDate,
   formatCentroApuntesDateTime,
   formatCentroApuntesError,
+  normalizeCentroApuntesNullableFields,
   normalizeOptions,
   showCentroApuntesSuccess,
 } from "../module-utils";
@@ -21,13 +24,12 @@ const emptyForm = () => ({
   current_stock: 0,
   minimum_stock: 0,
   maximum_stock: null,
-  location: "",
+  location: null,
   supplier_id: null,
-  unit_price_estimated: 0,
-  last_purchase_at: "",
-  expires_at: "",
+  last_purchase_at: null,
+  expires_at: null,
   status: "disponible",
-  observations: "",
+  observations: null,
   active: true,
   photo: null,
 });
@@ -35,6 +37,8 @@ const emptyForm = () => ({
 export default {
   components: {
     CentroApuntesHelpButton,
+    CentroApuntesModalIntro,
+    CentroApuntesSectionToolbar,
     CentroApuntesStatusBadge,
     LoadingState,
   },
@@ -141,13 +145,12 @@ export default {
             current_stock: this.selectedSupply.current_stock,
             minimum_stock: this.selectedSupply.minimum_stock,
             maximum_stock: this.selectedSupply.maximum_stock,
-            location: this.selectedSupply.location || "",
+            location: this.selectedSupply.location ?? null,
             supplier_id: this.selectedSupply.supplier_id || null,
-            unit_price_estimated: this.selectedSupply.unit_price_estimated,
-            last_purchase_at: String(this.selectedSupply.last_purchase_at || "").slice(0, 10),
-            expires_at: String(this.selectedSupply.expires_at || "").slice(0, 10),
+            last_purchase_at: this.selectedSupply.last_purchase_at ? String(this.selectedSupply.last_purchase_at).slice(0, 10) : null,
+            expires_at: this.selectedSupply.expires_at ? String(this.selectedSupply.expires_at).slice(0, 10) : null,
             status: this.selectedSupply.status,
-            observations: this.selectedSupply.observations || "",
+            observations: this.selectedSupply.observations ?? null,
             active: this.selectedSupply.active,
             photo: null,
           };
@@ -164,6 +167,14 @@ export default {
     buildFormData() {
       const formData = new FormData();
       const photo = Array.isArray(this.form.photo) ? this.form.photo[0] : this.form.photo;
+      const normalized = normalizeCentroApuntesNullableFields(this.form, [
+        "maximum_stock",
+        "location",
+        "supplier_id",
+        "last_purchase_at",
+        "expires_at",
+        "observations",
+      ]);
       [
         "name",
         "category",
@@ -173,12 +184,11 @@ export default {
         "maximum_stock",
         "location",
         "supplier_id",
-        "unit_price_estimated",
         "last_purchase_at",
         "expires_at",
         "status",
         "observations",
-      ].forEach((field) => formData.append(field, this.form[field] ?? ""));
+      ].forEach((field) => formData.append(field, normalized[field] ?? ""));
       formData.append("active", this.form.active ? 1 : 0);
 
       if (photo) {
@@ -260,9 +270,8 @@ export default {
 </script>
 
 <template>
-  <div class="d-flex flex-column gap-3">
-    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
-      <div class="fw-semibold">Inventario de insumos del pañol</div>
+  <div class="centro-apuntes-tab d-flex flex-column gap-3">
+    <CentroApuntesSectionToolbar title="Inventario de insumos" description="Consulta existencias, mínimos, vencimientos y ubicación de cada material." icon="bx-box">
       <div class="d-flex gap-2">
         <CentroApuntesHelpButton
           title="Ayuda: inventario de insumos"
@@ -270,11 +279,11 @@ export default {
         />
         <BButton v-if="canManage" variant="primary" @click="openCreate"><i class="bx bx-plus me-1"></i>Nuevo insumo</BButton>
       </div>
-    </div>
+    </CentroApuntesSectionToolbar>
 
     <BAlert v-if="error" show variant="danger">{{ error }}</BAlert>
 
-    <BCard class="border-0 shadow-sm">
+    <BCard class="filter-card border-0 shadow-sm">
       <div class="row g-3 align-items-end">
         <div class="col-md-5">
           <label class="form-label">Buscar</label>
@@ -298,7 +307,7 @@ export default {
       </div>
     </BCard>
 
-    <BCard class="border-0 shadow-sm">
+    <BCard class="data-card border-0 shadow-sm">
       <LoadingState v-if="loading || detailLoading" message="Cargando insumos..." compact />
       <BTable
         v-else
@@ -310,7 +319,6 @@ export default {
           { key: 'name', label: 'Insumo' },
           { key: 'category', label: 'Categoría' },
           { key: 'current_stock', label: 'Stock' },
-          { key: 'unit_price_estimated', label: 'Precio estimado' },
           { key: 'expires_at', label: 'Vencimiento' },
           { key: 'status', label: 'Estado' },
           { key: 'actions', label: 'Acciones' },
@@ -323,9 +331,6 @@ export default {
         <template #cell(current_stock)="{ item }">
           {{ item.current_stock }} {{ item.unit_of_measure }}
           <div class="small text-muted">Mín. {{ item.minimum_stock }}</div>
-        </template>
-        <template #cell(unit_price_estimated)="{ item }">
-          ${{ Number(item.unit_price_estimated || 0).toLocaleString("es-CL") }}
         </template>
         <template #cell(expires_at)="{ item }">
           {{ formatCentroApuntesDate(item.expires_at) }}
@@ -351,16 +356,16 @@ export default {
       </div>
     </BCard>
 
-    <BModal v-model="showModal" size="lg" title="Insumo del pañol" hide-footer>
-      <div class="d-flex justify-content-end mb-3">
+    <BModal v-model="showModal" size="lg" :title="form.id ? 'Editar insumo' : 'Nuevo insumo'" hide-footer centered scrollable modal-class="centro-apuntes-modal">
+      <CentroApuntesModalIntro title="Ficha de inventario" text="Proveedor, ubicación, stock máximo, fechas, foto y observaciones pueden quedar sin información." icon="bx-box">
         <CentroApuntesHelpButton
           title="Ayuda: formulario de insumo"
-          text="Use este formulario para registrar insumos, su stock, proveedor, costo estimado, vencimiento, foto y estado operativo."
+          text="Use este formulario para registrar insumos, su stock, proveedor, ubicación, vencimiento, foto y estado operativo."
         />
-      </div>
-      <div class="row g-3">
+      </CentroApuntesModalIntro>
+      <div class="modal-form-grid row g-3">
         <div class="col-md-8">
-          <label class="form-label">Nombre</label>
+          <label class="form-label">Nombre <span class="field-required">*</span></label>
           <BFormInput v-model="form.name" />
         </div>
         <div class="col-md-4">
@@ -368,51 +373,47 @@ export default {
           <BFormSelect v-model="form.status" :options="statusOptions.map((item) => ({ value: item.value, text: item.label }))" />
         </div>
         <div class="col-md-6">
-          <label class="form-label">Categoría</label>
+          <label class="form-label">Categoría <span class="field-required">*</span></label>
           <BFormSelect v-model="form.category" :options="categoryOptions.map((item) => ({ value: item.value, text: item.label }))" />
         </div>
         <div class="col-md-6">
-          <label class="form-label">Unidad de medida</label>
+          <label class="form-label">Unidad de medida <span class="field-required">*</span></label>
           <BFormSelect v-model="form.unit_of_measure" :options="unitOptions.map((item) => ({ value: item.value, text: item.label }))" />
         </div>
         <div class="col-md-4">
-          <label class="form-label">Stock actual</label>
+          <label class="form-label">Stock actual <span class="field-required">*</span></label>
           <BFormInput v-model="form.current_stock" type="number" min="0" step="0.01" />
         </div>
         <div class="col-md-4">
-          <label class="form-label">Stock mínimo</label>
+          <label class="form-label">Stock mínimo <span class="field-required">*</span></label>
           <BFormInput v-model="form.minimum_stock" type="number" min="0" step="0.01" />
         </div>
         <div class="col-md-4">
-          <label class="form-label">Stock máximo</label>
+          <label class="form-label">Stock máximo <span class="field-optional">Opcional</span></label>
           <BFormInput v-model="form.maximum_stock" type="number" min="0" step="0.01" />
         </div>
         <div class="col-md-6">
-          <label class="form-label">Ubicación</label>
+          <label class="form-label">Ubicación <span class="field-optional">Opcional</span></label>
           <BFormInput v-model="form.location" />
         </div>
         <div class="col-md-6">
-          <label class="form-label">Proveedor</label>
+          <label class="form-label">Proveedor <span class="field-optional">Opcional</span></label>
           <BFormSelect v-model="form.supplier_id" :options="[{ value: null, text: 'Sin proveedor' }].concat(supplierOptions.map((item) => ({ value: item.value, text: item.label })))" />
         </div>
-        <div class="col-md-4">
-          <label class="form-label">Precio unitario estimado</label>
-          <BFormInput v-model="form.unit_price_estimated" type="number" min="0" step="0.01" />
-        </div>
-        <div class="col-md-4">
-          <label class="form-label">Última compra</label>
+        <div class="col-md-6">
+          <label class="form-label">Última compra <span class="field-optional">Opcional</span></label>
           <BFormInput v-model="form.last_purchase_at" type="date" />
         </div>
-        <div class="col-md-4">
-          <label class="form-label">Fecha de vencimiento</label>
+        <div class="col-md-6">
+          <label class="form-label">Fecha de vencimiento <span class="field-optional">Opcional</span></label>
           <BFormInput v-model="form.expires_at" type="date" />
         </div>
         <div class="col-md-12">
-          <label class="form-label">Foto</label>
+          <label class="form-label">Foto <span class="field-optional">Opcional</span></label>
           <BFormFile v-model="form.photo" browse-text="Seleccionar" />
         </div>
         <div class="col-md-12">
-          <label class="form-label">Observaciones</label>
+          <label class="form-label">Observaciones <span class="field-optional">Opcional</span></label>
           <BFormTextarea v-model="form.observations" rows="3" />
         </div>
         <div class="col-md-12">
@@ -425,15 +426,15 @@ export default {
         <img :src="selectedSupply.photo_url" alt="Foto insumo" class="img-thumbnail" style="max-width: 220px" />
       </div>
 
-      <div class="d-flex justify-content-end gap-2 mt-4">
+      <div class="modal-actions">
         <BButton variant="light" @click="closeModal">Cancelar</BButton>
         <BButton variant="primary" :disabled="saving" @click="save">{{ saving ? "Guardando..." : "Guardar" }}</BButton>
       </div>
     </BModal>
 
-    <BModal v-model="showDetailModal" size="xl" title="Detalle de insumo" hide-footer>
+    <BModal v-model="showDetailModal" size="xl" title="Detalle de insumo" hide-footer centered scrollable modal-class="centro-apuntes-modal">
       <template v-if="selectedSupply">
-        <div class="row g-3">
+        <div class="detail-grid row g-3">
           <div class="col-md-4">
             <div class="text-muted small">Insumo</div>
             <div class="fw-semibold">{{ selectedSupply.name }}</div>
@@ -457,7 +458,7 @@ export default {
         </div>
 
         <div class="mt-4">
-          <div class="fw-semibold mb-2">Movimientos recientes</div>
+          <div class="modal-section-title">Movimientos recientes</div>
           <div class="table-responsive">
             <table class="table table-sm align-middle mb-0">
               <thead>

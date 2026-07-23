@@ -2,12 +2,26 @@
 
 namespace App\Http\Requests\CentroApuntes;
 
+use App\Http\Requests\CentroApuntes\Concerns\NormalizesNullableFields;
 use App\Models\CentroApuntes\CentroApuntesSolicitud;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
 class SaveCentroApuntesSolicitudRequest extends FormRequest
 {
+    use NormalizesNullableFields;
+
+    protected function prepareForValidation(): void
+    {
+        $this->normalizeNullableFields([
+            'task_type_other',
+            'requested_at',
+            'instructions',
+            'observations',
+            'internal_observations',
+        ]);
+    }
+
     public function authorize(): bool
     {
         return true;

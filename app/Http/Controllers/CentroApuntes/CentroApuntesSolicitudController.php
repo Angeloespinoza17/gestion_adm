@@ -64,7 +64,7 @@ class CentroApuntesSolicitudController extends Controller
             'data' => $solicitud->load([
                 'requester:id,name,email,user_type',
                 'subject:id,name,code,area,education_level',
-                'machine:id,name,internal_code,type,status,estimated_cost_letter,estimated_cost_officio',
+                'machine:id,name,internal_code,type,status',
                 'receivedBy:id,name,email',
                 'attachments.uploadedBy:id,name',
                 'history.performedBy:id,name',

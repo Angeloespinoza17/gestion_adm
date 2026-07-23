@@ -73,7 +73,7 @@ class CentroApuntesCatalogsController extends Controller
                 'label' => trim(sprintf('%s%s', $user->name, $user->staff?->cargo?->name ? ' · ' . $user->staff->cargo->name : '')),
             ])->values(),
             'subjects' => CentroApuntesAsignatura::query()->orderBy('name')->get(['id', 'name', 'code', 'area', 'education_level', 'status']),
-            'machines' => CentroApuntesMaquina::query()->orderBy('name')->get(['id', 'name', 'internal_code', 'type', 'status', 'estimated_cost_letter', 'estimated_cost_officio']),
+            'machines' => CentroApuntesMaquina::query()->orderBy('name')->get(['id', 'name', 'internal_code', 'type', 'status']),
             'supplies' => PanolInsumo::query()->orderBy('name')->get(['id', 'name', 'category', 'unit_of_measure', 'current_stock', 'status']),
             'departments' => Department::query()->where('active', true)->orderBy('sort_order')->orderBy('name')->get(['id', 'name', 'color']),
             'suppliers' => Supplier::query()->where('active', true)->orderBy('name')->get(['id', 'name', 'rut']),

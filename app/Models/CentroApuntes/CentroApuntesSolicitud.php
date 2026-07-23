@@ -45,6 +45,12 @@ class CentroApuntesSolicitud extends Model
 
     protected $table = 'centro_apuntes_solicitudes';
 
+    protected $hidden = [
+        'estimated_cost_per_sheet',
+        'estimated_cost_per_copy',
+        'estimated_cost_total',
+    ];
+
     protected $fillable = [
         'request_code',
         'requested_by_user_id',
