@@ -40,11 +40,12 @@ class RbacReconciliationTest extends TestCase
                 $role->modules()->syncWithoutDetaching($inventoryModules);
             });
 
+        $permissionGroupCountBeforePreview = PermissionGroup::query()->count();
         $service = app(RbacReconciliationService::class);
         $preview = $service->preview();
 
         $this->assertSame(0, $preview['audit']['critical_issue_count']);
-        $this->assertSame(0, PermissionGroup::query()->count());
+        $this->assertSame($permissionGroupCountBeforePreview, PermissionGroup::query()->count());
         $this->assertFalse(Permission::query()->where('slug', 'administrar_catalogos_enfermeria')->exists());
 
         $result = $service->apply();

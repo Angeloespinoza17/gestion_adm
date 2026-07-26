@@ -29,7 +29,7 @@ class PanolEntregaPolicy
 
     public function update(User $user, mixed $model = null): bool
     {
-        return $this->accessService->canApproveDeliveries($user) || $this->accessService->canRequestMaterials($user);
+        return $this->accessService->canRequestMaterials($user);
     }
 
     public function delete(User $user, mixed $model = null): bool
@@ -44,6 +44,6 @@ class PanolEntregaPolicy
 
     public function deliver(User $user, mixed $model = null): bool
     {
-        return $this->accessService->canApproveDeliveries($user) || $this->accessService->canManageInventory($user);
+        return $this->accessService->canRegisterMaterialDelivery($user);
     }
 }

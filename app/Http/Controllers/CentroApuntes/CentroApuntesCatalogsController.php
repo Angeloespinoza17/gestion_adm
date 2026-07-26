@@ -47,6 +47,7 @@ class CentroApuntesCatalogsController extends Controller
                 'can_register_stock_movements' => $this->accessService->canRegisterStockMovements($request->user()),
                 'can_request_materials' => $this->accessService->canRequestMaterials($request->user()),
                 'can_approve_deliveries' => $this->accessService->canApproveDeliveries($request->user()),
+                'can_register_material_delivery' => $this->accessService->canRegisterMaterialDelivery($request->user()),
                 'can_export_reports' => $this->accessService->canExportReports($request->user()),
             ],
             'task_types' => $this->toOptions(CentroApuntesSolicitud::TASK_TYPES),

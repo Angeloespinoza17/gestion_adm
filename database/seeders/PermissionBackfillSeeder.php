@@ -98,7 +98,9 @@ class PermissionBackfillSeeder extends Seeder
             ['slug' => 'administrar_maquinas_centro_apuntes', 'name' => 'Administrar maquinas Centro de Apuntes', 'description' => 'Permite administrar maquinas, impresoras o equipos operativos del Centro de Apuntes.'],
             ['slug' => 'administrar_inventario_panol', 'name' => 'Administrar inventario Panol', 'description' => 'Permite administrar insumos, stock y catalogo del Panol.'],
             ['slug' => 'registrar_movimientos_panol', 'name' => 'Registrar movimientos Panol', 'description' => 'Permite registrar ingresos, salidas y ajustes de stock del Panol.'],
+            ['slug' => 'solicitar_materiales_panol', 'name' => 'Solicitar materiales Panol', 'description' => 'Permite crear y editar solicitudes de materiales del Panol.'],
             ['slug' => 'aprobar_entregas_panol', 'name' => 'Aprobar entregas Panol', 'description' => 'Permite aprobar, rechazar o cerrar entregas de materiales del Panol.'],
+            ['slug' => 'registrar_entrega_materiales_panol', 'name' => 'Registrar entrega de materiales Panol', 'description' => 'Permite confirmar el retiro y registrar la entrega física de materiales del Panol.'],
             ['slug' => 'ver_reportes_centro_apuntes', 'name' => 'Ver reportes Centro de Apuntes', 'description' => 'Permite consultar reportes e indicadores del Centro de Apuntes y Panol.'],
             ['slug' => 'exportar_reportes_centro_apuntes', 'name' => 'Exportar reportes Centro de Apuntes', 'description' => 'Permite exportar reportes del Centro de Apuntes y Panol.'],
 

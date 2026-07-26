@@ -954,14 +954,14 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/movimientos', [PanolMovimientoController::class, 'store'])->middleware('permission:registrar_movimientos_panol');
 
         Route::get('/entregas', [PanolEntregaController::class, 'index'])->middleware('permission:ver_modulo_centro_apuntes');
-        Route::post('/entregas', [PanolEntregaController::class, 'store'])->middleware('permission:ver_modulo_centro_apuntes');
+        Route::post('/entregas', [PanolEntregaController::class, 'store'])->middleware('permission:solicitar_materiales_panol');
         Route::get('/entregas/{delivery}', [PanolEntregaController::class, 'show'])->middleware('permission:ver_modulo_centro_apuntes');
-        Route::put('/entregas/{delivery}', [PanolEntregaController::class, 'update'])->middleware('permission:ver_modulo_centro_apuntes');
+        Route::put('/entregas/{delivery}', [PanolEntregaController::class, 'update'])->middleware('permission:solicitar_materiales_panol');
         Route::delete('/entregas/{delivery}', [PanolEntregaController::class, 'destroy'])->middleware('permission:aprobar_entregas_panol');
         Route::post('/entregas/{delivery}/approve', [PanolEntregaController::class, 'approve'])->middleware('permission:aprobar_entregas_panol');
         Route::post('/entregas/{delivery}/reject', [PanolEntregaController::class, 'reject'])->middleware('permission:aprobar_entregas_panol');
         Route::post('/entregas/{delivery}/annul', [PanolEntregaController::class, 'annul'])->middleware('permission:aprobar_entregas_panol');
-        Route::post('/entregas/{delivery}/deliver', [PanolEntregaController::class, 'deliver'])->middleware('permission:aprobar_entregas_panol');
+        Route::post('/entregas/{delivery}/deliver', [PanolEntregaController::class, 'deliver'])->middleware('permission:registrar_entrega_materiales_panol');
 
         Route::get('/reportes', CentroApuntesReportController::class)->middleware('permission:ver_reportes_centro_apuntes');
     });

@@ -66,12 +66,17 @@ class CentroApuntesAccessService
 
     public function canRequestMaterials(User $user): bool
     {
-        return $this->canViewModule($user) || $this->canApproveDeliveries($user);
+        return $user->hasPermission('solicitar_materiales_panol');
     }
 
     public function canApproveDeliveries(User $user): bool
     {
         return $user->hasPermission('aprobar_entregas_panol');
+    }
+
+    public function canRegisterMaterialDelivery(User $user): bool
+    {
+        return $user->hasPermission('registrar_entrega_materiales_panol');
     }
 
     public function canViewReports(User $user): bool

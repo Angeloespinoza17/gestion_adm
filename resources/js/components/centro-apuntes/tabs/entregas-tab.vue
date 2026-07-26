@@ -405,7 +405,7 @@ export default {
             <BButton size="sm" variant="outline-info" @click="openDetail(item)">Ver</BButton>
             <BButton v-if="capabilities.can_request_materials" size="sm" variant="outline-primary" @click="openEdit(item)">Editar</BButton>
             <BButton v-if="capabilities.can_approve_deliveries" size="sm" variant="outline-success" @click="approve(item)">Aprobar</BButton>
-            <BButton v-if="capabilities.can_approve_deliveries" size="sm" variant="outline-warning" @click="deliver(item)">Entregar</BButton>
+            <BButton v-if="capabilities.can_register_material_delivery" size="sm" variant="outline-warning" @click="deliver(item)">Entregar</BButton>
             <BButton v-if="capabilities.can_approve_deliveries" size="sm" variant="outline-danger" @click="reject(item)">Rechazar</BButton>
             <BButton v-if="capabilities.can_approve_deliveries" size="sm" variant="outline-secondary" @click="annul(item)">Anular</BButton>
             <BButton v-if="capabilities.can_approve_deliveries" size="sm" variant="outline-dark" @click="destroy(item)">Eliminar</BButton>
