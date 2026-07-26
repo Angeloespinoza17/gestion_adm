@@ -5,11 +5,13 @@ namespace App\Http\Controllers;
 use App\Models\Cargo;
 use App\Models\Role;
 use App\Models\User;
+use App\Services\Staff\StaffProfileLinker;
 use App\Services\Users\UserDeletionService;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
@@ -68,7 +70,7 @@ class UserController extends Controller
         return response()->json($users);
     }
 
-    public function store(Request $request): JsonResponse
+    public function store(Request $request, StaffProfileLinker $staffProfileLinker): JsonResponse
     {
         $payload = $request->validate([
             'name' => ['required', 'string', 'max:255'],
@@ -90,10 +92,20 @@ class UserController extends Controller
 
         $payload['password'] = Hash::make($payload['password']);
 
-        $user = User::create($payload);
-        if (! empty($roles)) {
-            $user->roles()->sync($roles);
-        }
+        $actorId = $request->user()?->id;
+        $user = DB::transaction(function () use ($payload, $roles, $actorId, $staffProfileLinker): User {
+            $user = User::query()->create($payload);
+
+            if (! empty($roles)) {
+                $user->roles()->sync($roles);
+            }
+
+            if ($user->user_type === 'staff') {
+                $staffProfileLinker->ensureLinked($user, $actorId);
+            }
+
+            return $user->refresh();
+        });
 
         return response()->json([
             'message' => 'Usuario creado correctamente.',
@@ -108,7 +120,7 @@ class UserController extends Controller
         ]);
     }
 
-    public function update(Request $request, User $user): JsonResponse
+    public function update(Request $request, User $user, StaffProfileLinker $staffProfileLinker): JsonResponse
     {
         $payload = $request->validate([
             'name' => ['sometimes', 'string', 'max:255'],
@@ -154,7 +166,16 @@ class UserController extends Controller
                 : $user->password;
         }
 
-        $user->update($payload);
+        $actorId = $request->user()?->id;
+        DB::transaction(function () use ($user, $payload, $actorId, $staffProfileLinker): void {
+            $user->update($payload);
+
+            if ($user->user_type === 'staff') {
+                $staffProfileLinker->ensureLinked($user, $actorId);
+            }
+        });
+
+        $user->refresh();
 
         return response()->json([
             'message' => 'Usuario actualizado correctamente.',

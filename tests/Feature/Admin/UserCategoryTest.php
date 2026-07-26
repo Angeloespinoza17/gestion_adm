@@ -15,9 +15,9 @@ class UserCategoryTest extends TestCase
 {
     use RefreshDatabase;
 
-    public function test_admin_can_categorize_a_user_as_staff_without_a_staff_profile(): void
+    public function test_admin_categorizing_a_user_as_staff_creates_a_linked_staff_profile(): void
     {
-        Sanctum::actingAs($this->userWithPermissions(['administrar_usuarios']));
+        Sanctum::actingAs($this->userWithPermissions(['administrar_usuarios', 'ver_funcionarios']));
 
         $response = $this->postJson('/api/admin/users', [
             'name' => 'Cuenta sin ficha',
@@ -29,14 +29,121 @@ class UserCategoryTest extends TestCase
 
         $response
             ->assertCreated()
-            ->assertJsonPath('data.user_type', 'staff')
-            ->assertJsonPath('data.staff_id', null);
+            ->assertJsonPath('data.user_type', 'staff');
 
+        $user = User::query()->where('email', 'cuenta.sin.ficha@example.test')->firstOrFail();
+        $this->assertNotNull($user->staff_id);
+        $this->assertDatabaseHas('staff', [
+            'id' => $user->staff_id,
+            'full_name' => 'Cuenta sin ficha',
+            'institutional_email' => 'cuenta.sin.ficha@example.test',
+            'active' => true,
+        ]);
         $this->assertDatabaseHas('users', [
-            'email' => 'cuenta.sin.ficha@example.test',
+            'id' => $user->id,
+            'user_type' => 'staff',
+            'staff_id' => $user->staff_id,
+        ]);
+
+        $this->getJson('/api/staff?search=Cuenta%20sin%20ficha')
+            ->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.id', $user->staff_id)
+            ->assertJsonPath('data.0.user.id', $user->id);
+    }
+
+    public function test_categorizing_an_existing_user_as_staff_links_an_existing_unassigned_profile(): void
+    {
+        Sanctum::actingAs($this->userWithPermissions(['administrar_usuarios']));
+
+        $staff = Staff::query()->create([
+            'full_name' => 'Ficha laboral existente',
+            'institutional_email' => 'persona.existente@example.test',
+            'status' => 'activo',
+            'active' => true,
+        ]);
+        $user = User::factory()->create([
+            'name' => 'Persona existente',
+            'email' => 'persona.existente@example.test',
+            'user_type' => null,
+            'staff_id' => null,
+        ]);
+
+        $this->putJson("/api/admin/users/{$user->id}", [
+            'user_type' => 'staff',
+        ])
+            ->assertOk()
+            ->assertJsonPath('data.user_type', 'staff')
+            ->assertJsonPath('data.staff_id', $staff->id);
+
+        $this->assertSame($staff->id, $user->fresh()->staff_id);
+        $this->assertSame(1, Staff::query()->count());
+        $this->assertSame('Ficha laboral existente', $staff->fresh()->full_name);
+    }
+
+    public function test_editing_an_unlinked_staff_user_creates_only_one_profile(): void
+    {
+        Sanctum::actingAs($this->userWithPermissions(['administrar_usuarios']));
+
+        $user = User::factory()->create([
+            'name' => 'Funcionario pendiente',
+            'email' => 'funcionario.pendiente@example.test',
             'user_type' => 'staff',
             'staff_id' => null,
         ]);
+
+        $this->putJson("/api/admin/users/{$user->id}", [
+            'name' => 'Funcionario pendiente',
+            'user_type' => 'staff',
+        ])
+            ->assertOk();
+
+        $staffId = $user->fresh()->staff_id;
+        $this->assertNotNull($staffId);
+
+        $this->putJson("/api/admin/users/{$user->id}", [
+            'name' => 'Funcionario pendiente actualizado',
+            'user_type' => 'staff',
+        ])
+            ->assertOk()
+            ->assertJsonPath('data.staff_id', $staffId);
+
+        $this->assertSame(1, Staff::query()->count());
+    }
+
+    public function test_staff_backfill_links_existing_and_creates_missing_profiles_without_destructive_down(): void
+    {
+        $existingStaff = Staff::query()->create([
+            'full_name' => 'Ficha existente sin cuenta',
+            'institutional_email' => 'ficha.existente@example.test',
+            'status' => 'activo',
+            'active' => true,
+        ]);
+        $existingProfileUser = User::factory()->create([
+            'name' => 'Cuenta para ficha existente',
+            'email' => 'ficha.existente@example.test',
+            'user_type' => 'staff',
+            'staff_id' => null,
+        ]);
+        $missingProfileUser = User::factory()->create([
+            'name' => 'Cuenta que necesita ficha',
+            'email' => 'ficha.nueva@example.test',
+            'user_type' => 'staff',
+            'staff_id' => null,
+        ]);
+
+        $migration = require database_path('migrations/2026_07_26_170000_backfill_staff_profiles_for_staff_users.php');
+        $migration->up();
+
+        $this->assertSame($existingStaff->id, $existingProfileUser->fresh()->staff_id);
+        $this->assertNotNull($missingProfileUser->fresh()->staff_id);
+        $this->assertSame(2, Staff::query()->count());
+
+        $migration->down();
+
+        $this->assertSame(2, Staff::query()->count());
+        $this->assertNotNull($existingProfileUser->fresh()->staff_id);
+        $this->assertNotNull($missingProfileUser->fresh()->staff_id);
     }
 
     public function test_preview_category_is_reserved_for_internal_accounts(): void

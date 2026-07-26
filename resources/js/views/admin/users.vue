@@ -379,7 +379,7 @@ export default {
         <strong>Categoría y rol cumplen funciones distintas.</strong>
         <p class="mb-0">
           La categoría distingue funcionarios, estudiantes y apoderados. Los roles controlan permisos y pueden quedar vacíos.
-          Puedes asignar la categoría aquí y crear o vincular la ficha laboral desde el módulo Funcionarios.
+          Al asignar Funcionario, el sistema crea o vincula automáticamente su ficha laboral.
         </p>
       </div>
       <router-link to="/staff" class="btn btn-sm btn-outline-primary">
@@ -613,7 +613,7 @@ export default {
             Esta cuenta está categorizada y vinculada a una ficha de funcionario.
           </small>
           <small v-else-if="form.user_type === 'staff'" class="text-muted d-block mt-2">
-            La ficha laboral se puede crear o vincular después desde el módulo Funcionarios.
+            Al guardar se creará o vinculará automáticamente la ficha laboral, sin duplicar registros existentes.
           </small>
           <small v-else class="text-muted d-block mt-2">
             La categoría identifica a la persona; los roles administran sus permisos.
