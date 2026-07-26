@@ -123,15 +123,16 @@ class UpdateStaffRequest extends FormRequest
                 'integer',
                 'exists:communes,id',
                 function ($attribute, $value, $fail) {
-                    if (!$value) {
+                    if (! $value) {
                         return;
                     }
 
                     $commune = Commune::query()->find($value);
                     $regionId = $this->input('region_id');
 
-                    if (!$regionId) {
+                    if (! $regionId) {
                         $fail('Selecciona una región para la comuna indicada.');
+
                         return;
                     }
 
@@ -163,13 +164,21 @@ class UpdateStaffRequest extends FormRequest
                 'integer',
                 'exists:users,id',
                 function ($attribute, $value, $fail) use ($staffId) {
-                    if (!$value) {
+                    if (! $value) {
                         return;
                     }
 
                     $user = User::query()->find($value);
                     if ($user && $user->staff_id && $user->staff_id !== $staffId) {
                         $fail('El usuario seleccionado ya está asociado a otro funcionario.');
+                    }
+
+                    if ($user && ($user->student_id || $user->guardian_id)) {
+                        $fail('Una cuenta de estudiante o apoderado no puede asociarse como funcionario.');
+                    }
+
+                    if ($user && $user->user_type && $user->user_type !== 'staff') {
+                        $fail('La cuenta seleccionada pertenece a otra categoría de usuario.');
                     }
                 },
             ],

@@ -184,8 +184,13 @@ const routes = [
     },
     {
         path: '/risk-prevention/documents',
-        meta: { authRequired: true, title: 'Centro de Documentos', permission: 'ver_prevencion_riesgos' },
+        meta: { authRequired: true, title: 'Gestión documental empresa', permission: 'ver_prevencion_riesgos' },
         component: () => import('../views/risk-prevention/documents.vue'),
+    },
+    {
+        path: '/risk-prevention/document-management',
+        meta: { authRequired: true, title: 'Gestión documental', permission: 'ver_documentos_prevencion_difundibles' },
+        component: () => import('../views/risk-prevention/staff-documents.vue'),
     },
     {
         path: '/risk-prevention/reports',

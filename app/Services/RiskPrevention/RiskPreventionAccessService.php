@@ -13,6 +13,7 @@ class RiskPreventionAccessService
     public const VIEW_PERMISSION = 'ver_prevencion_riesgos';
     public const MANAGE_PERMISSION = 'gestionar_prevencion_riesgos';
     public const EXPORT_PERMISSION = 'exportar_prevencion_riesgos';
+    public const DISSEMINATED_DOCUMENTS_PERMISSION = 'ver_documentos_prevencion_difundibles';
 
     /**
      * @return array<int, string>
@@ -27,6 +28,7 @@ class RiskPreventionAccessService
             'prevent_emergency_drills',
             'prevent_epp_items',
             'prevent_epp_deliveries',
+            'prevent_epp_delivery_records',
             'prevent_trainings',
             'prevent_training_participants',
             'prevent_documents',

@@ -26,6 +26,7 @@ class PrevencionRiesgosModuleSeeder extends Seeder
             ['slug' => 'ver_prevencion_riesgos', 'name' => 'Ver Prevención de Riesgos'],
             ['slug' => 'gestionar_prevencion_riesgos', 'name' => 'Gestionar Prevención de Riesgos'],
             ['slug' => 'exportar_prevencion_riesgos', 'name' => 'Exportar Prevención de Riesgos'],
+            ['slug' => 'ver_documentos_prevencion_difundibles', 'name' => 'Ver Documentos Difundibles de Prevención'],
         ];
 
         foreach ($permissions as $permission) {
@@ -61,8 +62,9 @@ class PrevencionRiesgosModuleSeeder extends Seeder
             ['slug' => 'risk_prevention_emergencies', 'name' => 'Emergencias y planes', 'route' => '/risk-prevention/emergencies', 'sort' => 4],
             ['slug' => 'risk_prevention_epp', 'name' => 'EPP y seguridad', 'route' => '/risk-prevention/epp', 'sort' => 5],
             ['slug' => 'risk_prevention_trainings', 'name' => 'Capacitaciones', 'route' => '/risk-prevention/trainings', 'sort' => 6],
-            ['slug' => 'risk_prevention_documents', 'name' => 'Centro de documentos', 'route' => '/risk-prevention/documents', 'sort' => 7],
-            ['slug' => 'risk_prevention_reports', 'name' => 'Reportes', 'route' => '/risk-prevention/reports', 'sort' => 8],
+            ['slug' => 'risk_prevention_documents', 'name' => 'Gestión documental empresa', 'route' => '/risk-prevention/documents', 'sort' => 7],
+            ['slug' => 'risk_prevention_staff_documents', 'name' => 'Gestión documental', 'route' => '/risk-prevention/document-management', 'sort' => 8],
+            ['slug' => 'risk_prevention_reports', 'name' => 'Reportes', 'route' => '/risk-prevention/reports', 'sort' => 9],
         ];
 
         foreach ($children as $child) {
@@ -149,6 +151,7 @@ class PrevencionRiesgosModuleSeeder extends Seeder
             'risk_prevention_epp',
             'risk_prevention_trainings',
             'risk_prevention_documents',
+            'risk_prevention_staff_documents',
             'risk_prevention_reports',
         ])->get();
 

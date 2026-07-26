@@ -275,6 +275,16 @@ class PermissionGroupSeeder extends Seeder
                 ],
             ],
             [
+                'slug' => 'documentos_prevencion_funcionarios',
+                'module_slug' => 'risk_prevention_staff_documents',
+                'name' => 'Gestión documental para funcionarios',
+                'description' => 'Consulta y descarga de documentación preventiva marcada para difusión interna.',
+                'sort_order' => 135,
+                'permissions' => [
+                    'ver_documentos_prevencion_difundibles',
+                ],
+            ],
+            [
                 'slug' => 'mantencion',
                 'module_slug' => 'maintenance',
                 'name' => 'Mantencion',

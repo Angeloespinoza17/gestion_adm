@@ -65,7 +65,13 @@ export async function downloadRiskFile(url, fileName = null) {
 
 export function formatRiskDate(value) {
   if (!value) return "-";
-  return new Date(value).toLocaleDateString("es-CL", {
+  const rawValue = String(value);
+  const dateOnlyMatch = rawValue.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  const date = dateOnlyMatch
+    ? new Date(Number(dateOnlyMatch[1]), Number(dateOnlyMatch[2]) - 1, Number(dateOnlyMatch[3]))
+    : new Date(value);
+
+  return date.toLocaleDateString("es-CL", {
     year: "numeric",
     month: "2-digit",
     day: "2-digit",

@@ -770,8 +770,11 @@ Route::middleware('auth:sanctum')->group(function () {
 
         Route::get('/epp/items', [RiskPreventionEppController::class, 'itemsIndex'])->middleware('permission:ver_prevencion_riesgos');
         Route::post('/epp/items', [RiskPreventionEppController::class, 'storeItem'])->middleware('permission:gestionar_prevencion_riesgos');
+        Route::post('/epp/items/bulk', [RiskPreventionEppController::class, 'bulkStoreItems'])->middleware('permission:gestionar_prevencion_riesgos');
         Route::put('/epp/items/{eppItem}', [RiskPreventionEppController::class, 'updateItem'])->middleware('permission:gestionar_prevencion_riesgos');
         Route::delete('/epp/items/{eppItem}', [RiskPreventionEppController::class, 'destroyItem'])->middleware('permission:gestionar_prevencion_riesgos');
+        Route::get('/epp/delivery-records', [RiskPreventionEppController::class, 'deliveryRecordsIndex'])->middleware('permission:ver_prevencion_riesgos');
+        Route::post('/epp/delivery-records', [RiskPreventionEppController::class, 'storeDeliveryRecord'])->middleware('permission:gestionar_prevencion_riesgos');
         Route::get('/epp/deliveries', [RiskPreventionEppController::class, 'deliveriesIndex'])->middleware('permission:ver_prevencion_riesgos');
         Route::post('/epp/deliveries', [RiskPreventionEppController::class, 'storeDelivery'])->middleware('permission:gestionar_prevencion_riesgos');
         Route::put('/epp/deliveries/{eppDelivery}', [RiskPreventionEppController::class, 'updateDelivery'])->middleware('permission:gestionar_prevencion_riesgos');
@@ -788,6 +791,8 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::put('/documents/{document}', [RiskPreventionDocumentController::class, 'update'])->middleware('permission:gestionar_prevencion_riesgos');
         Route::delete('/documents/{document}', [RiskPreventionDocumentController::class, 'destroy'])->middleware('permission:gestionar_prevencion_riesgos');
         Route::get('/documents/{document}/download', [RiskPreventionDocumentController::class, 'download'])->middleware('permission:ver_prevencion_riesgos');
+        Route::get('/disseminated-documents', [RiskPreventionDocumentController::class, 'disseminatedIndex'])->middleware('permission:ver_documentos_prevencion_difundibles');
+        Route::get('/disseminated-documents/{document}/download', [RiskPreventionDocumentController::class, 'downloadDisseminated'])->middleware('permission:ver_documentos_prevencion_difundibles');
     });
 
     Route::prefix('biblioteca')->group(function () {

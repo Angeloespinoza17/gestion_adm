@@ -52,6 +52,19 @@ class RiskPreventionCatalogController extends Controller
                 RiskPreventionEppItem::query()->pluck('epp_type')->all(),
             ),
             'epp_items' => RiskPreventionEppItem::query()->orderBy('name')->get(['id', 'name', 'epp_type', 'stock', 'minimum_stock', 'unit']),
+            'epp_recipients' => Staff::query()
+                ->with('cargo:id,name')
+                ->where('active', true)
+                ->orderBy('full_name')
+                ->limit(500)
+                ->get(['id', 'full_name', 'rut', 'cargo_id'])
+                ->map(fn (Staff $staff) => [
+                    'id' => $staff->id,
+                    'name' => $staff->full_name,
+                    'rut' => $staff->rut,
+                    'position' => $staff->cargo?->name,
+                ])
+                ->values(),
             'training_types' => [
                 ['value' => 'induccion', 'label' => 'Inducción'],
                 ['value' => 'actualizacion', 'label' => 'Actualización'],

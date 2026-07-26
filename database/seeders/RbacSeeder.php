@@ -138,6 +138,7 @@ class RbacSeeder extends Seeder
             ['slug' => 'ver_psicologia', 'name' => 'Ver Psicología'],
             ['slug' => 'ver_convivencia', 'name' => 'Ver Convivencia Escolar'],
             ['slug' => 'ver_prevencion_riesgos', 'name' => 'Ver Prevención de Riesgos'],
+            ['slug' => 'ver_documentos_prevencion_difundibles', 'name' => 'Ver Documentos Difundibles de Prevención'],
 
             // Mantención
             ['slug' => 'ver_mantencion', 'name' => 'Ver Mantención'],

@@ -16,6 +16,9 @@ class RiskPreventionEppDelivery extends Model
 
     protected $fillable = [
         'epp_item_id',
+        'delivery_record_id',
+        'epp_name_snapshot',
+        'unit_snapshot',
         'employee_name',
         'quantity',
         'delivered_at',
@@ -40,6 +43,11 @@ class RiskPreventionEppDelivery extends Model
     public function item(): BelongsTo
     {
         return $this->belongsTo(RiskPreventionEppItem::class, 'epp_item_id');
+    }
+
+    public function deliveryRecord(): BelongsTo
+    {
+        return $this->belongsTo(RiskPreventionEppDeliveryRecord::class, 'delivery_record_id');
     }
 
     public function createdBy(): BelongsTo

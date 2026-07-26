@@ -110,12 +110,18 @@ export const menuItems = [
             },
             {
                 id: 90657,
-                label: 'Centro de documentos',
+                label: 'Gestión documental empresa',
                 link: '/risk-prevention/documents',
                 parentId: 9065
             },
             {
                 id: 90658,
+                label: 'Gestión documental',
+                link: '/risk-prevention/document-management',
+                parentId: 9065
+            },
+            {
+                id: 90659,
                 label: 'Reportes',
                 link: '/risk-prevention/reports',
                 parentId: 9065

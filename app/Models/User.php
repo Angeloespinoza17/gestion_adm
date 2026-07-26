@@ -5,6 +5,7 @@ namespace App\Models;
 use App\Models\Security\SecurityIncident;
 use App\Models\Security\SecurityNotification;
 use App\Models\Security\SecurityShift;
+use App\Services\RiskPrevention\RiskPreventionAccessService;
 use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
@@ -219,7 +220,7 @@ class User extends Authenticatable
             ? $this->roles
             : $this->roles()->with(['permissions' => fn ($query) => $query->where('active', true)])->get();
 
-        return $roles
+        $permissions = $roles
             ->pluck('permissions')
             ->flatten()
             ->filter(fn ($permission) => $permission && (
@@ -229,6 +230,12 @@ class User extends Authenticatable
             ->unique()
             ->values()
             ->all();
+
+        if ($this->user_type === 'staff' || $this->staff_id !== null) {
+            $permissions[] = RiskPreventionAccessService::DISSEMINATED_DOCUMENTS_PERMISSION;
+        }
+
+        return array_values(array_unique($permissions));
     }
 
     public function hasPermission(string $permissionSlug): bool

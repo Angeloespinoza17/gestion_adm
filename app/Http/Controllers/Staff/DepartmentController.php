@@ -9,6 +9,7 @@ use App\Models\Department;
 use App\Models\Staff;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
 class DepartmentController extends Controller
@@ -17,9 +18,13 @@ class DepartmentController extends Controller
     {
         return response()->json([
             'responsible_staff' => Staff::query()
-                ->where('active', true)
                 ->orderBy('full_name')
-                ->get(['id', 'full_name', 'rut']),
+                ->with('cargo:id,name')
+                ->get(['id', 'full_name', 'rut', 'cargo_id', 'active']),
+            'staff' => Staff::query()
+                ->orderBy('full_name')
+                ->with('cargo:id,name')
+                ->get(['id', 'full_name', 'rut', 'cargo_id', 'active']),
         ]);
     }
 
@@ -29,7 +34,12 @@ class DepartmentController extends Controller
         $active = $request->query('active');
 
         $departments = Department::query()
-            ->with('responsibleStaff:id,full_name,rut')
+            ->with([
+                'responsibleStaff:id,full_name,rut,cargo_id,active',
+                'responsibleStaff.cargo:id,name',
+                'staff:id,full_name,rut,cargo_id,active',
+                'staff.cargo:id,name',
+            ])
             ->withCount('staff')
             ->when($search !== '', function ($query) use ($search) {
                 $query->where(function ($query) use ($search) {
@@ -54,13 +64,20 @@ class DepartmentController extends Controller
     public function store(StoreDepartmentRequest $request): JsonResponse
     {
         $payload = $request->validated();
+        $staffIds = $this->teamIds($payload);
+        unset($payload['staff_ids']);
         $payload['slug'] = $this->generateSlug((string) $payload['name']);
 
-        $department = Department::query()->create($payload);
+        $department = DB::transaction(function () use ($payload, $staffIds) {
+            $department = Department::query()->create($payload);
+            $department->staff()->sync($staffIds);
+
+            return $department;
+        });
 
         return response()->json([
             'message' => 'Departamento creado correctamente.',
-            'data' => $department->load('responsibleStaff:id,full_name,rut'),
+            'data' => $this->loadDepartment($department),
         ], 201);
     }
 
@@ -77,16 +94,25 @@ class DepartmentController extends Controller
     public function update(UpdateDepartmentRequest $request, Department $department): JsonResponse
     {
         $payload = $request->validated();
+        $hasStaffIds = array_key_exists('staff_ids', $payload);
+        $staffIds = $this->teamIds($payload);
+        unset($payload['staff_ids']);
 
         if (array_key_exists('name', $payload)) {
             $payload['slug'] = $this->generateSlug((string) $payload['name'], $department->id);
         }
 
-        $department->update($payload);
+        DB::transaction(function () use ($department, $payload, $hasStaffIds, $staffIds) {
+            $department->update($payload);
+
+            if ($hasStaffIds) {
+                $department->staff()->sync($staffIds);
+            }
+        });
 
         return response()->json([
             'message' => 'Departamento actualizado correctamente.',
-            'data' => $department->load('responsibleStaff:id,full_name,rut'),
+            'data' => $this->loadDepartment($department),
         ]);
     }
 
@@ -125,10 +151,34 @@ class DepartmentController extends Controller
                 ->where('slug', $slug)
                 ->exists()
         ) {
-            $slug = $base . '-' . $counter;
+            $slug = $base.'-'.$counter;
             $counter++;
         }
 
         return $slug;
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     * @return array<int, int>
+     */
+    private function teamIds(array $payload): array
+    {
+        return collect($payload['staff_ids'] ?? [])
+            ->map(fn ($id) => (int) $id)
+            ->filter()
+            ->unique()
+            ->values()
+            ->all();
+    }
+
+    private function loadDepartment(Department $department): Department
+    {
+        return $department->load([
+            'responsibleStaff:id,full_name,rut,cargo_id,active',
+            'responsibleStaff.cargo:id,name',
+            'staff:id,full_name,rut,cargo_id,active',
+            'staff.cargo:id,name',
+        ])->loadCount('staff');
     }
 }

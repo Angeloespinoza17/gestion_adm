@@ -16,17 +16,26 @@ use Illuminate\Validation\ValidationException;
 
 class UserController extends Controller
 {
+    private const USER_TYPE_OPTIONS = [
+        ['value' => 'staff', 'label' => 'Funcionario'],
+        ['value' => 'student', 'label' => 'Estudiante'],
+        ['value' => 'guardian', 'label' => 'Apoderado'],
+        ['value' => 'role_preview', 'label' => 'Cuenta de vista previa'],
+    ];
+
     public function catalogs(): JsonResponse
     {
         return response()->json([
             'cargos' => Cargo::query()->where('active', true)->orderBy('name')->get(['id', 'name', 'slug']),
             'roles' => Role::query()->where('active', true)->orderBy('name')->get(['id', 'name', 'slug']),
+            'user_types' => self::USER_TYPE_OPTIONS,
         ]);
     }
 
     public function index(Request $request): JsonResponse
     {
         $search = trim((string) $request->query('search'));
+        $userType = trim((string) $request->query('user_type'));
 
         $users = User::query()
             ->with([
@@ -40,6 +49,7 @@ class UserController extends Controller
                         ->orWhere('email', 'like', "%{$search}%");
                 });
             })
+            ->when($userType !== '', fn ($query) => $query->where('user_type', $userType))
             ->orderBy('name')
             ->paginate((int) $request->query('per_page', 15));
 
@@ -64,7 +74,11 @@ class UserController extends Controller
             'email' => ['required', 'email', 'max:255', 'unique:users,email'],
             'password' => ['required', 'string', 'min:8'],
             'cargo_id' => ['nullable', 'integer', 'exists:cargos,id'],
-            'user_type' => ['nullable', 'string', 'max:191'],
+            'user_type' => [
+                'nullable',
+                Rule::in(array_column(self::USER_TYPE_OPTIONS, 'value')),
+                Rule::notIn(['staff']),
+            ],
             'active' => ['sometimes', 'boolean'],
             'roles' => ['sometimes', 'array'],
             'roles.*' => ['integer', 'exists:roles,id'],
@@ -100,7 +114,19 @@ class UserController extends Controller
             'email' => ['sometimes', 'email', 'max:255', Rule::unique('users', 'email')->ignore($user->id)],
             'password' => ['nullable', 'string', 'min:8'],
             'cargo_id' => ['nullable', 'integer', 'exists:cargos,id'],
-            'user_type' => ['nullable', 'string', 'max:191'],
+            'user_type' => [
+                'nullable',
+                Rule::in(array_column(self::USER_TYPE_OPTIONS, 'value')),
+                function ($attribute, $value, $fail) use ($user) {
+                    if ($user->staff_id && $value !== 'staff') {
+                        $fail('La categoría funcionario se administra desde la ficha de Funcionarios.');
+                    }
+
+                    if (! $user->staff_id && $value === 'staff') {
+                        $fail('Para categorizar esta cuenta como funcionario, asóciala desde el módulo Funcionarios.');
+                    }
+                },
+            ],
             'active' => ['sometimes', 'boolean'],
         ]);
 

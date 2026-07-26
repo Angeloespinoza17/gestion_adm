@@ -15,7 +15,8 @@ const exportableColumns = [
   { value: "personal_email", label: "Correo personal" },
   { value: "phone", label: "Teléfono" },
   { value: "cargo", label: "Cargo" },
-  { value: "departments", label: "Departamentos" },
+  { value: "departments", label: "Equipos a los que pertenece" },
+  { value: "managed_departments", label: "Departamentos a cargo" },
   { value: "status", label: "Estado" },
   { value: "active", label: "Registro activo" },
   { value: "contract_type", label: "Tipo de contrato" },
@@ -60,6 +61,7 @@ export default {
       importResult: null,
       importFileKey: 0,
       updateExisting: true,
+      showAdvancedFilters: false,
       catalogs: {
         cargos: [],
         departments: [],
@@ -75,12 +77,14 @@ export default {
         status: null,
         contract_type: null,
         active: null,
+        access: null,
       },
       exportForm: {
         format: "excel",
         columns: ["full_name", "rut"],
       },
       staff: [],
+      summary: { total: 0, active: 0, with_account: 0, without_account: 0 },
       pagination: { current_page: 1, last_page: 1, total: 0, per_page: 15 },
     };
   },
@@ -124,6 +128,13 @@ export default {
         { value: "0", label: "Solo desactivados" },
       ];
     },
+    accessOptions() {
+      return [
+        { value: null, label: "Todas las cuentas" },
+        { value: "with_account", label: "Con cuenta de acceso" },
+        { value: "without_account", label: "Sin cuenta de acceso" },
+      ];
+    },
     perPageSelectOptions() {
       return perPageOptions;
     },
@@ -157,6 +168,7 @@ export default {
         this.filters.status,
         this.filters.contract_type,
         this.filters.active,
+        this.filters.access,
       ].filter((value) => value !== null && value !== "").length;
     },
     currentActiveCount() {
@@ -192,6 +204,7 @@ export default {
       pushSelect("status", "Estado", this.statusOptions);
       pushSelect("contract_type", "Contrato", this.contractTypeOptions);
       pushSelect("active", "Registro", this.activeOptions);
+      pushSelect("access", "Acceso", this.accessOptions);
 
       return filters;
     },
@@ -210,31 +223,31 @@ export default {
     summaryCards() {
       return [
         {
-          label: "Resultados",
-          value: this.formatInteger(this.pagination.total),
-          detail: this.hasActiveFilters ? "según filtros aplicados" : "funcionarios registrados",
+          label: "Funcionarios",
+          value: this.formatInteger(this.summary.total),
+          detail: "personas categorizadas como staff",
           icon: "bx-list-ul",
           tone: "primary",
         },
         {
-          label: "Página actual",
-          value: this.formatInteger((this.staff || []).length),
-          detail: `${this.formatInteger(this.currentActiveCount)} activos, ${this.formatInteger(this.currentInactiveCount)} desactivados`,
+          label: "Activos",
+          value: this.formatInteger(this.summary.active),
+          detail: "fichas laborales vigentes",
           icon: "bx-id-card",
           tone: "success",
         },
         {
-          label: "Usuarios asociados",
-          value: this.formatInteger(this.linkedUsersCount),
-          detail: "en los resultados visibles",
+          label: "Con acceso",
+          value: this.formatInteger(this.summary.with_account),
+          detail: "cuentas de usuario vinculadas",
           icon: "bx-user-check",
           tone: "info",
         },
         {
-          label: "Filtros activos",
-          value: this.formatInteger(this.activeFilterCount),
-          detail: this.hasActiveFilters ? "refinando el listado" : "sin filtros",
-          icon: "bx-filter-alt",
+          label: "Sin acceso",
+          value: this.formatInteger(this.summary.without_account),
+          detail: "fichas pendientes de cuenta",
+          icon: "bx-user-x",
           tone: "warning",
         },
       ];
@@ -263,6 +276,7 @@ export default {
         status: this.filters.status,
         contract_type: this.filters.contract_type,
         active: this.filters.active === null ? null : this.filters.active,
+        access: this.filters.access,
       };
     },
     async loadCatalogs() {
@@ -278,6 +292,7 @@ export default {
         });
 
         this.staff = response.data.data;
+        this.summary = response.data.summary || this.summary;
         this.pagination = {
           current_page: response.data.current_page,
           last_page: response.data.last_page,
@@ -301,6 +316,7 @@ export default {
         status: null,
         contract_type: null,
         active: null,
+        access: null,
       };
       this.loadStaff(1);
     },
@@ -316,6 +332,26 @@ export default {
     changePerPage() {
       this.pagination.per_page = Number(this.pagination.per_page || 15);
       this.loadStaff(1);
+    },
+    initials(name) {
+      return String(name || "?")
+        .trim()
+        .split(/\s+/)
+        .slice(0, 2)
+        .map((part) => part.charAt(0).toUpperCase())
+        .join("");
+    },
+    visibleDepartments(item) {
+      return (item?.departments || []).slice(0, 2);
+    },
+    remainingDepartmentCount(item) {
+      return Math.max((item?.departments || []).length - 2, 0);
+    },
+    visibleManagedDepartments(item) {
+      return (item?.managed_departments || []).slice(0, 2);
+    },
+    remainingManagedDepartmentCount(item) {
+      return Math.max((item?.managed_departments || []).length - 2, 0);
     },
     async toggleActive(item) {
       const result = await this.confirmAction({
@@ -519,6 +555,8 @@ export default {
           return item.cargo?.name || "";
         case "departments":
           return (item.departments || []).map((department) => department.name).join(", ");
+        case "managed_departments":
+          return (item.managed_departments || []).map((department) => department.name).join(", ");
         case "status":
           return this.statusLabel(item.status);
         case "active":
@@ -804,6 +842,17 @@ export default {
 
     <BAlert v-if="error" variant="danger" show class="mb-3">{{ error }}</BAlert>
 
+    <div class="staff-identity-note mb-4">
+      <span class="staff-identity-note__icon"><i class="bx bx-id-card"></i></span>
+      <div>
+        <strong>Funcionario es una categoría de persona, no un rol.</strong>
+        <p class="mb-0">
+          Aquí se administra su ficha laboral. La cuenta de acceso es independiente y los roles solo determinan
+          qué módulos puede utilizar.
+        </p>
+      </div>
+    </div>
+
     <div class="row g-3 mb-4">
       <div v-for="card in summaryCards" :key="card.label" class="col-xl-3 col-md-6">
         <BCard no-body class="staff-summary-card h-100">
@@ -826,8 +875,8 @@ export default {
     <BCard class="mb-4 staff-filter-card">
       <div class="d-flex flex-wrap align-items-center justify-content-between mb-3 gap-2">
         <div>
-          <h5 class="mb-1">Filtros</h5>
-          <p class="text-muted mb-0">Nombre, RUT, cargo, departamento, estado y contrato.</p>
+          <h5 class="mb-1">Buscar en el directorio</h5>
+          <p class="text-muted mb-0">Encuentra personas por identidad, organización o estado de acceso.</p>
         </div>
         <span :class="['badge rounded-pill font-size-12', hasActiveFilters ? 'badge-soft-primary' : 'badge-soft-secondary']">
           {{ activeFilterCount }} filtros activos
@@ -835,7 +884,7 @@ export default {
       </div>
 
       <div class="row g-3 align-items-end">
-        <div class="col-xxl-4 col-lg-6">
+        <div class="col-xl-4 col-lg-6">
           <label class="form-label">Búsqueda general</label>
           <div class="search-box">
             <div class="position-relative">
@@ -849,47 +898,62 @@ export default {
             </div>
           </div>
         </div>
-        <div class="col-xxl-2 col-lg-3 col-md-6">
-          <label class="form-label">Nombre</label>
-          <BFormInput v-model="filters.name" @keyup.enter="loadStaff(1)" />
-        </div>
-        <div class="col-xxl-2 col-lg-3 col-md-6">
-          <label class="form-label">RUT</label>
-          <BFormInput v-model="filters.rut" @keyup.enter="loadStaff(1)" />
-        </div>
-        <div class="col-xxl-2 col-lg-4 col-md-6">
-          <label class="form-label">Cargo</label>
-          <Multiselect v-model="filters.cargo_id" :options="cargoOptions" :searchable="true" />
-        </div>
-        <div class="col-xxl-2 col-lg-4 col-md-6">
+        <div class="col-xl-3 col-lg-6">
           <label class="form-label">Departamento</label>
           <Multiselect v-model="filters.department_id" :options="departmentOptions" :searchable="true" />
         </div>
-        <div class="col-xl-3 col-lg-4 col-md-6">
+        <div class="col-xl-2 col-md-6">
           <label class="form-label">Estado</label>
           <Multiselect v-model="filters.status" :options="statusOptions" :searchable="true" />
         </div>
-        <div class="col-xl-3 col-lg-4 col-md-6">
-          <label class="form-label">Tipo de contrato</label>
-          <Multiselect v-model="filters.contract_type" :options="contractTypeOptions" :searchable="true" />
+        <div class="col-xl-3 col-md-6">
+          <label class="form-label">Cuenta de acceso</label>
+          <Multiselect v-model="filters.access" :options="accessOptions" :searchable="false" />
         </div>
-        <div class="col-xl-3 col-lg-4 col-md-6">
-          <label class="form-label">Registro</label>
-          <Multiselect v-model="filters.active" :options="activeOptions" :searchable="false" />
-        </div>
-        <div class="col-xl-3 col-lg-8">
-          <div class="d-flex flex-wrap gap-2">
+        <div class="col-12">
+          <div class="d-flex flex-wrap align-items-center gap-2">
             <BButton variant="primary" @click="loadStaff(1)">
               <i class="bx bx-search-alt me-1"></i>
-              Filtrar
+              Buscar
             </BButton>
             <BButton variant="light" @click="resetFilters">
               <i class="bx bx-reset me-1"></i>
               Limpiar
             </BButton>
+            <BButton variant="link" class="text-decoration-none" @click="showAdvancedFilters = !showAdvancedFilters">
+              <i :class="showAdvancedFilters ? 'bx bx-chevron-up' : 'bx bx-slider-alt'" class="me-1"></i>
+              {{ showAdvancedFilters ? "Ocultar filtros avanzados" : "Más filtros" }}
+            </BButton>
           </div>
         </div>
       </div>
+
+      <BCollapse v-model="showAdvancedFilters">
+        <div class="staff-advanced-filters">
+          <div class="row g-3">
+            <div class="col-lg-3 col-md-6">
+              <label class="form-label">Nombre exacto o parcial</label>
+              <BFormInput v-model="filters.name" @keyup.enter="loadStaff(1)" />
+            </div>
+            <div class="col-lg-2 col-md-6">
+              <label class="form-label">RUT</label>
+              <BFormInput v-model="filters.rut" @keyup.enter="loadStaff(1)" />
+            </div>
+            <div class="col-lg-3 col-md-6">
+              <label class="form-label">Cargo</label>
+              <Multiselect v-model="filters.cargo_id" :options="cargoOptions" :searchable="true" />
+            </div>
+            <div class="col-lg-2 col-md-6">
+              <label class="form-label">Contrato</label>
+              <Multiselect v-model="filters.contract_type" :options="contractTypeOptions" :searchable="true" />
+            </div>
+            <div class="col-lg-2 col-md-6">
+              <label class="form-label">Ficha</label>
+              <Multiselect v-model="filters.active" :options="activeOptions" :searchable="false" />
+            </div>
+          </div>
+        </div>
+      </BCollapse>
 
       <div v-if="activeFilters.length" class="active-filter-bar">
         <span v-for="filter in activeFilters" :key="filter.key" class="active-filter-chip">
@@ -941,8 +1005,8 @@ export default {
           <BThead class="table-light">
             <BTr>
               <BTh>Funcionario</BTh>
-              <BTh>Contacto</BTh>
-              <BTh>Cargo</BTh>
+              <BTh>Organización</BTh>
+              <BTh>Cuenta de acceso</BTh>
               <BTh class="staff-status-col">Estado</BTh>
               <BTh class="text-end staff-actions-col">Acciones</BTh>
             </BTr>
@@ -969,32 +1033,71 @@ export default {
 
             <BTr v-for="item in staff" :key="item.id">
               <BTd>
-                <div class="staff-person-cell">
-                  <router-link :to="`/staff/${item.id}`" class="staff-name-link">
-                    {{ item.full_name }}
-                  </router-link>
-                  <div class="staff-meta">
-                    <span>{{ item.rut || "Sin RUT" }}</span>
-                    <span v-if="item.start_date">Ingreso {{ formatDate(item.start_date) }}</span>
+                <div class="staff-person-cell d-flex align-items-center gap-2">
+                  <span class="staff-person-avatar">{{ initials(item.full_name) }}</span>
+                  <div class="min-w-0">
+                    <router-link :to="`/staff/${item.id}`" class="staff-name-link">
+                      {{ item.full_name }}
+                    </router-link>
+                    <div class="staff-meta">
+                      <span>{{ item.rut || "Sin RUT" }}</span>
+                      <span class="staff-category-badge">Funcionario</span>
+                    </div>
                   </div>
                 </div>
               </BTd>
 
               <BTd>
-                <div class="staff-contact">
-                  <div class="staff-contact-line">
-                    <i class="mdi mdi-email-outline"></i>
-                    <span>{{ item.institutional_email || item.personal_email || "Sin correo" }}</span>
+                <div class="staff-organization">
+                  <div class="fw-medium">{{ item.cargo?.name || "Sin cargo asignado" }}</div>
+                  <div v-if="(item.departments || []).length" class="staff-department-list">
+                    <span
+                      v-for="department in visibleDepartments(item)"
+                      :key="department.id"
+                      class="staff-department-chip"
+                    >
+                      <i class="bx bx-buildings"></i>{{ department.name }}
+                    </span>
+                    <span v-if="remainingDepartmentCount(item)" class="staff-department-more">
+                      +{{ remainingDepartmentCount(item) }}
+                    </span>
                   </div>
-                  <div v-if="item.phone" class="staff-contact-line text-muted">
-                    <i class="mdi mdi-phone-outline"></i>
-                    <span>{{ item.phone }}</span>
+                  <small v-else class="text-muted">Sin departamento</small>
+                  <div v-if="(item.managed_departments || []).length" class="staff-managed-list">
+                    <span class="staff-managed-label">A cargo de</span>
+                    <span
+                      v-for="department in visibleManagedDepartments(item)"
+                      :key="department.id"
+                      class="staff-managed-chip"
+                    >
+                      {{ department.name }}
+                    </span>
+                    <span v-if="remainingManagedDepartmentCount(item)" class="staff-department-more">
+                      +{{ remainingManagedDepartmentCount(item) }}
+                    </span>
                   </div>
                 </div>
               </BTd>
 
               <BTd>
-                <div class="fw-medium">{{ item.cargo?.name || "-" }}</div>
+                <div v-if="item.user" class="staff-account-cell">
+                  <span class="staff-account-status is-linked">
+                    <i class="bx bx-check-circle"></i>Cuenta vinculada
+                  </span>
+                  <span class="staff-account-email">{{ item.user.email }}</span>
+                  <small :class="item.user.active ? 'text-success' : 'text-muted'">
+                    {{ item.user.active ? "Acceso activo" : "Acceso desactivado" }}
+                  </small>
+                </div>
+                <div v-else class="staff-account-cell">
+                  <span class="staff-account-status is-pending">
+                    <i class="bx bx-user-x"></i>Sin cuenta de acceso
+                  </span>
+                  <span class="staff-account-email text-muted">
+                    {{ item.institutional_email || "Falta correo institucional" }}
+                  </span>
+                  <small class="text-muted">No depende de un rol</small>
+                </div>
               </BTd>
 
               <BTd class="staff-status-col">
@@ -1002,7 +1105,7 @@ export default {
                   <span :class="`badge rounded-pill badge-soft-${statusVariant(item)}`">
                     {{ statusLabel(item.status) }}
                   </span>
-                  <small class="text-muted">{{ item.active ? "Registro activo" : "Registro desactivado" }}</small>
+                  <small class="text-muted">{{ item.active ? "Ficha activa" : "Ficha desactivada" }}</small>
                 </div>
               </BTd>
 
@@ -1229,6 +1332,49 @@ export default {
   box-shadow: 0 0.125rem 0.375rem rgba(15, 23, 42, 0.035);
 }
 
+.staff-identity-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.85rem;
+  padding: 1rem 1.1rem;
+  border: 1px solid #dbe4ff;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #f7f9ff, #f5fbff);
+  color: #3f4858;
+}
+
+.staff-identity-note__icon {
+  display: inline-flex;
+  width: 2.65rem;
+  height: 2.65rem;
+  flex: 0 0 2.65rem;
+  align-items: center;
+  justify-content: center;
+  border-radius: 10px;
+  background: #e8edff;
+  color: #556ee6;
+  font-size: 1.35rem;
+}
+
+.staff-identity-note strong {
+  display: block;
+  margin-bottom: 0.2rem;
+  color: #2a3042;
+}
+
+.staff-identity-note p {
+  color: #667085;
+  font-size: 0.86rem;
+}
+
+.staff-advanced-filters {
+  margin-top: 1rem;
+  padding: 1rem;
+  border: 1px solid #e7ebf3;
+  border-radius: 10px;
+  background: #fafbfe;
+}
+
 .staff-summary-label {
   display: block;
   margin-bottom: 0.35rem;
@@ -1340,7 +1486,7 @@ export default {
 }
 
 .staff-table {
-  min-width: 940px;
+  min-width: 1120px;
 }
 
 .staff-table th {
@@ -1358,7 +1504,21 @@ export default {
 }
 
 .staff-person-cell {
-  min-width: 190px;
+  min-width: 215px;
+}
+
+.staff-person-avatar {
+  display: inline-flex;
+  width: 2.45rem;
+  height: 2.45rem;
+  flex: 0 0 2.45rem;
+  align-items: center;
+  justify-content: center;
+  border-radius: 10px;
+  background: #eef1ff;
+  color: #556ee6;
+  font-size: 0.78rem;
+  font-weight: 800;
 }
 
 .staff-name-link {
@@ -1385,21 +1545,100 @@ export default {
   font-size: 0.78rem;
 }
 
-.staff-contact {
-  min-width: 205px;
+.staff-category-badge {
+  padding: 0.08rem 0.38rem;
+  border-radius: 999px;
+  background: #f0f7ff;
+  color: #3577b8;
+  font-size: 0.68rem;
+  font-weight: 700;
 }
 
-.staff-contact-line {
+.staff-organization {
+  min-width: 220px;
+}
+
+.staff-department-list {
   display: flex;
-  max-width: 250px;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 0.4rem;
-  color: #495057;
-  font-size: 0.84rem;
+  gap: 0.28rem;
+  margin-top: 0.28rem;
 }
 
-.staff-contact-line span {
+.staff-managed-list {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.28rem;
+  margin-top: 0.38rem;
+}
+
+.staff-managed-label {
+  color: #74788d;
+  font-size: 0.67rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.staff-managed-chip {
+  padding: 0.14rem 0.4rem;
+  border: 1px solid #dce5ff;
+  border-radius: 999px;
+  background: #f7f9ff;
+  color: #556ee6;
+  font-size: 0.68rem;
+  font-weight: 700;
+}
+
+.staff-department-chip,
+.staff-department-more {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.22rem;
+  padding: 0.16rem 0.42rem;
+  border-radius: 999px;
+  background: #f2f4f7;
+  color: #5d6677;
+  font-size: 0.69rem;
+  line-height: 1.25;
+}
+
+.staff-department-more {
+  background: #e9edf5;
+  font-weight: 700;
+}
+
+.staff-account-cell {
+  display: flex;
+  min-width: 225px;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.16rem;
+}
+
+.staff-account-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.28rem;
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.staff-account-status.is-linked {
+  color: #2ca67a;
+}
+
+.staff-account-status.is-pending {
+  color: #b7791f;
+}
+
+.staff-account-email {
+  display: block;
+  max-width: 240px;
   overflow: hidden;
+  color: #3f4858;
+  font-size: 0.82rem;
   text-overflow: ellipsis;
   white-space: nowrap;
 }

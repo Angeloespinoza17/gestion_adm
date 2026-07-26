@@ -12,6 +12,7 @@ const emptyForm = () => ({
   password: "",
   cargo_id: null,
   user_type: "",
+  staff_id: null,
   active: true,
   roles: [],
 });
@@ -24,10 +25,11 @@ export default {
       saving: false,
       bulkDeleting: false,
       search: "",
+      userTypeFilter: null,
       users: [],
       selectedUserIds: [],
       pagination: { current_page: 1, last_page: 1, total: 0 },
-      catalogs: { cargos: [], roles: [] },
+      catalogs: { cargos: [], roles: [], user_types: [] },
       showModal: false,
       form: emptyForm(),
       passwordTouched: false,
@@ -46,6 +48,29 @@ export default {
       return [{ value: null, label: "Sin cargo" }].concat(
         this.catalogs.cargos.map((c) => ({ value: c.id, label: c.name }))
       );
+    },
+    userTypeOptions() {
+      return [{ value: null, label: "Sin categoría" }].concat(
+        (this.catalogs.user_types || []).map((type) => ({
+          value: type.value,
+          label: type.label,
+        }))
+      );
+    },
+    userTypeFilterOptions() {
+      return [{ value: null, label: "Todas las categorías" }].concat(
+        (this.catalogs.user_types || []).map((type) => ({
+          value: type.value,
+          label: type.label,
+        }))
+      );
+    },
+    editableUserTypeOptions() {
+      if (this.form.staff_id || this.form.user_type === "staff") {
+        return this.userTypeOptions;
+      }
+
+      return this.userTypeOptions.filter((type) => type.value !== "staff");
     },
     selectedUserSet() {
       return new Set(this.normalizeIdList(this.selectedUserIds));
@@ -90,7 +115,11 @@ export default {
       this.error = null;
       try {
         const response = await axios.get("/api/admin/users", {
-          params: { page, search: this.search },
+          params: {
+            page,
+            search: this.search,
+            user_type: this.userTypeFilter,
+          },
         });
         this.users = response.data.data;
         this.pagination = {
@@ -118,6 +147,7 @@ export default {
         password: "",
         cargo_id: user.cargo_id ?? null,
         user_type: user.user_type ?? "",
+        staff_id: user.staff_id ?? null,
         active: Boolean(user.active),
         roles: (user.roles || []).map((r) => r.id),
       };
@@ -307,6 +337,17 @@ export default {
 
       return error?.response?.data?.message || error?.message || "Error desconocido";
     },
+    userTypeLabel(value) {
+      return (this.catalogs.user_types || []).find((type) => type.value === value)?.label || "Sin categoría";
+    },
+    userTypeVariant(value) {
+      return {
+        staff: "primary",
+        student: "info",
+        guardian: "warning",
+        role_preview: "secondary",
+      }[value] || "light";
+    },
   },
 };
 </script>
@@ -328,6 +369,20 @@ export default {
     <BAlert v-if="error" variant="danger" show class="mb-3">{{ error }}</BAlert>
     <BAlert v-if="success" variant="success" show class="mb-3">{{ success }}</BAlert>
 
+    <div class="users-category-note">
+      <span><i class="bx bx-category"></i></span>
+      <div>
+        <strong>Categoría y rol cumplen funciones distintas.</strong>
+        <p class="mb-0">
+          La categoría distingue funcionarios, estudiantes y apoderados. Los roles controlan permisos y pueden quedar vacíos.
+          Las cuentas de funcionarios se crean o vinculan desde el módulo Funcionarios.
+        </p>
+      </div>
+      <router-link to="/staff" class="btn btn-sm btn-outline-primary">
+        Ir a Funcionarios
+      </router-link>
+    </div>
+
     <section class="users-panel">
       <div class="users-search-row">
         <div class="users-search">
@@ -337,6 +392,14 @@ export default {
             class="users-search__input"
             placeholder="Buscar por nombre o email"
             @keyup.enter="loadUsers(1)"
+          />
+        </div>
+        <div class="users-type-filter">
+          <Multiselect
+            v-model="userTypeFilter"
+            :options="userTypeFilterOptions"
+            :searchable="false"
+            placeholder="Todas las categorías"
           />
         </div>
         <BButton variant="outline-primary" @click="loadUsers(1)">
@@ -396,6 +459,7 @@ export default {
             { key: 'select', label: '', class: 'users-select-column' },
             { key: 'name', label: 'Nombre' },
             { key: 'email', label: 'Email' },
+            { key: 'user_type', label: 'Categoría' },
             { key: 'cargo', label: 'Cargo' },
             { key: 'roles', label: 'Roles' },
             { key: 'active', label: 'Activo' },
@@ -431,6 +495,11 @@ export default {
           </template>
           <template #cell(cargo)="{ item }">
             {{ item.cargo?.name || "Sin cargo" }}
+          </template>
+          <template #cell(user_type)="{ item }">
+            <BBadge :variant="userTypeVariant(item.user_type)" class="users-type-badge">
+              {{ userTypeLabel(item.user_type) }}
+            </BBadge>
           </template>
           <template #cell(roles)="{ item }">
             <span v-if="(item.roles || []).length === 0" class="text-muted">Sin rol</span>
@@ -504,8 +573,20 @@ export default {
           <Multiselect v-model="form.cargo_id" :options="cargoOptions" :searchable="true" />
         </div>
         <div class="col-md-6 mb-3">
-          <label class="form-label">Tipo usuario</label>
-          <BFormInput v-model="form.user_type" placeholder="Ej: funcionario / estudiante / apoderado" />
+          <label class="form-label">Categoría de usuario</label>
+          <Multiselect
+            v-model="form.user_type"
+            :options="editableUserTypeOptions"
+            :searchable="false"
+            :disabled="Boolean(form.staff_id)"
+            placeholder="Seleccionar categoría"
+          />
+          <small v-if="form.staff_id" class="text-muted d-block mt-2">
+            La categoría funcionario se administra desde su ficha laboral.
+          </small>
+          <small v-else class="text-muted d-block mt-2">
+            Para un funcionario nuevo, utiliza el módulo Funcionarios.
+          </small>
         </div>
         <div class="col-md-6 mb-3 d-flex align-items-end">
           <BFormCheckbox v-model="form.active">Activo</BFormCheckbox>
@@ -519,6 +600,9 @@ export default {
             :close-on-select="false"
             :searchable="true"
           />
+          <small class="text-muted d-block mt-2">
+            Opcional. Los roles determinan permisos; no definen si la persona es funcionaria, estudiante o apoderada.
+          </small>
         </div>
       </div>
 
@@ -541,6 +625,45 @@ export default {
   margin-bottom: 1.5rem;
 }
 
+.users-category-note {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  margin-bottom: 1.25rem;
+  padding: 1rem 1.1rem;
+  border: 1px solid #dce5ff;
+  border-radius: 0.9rem;
+  background: linear-gradient(135deg, #f7f9ff, #f5fbff);
+}
+
+.users-category-note > span {
+  display: inline-flex;
+  width: 2.7rem;
+  height: 2.7rem;
+  flex: 0 0 2.7rem;
+  align-items: center;
+  justify-content: center;
+  border-radius: 0.75rem;
+  background: #e8edff;
+  color: #556ee6;
+  font-size: 1.35rem;
+}
+
+.users-category-note > div {
+  flex: 1;
+}
+
+.users-category-note strong {
+  display: block;
+  margin-bottom: 0.18rem;
+  color: #2a3042;
+}
+
+.users-category-note p {
+  color: #667085;
+  font-size: 0.84rem;
+}
+
 .users-panel {
   overflow: hidden;
   border: 1px solid #e9edf5;
@@ -559,6 +682,10 @@ export default {
 .users-search {
   position: relative;
   width: min(32rem, 100%);
+}
+
+.users-type-filter {
+  width: min(16rem, 100%);
 }
 
 .users-search__icon {
@@ -673,6 +800,11 @@ export default {
   gap: 0.35rem;
 }
 
+.users-type-badge {
+  padding: 0.36rem 0.55rem;
+  font-weight: 650;
+}
+
 .users-pagination {
   display: flex;
   align-items: center;
@@ -683,6 +815,15 @@ export default {
 }
 
 @media (max-width: 991.98px) {
+  .users-category-note {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .users-category-note > .btn {
+    margin-left: 3.55rem;
+  }
+
   .bulk-actions-bar,
   .bulk-actions-buttons {
     align-items: stretch;
@@ -697,15 +838,21 @@ export default {
 @media (max-width: 575.98px) {
   .users-page-header,
   .users-search-row,
-  .users-pagination {
+  .users-pagination,
+  .users-category-note {
     align-items: stretch;
     flex-direction: column;
   }
 
   .users-page-header > .btn,
   .users-search-row > .btn,
+  .users-category-note > .btn,
   .bulk-actions-buttons > .btn {
     width: 100%;
+  }
+
+  .users-category-note > .btn {
+    margin-left: 0;
   }
 }
 </style>

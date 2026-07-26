@@ -158,6 +158,13 @@ class Staff extends Model
         return $this->belongsToMany(Department::class)->withTimestamps();
     }
 
+    public function managedDepartments(): HasMany
+    {
+        return $this->hasMany(Department::class, 'responsible_staff_id')
+            ->orderBy('sort_order')
+            ->orderBy('name');
+    }
+
     public function documents(): HasMany
     {
         return $this->hasMany(StaffDocument::class);

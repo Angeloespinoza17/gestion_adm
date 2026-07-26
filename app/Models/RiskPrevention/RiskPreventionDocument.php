@@ -15,6 +15,10 @@ class RiskPreventionDocument extends Model
 
     protected $table = 'prevent_documents';
 
+    protected $hidden = [
+        'document_path',
+    ];
+
     protected $fillable = [
         'document_type',
         'title',
@@ -23,9 +27,15 @@ class RiskPreventionDocument extends Model
         'valid_from',
         'valid_until',
         'status',
+        'is_disseminable',
         'responsible_name',
         'document_path',
         'document_name',
+        'mime_type',
+        'file_extension',
+        'file_size',
+        'disseminated_at',
+        'disseminated_by',
         'notes',
         'created_by',
         'updated_by',
@@ -34,11 +44,15 @@ class RiskPreventionDocument extends Model
     protected $casts = [
         'valid_from' => 'date',
         'valid_until' => 'date',
+        'is_disseminable' => 'boolean',
+        'file_size' => 'integer',
+        'disseminated_at' => 'datetime',
     ];
 
     protected $appends = [
         'days_until_expiration',
         'current_status',
+        'has_file',
     ];
 
     public function createdBy(): BelongsTo
@@ -49,6 +63,11 @@ class RiskPreventionDocument extends Model
     public function updatedBy(): BelongsTo
     {
         return $this->belongsTo(User::class, 'updated_by');
+    }
+
+    public function disseminatedBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'disseminated_by');
     }
 
     public function getDaysUntilExpirationAttribute(): ?int
@@ -75,5 +94,10 @@ class RiskPreventionDocument extends Model
         }
 
         return self::STATUS_VIGENTE;
+    }
+
+    public function getHasFileAttribute(): bool
+    {
+        return filled($this->document_path);
     }
 }

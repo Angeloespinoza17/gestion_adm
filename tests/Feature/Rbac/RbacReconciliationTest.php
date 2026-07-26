@@ -50,7 +50,7 @@ class RbacReconciliationTest extends TestCase
         $result = $service->apply();
 
         $this->assertSame(0, $result['audit']['critical_issue_count']);
-        $this->assertSame(27, PermissionGroup::query()->where('active', true)->count());
+        $this->assertSame(28, PermissionGroup::query()->where('active', true)->count());
         $this->assertTrue(Permission::query()->where('slug', 'administrar_catalogos_enfermeria')->where('active', true)->exists());
 
         $nurse = Role::query()->where('slug', 'enfermeria')->firstOrFail();

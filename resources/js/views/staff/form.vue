@@ -802,7 +802,8 @@ export default {
 
         const institutionData = [
           ["Usuario asociado", this.staff.user ? `${this.staff.user.name} (${this.staff.user.email})` : "Sin acceso al sistema"],
-          ["Departamentos", (this.staff.departments || []).map((department) => department.name).join(", ") || "-"],
+          ["Equipos a los que pertenece", (this.staff.departments || []).map((department) => department.name).join(", ") || "-"],
+          ["Departamentos a cargo", (this.staff.managed_departments || []).map((department) => department.name).join(", ") || "-"],
           ["Registro activo", this.staff.active ? "Sí" : "No"],
           ["Creado", this.formatDateTime(this.staff.created_at) || "-"],
           ["Actualizado", this.formatDateTime(this.staff.updated_at) || "-"],
@@ -1280,8 +1281,8 @@ export default {
           </div>
         </BCard>
 
-        <BCard title="Departamentos asociados" class="staff-form-card mt-3">
-          <StaffFieldLabel label="Asignación de departamentos" />
+        <BCard title="Equipos a los que pertenece" class="staff-form-card mt-3">
+          <StaffFieldLabel label="Pertenencia a departamentos" />
           <Multiselect
             v-model="form.department_ids"
             class="staff-multiselect"
@@ -1292,7 +1293,21 @@ export default {
             :disabled="!canEdit"
           />
           <div class="small text-muted mt-2">
-            La asignación y remoción de departamentos se gestiona desde esta ficha.
+            Esto define los equipos que integra. Ser encargado de un departamento se configura por separado
+            en el administrador de departamentos.
+          </div>
+          <div v-if="staff" class="staff-responsibility-summary mt-3">
+            <div class="d-flex align-items-center justify-content-between gap-2">
+              <div>
+                <span class="text-muted small">Departamentos a cargo</span>
+                <div class="fw-semibold">
+                  {{ (staff.managed_departments || []).map((department) => department.name).join(", ") || "Ninguno" }}
+                </div>
+              </div>
+              <router-link to="/staff/departments" class="btn btn-sm btn-outline-primary">
+                Administrar
+              </router-link>
+            </div>
           </div>
         </BCard>
       </div>
@@ -1331,9 +1346,15 @@ export default {
               <div class="fw-semibold">{{ staff.commune_record?.name || staff.commune || "-" }}</div>
             </div>
             <div class="col-12">
-              <div class="text-muted small">Departamentos</div>
+              <div class="text-muted small">Equipos a los que pertenece</div>
               <div class="fw-semibold">
                 {{ (staff.departments || []).map((department) => department.name).join(", ") || "-" }}
+              </div>
+            </div>
+            <div class="col-12">
+              <div class="text-muted small">Departamentos a cargo</div>
+              <div class="fw-semibold">
+                {{ (staff.managed_departments || []).map((department) => department.name).join(", ") || "-" }}
               </div>
             </div>
           </div>
@@ -1860,6 +1881,13 @@ export default {
   font-size: 0.82rem;
   font-weight: 700;
   padding: 0.25rem 0.7rem;
+}
+
+.staff-responsibility-summary {
+  padding: 0.85rem;
+  border: 1px solid #dce5ff;
+  border-radius: 10px;
+  background: #f7f9ff;
 }
 
 .staff-required-dot {

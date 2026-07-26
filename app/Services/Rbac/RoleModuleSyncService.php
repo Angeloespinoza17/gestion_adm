@@ -61,12 +61,12 @@ class RoleModuleSyncService
                 ->all();
         }
 
-        $roles = $user->roles()
-            ->with(['permissions' => fn ($query) => $query->where('active', true)->select('permissions.id')])
-            ->get();
-
         return $this->moduleIdsForPermissionIds(
-            $roles->pluck('permissions')->flatten()->pluck('id')->all()
+            Permission::query()
+                ->where('active', true)
+                ->whereIn('slug', $user->permissionSlugs())
+                ->pluck('id')
+                ->all()
         );
     }
 

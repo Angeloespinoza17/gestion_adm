@@ -20,11 +20,11 @@ use Illuminate\Database\QueryException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\UploadedFile;
-use Symfony\Component\HttpFoundation\BinaryFileResponse;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\ValidationException;
+use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
 class StaffController extends Controller
 {
@@ -47,8 +47,13 @@ class StaffController extends Controller
                 ->orderBy('name')
                 ->get(['id', 'region_id', 'code', 'name']),
             'users' => User::query()
+                ->whereNull('student_id')
+                ->whereNull('guardian_id')
+                ->where(function ($query) {
+                    $query->whereNull('user_type')->orWhere('user_type', 'staff');
+                })
                 ->orderBy('name')
-                ->get(['id', 'name', 'email', 'staff_id', 'cargo_id', 'active']),
+                ->get(['id', 'name', 'email', 'user_type', 'staff_id', 'cargo_id', 'active']),
             'roles' => Role::query()
                 ->where('active', true)
                 ->orderBy('name')
@@ -67,6 +72,7 @@ class StaffController extends Controller
         $rut = Rut::normalize((string) $request->query('rut'));
         $status = trim((string) $request->query('status'));
         $contractType = trim((string) $request->query('contract_type'));
+        $access = trim((string) $request->query('access'));
         $cargoId = $request->query('cargo_id');
         $departmentId = $request->query('department_id');
         $active = $request->query('active');
@@ -76,6 +82,7 @@ class StaffController extends Controller
                 'cargo:id,name,slug',
                 'user:id,name,email,active,staff_id',
                 'departments:id,name,color,active',
+                'managedDepartments:id,name,color,responsible_staff_id,active',
                 'regionRecord:id,name,short_name',
                 'communeRecord:id,name,region_id',
             ])
@@ -95,7 +102,9 @@ class StaffController extends Controller
             ->when($cargoId, fn ($query) => $query->where('cargo_id', $cargoId))
             ->when($departmentId, fn ($query) => $query->whereHas('departments', fn ($deptQuery) => $deptQuery->where('departments.id', $departmentId)))
             ->when($status !== '', fn ($query) => $query->where('status', $status))
-            ->when($contractType !== '', fn ($query) => $query->where('contract_type', $contractType));
+            ->when($contractType !== '', fn ($query) => $query->where('contract_type', $contractType))
+            ->when($access === 'with_account', fn ($query) => $query->has('user'))
+            ->when($access === 'without_account', fn ($query) => $query->doesntHave('user'));
 
         if ($active !== null && $active !== '') {
             $staff->where('active', filter_var($active, FILTER_VALIDATE_BOOLEAN));
@@ -105,7 +114,14 @@ class StaffController extends Controller
             ->orderBy('full_name')
             ->paginate((int) $request->query('per_page', 15));
 
-        return response()->json($items);
+        return response()->json(array_merge($items->toArray(), [
+            'summary' => [
+                'total' => Staff::query()->count(),
+                'active' => Staff::query()->where('active', true)->count(),
+                'with_account' => Staff::query()->has('user')->count(),
+                'without_account' => Staff::query()->doesntHave('user')->count(),
+            ],
+        ]));
     }
 
     public function import(ImportStaffRequest $request, StaffImportService $importService): JsonResponse
@@ -284,7 +300,7 @@ class StaffController extends Controller
         }
 
         $user->staff_id = $staff->id;
-        $user->user_type = $user->user_type ?: 'staff';
+        $user->user_type = 'staff';
 
         if ($cargoId) {
             $user->cargo_id = $cargoId;
@@ -374,6 +390,7 @@ class StaffController extends Controller
             'user:id,name,email,active,staff_id,cargo_id',
             'user.roles:id,name,slug',
             'departments:id,name,color,active',
+            'managedDepartments:id,name,color,responsible_staff_id,active',
             'dependencyReservations:id,maintenance_dependency_id,staff_id,department_id,title,starts_at,ends_at,status,estimated_attendees,created_by',
             'dependencyReservations.dependency:id,name,calendar_color',
             'dependencyReservations.department:id,name,color',

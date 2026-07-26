@@ -464,8 +464,14 @@ export default {
           },
           {
             id: "fallback-risk-prevention-documents",
-            label: "Centro de documentos",
+            label: "Gestión documental empresa",
             link: "/risk-prevention/documents",
+            parentId: "fallback-risk-prevention",
+          },
+          {
+            id: "fallback-risk-prevention-staff-documents",
+            label: "Gestión documental",
+            link: "/risk-prevention/document-management",
             parentId: "fallback-risk-prevention",
           },
           {
@@ -824,6 +830,7 @@ export default {
               "/risk-prevention/epp",
               "/risk-prevention/trainings",
               "/risk-prevention/documents",
+              "/risk-prevention/document-management",
               "/risk-prevention/reports",
             ].includes(link)
           );
@@ -973,6 +980,7 @@ export default {
             "/risk-prevention/epp",
             "/risk-prevention/trainings",
             "/risk-prevention/documents",
+            "/risk-prevention/document-management",
             "/risk-prevention/reports",
           ].includes(subitem.link)
         );

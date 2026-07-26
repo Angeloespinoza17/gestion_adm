@@ -66,6 +66,7 @@ class PermissionBackfillSeeder extends Seeder
             ['slug' => 'exportar_calendario_fechas_relevantes', 'name' => 'Exportar Calendario de Fechas Relevantes', 'description' => 'Permite exportar eventos e informacion del calendario de fechas relevantes.'],
 
             // Prevencion de riesgos
+            ['slug' => 'ver_documentos_prevencion_difundibles', 'name' => 'Ver Documentos Difundibles de Prevencion', 'description' => 'Permite a funcionarios consultar y descargar documentos de Prevencion de Riesgos marcados como difundibles.'],
             ['slug' => 'gestionar_prevencion_riesgos', 'name' => 'Gestionar Prevencion de Riesgos', 'description' => 'Permite crear, editar y administrar registros de extintores, accidentes, EPP, capacitaciones y documentos de Prevencion de Riesgos.'],
             ['slug' => 'exportar_prevencion_riesgos', 'name' => 'Exportar Prevencion de Riesgos', 'description' => 'Permite exportar reportes y listados del modulo Prevencion de Riesgos.'],
 

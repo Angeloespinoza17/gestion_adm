@@ -22,9 +22,25 @@ class SaveRiskPreventionDocumentRequest extends FormRequest
             'valid_from' => ['nullable', 'date'],
             'valid_until' => ['nullable', 'date', 'after_or_equal:valid_from'],
             'status' => ['required', Rule::in(['vigente', 'por_vencer', 'vencido', 'archivado'])],
+            'is_disseminable' => ['sometimes', 'boolean'],
             'responsible_name' => ['nullable', 'string', 'max:160'],
             'notes' => ['nullable', 'string'],
-            'document' => ['nullable', 'file', 'max:10240'],
+            'document' => [
+                $this->isMethod('post') ? 'required' : 'nullable',
+                'file',
+                'max:25600',
+                'mimes:pdf,doc,docx,xls,xlsx,ppt,pptx,odt,ods,odp,csv,txt,jpg,jpeg,png,webp',
+            ],
+        ];
+    }
+
+    public function messages(): array
+    {
+        return [
+            'document.required' => 'Debes adjuntar un archivo o tomar una fotografía.',
+            'document.max' => 'El archivo no puede superar los 25 MB.',
+            'document.mimes' => 'El formato seleccionado no está permitido.',
+            'valid_until.after_or_equal' => 'La fecha de término debe ser igual o posterior al inicio de vigencia.',
         ];
     }
 }
