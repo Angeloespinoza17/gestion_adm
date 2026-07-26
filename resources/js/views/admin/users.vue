@@ -13,6 +13,8 @@ const emptyForm = () => ({
   cargo_id: null,
   user_type: "",
   staff_id: null,
+  student_id: null,
+  guardian_id: null,
   active: true,
   roles: [],
 });
@@ -64,13 +66,6 @@ export default {
           label: type.label,
         }))
       );
-    },
-    editableUserTypeOptions() {
-      if (this.form.staff_id || this.form.user_type === "staff") {
-        return this.userTypeOptions;
-      }
-
-      return this.userTypeOptions.filter((type) => type.value !== "staff");
     },
     selectedUserSet() {
       return new Set(this.normalizeIdList(this.selectedUserIds));
@@ -148,6 +143,8 @@ export default {
         cargo_id: user.cargo_id ?? null,
         user_type: user.user_type ?? "",
         staff_id: user.staff_id ?? null,
+        student_id: user.student_id ?? null,
+        guardian_id: user.guardian_id ?? null,
         active: Boolean(user.active),
         roles: (user.roles || []).map((r) => r.id),
       };
@@ -375,7 +372,7 @@ export default {
         <strong>Categoría y rol cumplen funciones distintas.</strong>
         <p class="mb-0">
           La categoría distingue funcionarios, estudiantes y apoderados. Los roles controlan permisos y pueden quedar vacíos.
-          Las cuentas de funcionarios se crean o vinculan desde el módulo Funcionarios.
+          Puedes asignar la categoría aquí y crear o vincular la ficha laboral desde el módulo Funcionarios.
         </p>
       </div>
       <router-link to="/staff" class="btn btn-sm btn-outline-primary">
@@ -576,16 +573,36 @@ export default {
           <label class="form-label">Categoría de usuario</label>
           <Multiselect
             v-model="form.user_type"
-            :options="editableUserTypeOptions"
+            :options="userTypeOptions"
             :searchable="false"
-            :disabled="Boolean(form.staff_id)"
             placeholder="Seleccionar categoría"
           />
-          <small v-if="form.staff_id" class="text-muted d-block mt-2">
-            La categoría funcionario se administra desde su ficha laboral.
+          <small
+            v-if="form.staff_id && form.user_type !== 'staff'"
+            class="text-warning d-block mt-2"
+          >
+            Al guardar, la cuenta se desvinculará de la ficha laboral. La ficha y sus registros se conservarán.
+          </small>
+          <small
+            v-else-if="form.student_id && form.user_type !== 'student'"
+            class="text-warning d-block mt-2"
+          >
+            Al guardar, la cuenta se desvinculará de la ficha de estudiante. La ficha y sus registros se conservarán.
+          </small>
+          <small
+            v-else-if="form.guardian_id && form.user_type !== 'guardian'"
+            class="text-warning d-block mt-2"
+          >
+            Al guardar, la cuenta se desvinculará de la ficha de apoderado. La ficha y sus registros se conservarán.
+          </small>
+          <small v-else-if="form.staff_id" class="text-muted d-block mt-2">
+            Esta cuenta está categorizada y vinculada a una ficha de funcionario.
+          </small>
+          <small v-else-if="form.user_type === 'staff'" class="text-muted d-block mt-2">
+            La ficha laboral se puede crear o vincular después desde el módulo Funcionarios.
           </small>
           <small v-else class="text-muted d-block mt-2">
-            Para un funcionario nuevo, utiliza el módulo Funcionarios.
+            La categoría identifica a la persona; los roles administran sus permisos.
           </small>
         </div>
         <div class="col-md-6 mb-3 d-flex align-items-end">

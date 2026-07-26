@@ -77,7 +77,6 @@ class UserController extends Controller
             'user_type' => [
                 'nullable',
                 Rule::in(array_column(self::USER_TYPE_OPTIONS, 'value')),
-                Rule::notIn(['staff']),
             ],
             'active' => ['sometimes', 'boolean'],
             'roles' => ['sometimes', 'array'],
@@ -117,18 +116,26 @@ class UserController extends Controller
             'user_type' => [
                 'nullable',
                 Rule::in(array_column(self::USER_TYPE_OPTIONS, 'value')),
-                function ($attribute, $value, $fail) use ($user) {
-                    if ($user->staff_id && $value !== 'staff') {
-                        $fail('La categoría funcionario se administra desde la ficha de Funcionarios.');
-                    }
-
-                    if (! $user->staff_id && $value === 'staff') {
-                        $fail('Para categorizar esta cuenta como funcionario, asóciala desde el módulo Funcionarios.');
-                    }
-                },
             ],
             'active' => ['sometimes', 'boolean'],
         ]);
+
+        $categoryChanged = array_key_exists('user_type', $payload)
+            && $payload['user_type'] !== $user->user_type;
+
+        if ($categoryChanged) {
+            if ($payload['user_type'] !== 'staff') {
+                $payload['staff_id'] = null;
+            }
+
+            if ($payload['user_type'] !== 'student') {
+                $payload['student_id'] = null;
+            }
+
+            if ($payload['user_type'] !== 'guardian') {
+                $payload['guardian_id'] = null;
+            }
+        }
 
         if (array_key_exists('password', $payload)) {
             $payload['password'] = $payload['password']

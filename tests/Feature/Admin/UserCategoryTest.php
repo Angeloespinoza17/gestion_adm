@@ -15,26 +15,31 @@ class UserCategoryTest extends TestCase
 {
     use RefreshDatabase;
 
-    public function test_admin_user_creator_does_not_create_a_staff_category_without_a_staff_profile(): void
+    public function test_admin_can_categorize_a_user_as_staff_without_a_staff_profile(): void
     {
         Sanctum::actingAs($this->userWithPermissions(['administrar_usuarios']));
 
-        $this->postJson('/api/admin/users', [
+        $response = $this->postJson('/api/admin/users', [
             'name' => 'Cuenta sin ficha',
             'email' => 'cuenta.sin.ficha@example.test',
             'password' => 'password-segura',
             'user_type' => 'staff',
             'active' => true,
-        ])
-            ->assertUnprocessable()
-            ->assertJsonValidationErrors('user_type');
+        ]);
 
-        $this->assertDatabaseMissing('users', [
+        $response
+            ->assertCreated()
+            ->assertJsonPath('data.user_type', 'staff')
+            ->assertJsonPath('data.staff_id', null);
+
+        $this->assertDatabaseHas('users', [
             'email' => 'cuenta.sin.ficha@example.test',
+            'user_type' => 'staff',
+            'staff_id' => null,
         ]);
     }
 
-    public function test_linked_staff_user_cannot_be_reclassified_as_a_student(): void
+    public function test_linked_staff_user_can_be_reclassified_without_deleting_staff_profile(): void
     {
         Sanctum::actingAs($this->userWithPermissions(['administrar_usuarios']));
 
@@ -52,10 +57,44 @@ class UserCategoryTest extends TestCase
         $this->putJson("/api/admin/users/{$user->id}", [
             'user_type' => 'student',
         ])
-            ->assertUnprocessable()
-            ->assertJsonValidationErrors('user_type');
+            ->assertOk()
+            ->assertJsonPath('data.user_type', 'student')
+            ->assertJsonPath('data.staff_id', null);
 
-        $this->assertSame('staff', $user->fresh()->user_type);
+        $this->assertSame('student', $user->fresh()->user_type);
+        $this->assertNull($user->fresh()->staff_id);
+        $this->assertDatabaseHas('staff', [
+            'id' => $staff->id,
+            'full_name' => 'Funcionario categorizado',
+        ]);
+    }
+
+    public function test_editing_a_linked_staff_user_keeps_the_profile_when_category_does_not_change(): void
+    {
+        Sanctum::actingAs($this->userWithPermissions(['administrar_usuarios']));
+
+        $staff = Staff::query()->create([
+            'full_name' => 'Funcionaria vinculada',
+            'status' => 'activo',
+            'active' => true,
+        ]);
+        $user = User::factory()->create([
+            'name' => 'Nombre anterior',
+            'staff_id' => $staff->id,
+            'user_type' => 'staff',
+            'active' => true,
+        ]);
+
+        $this->putJson("/api/admin/users/{$user->id}", [
+            'name' => 'Nombre actualizado',
+            'user_type' => 'staff',
+        ])
+            ->assertOk()
+            ->assertJsonPath('data.name', 'Nombre actualizado')
+            ->assertJsonPath('data.user_type', 'staff')
+            ->assertJsonPath('data.staff_id', $staff->id);
+
+        $this->assertSame($staff->id, $user->fresh()->staff_id);
     }
 
     private function userWithPermissions(array $permissionSlugs): User
