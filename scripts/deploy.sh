@@ -56,11 +56,13 @@ rsync -az --delete \
   --exclude='node_modules' \
   --exclude='vendor' \
   --exclude='storage' \
+  --exclude='public/hot' \
   "${ROOT_DIR}/" "${REMOTE}:${DEPLOY_REMOTE_PATH}/"
 
 echo "==> Instalando dependencias y optimizando Laravel"
 "${SSH_COMMAND[@]}" "${REMOTE}" "export HOME=\"\$(getent passwd \$(id -u) | cut -d: -f6)\" && \
 cd '${DEPLOY_REMOTE_PATH}' && \
+rm -f public/hot && \
 ${DEPLOY_COMPOSER_BIN} install --no-dev --optimize-autoloader && \
 ${DEPLOY_PHP_BIN} artisan config:clear && \
 ${DEPLOY_PHP_BIN} artisan env --no-ansi | grep -Eq 'environment([[:space:]]+is|:)[[:space:]]*\[?production\]?[[:space:].]*$' && \
