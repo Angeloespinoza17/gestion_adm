@@ -6,13 +6,12 @@ use App\Models\Security\SecurityIncident;
 use App\Models\Security\SecurityNotification;
 use App\Models\Security\SecurityShift;
 use App\Services\RiskPrevention\RiskPreventionAccessService;
-use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
-use Illuminate\Foundation\Auth\User as Authenticatable;
-use Illuminate\Notifications\Notifiable;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Foundation\Auth\User as Authenticatable;
+use Illuminate\Notifications\Notifiable;
 use Illuminate\Support\Facades\Storage;
 use Laravel\Sanctum\HasApiTokens;
 
@@ -83,7 +82,7 @@ class User extends Authenticatable
     {
         $path = $this->profile_photo_path ?: $this->staff?->profile_photo_path;
 
-        if (!$path) {
+        if (! $path) {
             return null;
         }
 
@@ -91,7 +90,7 @@ class User extends Authenticatable
         $parts = parse_url((string) $url);
 
         if (is_array($parts) && isset($parts['path'])) {
-            return $parts['path'] . (isset($parts['query']) ? '?' . $parts['query'] : '');
+            return $parts['path'].(isset($parts['query']) ? '?'.$parts['query'] : '');
         }
 
         return $url;
@@ -231,16 +230,30 @@ class User extends Authenticatable
             ->values()
             ->all();
 
-        if ($this->user_type === 'staff' || $this->staff_id !== null) {
+        if (
+            ($this->user_type === 'staff' || $this->staff_id !== null)
+            && ! $this->hasTemporaryHomeOnlyAccess()
+        ) {
             $permissions[] = RiskPreventionAccessService::DISSEMINATED_DOCUMENTS_PERMISSION;
         }
 
         return array_values(array_unique($permissions));
     }
 
+    private function hasTemporaryHomeOnlyAccess(): bool
+    {
+        if ($this->relationLoaded('roles')) {
+            return $this->roles->contains('slug', Role::TEMPORARY_HOME_ONLY_SLUG);
+        }
+
+        return $this->roles()
+            ->where('slug', Role::TEMPORARY_HOME_ONLY_SLUG)
+            ->exists();
+    }
+
     public function hasPermission(string $permissionSlug): bool
     {
-        if (!$this->active) {
+        if (! $this->active) {
             return false;
         }
 

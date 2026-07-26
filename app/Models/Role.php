@@ -10,6 +10,8 @@ class Role extends Model
 {
     use HasFactory;
 
+    public const TEMPORARY_HOME_ONLY_SLUG = 'funcionario_temporal_inicio';
+
     protected $fillable = [
         'name',
         'slug',
@@ -36,4 +38,3 @@ class Role extends Model
         return $this->belongsToMany(SystemModule::class)->withTimestamps();
     }
 }
-
