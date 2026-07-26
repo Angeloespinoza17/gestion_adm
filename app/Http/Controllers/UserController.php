@@ -58,6 +58,7 @@ class UserController extends Controller
             $user->setAttribute(
                 'can_delete',
                 $user->id !== $actorId
+                    && $user->user_type !== 'role_preview'
                     && ! $user->roles->contains(fn (Role $role) => $role->slug === 'super_admin')
             );
 
@@ -77,6 +78,7 @@ class UserController extends Controller
             'user_type' => [
                 'nullable',
                 Rule::in(array_column(self::USER_TYPE_OPTIONS, 'value')),
+                Rule::notIn(['role_preview']),
             ],
             'active' => ['sometimes', 'boolean'],
             'roles' => ['sometimes', 'array'],
@@ -116,6 +118,15 @@ class UserController extends Controller
             'user_type' => [
                 'nullable',
                 Rule::in(array_column(self::USER_TYPE_OPTIONS, 'value')),
+                function ($attribute, $value, $fail) use ($user) {
+                    if ($user->user_type === 'role_preview' && $value !== 'role_preview') {
+                        $fail('La categoría de las cuentas técnicas de vista previa no puede modificarse.');
+                    }
+
+                    if ($user->user_type !== 'role_preview' && $value === 'role_preview') {
+                        $fail('La categoría Cuenta de vista previa está reservada para cuentas técnicas.');
+                    }
+                },
             ],
             'active' => ['sometimes', 'boolean'],
         ]);
@@ -260,6 +271,7 @@ class UserController extends Controller
     {
         $protectedUsers = $users->filter(function (User $user) use ($actor): bool {
             return $user->id === $actor?->id
+                || $user->user_type === 'role_preview'
                 || $user->roles->contains(fn (Role $role) => $role->slug === 'super_admin');
         });
 
@@ -268,7 +280,7 @@ class UserController extends Controller
         }
 
         throw ValidationException::withMessages([
-            'users' => 'La cuenta actual y las cuentas Super Admin no pueden eliminarse.',
+            'users' => 'La cuenta actual, las cuentas Super Admin y las cuentas técnicas de vista previa no pueden eliminarse.',
         ]);
     }
 }

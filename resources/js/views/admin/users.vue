@@ -67,6 +67,13 @@ export default {
         }))
       );
     },
+    editableUserTypeOptions() {
+      if (this.form.user_type === "role_preview") {
+        return this.userTypeOptions.filter((type) => type.value === "role_preview");
+      }
+
+      return this.userTypeOptions.filter((type) => type.value !== "role_preview");
+    },
     selectedUserSet() {
       return new Set(this.normalizeIdList(this.selectedUserIds));
     },
@@ -573,12 +580,19 @@ export default {
           <label class="form-label">Categoría de usuario</label>
           <Multiselect
             v-model="form.user_type"
-            :options="userTypeOptions"
+            :options="editableUserTypeOptions"
             :searchable="false"
+            :disabled="form.user_type === 'role_preview'"
             placeholder="Seleccionar categoría"
           />
           <small
-            v-if="form.staff_id && form.user_type !== 'staff'"
+            v-if="form.user_type === 'role_preview'"
+            class="text-muted d-block mt-2"
+          >
+            Cuenta técnica reservada para que Super Admin revise la experiencia de un rol.
+          </small>
+          <small
+            v-else-if="form.staff_id && form.user_type !== 'staff'"
             class="text-warning d-block mt-2"
           >
             Al guardar, la cuenta se desvinculará de la ficha laboral. La ficha y sus registros se conservarán.

@@ -39,6 +39,41 @@ class UserCategoryTest extends TestCase
         ]);
     }
 
+    public function test_preview_category_is_reserved_for_internal_accounts(): void
+    {
+        Sanctum::actingAs($this->userWithPermissions(['administrar_usuarios']));
+
+        $this->postJson('/api/admin/users', [
+            'name' => 'Cuenta técnica manual',
+            'email' => 'vista.previa.manual@example.test',
+            'password' => 'password-segura',
+            'user_type' => 'role_preview',
+            'active' => true,
+        ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('user_type');
+
+        $previewUser = User::factory()->create([
+            'user_type' => 'role_preview',
+            'active' => true,
+        ]);
+
+        $this->putJson("/api/admin/users/{$previewUser->id}", [
+            'user_type' => 'staff',
+        ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('user_type');
+
+        $this->deleteJson("/api/admin/users/{$previewUser->id}")
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('users');
+
+        $this->assertDatabaseHas('users', [
+            'id' => $previewUser->id,
+            'user_type' => 'role_preview',
+        ]);
+    }
+
     public function test_linked_staff_user_can_be_reclassified_without_deleting_staff_profile(): void
     {
         Sanctum::actingAs($this->userWithPermissions(['administrar_usuarios']));
