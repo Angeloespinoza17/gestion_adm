@@ -42,7 +42,7 @@ class AccountingResourceRegistry
         return [
             'cost-centers' => [
                 'model' => AccountingCostCenter::class,
-                'view_permission' => AccountingAccessService::VIEW_PERMISSION,
+                'view_permission' => AccountingAccessService::COST_CENTER_PERMISSION,
                 'manage_permission' => AccountingAccessService::COST_CENTER_PERMISSION,
                 'search' => ['code', 'name', 'description', 'responsible_name'],
                 'filters' => ['type', 'is_active', 'valid_year'],
@@ -59,7 +59,7 @@ class AccountingResourceRegistry
             ],
             'funding-sources' => [
                 'model' => AccountingFundingSource::class,
-                'view_permission' => AccountingAccessService::VIEW_PERMISSION,
+                'view_permission' => AccountingAccessService::FUNDING_PANEL_PERMISSION,
                 'manage_permission' => AccountingAccessService::FUNDING_PANEL_PERMISSION,
                 'search' => ['code', 'name', 'description', 'category'],
                 'filters' => ['category', 'is_active'],
@@ -74,7 +74,7 @@ class AccountingResourceRegistry
             ],
             'manual-versions' => [
                 'model' => AccountingManualVersion::class,
-                'view_permission' => AccountingAccessService::VIEW_PERMISSION,
+                'view_permission' => AccountingAccessService::MANUAL_PERMISSION,
                 'manage_permission' => AccountingAccessService::MANUAL_PERMISSION,
                 'search' => ['name', 'version'],
                 'filters' => ['year', 'is_active', 'is_current'],
@@ -95,7 +95,7 @@ class AccountingResourceRegistry
             ],
             'manual-accounts' => [
                 'model' => AccountingManualAccount::class,
-                'view_permission' => AccountingAccessService::VIEW_PERMISSION,
+                'view_permission' => AccountingAccessService::MANUAL_PERMISSION,
                 'manage_permission' => AccountingAccessService::MANUAL_PERMISSION,
                 'search' => ['code', 'name', 'description', 'category', 'subcategory'],
                 'filters' => ['manual_version_id', 'type', 'allows_movements', 'is_active'],
@@ -155,7 +155,14 @@ class AccountingResourceRegistry
             ],
             'parties' => [
                 'model' => AccountingParty::class,
-                'view_permission' => AccountingAccessService::VIEW_PERMISSION,
+                'view_permission' => [
+                    AccountingAccessService::INCOMES_PERMISSION,
+                    AccountingAccessService::EXPENSES_PERMISSION,
+                    AccountingAccessService::PAYMENTS_PERMISSION,
+                    AccountingAccessService::INVOICES_PERMISSION,
+                    AccountingAccessService::HONORARIES_PERMISSION,
+                    AccountingAccessService::DECLARATIONS_PERMISSION,
+                ],
                 'manage_permission' => AccountingAccessService::PAYMENTS_PERMISSION,
                 'search' => ['name', 'business_name', 'rut', 'email'],
                 'filters' => ['party_type', 'is_active'],
@@ -209,7 +216,7 @@ class AccountingResourceRegistry
             ],
             'incomes' => [
                 'model' => AccountingIncome::class,
-                'view_permission' => AccountingAccessService::VIEW_PERMISSION,
+                'view_permission' => AccountingAccessService::INCOMES_PERMISSION,
                 'manage_permission' => AccountingAccessService::INCOMES_PERMISSION,
                 'search' => ['code', 'income_type', 'document_reference', 'status'],
                 'filters' => ['funding_source_id', 'cost_center_id', 'manual_account_id', 'status'],
@@ -233,7 +240,12 @@ class AccountingResourceRegistry
             ],
             'expenses' => [
                 'model' => AccountingExpense::class,
-                'view_permission' => AccountingAccessService::VIEW_PERMISSION,
+                'view_permission' => [
+                    AccountingAccessService::EXPENSES_PERMISSION,
+                    AccountingAccessService::PAYMENTS_PERMISSION,
+                    AccountingAccessService::INVOICES_PERMISSION,
+                    AccountingAccessService::HONORARIES_PERMISSION,
+                ],
                 'manage_permission' => AccountingAccessService::EXPENSES_PERMISSION,
                 'search' => ['code', 'document_type', 'document_number', 'status', 'payment_reference'],
                 'filters' => ['document_type', 'cost_center_id', 'funding_source_id', 'manual_account_id', 'status'],
@@ -263,7 +275,10 @@ class AccountingResourceRegistry
             ],
             'cash-funds' => [
                 'model' => AccountingCashFund::class,
-                'view_permission' => AccountingAccessService::VIEW_PERMISSION,
+                'view_permission' => [
+                    AccountingAccessService::CASH_FUND_PERMISSION,
+                    AccountingAccessService::FUNDS_RENDER_PERMISSION,
+                ],
                 'manage_permission' => AccountingAccessService::CASH_FUND_PERMISSION,
                 'search' => ['code', 'fund_type', 'status'],
                 'filters' => ['fund_type', 'responsible_user_id', 'status'],

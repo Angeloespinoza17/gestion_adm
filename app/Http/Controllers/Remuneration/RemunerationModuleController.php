@@ -51,6 +51,9 @@ class RemunerationModuleController extends Controller
     {
         abort_unless($this->accessService->canView($request->user()), 403);
 
+        $canAny = fn (array $permissions): bool => collect($permissions)
+            ->contains(fn (string $permission): bool => $this->accessService->canManage($request->user(), $permission));
+
         return response()->json([
             'statuses' => [
                 'periods' => ['abierto', 'en_calculo', 'cerrado', 'reabierto'],
@@ -84,24 +87,83 @@ class RemunerationModuleController extends Controller
                 'attendance_statuses' => collect(\App\Models\PermissionRequest::ATTENDANCE_STATUS_OPTIONS)->pluck('value')->all(),
                 'payroll_statuses' => collect(\App\Models\PermissionRequest::PAYROLL_STATUS_OPTIONS)->pluck('value')->all(),
             ],
-            'data' => [
-                'periods' => RemunerationPeriod::query()->orderByDesc('year')->orderByDesc('month')->get(['id', 'year', 'month', 'name', 'status']),
-                'staff' => Staff::query()->where('active', true)->orderBy('full_name')->get(['id', 'full_name', 'rut', 'cargo_id']),
-                'contracts' => Contract::query()->with('staff:id,full_name,rut')->orderByDesc('start_date')->get(['id', 'staff_id', 'position_name', 'contract_type', 'start_date', 'end_date', 'status']),
-                'users' => \App\Models\User::query()->where('active', true)->orderBy('name')->get(['id', 'name', 'email']),
-                'cargos' => \App\Models\Cargo::query()->where('active', true)->orderBy('name')->get(['id', 'name', 'slug']),
-                'departments' => \App\Models\Department::query()->orderBy('name')->get(['id', 'name']),
-                'permission_types' => \App\Models\PermissionType::query()->where('active', true)->orderBy('name')->get(['id', 'name']),
-                'cost_centers' => AccountingCostCenter::query()->where('is_active', true)->orderBy('name')->get(['id', 'code', 'name']),
-                'funding_sources' => AccountingFundingSource::query()->where('is_active', true)->orderBy('name')->get(['id', 'code', 'name']),
-                'manual_accounts' => AccountingManualAccount::query()->where('is_active', true)->orderBy('code')->get(['id', 'code', 'name', 'type']),
-                'bank_accounts' => AccountingBankAccount::query()->where('is_active', true)->orderBy('bank_name')->get(['id', 'bank_name', 'account_name', 'account_number']),
-                'concepts' => \App\Models\Remuneration\RemunerationConcept::query()->where('is_active', true)->orderBy('sort_order')->get(['id', 'code', 'name', 'type', 'is_imponible', 'is_taxable']),
-                'job_profiles' => \App\Models\HumanResources\HrJobProfile::query()->orderBy('title')->get(['id', 'code', 'title', 'status']),
-                'document_controls' => \App\Models\HumanResources\HrDocumentControl::query()->orderByDesc('id')->limit(200)->get(['id', 'staff_id', 'title', 'document_type', 'status']),
-                'climate_surveys' => \App\Models\HumanResources\HrClimateSurvey::query()->orderByDesc('id')->get(['id', 'title', 'scope', 'status', 'risk_level']),
-                'cv_bank_entries' => \App\Models\HumanResources\HrCvBankEntry::query()->orderBy('full_name')->get(['id', 'full_name', 'desired_position', 'specialty', 'status']),
-            ],
+            'data' => array_filter([
+                'periods' => $canAny([
+                    RemunerationAccessService::CLOSE_PERIOD_PERMISSION,
+                    RemunerationAccessService::MOVEMENTS_PERMISSION,
+                    RemunerationAccessService::CALCULATE_PERMISSION,
+                    RemunerationAccessService::APPROVE_PERMISSION,
+                    RemunerationAccessService::PAYMENTS_PERMISSION,
+                    RemunerationAccessService::REPORTS_PERMISSION,
+                    RemunerationAccessService::IMPORT_PERMISSION,
+                ]) ? RemunerationPeriod::query()->orderByDesc('year')->orderByDesc('month')->get(['id', 'year', 'month', 'name', 'status']) : null,
+                'staff' => $canAny([
+                    RemunerationAccessService::EMPLOYEES_PERMISSION,
+                    RemunerationAccessService::CONTRACTS_PERMISSION,
+                    RemunerationAccessService::MOVEMENTS_PERMISSION,
+                    RemunerationAccessService::CALCULATE_PERMISSION,
+                    RemunerationAccessService::APPROVE_PERMISSION,
+                    RemunerationAccessService::PAYMENTS_PERMISSION,
+                    RemunerationAccessService::REPORTS_PERMISSION,
+                    RemunerationAccessService::HR_MANAGEMENT_PERMISSION,
+                ]) ? Staff::query()->where('active', true)->orderBy('full_name')->get(['id', 'full_name', 'rut', 'cargo_id']) : null,
+                'contracts' => $canAny([
+                    RemunerationAccessService::CONTRACTS_PERMISSION,
+                    RemunerationAccessService::MOVEMENTS_PERMISSION,
+                    RemunerationAccessService::CALCULATE_PERMISSION,
+                    RemunerationAccessService::APPROVE_PERMISSION,
+                ]) ? Contract::query()->with('staff:id,full_name,rut')->orderByDesc('start_date')->get(['id', 'staff_id', 'position_name', 'contract_type', 'start_date', 'end_date', 'status']) : null,
+                'users' => $canAny([
+                    RemunerationAccessService::HR_MANAGEMENT_PERMISSION,
+                    RemunerationAccessService::ADMIN_PERMISSION,
+                ]) ? \App\Models\User::query()->where('active', true)->orderBy('name')->get(['id', 'name', 'email']) : null,
+                'cargos' => $canAny([
+                    RemunerationAccessService::EMPLOYEES_PERMISSION,
+                    RemunerationAccessService::HR_MANAGEMENT_PERMISSION,
+                ]) ? \App\Models\Cargo::query()->where('active', true)->orderBy('name')->get(['id', 'name', 'slug']) : null,
+                'departments' => $canAny([
+                    RemunerationAccessService::EMPLOYEES_PERMISSION,
+                    RemunerationAccessService::HR_MANAGEMENT_PERMISSION,
+                ]) ? \App\Models\Department::query()->orderBy('name')->get(['id', 'name']) : null,
+                'permission_types' => $canAny([
+                    RemunerationAccessService::HR_MANAGEMENT_PERMISSION,
+                ]) ? \App\Models\PermissionType::query()->where('active', true)->orderBy('name')->get(['id', 'name']) : null,
+                'cost_centers' => $canAny([
+                    RemunerationAccessService::MOVEMENTS_PERMISSION,
+                    RemunerationAccessService::CALCULATE_PERMISSION,
+                    RemunerationAccessService::ACCOUNTING_PERMISSION,
+                ]) ? AccountingCostCenter::query()->where('is_active', true)->orderBy('name')->get(['id', 'code', 'name']) : null,
+                'funding_sources' => $canAny([
+                    RemunerationAccessService::MOVEMENTS_PERMISSION,
+                    RemunerationAccessService::CALCULATE_PERMISSION,
+                    RemunerationAccessService::ACCOUNTING_PERMISSION,
+                ]) ? AccountingFundingSource::query()->where('is_active', true)->orderBy('name')->get(['id', 'code', 'name']) : null,
+                'manual_accounts' => $canAny([
+                    RemunerationAccessService::CONTRACTS_PERMISSION,
+                    RemunerationAccessService::ACCOUNTING_PERMISSION,
+                ]) ? AccountingManualAccount::query()->where('is_active', true)->orderBy('code')->get(['id', 'code', 'name', 'type']) : null,
+                'bank_accounts' => $canAny([
+                    RemunerationAccessService::PAYMENTS_PERMISSION,
+                    RemunerationAccessService::ACCOUNTING_PERMISSION,
+                ]) ? AccountingBankAccount::query()->where('is_active', true)->orderBy('bank_name')->get(['id', 'bank_name', 'account_name', 'account_number']) : null,
+                'concepts' => $canAny([
+                    RemunerationAccessService::CONCEPTS_PERMISSION,
+                    RemunerationAccessService::MOVEMENTS_PERMISSION,
+                    RemunerationAccessService::CALCULATE_PERMISSION,
+                ]) ? \App\Models\Remuneration\RemunerationConcept::query()->where('is_active', true)->orderBy('sort_order')->get(['id', 'code', 'name', 'type', 'is_imponible', 'is_taxable']) : null,
+                'job_profiles' => $canAny([
+                    RemunerationAccessService::HR_MANAGEMENT_PERMISSION,
+                ]) ? \App\Models\HumanResources\HrJobProfile::query()->orderBy('title')->get(['id', 'code', 'title', 'status']) : null,
+                'document_controls' => $canAny([
+                    RemunerationAccessService::HR_MANAGEMENT_PERMISSION,
+                ]) ? \App\Models\HumanResources\HrDocumentControl::query()->orderByDesc('id')->limit(200)->get(['id', 'staff_id', 'title', 'document_type', 'status']) : null,
+                'climate_surveys' => $canAny([
+                    RemunerationAccessService::HR_MANAGEMENT_PERMISSION,
+                ]) ? \App\Models\HumanResources\HrClimateSurvey::query()->orderByDesc('id')->get(['id', 'title', 'scope', 'status', 'risk_level']) : null,
+                'cv_bank_entries' => $canAny([
+                    RemunerationAccessService::HR_MANAGEMENT_PERMISSION,
+                ]) ? \App\Models\HumanResources\HrCvBankEntry::query()->orderBy('full_name')->get(['id', 'full_name', 'desired_position', 'specialty', 'status']) : null,
+            ], static fn ($value): bool => $value !== null),
             'permissions' => $request->user()?->permissionSlugs() ?? [],
         ]);
     }

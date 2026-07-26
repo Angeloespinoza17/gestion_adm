@@ -324,8 +324,28 @@ export default {
 .centro-apuntes-modal .modal-actions { align-items: center; border-top: 1px solid var(--bs-border-color); display: flex; gap: .55rem; justify-content: flex-end; margin-top: 1.2rem; padding-top: 1rem; }
 .centro-apuntes-modal .modal-actions .btn { border-radius: .55rem; font-weight: 650; min-width: 6.5rem; }
 .centro-apuntes-modal .detail-grid { margin-inline: 0; }
-.centro-apuntes-modal .detail-grid > [class*="col-"] { padding-top: 0; }
-.centro-apuntes-modal .detail-grid > [class*="col-"] > div:first-child { background: var(--bs-tertiary-bg); border: 1px solid var(--bs-border-color); border-radius: .7rem; height: 100%; min-height: 4.45rem; padding: .72rem .8rem; }
+.centro-apuntes-modal .detail-grid > [class*="col-"] {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-height: 4.45rem;
+  padding-top: 0;
+  position: relative;
+}
+.centro-apuntes-modal .detail-grid > [class*="col-"]::before {
+  background: var(--bs-tertiary-bg);
+  border: 1px solid var(--bs-border-color);
+  border-radius: .7rem;
+  content: "";
+  inset: 0 calc(var(--bs-gutter-x) * .5);
+  position: absolute;
+}
+.centro-apuntes-modal .detail-grid > [class*="col-"] > * {
+  margin-inline: .8rem;
+  overflow-wrap: anywhere;
+  position: relative;
+  z-index: 1;
+}
 .centro-apuntes-modal .detail-grid .text-muted.small { font-size: .64rem; font-weight: 750; letter-spacing: .045em; margin-bottom: .28rem; text-transform: uppercase; }
 .centro-apuntes-modal .modal-section-title { align-items: center; color: var(--bs-heading-color); display: flex; font-size: .8rem; font-weight: 750; gap: .38rem; margin-bottom: .6rem; }
 .centro-apuntes-modal .modal-section-title::before { background: var(--bs-primary); border-radius: 999px; content: ""; height: 1rem; width: .2rem; }

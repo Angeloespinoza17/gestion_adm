@@ -7,15 +7,25 @@ const pmeSepRoute = (path, title) => ({
     component: () => import('../views/pme-sep/index.vue'),
 })
 
-const accountingRoute = (path, title, permission = 'contabilidad.ver') => ({
+const accountingRoute = (path, title, permission) => ({
     path,
-    meta: { authRequired: true, title, permission },
+    meta: {
+        authRequired: true,
+        title,
+        permission,
+        permissionsAll: ['contabilidad.acceso_confidencial', 'contabilidad.ver', permission],
+    },
     component: () => import('../views/accounting/index.vue'),
 })
 
-const remunerationRoute = (path, title, permission = 'remuneraciones.ver') => ({
+const remunerationRoute = (path, title, permission) => ({
     path,
-    meta: { authRequired: true, title, permission },
+    meta: {
+        authRequired: true,
+        title,
+        permission,
+        permissionsAll: ['remuneraciones.acceso_confidencial', 'remuneraciones.ver', permission],
+    },
     component: () => import('../views/remuneration/index.vue'),
 })
 
@@ -499,7 +509,7 @@ const routes = [
     informaticaRoute('/informatica/prestamos', 'Préstamos de Equipos', 'informatica.prestamos.ver'),
     informaticaRoute('/informatica/mantenciones', 'Mantenciones Informáticas', 'informatica.mantenciones.ver'),
     informaticaRoute('/informatica/reportes', 'Reportes de Informática', 'informatica.reportes.ver'),
-    remunerationRoute('/remuneraciones', 'Dashboard Remuneraciones'),
+    remunerationRoute('/remuneraciones', 'Dashboard Remuneraciones', 'remuneraciones.dashboard'),
     remunerationRoute('/remuneraciones/trabajadores', 'Trabajadores Remuneraciones', 'remuneraciones.trabajadores.gestionar'),
     remunerationRoute('/remuneraciones/contratos', 'Contratos Remuneraciones', 'remuneraciones.contratos.gestionar'),
     remunerationRoute('/remuneraciones/periodos', 'Períodos Remuneraciones', 'remuneraciones.periodos.cerrar'),
@@ -508,13 +518,13 @@ const routes = [
     remunerationRoute('/remuneraciones/movimientos', 'Movimientos Remuneraciones', 'remuneraciones.movimientos.gestionar'),
     remunerationRoute('/remuneraciones/liquidaciones', 'Liquidaciones de Sueldo', 'remuneraciones.liquidaciones.calcular'),
     remunerationRoute('/remuneraciones/importaciones', 'Importador Libro Remuneraciones', 'remuneraciones.importar'),
-    remunerationRoute('/remuneraciones/libro-importado', 'Libro Importado Remuneraciones'),
+    remunerationRoute('/remuneraciones/libro-importado', 'Libro Importado Remuneraciones', 'remuneraciones.importar'),
     remunerationRoute('/remuneraciones/estadisticas-libro', 'Datos y Estadísticas Remuneraciones', 'remuneraciones.reportes.ver'),
     remunerationRoute('/remuneraciones/pagos', 'Pagos Remuneraciones', 'remuneraciones.pagos.gestionar'),
     remunerationRoute('/remuneraciones/centralizacion', 'Centralización Remuneraciones', 'remuneraciones.contabilidad.centralizar'),
     remunerationRoute('/remuneraciones/reportes', 'Reportes Remuneraciones', 'remuneraciones.reportes.ver'),
     remunerationRoute('/remuneraciones/licencias-medicas', 'Licencias Médicas RR.HH.', 'remuneraciones.rrhh.gestionar'),
-    remunerationRoute('/remuneraciones/cumpleanos', 'Cumpleaños RR.HH.'),
+    remunerationRoute('/remuneraciones/cumpleanos', 'Cumpleaños RR.HH.', 'remuneraciones.trabajadores.gestionar'),
     remunerationRoute('/remuneraciones/permisos', 'Permisos RR.HH.', 'remuneraciones.rrhh.gestionar'),
     remunerationRoute('/remuneraciones/departamentos', 'Departamentos Remuneraciones', 'remuneraciones.rrhh.gestionar'),
     remunerationRoute('/remuneraciones/funciones', 'Funciones Remuneraciones', 'remuneraciones.rrhh.gestionar'),
@@ -529,27 +539,27 @@ const routes = [
     remunerationRoute('/remuneraciones/perfiles-cargo', 'Perfiles de Cargo', 'remuneraciones.rrhh.gestionar'),
     remunerationRoute('/remuneraciones/certificados', 'Certificados Laborales', 'remuneraciones.rrhh.gestionar'),
     remunerationRoute('/remuneraciones/auditoria', 'Auditoría Remuneraciones', 'remuneraciones.admin'),
-    accountingRoute('/contabilidad', 'Dashboard Contabilidad'),
-    accountingRoute('/contabilidad/rendiciones', 'Rendición de Cuentas'),
+    accountingRoute('/contabilidad', 'Dashboard Contabilidad', 'contabilidad.dashboard'),
+    accountingRoute('/contabilidad/rendiciones', 'Rendición de Cuentas', 'contabilidad.fondos_rendir.gestionar'),
     accountingRoute('/contabilidad/presupuesto', 'Presupuesto Anual', 'contabilidad.presupuesto.ver'),
-    accountingRoute('/contabilidad/centros-costo', 'Centros de Costo'),
-    accountingRoute('/contabilidad/manual-cuentas', 'Manual de Cuentas'),
-    accountingRoute('/contabilidad/ingresos', 'Ingresos'),
-    accountingRoute('/contabilidad/egresos', 'Egresos y Pagos'),
-    accountingRoute('/contabilidad/caja-chica', 'Caja Chica'),
-    accountingRoute('/contabilidad/fondos-rendir', 'Fondos por Rendir'),
-    accountingRoute('/contabilidad/conciliacion', 'Conciliación Bancaria'),
-    accountingRoute('/contabilidad/subvenciones', 'Panel de Subvenciones'),
-    accountingRoute('/contabilidad/cheques', 'Gestión de Cheques'),
-    accountingRoute('/contabilidad/facturas', 'Gestión de Facturas'),
-    accountingRoute('/contabilidad/boletas-honorarios', 'Boletas de Honorarios'),
-    accountingRoute('/contabilidad/flujo-caja', 'Flujo de Caja'),
-    accountingRoute('/contabilidad/cuentas-por-pagar', 'Cuentas por Pagar'),
-    accountingRoute('/contabilidad/f29', 'Gestión F29'),
+    accountingRoute('/contabilidad/centros-costo', 'Centros de Costo', 'contabilidad.centros_costo.gestionar'),
+    accountingRoute('/contabilidad/manual-cuentas', 'Manual de Cuentas', 'contabilidad.manual_cuentas.gestionar'),
+    accountingRoute('/contabilidad/ingresos', 'Ingresos', 'contabilidad.ingresos.gestionar'),
+    accountingRoute('/contabilidad/egresos', 'Egresos y Pagos', 'contabilidad.egresos.gestionar'),
+    accountingRoute('/contabilidad/caja-chica', 'Caja Chica', 'contabilidad.caja_chica.gestionar'),
+    accountingRoute('/contabilidad/fondos-rendir', 'Fondos por Rendir', 'contabilidad.fondos_rendir.gestionar'),
+    accountingRoute('/contabilidad/conciliacion', 'Conciliación Bancaria', 'contabilidad.conciliacion.gestionar'),
+    accountingRoute('/contabilidad/subvenciones', 'Panel de Subvenciones', 'contabilidad.subvenciones.ver'),
+    accountingRoute('/contabilidad/cheques', 'Gestión de Cheques', 'contabilidad.cheques.gestionar'),
+    accountingRoute('/contabilidad/facturas', 'Gestión de Facturas', 'contabilidad.facturas.gestionar'),
+    accountingRoute('/contabilidad/boletas-honorarios', 'Boletas de Honorarios', 'contabilidad.boletas.gestionar'),
+    accountingRoute('/contabilidad/flujo-caja', 'Flujo de Caja', 'contabilidad.balance.ver'),
+    accountingRoute('/contabilidad/cuentas-por-pagar', 'Cuentas por Pagar', 'contabilidad.pagos.gestionar'),
+    accountingRoute('/contabilidad/f29', 'Gestión F29', 'contabilidad.f29.gestionar'),
     accountingRoute('/contabilidad/balance', 'Balance 8 y 9 Columnas', 'contabilidad.balance.ver'),
-    accountingRoute('/contabilidad/dj-ingresos', 'Declaraciones Juradas de Ingresos'),
-    accountingRoute('/contabilidad/dj-arriendo', 'Declaración Jurada de Arriendo'),
-    accountingRoute('/contabilidad/declaracion-renta', 'Declaración de Renta'),
+    accountingRoute('/contabilidad/dj-ingresos', 'Declaraciones Juradas de Ingresos', 'contabilidad.dj.gestionar'),
+    accountingRoute('/contabilidad/dj-arriendo', 'Declaración Jurada de Arriendo', 'contabilidad.dj.gestionar'),
+    accountingRoute('/contabilidad/declaracion-renta', 'Declaración de Renta', 'contabilidad.renta.gestionar'),
     accountingRoute('/contabilidad/reportes', 'Reportes Contables', 'contabilidad.balance.ver'),
     {
         path: '/convivencia',
@@ -1418,8 +1428,11 @@ router.beforeEach(async (routeTo, routeFrom, next) => {
     axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
 
     const requiredPermission = routeTo.meta.permission;
+    const requiredPermissions = Array.from(new Set(
+        (routeTo.meta.permissionsAll || [requiredPermission]).filter(Boolean)
+    ));
     const superAdminOnly = routeTo.matched.some((route) => route.meta.superAdminOnly);
-    if (!requiredPermission && !superAdminOnly) {
+    if (requiredPermissions.length === 0 && !superAdminOnly) {
         return next();
     }
 
@@ -1447,7 +1460,8 @@ router.beforeEach(async (routeTo, routeFrom, next) => {
 
     const isAuthorized = (grantedPermissions) => superAdminOnly
         ? grantedPermissions.includes('__superadmin__')
-        : grantedPermissions.includes('__superadmin__') || grantedPermissions.includes(requiredPermission);
+        : grantedPermissions.includes('__superadmin__')
+            || requiredPermissions.every((permission) => grantedPermissions.includes(permission));
 
     if (isAuthorized(permissions)) {
         return next();

@@ -588,7 +588,7 @@ export default {
       </div>
     </BModal>
 
-    <BModal v-model="showDetailModal" size="xl" title="Detalle de solicitud" hide-footer centered scrollable modal-class="centro-apuntes-modal">
+    <BModal v-model="showDetailModal" size="lg" title="Detalle de solicitud" hide-footer centered scrollable modal-class="centro-apuntes-modal">
       <template v-if="selectedRequest">
         <div class="detail-grid row g-3">
           <div class="col-md-4">
@@ -597,15 +597,15 @@ export default {
           </div>
           <div class="col-md-4">
             <div class="text-muted small">Solicitante</div>
-            <div>{{ selectedRequest.requested_by_name_snapshot }}</div>
+            <div>{{ selectedRequest.requested_by_name_snapshot || "-" }}</div>
           </div>
           <div class="col-md-4">
             <div class="text-muted small">Asignatura</div>
-            <div>{{ selectedRequest.subject_name_snapshot }}</div>
+            <div>{{ selectedRequest.subject_name_snapshot || "-" }}</div>
           </div>
           <div class="col-md-4">
             <div class="text-muted small">Máquina</div>
-            <div>{{ selectedRequest.machine_name_snapshot }}</div>
+            <div>{{ selectedRequest.machine_name_snapshot || "-" }}</div>
           </div>
           <div class="col-md-4">
             <div class="text-muted small">Tipo de tarea</div>
@@ -615,11 +615,11 @@ export default {
             <div class="text-muted small">Estado</div>
             <CentroApuntesStatusBadge :status="selectedRequest.status" />
           </div>
-          <div class="col-md-4">
+          <div class="col-md-6">
             <div class="text-muted small">Volumen</div>
             <div>{{ selectedRequest.sheet_count }} hoja(s) x {{ selectedRequest.copies_count }} copia(s)</div>
           </div>
-          <div class="col-md-4">
+          <div class="col-md-6">
             <div class="text-muted small">Fecha de entrega</div>
             <div>{{ formatCentroApuntesDate(selectedRequest.delivery_date) }}</div>
           </div>
@@ -642,12 +642,23 @@ export default {
             />
           </div>
           <BAlert v-if="!selectedRequest.attachments?.length" show variant="light" class="mb-0">Sin adjuntos registrados.</BAlert>
-          <ul v-else class="mb-0">
-            <li v-for="attachment in selectedRequest.attachments" :key="attachment.id">
-              <a :href="attachment.file_url" target="_blank" rel="noopener">{{ attachment.original_name }}</a>
-              <span class="text-muted small"> · {{ attachment.uploaded_by?.name || attachment.uploadedBy?.name || "Sistema" }}</span>
-            </li>
-          </ul>
+          <div v-else class="request-attachments">
+            <a
+              v-for="attachment in selectedRequest.attachments"
+              :key="attachment.id"
+              :href="attachment.file_url"
+              class="request-attachment"
+              target="_blank"
+              rel="noopener"
+            >
+              <span class="request-attachment__icon"><i class="bx bx-paperclip"></i></span>
+              <span class="request-attachment__copy">
+                <strong>{{ attachment.original_name }}</strong>
+                <small>Subido por {{ attachment.uploaded_by?.name || attachment.uploadedBy?.name || "Sistema" }}</small>
+              </span>
+              <i class="bx bx-link-external request-attachment__action" aria-hidden="true"></i>
+            </a>
+          </div>
         </div>
 
         <div class="mt-4">
@@ -664,6 +675,11 @@ export default {
                 </tr>
               </thead>
               <tbody>
+                <tr v-if="!(selectedRequest.history || []).length">
+                  <td colspan="5" class="text-center text-muted py-4">
+                    Sin cambios registrados.
+                  </td>
+                </tr>
                 <tr v-for="history in selectedRequest.history || []" :key="history.id">
                   <td>{{ formatCentroApuntesDateTime(history.created_at) }}</td>
                   <td>{{ humanizeCentroApuntesStatus(history.action_type) }}</td>
@@ -684,3 +700,70 @@ export default {
     </BModal>
   </div>
 </template>
+
+<style scoped>
+.request-attachments {
+  display: grid;
+  gap: .55rem;
+}
+
+.request-attachment {
+  align-items: center;
+  background: var(--bs-body-bg);
+  border: 1px solid var(--bs-border-color);
+  border-radius: .7rem;
+  color: inherit;
+  display: grid;
+  gap: .7rem;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  padding: .72rem .8rem;
+  text-decoration: none;
+  transition: background-color .15s ease, border-color .15s ease, transform .15s ease;
+}
+
+.request-attachment:hover {
+  background: rgba(var(--bs-primary-rgb), .04);
+  border-color: rgba(var(--bs-primary-rgb), .35);
+  color: var(--bs-primary);
+  transform: translateY(-1px);
+}
+
+.request-attachment__icon {
+  align-items: center;
+  background: rgba(var(--bs-primary-rgb), .1);
+  border-radius: .55rem;
+  color: var(--bs-primary);
+  display: inline-flex;
+  font-size: 1.05rem;
+  height: 2.25rem;
+  justify-content: center;
+  width: 2.25rem;
+}
+
+.request-attachment__copy {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.request-attachment__copy strong,
+.request-attachment__copy small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.request-attachment__copy strong {
+  font-size: .78rem;
+}
+
+.request-attachment__copy small {
+  color: var(--bs-secondary-color);
+  font-size: .68rem;
+}
+
+.request-attachment__action {
+  color: var(--bs-secondary-color);
+  font-size: 1rem;
+}
+</style>

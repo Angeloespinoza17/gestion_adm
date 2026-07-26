@@ -159,16 +159,23 @@ class AccountingModuleSeeder extends ModuleSeeder
             ->pluck('id', 'slug');
 
         $allPermissions = array_keys($permissions->all());
+        $allPermissionsWithoutConfidentialAccess = array_values(array_diff(
+            $allPermissions,
+            [AccountingAccessService::CONFIDENTIAL_ACCESS_PERMISSION],
+        ));
         $baseView = [
             AccountingAccessService::VIEW_PERMISSION,
             AccountingAccessService::DASHBOARD_PERMISSION,
             AccountingAccessService::BUDGET_VIEW_PERMISSION,
             AccountingAccessService::BALANCE_PERMISSION,
         ];
+        $confidentialBaseView = array_values(array_unique(array_merge([
+            AccountingAccessService::CONFIDENTIAL_ACCESS_PERMISSION,
+        ], $baseView)));
 
         $rolePermissions = [
             'super_admin' => $allPermissions,
-            'administrador' => $allPermissions,
+            'administrador' => $allPermissionsWithoutConfidentialAccess,
             'direccion' => array_values(array_unique(array_merge($baseView, [
                 AccountingAccessService::BUDGET_APPROVE_PERMISSION,
                 AccountingAccessService::EXPORT_PERMISSION,
@@ -181,7 +188,7 @@ class AccountingModuleSeeder extends ModuleSeeder
                 AccountingAccessService::DECLARATIONS_PERMISSION,
             ]))),
             'contabilidad_admin' => $allPermissions,
-            'contabilidad_analista' => array_values(array_unique(array_merge($baseView, [
+            'contabilidad_analista' => array_values(array_unique(array_merge($confidentialBaseView, [
                 AccountingAccessService::BUDGET_CREATE_PERMISSION,
                 AccountingAccessService::COST_CENTER_PERMISSION,
                 AccountingAccessService::MANUAL_PERMISSION,
@@ -196,14 +203,14 @@ class AccountingModuleSeeder extends ModuleSeeder
                 AccountingAccessService::F29_PERMISSION,
                 AccountingAccessService::DECLARATIONS_PERMISSION,
             ]))),
-            'tesoreria' => array_values(array_unique(array_merge($baseView, [
+            'tesoreria' => array_values(array_unique(array_merge($confidentialBaseView, [
                 AccountingAccessService::PAYMENTS_PERMISSION,
                 AccountingAccessService::CASH_FUND_PERMISSION,
                 AccountingAccessService::RECONCILIATION_PERMISSION,
                 AccountingAccessService::CHEQUES_PERMISSION,
             ]))),
-            'solo_lectura_contabilidad' => $baseView,
-            'rendicion_revisor' => array_values(array_unique(array_merge($baseView, [
+            'solo_lectura_contabilidad' => $confidentialBaseView,
+            'rendicion_revisor' => array_values(array_unique(array_merge($confidentialBaseView, [
                 AccountingAccessService::FUNDS_RENDER_PERMISSION,
                 AccountingAccessService::EXPORT_PERMISSION,
             ]))),

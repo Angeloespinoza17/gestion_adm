@@ -516,6 +516,7 @@ class PermissionGroupSeeder extends Seeder
                 'description' => 'Presupuesto, centros de costo, cuentas, ingresos, egresos, pagos, conciliacion, impuestos y reportes.',
                 'sort_order' => 240,
                 'permissions' => [
+                    'contabilidad.acceso_confidencial',
                     'contabilidad.ver',
                     'contabilidad.dashboard',
                     'contabilidad.presupuesto.ver',
@@ -548,6 +549,7 @@ class PermissionGroupSeeder extends Seeder
                 'description' => 'Trabajadores, contratos, parametros, conceptos, movimientos, liquidaciones, pagos, periodos y RR.HH.',
                 'sort_order' => 250,
                 'permissions' => [
+                    'remuneraciones.acceso_confidencial',
                     'remuneraciones.ver',
                     'remuneraciones.dashboard',
                     'remuneraciones.trabajadores.gestionar',

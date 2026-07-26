@@ -432,7 +432,7 @@ export default {
       </div>
     </BModal>
 
-    <BModal v-model="showDetailModal" size="xl" title="Detalle de insumo" hide-footer centered scrollable modal-class="centro-apuntes-modal">
+    <BModal v-model="showDetailModal" size="lg" title="Detalle de insumo" hide-footer centered scrollable modal-class="centro-apuntes-modal">
       <template v-if="selectedSupply">
         <div class="detail-grid row g-3">
           <div class="col-md-4">
@@ -471,6 +471,11 @@ export default {
                 </tr>
               </thead>
               <tbody>
+                <tr v-if="!(selectedSupply.movements || []).length">
+                  <td colspan="5" class="text-center text-muted py-4">
+                    Sin movimientos registrados.
+                  </td>
+                </tr>
                 <tr v-for="movement in selectedSupply.movements || []" :key="movement.id">
                   <td>{{ formatCentroApuntesDateTime(movement.moved_at) }}</td>
                   <td><CentroApuntesStatusBadge :status="movement.movement_type" /></td>

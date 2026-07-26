@@ -7,6 +7,7 @@ use Illuminate\Support\Facades\Schema;
 
 class AccountingAccessService
 {
+    public const CONFIDENTIAL_ACCESS_PERMISSION = 'contabilidad.acceso_confidencial';
     public const VIEW_PERMISSION = 'contabilidad.ver';
     public const DASHBOARD_PERMISSION = 'contabilidad.dashboard';
     public const BUDGET_VIEW_PERMISSION = 'contabilidad.presupuesto.ver';
@@ -37,6 +38,7 @@ class AccountingAccessService
     public function permissionDefinitions(): array
     {
         return [
+            ['slug' => self::CONFIDENTIAL_ACCESS_PERMISSION, 'name' => 'Acceso confidencial a Contabilidad'],
             ['slug' => self::VIEW_PERMISSION, 'name' => 'Ver módulo Contabilidad'],
             ['slug' => self::DASHBOARD_PERMISSION, 'name' => 'Ver dashboard Contabilidad'],
             ['slug' => self::BUDGET_VIEW_PERMISSION, 'name' => 'Ver presupuesto Contabilidad'],
@@ -112,17 +114,30 @@ class AccountingAccessService
 
     public function canView(?User $user): bool
     {
-        return $this->hasAny($user, [self::VIEW_PERMISSION, self::ADMIN_PERMISSION]);
+        return $this->hasConfidentialAccess($user)
+            && $this->hasAny($user, [self::VIEW_PERMISSION]);
     }
 
     public function canViewDashboard(?User $user): bool
     {
-        return $this->hasAny($user, [self::DASHBOARD_PERMISSION, self::ADMIN_PERMISSION, self::VIEW_PERMISSION]);
+        return $this->canManage($user, self::DASHBOARD_PERMISSION);
     }
 
-    public function canManage(?User $user, string $permission): bool
+    /**
+     * @param  string|array<int, string>  $permission
+     */
+    public function canManage(?User $user, string|array $permission): bool
     {
-        return $this->hasAny($user, [$permission, self::ADMIN_PERMISSION]);
+        $permissions = is_array($permission) ? $permission : [$permission];
+        $permissions[] = self::ADMIN_PERMISSION;
+
+        return $this->canView($user)
+            && $this->hasAny($user, $permissions);
+    }
+
+    public function hasConfidentialAccess(?User $user): bool
+    {
+        return $this->hasAny($user, [self::CONFIDENTIAL_ACCESS_PERMISSION]);
     }
 
     /**

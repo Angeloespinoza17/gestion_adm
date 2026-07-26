@@ -881,7 +881,12 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/reportes', InformaticaReportController::class)->middleware('permission:informatica.reportes.ver');
     });
 
-    Route::prefix('remuneraciones')->group(function () {
+    Route::prefix('remuneraciones')
+        ->middleware([
+            'permission:remuneraciones.acceso_confidencial,remuneraciones.ver',
+            \App\Http\Middleware\NoStoreSensitiveResponse::class,
+        ])
+        ->group(function () {
         Route::get('/catalogs', [RemunerationModuleController::class, 'catalogs'])->middleware('permission:remuneraciones.ver');
         Route::get('/dashboard', [RemunerationModuleController::class, 'dashboard'])->middleware('permission:remuneraciones.ver');
         Route::get('/book-analytics', [RemunerationModuleController::class, 'bookAnalytics'])->middleware('permission:remuneraciones.reportes.ver');
@@ -908,7 +913,12 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::delete('/resources/{resource}/{record}', [RemunerationModuleController::class, 'destroy'])->middleware('permission:remuneraciones.ver');
     });
 
-    Route::prefix('contabilidad')->group(function () {
+    Route::prefix('contabilidad')
+        ->middleware([
+            'permission:contabilidad.acceso_confidencial,contabilidad.ver',
+            \App\Http\Middleware\NoStoreSensitiveResponse::class,
+        ])
+        ->group(function () {
         Route::get('/catalogs', [AccountingModuleController::class, 'catalogs'])->middleware('permission:contabilidad.ver');
         Route::get('/dashboard', [AccountingModuleController::class, 'dashboard'])->middleware('permission:contabilidad.ver');
         Route::get('/reportes', [AccountingModuleController::class, 'reports'])->middleware('permission:contabilidad.ver');

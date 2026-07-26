@@ -162,7 +162,7 @@ class MaintenanceWorkOrderController extends Controller
                     'distribution',
                     'sector',
                     'zone',
-                    'is_reservable',
+                    'usage',
                     'is_maintenance_location',
                 ]),
             'technical_areas' => MaintenanceDependency::query()

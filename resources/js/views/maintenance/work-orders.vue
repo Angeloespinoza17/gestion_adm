@@ -344,7 +344,9 @@ export default {
     dependencyLabel(dependency) {
       if (!dependency) return "Sin dependencia";
 
-      return `${dependency.code} · ${dependency.name}${dependency.is_reservable ? " · Reservable" : " · No reservable"}`;
+      const usage = String(dependency.usage || "").trim();
+
+      return `${dependency.code} · ${dependency.name}${usage ? ` · Uso: ${usage}` : ""}`;
     },
     inventoryItemLabel(item) {
       if (!item) return "Sin bien inventariado asociado";

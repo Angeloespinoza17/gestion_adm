@@ -7,28 +7,28 @@ import AccountingHelpButton from "../../components/accounting/help-button.vue";
 import { formatAccountingError, money, shortDate } from "../../components/accounting/module-utils";
 
 const navItems = [
-  { route: "/contabilidad", key: "dashboard", label: "Dashboard", group: "Resumen", icon: "bx-grid-alt" },
-  { route: "/contabilidad/rendiciones", key: "renderings", label: "Rendiciones" },
-  { route: "/contabilidad/presupuesto", key: "budget-lines", label: "Presupuesto" },
-  { route: "/contabilidad/centros-costo", key: "cost-centers", label: "Centros de costo" },
-  { route: "/contabilidad/manual-cuentas", key: "manual-accounts", label: "Manual de cuentas" },
-  { route: "/contabilidad/ingresos", key: "incomes", label: "Ingresos" },
-  { route: "/contabilidad/egresos", key: "expenses", label: "Egresos" },
-  { route: "/contabilidad/caja-chica", key: "cash-funds", label: "Caja chica" },
-  { route: "/contabilidad/fondos-rendir", key: "funds-to-render", label: "Fondos por rendir" },
-  { route: "/contabilidad/conciliacion", key: "bank-movements", label: "Conciliación" },
-  { route: "/contabilidad/subvenciones", key: "funding-sources", label: "Subvenciones" },
-  { route: "/contabilidad/cheques", key: "cheques", label: "Cheques" },
-  { route: "/contabilidad/facturas", key: "invoices", label: "Facturas" },
-  { route: "/contabilidad/boletas-honorarios", key: "honoraries", label: "Boletas" },
-  { route: "/contabilidad/flujo-caja", key: "cashflow", label: "Flujo caja" },
-  { route: "/contabilidad/cuentas-por-pagar", key: "payables", label: "Cuentas por pagar" },
-  { route: "/contabilidad/f29", key: "f29", label: "F29" },
-  { route: "/contabilidad/balance", key: "balance", label: "Balance" },
-  { route: "/contabilidad/dj-ingresos", key: "dj-income", label: "DJ Ingresos" },
-  { route: "/contabilidad/dj-arriendo", key: "dj-rental", label: "DJ Arriendo" },
-  { route: "/contabilidad/declaracion-renta", key: "income-tax", label: "Renta" },
-  { route: "/contabilidad/reportes", key: "reports", label: "Reportes" },
+  { route: "/contabilidad", key: "dashboard", label: "Dashboard", group: "Resumen", icon: "bx-grid-alt", permission: "contabilidad.dashboard" },
+  { route: "/contabilidad/rendiciones", key: "renderings", label: "Rendiciones", permission: "contabilidad.fondos_rendir.gestionar" },
+  { route: "/contabilidad/presupuesto", key: "budget-lines", label: "Presupuesto", permission: "contabilidad.presupuesto.ver" },
+  { route: "/contabilidad/centros-costo", key: "cost-centers", label: "Centros de costo", permission: "contabilidad.centros_costo.gestionar" },
+  { route: "/contabilidad/manual-cuentas", key: "manual-accounts", label: "Manual de cuentas", permission: "contabilidad.manual_cuentas.gestionar" },
+  { route: "/contabilidad/ingresos", key: "incomes", label: "Ingresos", permission: "contabilidad.ingresos.gestionar" },
+  { route: "/contabilidad/egresos", key: "expenses", label: "Egresos", permission: "contabilidad.egresos.gestionar" },
+  { route: "/contabilidad/caja-chica", key: "cash-funds", label: "Caja chica", permission: "contabilidad.caja_chica.gestionar" },
+  { route: "/contabilidad/fondos-rendir", key: "funds-to-render", label: "Fondos por rendir", permission: "contabilidad.fondos_rendir.gestionar" },
+  { route: "/contabilidad/conciliacion", key: "bank-movements", label: "Conciliación", permission: "contabilidad.conciliacion.gestionar" },
+  { route: "/contabilidad/subvenciones", key: "funding-sources", label: "Subvenciones", permission: "contabilidad.subvenciones.ver" },
+  { route: "/contabilidad/cheques", key: "cheques", label: "Cheques", permission: "contabilidad.cheques.gestionar" },
+  { route: "/contabilidad/facturas", key: "invoices", label: "Facturas", permission: "contabilidad.facturas.gestionar" },
+  { route: "/contabilidad/boletas-honorarios", key: "honoraries", label: "Boletas", permission: "contabilidad.boletas.gestionar" },
+  { route: "/contabilidad/flujo-caja", key: "cashflow", label: "Flujo caja", permission: "contabilidad.balance.ver" },
+  { route: "/contabilidad/cuentas-por-pagar", key: "payables", label: "Cuentas por pagar", permission: "contabilidad.pagos.gestionar" },
+  { route: "/contabilidad/f29", key: "f29", label: "F29", permission: "contabilidad.f29.gestionar" },
+  { route: "/contabilidad/balance", key: "balance", label: "Balance", permission: "contabilidad.balance.ver" },
+  { route: "/contabilidad/dj-ingresos", key: "dj-income", label: "DJ Ingresos", permission: "contabilidad.dj.gestionar" },
+  { route: "/contabilidad/dj-arriendo", key: "dj-rental", label: "DJ Arriendo", permission: "contabilidad.dj.gestionar" },
+  { route: "/contabilidad/declaracion-renta", key: "income-tax", label: "Renta", permission: "contabilidad.renta.gestionar" },
+  { route: "/contabilidad/reportes", key: "reports", label: "Reportes", permission: "contabilidad.balance.ver" },
 ];
 
 const navGroups = [
@@ -656,8 +656,10 @@ export default {
     groupedNavigation() {
       return this.navGroups.map((group) => ({
         ...group,
-        items: group.keys.map((key) => this.navItems.find((item) => item.key === key)).filter(Boolean),
-      }));
+        items: group.keys
+          .map((key) => this.navItems.find((item) => item.key === key))
+          .filter((item) => item && this.canAccessNavigation(item.permission)),
+      })).filter((group) => group.items.length > 0);
     },
     activeGroupLabel() {
       return this.groupedNavigation.find((group) => group.items.some((item) => item.key === this.activePanelKey))?.label || "Contabilidad";
@@ -690,6 +692,16 @@ export default {
     shortDate,
     isNavActive(route) {
       return this.$route.path === route;
+    },
+    canAccessNavigation(permission) {
+      const permissions = this.catalogs.permissions || [];
+
+      return permissions.includes("__superadmin__")
+        || (
+          permissions.includes("contabilidad.acceso_confidencial")
+          && permissions.includes("contabilidad.ver")
+          && (permissions.includes(permission) || permissions.includes("contabilidad.admin"))
+        );
     },
     openCreateModal() {
       this.resetForm();

@@ -107,6 +107,38 @@ const MENU_ICON_BY_ROUTE = {
   "/inventory/management": "bx-box",
 };
 
+const MENU_LANDING_ROUTE_BY_SLUG = {
+  students: "/students",
+  schedule: "/schedule/teacher",
+  porter: "/porter/dashboard",
+  staff: "/staff",
+  staff_permissions: "/staff/permissions/dashboard",
+  tasks: "/tasks/backlog",
+  contracts: "/contracts",
+  infirmary: "/infirmary",
+  convivencia: "/convivencia",
+  risk_prevention: "/risk-prevention",
+  maintenance: "/maintenance/dependencies",
+  mantencion: "/maintenance/dependencies",
+  inventory: "/inventory/items",
+  inventario: "/inventory/items",
+  spaces: "/spaces/dependencies",
+  security: "/security/dashboard",
+  relevant_calendar: "/relevant-calendar",
+  public_site: "/admin/noticias",
+  settings: "/admin/dashboard",
+  remuneration: "/remuneraciones",
+  remuneraciones: "/remuneraciones",
+  accounting: "/contabilidad",
+  contabilidad: "/contabilidad",
+  informatica: "/informatica",
+  biblioteca: "/biblioteca",
+  centro_apuntes: "/centro-apuntes",
+  apoyo_profesional: "/apoyo-profesional",
+  pme: "/pme-sep",
+  pme_sep: "/pme-sep",
+};
+
 const DEPRECATED_MENU_ICONS = {
   "bx-door-open": "bx-building-house",
   "bx-calendar-week": "bx-calendar-event",
@@ -611,13 +643,33 @@ export default {
       }
     },
     prepareMenuItems(items = []) {
-      return this.reorderTopMenuSections(
-        this.normalizeMenuLinks(
-          this.normalizeConvivenciaSection(
-            this.normalizeStudentsSection(items)
-          )
+      const normalizedItems = this.normalizeMenuLinks(
+        this.normalizeConvivenciaSection(
+          this.normalizeStudentsSection(items)
         )
       );
+
+      return this.reorderTopMenuSections(
+        this.deduplicateHomeMenuItems(
+          normalizedItems
+        )
+      );
+    },
+    deduplicateHomeMenuItems(items = []) {
+      let homeFound = false;
+
+      return items.filter((item) => {
+        if (!this.isDashboardMenuItem(item)) {
+          return true;
+        }
+
+        if (homeFound) {
+          return false;
+        }
+
+        homeFound = true;
+        return true;
+      });
     },
     filterMenuByPermissions(items = [], permissions = []) {
       const granted = new Set(permissions || []);
@@ -704,7 +756,7 @@ export default {
 
       const buildItems = (parentId) => {
         const children = sortMods(byParent.get(parentId) || []);
-        return children.map((mod) => {
+        return children.reduce((items, mod) => {
           const subItems = buildItems(mod.id);
           const item = {
             id: mod.id,
@@ -716,14 +768,26 @@ export default {
           if (subItems.length > 0) {
             item.subItems = subItems;
           } else {
-            item.link = mod.frontend_route || "/";
+            item.link = this.resolveModuleLandingLink(mod);
+
+            if (!item.link) {
+              return items;
+            }
           }
 
-          return item;
-        });
+          items.push(item);
+          return items;
+        }, []);
       };
 
       return buildItems(null);
+    },
+    resolveModuleLandingLink(item) {
+      if (item.frontend_route) {
+        return item.frontend_route;
+      }
+
+      return MENU_LANDING_ROUTE_BY_SLUG[normalizeMenuKey(item.slug)] || null;
     },
     shouldHideMenuItem(item) {
       const label = normalizeMenuKey(item.name || item.label);
@@ -1164,11 +1228,12 @@ export default {
     },
     isDashboardMenuItem(item) {
       const slug = normalizeMenuKey(item.slug);
-      const routes = this.collectMenuRoutes(item);
+      const route = item.frontend_route || item.link;
 
       return (
         slug === "dashboard" ||
-        routes.some((route) => route === "/" || route === "/inicio")
+        route === "/" ||
+        route === "/inicio"
       );
     },
     getPinnedTopMenuPriority(item) {

@@ -11,6 +11,7 @@ use App\Models\SystemModule;
 use App\Models\User;
 use App\Services\RelevantCalendar\CalendarEventAccessService;
 use App\Services\RelevantCalendar\CalendarRecurrenceService;
+use App\Services\Rbac\SensitiveModuleAccessService;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
@@ -21,6 +22,7 @@ class HomeDashboardService
     public function __construct(
         private readonly CalendarEventAccessService $calendarAccess,
         private readonly CalendarRecurrenceService $recurrenceService,
+        private readonly SensitiveModuleAccessService $sensitiveModuleAccessService,
     ) {
     }
 
@@ -568,9 +570,11 @@ class HomeDashboardService
             $parentIds = $parents->pluck('parent_id')->filter()->unique()->values()->all();
         }
 
-        return SystemModule::query()
+        $modules = SystemModule::query()
             ->whereIn('id', $moduleIds)
             ->get(['id', 'parent_id', 'name', 'slug', 'frontend_route']);
+
+        return $this->sensitiveModuleAccessService->filterModules($user, $modules);
     }
 
     private function operationalCalendarQuery(User $user): Builder

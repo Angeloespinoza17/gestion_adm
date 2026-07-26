@@ -4,12 +4,16 @@ namespace App\Http\Controllers;
 
 use App\Models\SystemModule;
 use App\Services\Rbac\RoleModuleSyncService;
+use App\Services\Rbac\SensitiveModuleAccessService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
 class MeController extends Controller
 {
-    public function __construct(private readonly RoleModuleSyncService $roleModuleSyncService) {}
+    public function __construct(
+        private readonly RoleModuleSyncService $roleModuleSyncService,
+        private readonly SensitiveModuleAccessService $sensitiveModuleAccessService,
+    ) {}
 
     public function modules(Request $request): JsonResponse
     {
@@ -48,6 +52,8 @@ class MeController extends Controller
             ->orderBy('parent_id')
             ->orderBy('sort_order')
             ->get(['id', 'parent_id', 'name', 'slug', 'frontend_route', 'icon', 'sort_order']);
+
+        $modules = $this->sensitiveModuleAccessService->filterModules($user, $modules);
 
         return $this->noStoreResponse($this->normalizeHomeModule($modules));
     }

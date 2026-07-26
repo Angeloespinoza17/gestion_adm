@@ -43,6 +43,9 @@ class AccountingModuleController extends Controller
     {
         abort_unless($this->accessService->canView($request->user()), 403);
 
+        $canAny = fn (array $permissions): bool => collect($permissions)
+            ->contains(fn (string $permission): bool => $this->accessService->canManage($request->user(), $permission));
+
         return response()->json([
             'statuses' => [
                 'budgets' => ['borrador', 'en_revision', 'aprobado', 'cerrado'],
@@ -66,18 +69,77 @@ class AccountingModuleController extends Controller
                 'fund_types' => ['caja_chica', 'fondo_por_rendir'],
                 'party_types' => ['proveedor', 'beneficiario', 'cliente', 'arrendador', 'arrendatario', 'otro'],
             ],
-            'data' => [
-                'cost_centers' => \App\Models\Accounting\AccountingCostCenter::query()->where('is_active', true)->orderBy('name')->get(['id', 'code', 'name']),
-                'funding_sources' => \App\Models\Accounting\AccountingFundingSource::query()->where('is_active', true)->orderBy('name')->get(['id', 'code', 'name']),
-                'manual_versions' => \App\Models\Accounting\AccountingManualVersion::query()->orderByDesc('year')->get(['id', 'year', 'name', 'version', 'is_current']),
-                'manual_accounts' => \App\Models\Accounting\AccountingManualAccount::query()->where('is_active', true)->orderBy('code')->get(['id', 'manual_version_id', 'code', 'name', 'type']),
-                'budgets' => \App\Models\Accounting\AccountingBudget::query()->orderByDesc('year')->get(['id', 'year', 'name', 'status']),
-                'parties' => \App\Models\Accounting\AccountingParty::query()->where('is_active', true)->orderBy('name')->get(['id', 'party_type', 'name', 'rut']),
-                'bank_accounts' => \App\Models\Accounting\AccountingBankAccount::query()->where('is_active', true)->orderBy('bank_name')->get(['id', 'bank_name', 'account_number']),
-                'users' => \App\Models\User::query()->where('active', true)->orderBy('name')->get(['id', 'name', 'email']),
-                'tax_periods' => \App\Models\Accounting\AccountingTaxPeriod::query()->orderByDesc('year')->orderByDesc('month')->get(['id', 'year', 'month', 'status']),
-                'declaration_types' => \App\Models\Accounting\AccountingDeclarationType::query()->where('is_active', true)->orderBy('name')->get(['id', 'code', 'name', 'category']),
-            ],
+            'data' => array_filter([
+                'cost_centers' => $canAny([
+                    AccountingAccessService::COST_CENTER_PERMISSION,
+                    AccountingAccessService::BUDGET_VIEW_PERMISSION,
+                    AccountingAccessService::BUDGET_CREATE_PERMISSION,
+                    AccountingAccessService::INCOMES_PERMISSION,
+                    AccountingAccessService::EXPENSES_PERMISSION,
+                    AccountingAccessService::PAYMENTS_PERMISSION,
+                    AccountingAccessService::CASH_FUND_PERMISSION,
+                    AccountingAccessService::FUNDS_RENDER_PERMISSION,
+                    AccountingAccessService::BALANCE_PERMISSION,
+                ]) ? \App\Models\Accounting\AccountingCostCenter::query()->where('is_active', true)->orderBy('name')->get(['id', 'code', 'name']) : null,
+                'funding_sources' => $canAny([
+                    AccountingAccessService::FUNDING_PANEL_PERMISSION,
+                    AccountingAccessService::BUDGET_VIEW_PERMISSION,
+                    AccountingAccessService::BUDGET_CREATE_PERMISSION,
+                    AccountingAccessService::INCOMES_PERMISSION,
+                    AccountingAccessService::EXPENSES_PERMISSION,
+                    AccountingAccessService::CASH_FUND_PERMISSION,
+                    AccountingAccessService::FUNDS_RENDER_PERMISSION,
+                    AccountingAccessService::BALANCE_PERMISSION,
+                ]) ? \App\Models\Accounting\AccountingFundingSource::query()->where('is_active', true)->orderBy('name')->get(['id', 'code', 'name']) : null,
+                'manual_versions' => $canAny([
+                    AccountingAccessService::MANUAL_PERMISSION,
+                    AccountingAccessService::BUDGET_VIEW_PERMISSION,
+                    AccountingAccessService::BUDGET_CREATE_PERMISSION,
+                    AccountingAccessService::BALANCE_PERMISSION,
+                ]) ? \App\Models\Accounting\AccountingManualVersion::query()->orderByDesc('year')->get(['id', 'year', 'name', 'version', 'is_current']) : null,
+                'manual_accounts' => $canAny([
+                    AccountingAccessService::MANUAL_PERMISSION,
+                    AccountingAccessService::BUDGET_VIEW_PERMISSION,
+                    AccountingAccessService::BUDGET_CREATE_PERMISSION,
+                    AccountingAccessService::INCOMES_PERMISSION,
+                    AccountingAccessService::EXPENSES_PERMISSION,
+                    AccountingAccessService::BALANCE_PERMISSION,
+                ]) ? \App\Models\Accounting\AccountingManualAccount::query()->where('is_active', true)->orderBy('code')->get(['id', 'manual_version_id', 'code', 'name', 'type']) : null,
+                'budgets' => $canAny([
+                    AccountingAccessService::BUDGET_VIEW_PERMISSION,
+                    AccountingAccessService::BUDGET_CREATE_PERMISSION,
+                    AccountingAccessService::BUDGET_APPROVE_PERMISSION,
+                ]) ? \App\Models\Accounting\AccountingBudget::query()->orderByDesc('year')->get(['id', 'year', 'name', 'status']) : null,
+                'parties' => $canAny([
+                    AccountingAccessService::INCOMES_PERMISSION,
+                    AccountingAccessService::EXPENSES_PERMISSION,
+                    AccountingAccessService::PAYMENTS_PERMISSION,
+                    AccountingAccessService::INVOICES_PERMISSION,
+                    AccountingAccessService::HONORARIES_PERMISSION,
+                    AccountingAccessService::DECLARATIONS_PERMISSION,
+                ]) ? \App\Models\Accounting\AccountingParty::query()->where('is_active', true)->orderBy('name')->get(['id', 'party_type', 'name', 'rut']) : null,
+                'bank_accounts' => $canAny([
+                    AccountingAccessService::RECONCILIATION_PERMISSION,
+                    AccountingAccessService::INCOMES_PERMISSION,
+                    AccountingAccessService::EXPENSES_PERMISSION,
+                    AccountingAccessService::PAYMENTS_PERMISSION,
+                    AccountingAccessService::CASH_FUND_PERMISSION,
+                    AccountingAccessService::CHEQUES_PERMISSION,
+                ]) ? \App\Models\Accounting\AccountingBankAccount::query()->where('is_active', true)->orderBy('bank_name')->get(['id', 'bank_name', 'account_number']) : null,
+                'users' => $canAny([
+                    AccountingAccessService::BUDGET_APPROVE_PERMISSION,
+                    AccountingAccessService::PAYMENTS_PERMISSION,
+                    AccountingAccessService::CASH_FUND_PERMISSION,
+                    AccountingAccessService::FUNDS_RENDER_PERMISSION,
+                ]) ? \App\Models\User::query()->where('active', true)->orderBy('name')->get(['id', 'name', 'email']) : null,
+                'tax_periods' => $canAny([
+                    AccountingAccessService::F29_PERMISSION,
+                ]) ? \App\Models\Accounting\AccountingTaxPeriod::query()->orderByDesc('year')->orderByDesc('month')->get(['id', 'year', 'month', 'status']) : null,
+                'declaration_types' => $canAny([
+                    AccountingAccessService::DECLARATIONS_PERMISSION,
+                    AccountingAccessService::INCOME_TAX_PERMISSION,
+                ]) ? \App\Models\Accounting\AccountingDeclarationType::query()->where('is_active', true)->orderBy('name')->get(['id', 'code', 'name', 'category']) : null,
+            ], static fn ($value): bool => $value !== null),
             'permissions' => $request->user()?->permissionSlugs() ?? [],
         ]);
     }

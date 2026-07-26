@@ -41,7 +41,7 @@ class RemunerationResourceRegistry
         return [
             'periods' => [
                 'model' => RemunerationPeriod::class,
-                'view_permission' => RemunerationAccessService::VIEW_PERMISSION,
+                'view_permission' => RemunerationAccessService::CLOSE_PERIOD_PERMISSION,
                 'manage_permission' => RemunerationAccessService::CLOSE_PERIOD_PERMISSION,
                 'search' => ['name', 'status'],
                 'filters' => ['year', 'month', 'status'],
@@ -59,7 +59,7 @@ class RemunerationResourceRegistry
             ],
             'parameters' => [
                 'model' => RemunerationLegalParameter::class,
-                'view_permission' => RemunerationAccessService::VIEW_PERMISSION,
+                'view_permission' => RemunerationAccessService::PARAMETERS_PERMISSION,
                 'manage_permission' => RemunerationAccessService::PARAMETERS_PERMISSION,
                 'search' => ['code', 'name', 'category', 'source_reference'],
                 'filters' => ['code', 'category', 'unit', 'is_active'],
@@ -80,7 +80,7 @@ class RemunerationResourceRegistry
             ],
             'profiles' => [
                 'model' => RemunerationEmployeeProfile::class,
-                'view_permission' => RemunerationAccessService::VIEW_PERMISSION,
+                'view_permission' => RemunerationAccessService::EMPLOYEES_PERMISSION,
                 'manage_permission' => RemunerationAccessService::EMPLOYEES_PERMISSION,
                 'search' => ['bank_name', 'afp_name', 'health_institution_name'],
                 'filters' => ['staff_id', 'payment_method', 'afp_name', 'is_active'],
@@ -113,7 +113,7 @@ class RemunerationResourceRegistry
             ],
             'contract-settings' => [
                 'model' => RemunerationContractSetting::class,
-                'view_permission' => RemunerationAccessService::VIEW_PERMISSION,
+                'view_permission' => RemunerationAccessService::CONTRACTS_PERMISSION,
                 'manage_permission' => RemunerationAccessService::CONTRACTS_PERMISSION,
                 'search' => ['employee_type', 'teacher_level'],
                 'filters' => ['staff_id', 'contract_id', 'employee_type', 'teacher_career', 'is_active'],
@@ -146,7 +146,7 @@ class RemunerationResourceRegistry
             ],
             'concepts' => [
                 'model' => RemunerationConcept::class,
-                'view_permission' => RemunerationAccessService::VIEW_PERMISSION,
+                'view_permission' => RemunerationAccessService::CONCEPTS_PERMISSION,
                 'manage_permission' => RemunerationAccessService::CONCEPTS_PERMISSION,
                 'search' => ['code', 'name', 'description'],
                 'filters' => ['type', 'is_legal', 'is_system', 'is_active'],
@@ -174,7 +174,7 @@ class RemunerationResourceRegistry
             ],
             'employee-concepts' => [
                 'model' => RemunerationEmployeeConcept::class,
-                'view_permission' => RemunerationAccessService::VIEW_PERMISSION,
+                'view_permission' => RemunerationAccessService::CONCEPTS_PERMISSION,
                 'manage_permission' => RemunerationAccessService::CONCEPTS_PERMISSION,
                 'filters' => ['staff_id', 'contract_id', 'concept_id', 'is_active'],
                 'order_by' => 'id',
@@ -194,7 +194,7 @@ class RemunerationResourceRegistry
             ],
             'movements' => [
                 'model' => RemunerationMovement::class,
-                'view_permission' => RemunerationAccessService::VIEW_PERMISSION,
+                'view_permission' => RemunerationAccessService::MOVEMENTS_PERMISSION,
                 'manage_permission' => RemunerationAccessService::MOVEMENTS_PERMISSION,
                 'search' => ['description', 'movement_type', 'status'],
                 'filters' => ['period_id', 'staff_id', 'movement_type', 'status', 'funding_source_id', 'cost_center_id'],
@@ -223,7 +223,13 @@ class RemunerationResourceRegistry
             ],
             'payrolls' => [
                 'model' => RemunerationPayroll::class,
-                'view_permission' => RemunerationAccessService::VIEW_PERMISSION,
+                'view_permission' => [
+                    RemunerationAccessService::CALCULATE_PERMISSION,
+                    RemunerationAccessService::APPROVE_PERMISSION,
+                    RemunerationAccessService::PAYMENTS_PERMISSION,
+                    RemunerationAccessService::REPORTS_PERMISSION,
+                    RemunerationAccessService::EXPORT_PERMISSION,
+                ],
                 'manage_permission' => RemunerationAccessService::CALCULATE_PERMISSION,
                 'search' => ['code', 'status', 'payroll_type'],
                 'filters' => ['period_id', 'staff_id', 'status', 'payroll_type'],
@@ -237,7 +243,7 @@ class RemunerationResourceRegistry
             ],
             'imports' => [
                 'model' => RemunerationBookImport::class,
-                'view_permission' => RemunerationAccessService::VIEW_PERMISSION,
+                'view_permission' => RemunerationAccessService::IMPORT_PERMISSION,
                 'manage_permission' => RemunerationAccessService::IMPORT_PERMISSION,
                 'search' => ['original_filename', 'file_hash', 'status'],
                 'filters' => ['period_id', 'status', 'year', 'month'],
@@ -249,7 +255,7 @@ class RemunerationResourceRegistry
             ],
             'import-rows' => [
                 'model' => RemunerationBookImportRow::class,
-                'view_permission' => RemunerationAccessService::VIEW_PERMISSION,
+                'view_permission' => RemunerationAccessService::IMPORT_PERMISSION,
                 'manage_permission' => RemunerationAccessService::IMPORT_PERMISSION,
                 'search' => ['rut', 'employee_name', 'employee_type'],
                 'filters' => ['book_import_id', 'staff_id', 'employee_type'],
@@ -261,7 +267,7 @@ class RemunerationResourceRegistry
             ],
             'payments' => [
                 'model' => RemunerationPayment::class,
-                'view_permission' => RemunerationAccessService::VIEW_PERMISSION,
+                'view_permission' => RemunerationAccessService::PAYMENTS_PERMISSION,
                 'manage_permission' => RemunerationAccessService::PAYMENTS_PERMISSION,
                 'search' => ['reference', 'payment_method', 'status'],
                 'filters' => ['payroll_id', 'payment_method', 'status'],
@@ -293,7 +299,7 @@ class RemunerationResourceRegistry
             ],
             'medical-leaves' => [
                 'model' => HrMedicalLeave::class,
-                'view_permission' => RemunerationAccessService::VIEW_PERMISSION,
+                'view_permission' => RemunerationAccessService::HR_MANAGEMENT_PERMISSION,
                 'manage_permission' => RemunerationAccessService::HR_MANAGEMENT_PERMISSION,
                 'search' => ['license_number', 'issuer', 'diagnosis_group', 'status'],
                 'filters' => ['staff_id', 'period_id', 'status', 'affects_payroll'],
@@ -320,7 +326,10 @@ class RemunerationResourceRegistry
             ],
             'birthdays' => [
                 'model' => Staff::class,
-                'view_permission' => RemunerationAccessService::VIEW_PERMISSION,
+                'view_permission' => [
+                    RemunerationAccessService::EMPLOYEES_PERMISSION,
+                    RemunerationAccessService::HR_MANAGEMENT_PERMISSION,
+                ],
                 'manage_permission' => RemunerationAccessService::EMPLOYEES_PERMISSION,
                 'search' => ['full_name', 'rut', 'institutional_email'],
                 'filters' => ['status', 'active'],
@@ -331,7 +340,7 @@ class RemunerationResourceRegistry
             ],
             'permissions' => [
                 'model' => PermissionRequest::class,
-                'view_permission' => RemunerationAccessService::VIEW_PERMISSION,
+                'view_permission' => RemunerationAccessService::HR_MANAGEMENT_PERMISSION,
                 'manage_permission' => RemunerationAccessService::HR_MANAGEMENT_PERMISSION,
                 'search' => ['reason', 'status', 'attendance_status', 'payroll_status'],
                 'filters' => ['staff_id', 'permission_type_id', 'status', 'payroll_status', 'affects_salary'],
@@ -367,7 +376,7 @@ class RemunerationResourceRegistry
             ],
             'departments' => [
                 'model' => Department::class,
-                'view_permission' => RemunerationAccessService::VIEW_PERMISSION,
+                'view_permission' => RemunerationAccessService::HR_MANAGEMENT_PERMISSION,
                 'manage_permission' => RemunerationAccessService::HR_MANAGEMENT_PERMISSION,
                 'search' => ['name', 'slug', 'description'],
                 'filters' => ['active'],
@@ -384,7 +393,7 @@ class RemunerationResourceRegistry
             ],
             'functions' => [
                 'model' => Cargo::class,
-                'view_permission' => RemunerationAccessService::VIEW_PERMISSION,
+                'view_permission' => RemunerationAccessService::HR_MANAGEMENT_PERMISSION,
                 'manage_permission' => RemunerationAccessService::HR_MANAGEMENT_PERMISSION,
                 'search' => ['name', 'slug', 'description'],
                 'filters' => ['active'],
@@ -398,7 +407,7 @@ class RemunerationResourceRegistry
             ],
             'staff-management' => [
                 'model' => Staff::class,
-                'view_permission' => RemunerationAccessService::VIEW_PERMISSION,
+                'view_permission' => RemunerationAccessService::EMPLOYEES_PERMISSION,
                 'manage_permission' => RemunerationAccessService::EMPLOYEES_PERMISSION,
                 'search' => ['full_name', 'rut', 'institutional_email', 'personal_email', 'status'],
                 'filters' => ['cargo_id', 'contract_type', 'status', 'active'],
@@ -427,7 +436,7 @@ class RemunerationResourceRegistry
             ],
             'document-controls' => [
                 'model' => HrDocumentControl::class,
-                'view_permission' => RemunerationAccessService::VIEW_PERMISSION,
+                'view_permission' => RemunerationAccessService::HR_MANAGEMENT_PERMISSION,
                 'manage_permission' => RemunerationAccessService::HR_MANAGEMENT_PERMISSION,
                 'search' => ['title', 'document_type', 'folio', 'status', 'owner_area'],
                 'filters' => ['staff_id', 'document_type', 'status', 'related_area'],
@@ -452,7 +461,7 @@ class RemunerationResourceRegistry
             ],
             'onboarding' => [
                 'model' => HrOnboardingProcess::class,
-                'view_permission' => RemunerationAccessService::VIEW_PERMISSION,
+                'view_permission' => RemunerationAccessService::HR_MANAGEMENT_PERMISSION,
                 'manage_permission' => RemunerationAccessService::HR_MANAGEMENT_PERMISSION,
                 'search' => ['status', 'notes'],
                 'filters' => ['staff_id', 'job_profile_id', 'responsible_user_id', 'status'],
@@ -477,7 +486,7 @@ class RemunerationResourceRegistry
             ],
             'climate-surveys' => [
                 'model' => HrClimateSurvey::class,
-                'view_permission' => RemunerationAccessService::VIEW_PERMISSION,
+                'view_permission' => RemunerationAccessService::HR_MANAGEMENT_PERMISSION,
                 'manage_permission' => RemunerationAccessService::HR_MANAGEMENT_PERMISSION,
                 'search' => ['title', 'scope', 'status', 'risk_level'],
                 'filters' => ['status', 'risk_level', 'scope'],
@@ -501,7 +510,7 @@ class RemunerationResourceRegistry
             ],
             'climate-action-plans' => [
                 'model' => HrClimateActionPlan::class,
-                'view_permission' => RemunerationAccessService::VIEW_PERMISSION,
+                'view_permission' => RemunerationAccessService::HR_MANAGEMENT_PERMISSION,
                 'manage_permission' => RemunerationAccessService::HR_MANAGEMENT_PERMISSION,
                 'search' => ['title', 'risk_level', 'status', 'action'],
                 'filters' => ['survey_id', 'owner_user_id', 'status', 'risk_level'],
@@ -522,7 +531,7 @@ class RemunerationResourceRegistry
             ],
             'workload' => [
                 'model' => HrWorkloadAssignment::class,
-                'view_permission' => RemunerationAccessService::VIEW_PERMISSION,
+                'view_permission' => RemunerationAccessService::HR_MANAGEMENT_PERMISSION,
                 'manage_permission' => RemunerationAccessService::HR_MANAGEMENT_PERMISSION,
                 'search' => ['function_name', 'role_type', 'status'],
                 'filters' => ['staff_id', 'contract_id', 'period_id', 'department_id', 'status'],
@@ -553,7 +562,7 @@ class RemunerationResourceRegistry
             ],
             'cv-bank' => [
                 'model' => HrCvBankEntry::class,
-                'view_permission' => RemunerationAccessService::VIEW_PERMISSION,
+                'view_permission' => RemunerationAccessService::HR_MANAGEMENT_PERMISSION,
                 'manage_permission' => RemunerationAccessService::HR_MANAGEMENT_PERMISSION,
                 'search' => ['full_name', 'rut', 'email', 'desired_position', 'specialty', 'status'],
                 'filters' => ['desired_position', 'specialty', 'status', 'rating'],
@@ -578,7 +587,7 @@ class RemunerationResourceRegistry
             ],
             'replacement-pool' => [
                 'model' => HrReplacementPoolEntry::class,
-                'view_permission' => RemunerationAccessService::VIEW_PERMISSION,
+                'view_permission' => RemunerationAccessService::HR_MANAGEMENT_PERMISSION,
                 'manage_permission' => RemunerationAccessService::HR_MANAGEMENT_PERMISSION,
                 'search' => ['full_name', 'specialty', 'subject_area', 'status'],
                 'filters' => ['cv_bank_entry_id', 'staff_id', 'specialty', 'subject_area', 'status', 'rating'],
@@ -603,7 +612,7 @@ class RemunerationResourceRegistry
             ],
             'job-profiles' => [
                 'model' => HrJobProfile::class,
-                'view_permission' => RemunerationAccessService::VIEW_PERMISSION,
+                'view_permission' => RemunerationAccessService::HR_MANAGEMENT_PERMISSION,
                 'manage_permission' => RemunerationAccessService::HR_MANAGEMENT_PERMISSION,
                 'search' => ['code', 'title', 'area', 'status'],
                 'filters' => ['cargo_id', 'area', 'status'],
@@ -626,7 +635,7 @@ class RemunerationResourceRegistry
             ],
             'labor-certificates' => [
                 'model' => HrLaborCertificate::class,
-                'view_permission' => RemunerationAccessService::VIEW_PERMISSION,
+                'view_permission' => RemunerationAccessService::HR_MANAGEMENT_PERMISSION,
                 'manage_permission' => RemunerationAccessService::HR_MANAGEMENT_PERMISSION,
                 'search' => ['certificate_type', 'purpose', 'folio', 'status'],
                 'filters' => ['staff_id', 'certificate_type', 'status', 'signed_by_user_id'],

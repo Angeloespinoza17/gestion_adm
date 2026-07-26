@@ -181,22 +181,29 @@ class RemunerationSeeder extends ModuleSeeder
             ->pluck('id', 'slug');
 
         $allPermissions = $permissionIds->keys()->all();
+        $allPermissionsWithoutConfidentialAccess = array_values(array_diff(
+            $allPermissions,
+            [RemunerationAccessService::CONFIDENTIAL_ACCESS_PERMISSION],
+        ));
         $baseView = [
             RemunerationAccessService::VIEW_PERMISSION,
             RemunerationAccessService::DASHBOARD_PERMISSION,
             RemunerationAccessService::REPORTS_PERMISSION,
         ];
+        $confidentialBaseView = array_values(array_unique(array_merge([
+            RemunerationAccessService::CONFIDENTIAL_ACCESS_PERMISSION,
+        ], $baseView)));
 
         $rolePermissions = [
             'super_admin' => $allPermissions,
-            'administrador' => $allPermissions,
-            'rrhh' => $allPermissions,
+            'administrador' => $allPermissionsWithoutConfidentialAccess,
+            'rrhh' => $allPermissionsWithoutConfidentialAccess,
             'direccion' => array_values(array_unique(array_merge($baseView, [
                 RemunerationAccessService::APPROVE_PERMISSION,
                 RemunerationAccessService::EXPORT_PERMISSION,
             ]))),
             'remuneraciones_admin' => $allPermissions,
-            'remuneraciones_analista' => array_values(array_unique(array_merge($baseView, [
+            'remuneraciones_analista' => array_values(array_unique(array_merge($confidentialBaseView, [
                 RemunerationAccessService::EMPLOYEES_PERMISSION,
                 RemunerationAccessService::CONTRACTS_PERMISSION,
                 RemunerationAccessService::CONCEPTS_PERMISSION,
@@ -207,7 +214,7 @@ class RemunerationSeeder extends ModuleSeeder
                 RemunerationAccessService::EXPORT_PERMISSION,
                 RemunerationAccessService::HR_MANAGEMENT_PERMISSION,
             ]))),
-            'remuneraciones_solo_lectura' => $baseView,
+            'remuneraciones_solo_lectura' => $confidentialBaseView,
         ];
 
         $allModules = $moduleIds->keys()->all();
