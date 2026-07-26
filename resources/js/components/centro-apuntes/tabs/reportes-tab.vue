@@ -28,7 +28,8 @@ export default {
   },
   data() {
     return {
-      loading: false,
+      loading: true,
+      hasLoaded: false,
       error: null,
       report: {
         range: {},
@@ -147,6 +148,7 @@ export default {
           },
         });
         this.report = response.data;
+        this.hasLoaded = true;
       } catch (error) {
         this.error = formatCentroApuntesError(error, "No se pudo cargar el reporte del módulo.");
       } finally {
@@ -294,11 +296,11 @@ export default {
       </div>
     </BCard>
 
-    <BCard v-if="loading" class="border-0 shadow-sm">
+    <BCard v-if="loading && !hasLoaded" class="border-0 shadow-sm">
       <LoadingState message="Generando reporte..." compact />
     </BCard>
 
-    <template v-else>
+    <template v-if="hasLoaded">
       <div class="row g-3">
         <div class="col-md-6 col-xl-4">
           <BCard class="border-0 shadow-sm h-100">

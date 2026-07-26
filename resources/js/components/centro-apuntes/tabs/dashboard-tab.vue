@@ -28,7 +28,8 @@ export default {
   },
   data() {
     return {
-      loading: false,
+      loading: true,
+      hasLoaded: false,
       error: null,
       dashboard: {
         generated_at: null,
@@ -152,6 +153,7 @@ export default {
       try {
         const response = await axios.get("/api/centro-apuntes/dashboard");
         this.dashboard = response.data;
+        this.hasLoaded = true;
       } catch (error) {
         this.error = formatCentroApuntesError(error, "No se pudo cargar el dashboard del módulo.");
       } finally {
@@ -188,11 +190,11 @@ export default {
     </CentroApuntesSectionToolbar>
 
     <BAlert v-if="error" show variant="danger">{{ error }}</BAlert>
-    <BCard v-if="loading" class="border-0 shadow-sm">
+    <BCard v-if="loading && !hasLoaded" class="border-0 shadow-sm">
       <LoadingState message="Cargando indicadores del centro de apuntes..." compact />
     </BCard>
 
-    <template v-else>
+    <template v-if="hasLoaded">
       <div class="row g-3">
         <div v-for="card in metricCards" :key="card.label" class="col-sm-6 col-xl-3 col-xxl-2">
           <BCard class="metric-card h-100" :class="`metric-card--${card.tone}`">
