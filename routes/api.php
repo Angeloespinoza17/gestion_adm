@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\APIController;
+use App\Http\Controllers\Admin\BackupController;
 use App\Http\Controllers\Admin\RoleImpersonationController;
 use App\Http\Controllers\Admin\SuperAdminDashboardController;
 use App\Http\Controllers\DeployController;
@@ -236,6 +237,9 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // Administración (RBAC)
     Route::prefix('admin')->group(function () {
+        Route::get('/backups', [BackupController::class, 'index'])->middleware('superadmin');
+        Route::get('/backups/{filename}/download', [BackupController::class, 'download'])->middleware('superadmin');
+
         Route::get('/dashboard', [SuperAdminDashboardController::class, 'index'])->middleware('permission:administrar_modulos');
         Route::get('/dashboard/report', [SuperAdminDashboardController::class, 'report'])->middleware('permission:administrar_modulos');
 

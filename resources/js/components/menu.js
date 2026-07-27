@@ -563,6 +563,12 @@ export const menuItems = [
                 label: "Deploy",
                 link: "/deploy",
                 parentId: 940
+            },
+            {
+                id: 948,
+                label: "Respaldos",
+                link: "/admin/backups",
+                parentId: 940
             }
         ]
     },

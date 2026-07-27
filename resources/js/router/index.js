@@ -294,6 +294,12 @@ const routes = [
         component: () => import('../views/dashboard/deploy.vue'),
     },
     {
+        path: '/admin/backups',
+        name: 'admin-backups',
+        meta: { authRequired: true, title: 'Respaldos', superAdminOnly: true },
+        component: () => import('../views/admin/backups.vue'),
+    },
+    {
         path: '/admin/noticias',
         meta: { authRequired: true, title: 'Noticias del sitio web', permission: 'ver_noticias' },
         component: () => import('../views/admin/news.vue'),

@@ -342,6 +342,7 @@ class RbacSeeder extends Seeder
             ['slug' => 'settings_cargos', 'name' => 'Cargos', 'frontend_route' => '/admin/cargos', 'icon' => null, 'sort' => 5, 'parent' => 'settings'],
             ['slug' => 'settings_organigram', 'name' => 'Organigrama', 'frontend_route' => '/admin/organigram', 'icon' => null, 'sort' => 6, 'parent' => 'settings'],
             ['slug' => 'settings_deploy', 'name' => 'Deploy', 'frontend_route' => '/deploy', 'icon' => null, 'sort' => 7, 'parent' => 'settings'],
+            ['slug' => 'settings_backups', 'name' => 'Respaldos', 'frontend_route' => '/admin/backups', 'icon' => null, 'sort' => 8, 'parent' => 'settings'],
         ];
 
         $existing = SystemModule::query()->get()->keyBy('slug');

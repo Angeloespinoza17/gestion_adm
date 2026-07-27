@@ -106,6 +106,7 @@ const moduleDescriptionBySlug = {
   settings_modules: "Permite administrar el catálogo de módulos visibles por rol.",
   settings_cargos: "Permite administrar cargos institucionales.",
   settings_organigram: "Permite consultar y sincronizar relaciones del organigrama.",
+  settings_backups: "Permite a Super Admin consultar y descargar respaldos de la base de datos.",
 
   pme_sep: "Permite gestionar planificación PME/SEP, acciones, evidencias, monitoreo y reportes.",
   biblioteca: "Permite gestionar biblioteca escolar, catálogo, préstamos, reservas, plan lector y reportes.",
