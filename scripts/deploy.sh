@@ -49,7 +49,7 @@ echo "==> Build local"
 npm run prod
 
 echo "==> Enviando archivos a ${REMOTE}:${DEPLOY_REMOTE_PATH}"
-rsync -az --delete \
+rsync -az --delete --chmod='Du=rwx,Dgo=rx' \
   -e "${RSYNC_SSH}" \
   --exclude='.env' \
   --exclude='.git' \
@@ -61,6 +61,7 @@ rsync -az --delete \
 
 echo "==> Instalando dependencias y optimizando Laravel"
 "${SSH_COMMAND[@]}" "${REMOTE}" "export HOME=\"\$(getent passwd \$(id -u) | cut -d: -f6)\" && \
+chmod 755 '${DEPLOY_REMOTE_PATH}' && \
 cd '${DEPLOY_REMOTE_PATH}' && \
 rm -f public/hot && \
 ${DEPLOY_COMPOSER_BIN} install --no-dev --optimize-autoloader && \
