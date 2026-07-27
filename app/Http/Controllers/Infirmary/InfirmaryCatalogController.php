@@ -22,6 +22,7 @@ use App\Models\StudentProfile;
 use App\Models\User;
 use App\Services\Infirmary\InfirmaryAccessService;
 use App\Services\Infirmary\InfirmaryMedicationStockService;
+use App\Services\Infirmary\InfirmarySequenceService;
 use App\Services\Infirmary\InfirmaryStudentContextService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -34,6 +35,7 @@ class InfirmaryCatalogController extends Controller
         private readonly InfirmaryAccessService $accessService,
         private readonly InfirmaryMedicationStockService $stockService,
         private readonly InfirmaryStudentContextService $studentContextService,
+        private readonly InfirmarySequenceService $sequenceService,
     ) {}
 
     public function catalogs(Request $request): JsonResponse
@@ -89,6 +91,7 @@ class InfirmaryCatalogController extends Controller
             'status_options' => InfirmaryAttention::STATUS_OPTIONS,
             'accident_location_options' => InfirmaryAttention::ACCIDENT_LOCATION_OPTIONS,
             'school_insurance_certificate' => config('infirmary.school_insurance_certificate', []),
+            'school_insurance_sequence' => $this->sequenceService->schoolInsuranceStatus(),
             'companion_options' => InfirmaryAttention::COMPANION_OPTIONS,
             'companion_staff' => $this->companionStaffOptions(),
             'treatment_category_options' => InfirmaryAttentionTreatment::CATEGORY_OPTIONS,
@@ -131,6 +134,31 @@ class InfirmaryCatalogController extends Controller
                 'can_view_reports' => $this->accessService->canViewReports($request->user()),
                 'can_export' => $this->accessService->canExport($request->user()),
             ],
+        ]);
+    }
+
+    public function updateSchoolInsuranceSequence(Request $request): JsonResponse
+    {
+        abort_unless($this->accessService->canManageCatalogs($request->user()), 403);
+
+        $validated = $request->validate([
+            'next_number' => ['required', 'integer', 'min:1', 'max:999999999'],
+            'reason' => ['required', 'string', 'min:5', 'max:500'],
+        ], [
+            'next_number.required' => 'Ingresa el próximo correlativo.',
+            'reason.required' => 'Indica el motivo del ajuste.',
+            'reason.min' => 'El motivo debe tener al menos 5 caracteres.',
+        ]);
+
+        $sequence = $this->sequenceService->setNextSchoolInsuranceNumber(
+            (int) $validated['next_number'],
+            trim($validated['reason']),
+            $request->user(),
+        );
+
+        return response()->json([
+            'message' => "El próximo certificado de Seguro Escolar será el N° {$sequence['next_number']}.",
+            'data' => $sequence,
         ]);
     }
 

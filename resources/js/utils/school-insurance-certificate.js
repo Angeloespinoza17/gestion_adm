@@ -159,7 +159,10 @@ export function createSchoolInsuranceCertificateForm(attention, defaults = {}) {
   const student = attention?.student || {};
   const names = splitStudentName(student, attention?.student_full_name_snapshot);
   const accidentLocation = attention?.accident_location_type;
-  const attentionCorrelative = attention?.correlative_number || attention?.id || null;
+  const attentionCorrelative = attention?.school_insurance_number
+    || attention?.correlative_number
+    || attention?.id
+    || null;
 
   return {
     attention_id: attention?.id || null,

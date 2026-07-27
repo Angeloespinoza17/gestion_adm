@@ -58,6 +58,7 @@ class InfirmaryAttention extends Model
     protected $fillable = [
         'subject_type',
         'correlative_number',
+        'school_insurance_number',
         'student_profile_id',
         'staff_id',
         'academic_year_id',
@@ -96,6 +97,7 @@ class InfirmaryAttention extends Model
 
     protected $casts = [
         'correlative_number' => 'integer',
+        'school_insurance_number' => 'integer',
         'occurred_at' => 'datetime:Y-m-d H:i:s',
         'attended_at' => 'datetime:Y-m-d H:i:s',
         'finalized_at' => 'datetime:Y-m-d H:i:s',

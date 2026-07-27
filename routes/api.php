@@ -539,6 +539,7 @@ Route::middleware('auth:sanctum')->group(function () {
 
     Route::prefix('infirmary')->group(function () {
         Route::get('/catalogs', [InfirmaryCatalogController::class, 'catalogs'])->middleware('permission:ver_enfermeria');
+        Route::put('/school-insurance-sequence', [InfirmaryCatalogController::class, 'updateSchoolInsuranceSequence'])->middleware('permission:administrar_catalogos_enfermeria');
         Route::get('/students', [InfirmaryCatalogController::class, 'students'])->middleware('permission:ver_enfermeria');
         Route::get('/students/{studentProfile}/context', [InfirmaryCatalogController::class, 'studentContext'])->middleware('permission:ver_enfermeria');
         Route::get('/dashboard', InfirmaryDashboardController::class)->middleware('permission:ver_enfermeria');

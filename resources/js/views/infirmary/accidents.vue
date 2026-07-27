@@ -46,11 +46,21 @@ export default {
       },
       certificateLogoDataUrl: null,
       exportingAttentionId: null,
+      sequenceForm: {
+        next_number: null,
+        reason: "",
+      },
+      sequenceSaving: false,
+      sequenceError: null,
+      sequenceMessage: null,
     };
   },
   computed: {
     canExport() {
       return Boolean(this.catalogs.capabilities?.can_export);
+    },
+    canConfigureSequence() {
+      return Boolean(this.catalogs.capabilities?.can_manage_catalogs);
     },
     categoryLabels() {
       return normalizeOptions(this.catalogs.attention_categories).reduce((labels, option) => {
@@ -80,6 +90,7 @@ export default {
       try {
         const response = await axios.get("/api/infirmary/catalogs");
         this.catalogs = response.data;
+        this.sequenceForm.next_number = response.data.school_insurance_sequence?.next_number || 1;
       } catch (error) {
         this.error = formatInfirmaryError(error, "No se pudieron cargar los datos de seguro escolar.");
       }
@@ -145,7 +156,41 @@ export default {
         : "-";
     },
     certificateReference(record) {
-      return `Nº ${String(record?.correlative_number || record?.id || "").padStart(5, "0")}`;
+      const number = record?.school_insurance_number || record?.correlative_number || record?.id || "";
+      return `Nº ${String(number).padStart(5, "0")}`;
+    },
+    async saveSequence() {
+      this.sequenceError = null;
+      this.sequenceMessage = null;
+
+      const nextNumber = Number(this.sequenceForm.next_number);
+      if (!Number.isInteger(nextNumber) || nextNumber < 1) {
+        this.sequenceError = "Ingresa un correlativo válido.";
+        return;
+      }
+
+      if (String(this.sequenceForm.reason || "").trim().length < 5) {
+        this.sequenceError = "Indica el motivo del ajuste con al menos 5 caracteres.";
+        return;
+      }
+
+      this.sequenceSaving = true;
+
+      try {
+        const response = await axios.put("/api/infirmary/school-insurance-sequence", {
+          next_number: nextNumber,
+          reason: String(this.sequenceForm.reason).trim(),
+        });
+
+        this.catalogs.school_insurance_sequence = response.data.data;
+        this.sequenceForm.next_number = response.data.data.next_number;
+        this.sequenceForm.reason = "";
+        this.sequenceMessage = response.data.message;
+      } catch (error) {
+        this.sequenceError = formatInfirmaryError(error, "No se pudo actualizar el correlativo.");
+      } finally {
+        this.sequenceSaving = false;
+      }
     },
     studentName(record) {
       const relatedName = record?.student?.registered_name
@@ -237,6 +282,56 @@ export default {
         text="La tabla muestra las atenciones clasificadas como accidente. Usa la acción PDF para generar el certificado con los datos precargados."
       />
     </div>
+
+    <BCard v-if="canConfigureSequence" class="school-insurance-sequence mb-3">
+      <div class="sequence-heading">
+        <span class="sequence-icon"><i class="mdi mdi-counter"></i></span>
+        <div>
+          <h5>Correlativo de certificados</h5>
+          <p>
+            Define el próximo número a emitir. Los certificados existentes no se modifican
+            y el sistema no permite retroceder ni reutilizar correlativos.
+          </p>
+        </div>
+        <div class="sequence-current">
+          <small>Base reservada hasta</small>
+          <strong>N° {{ String(catalogs.school_insurance_sequence?.last_number || 0).padStart(5, "0") }}</strong>
+        </div>
+      </div>
+
+      <BAlert v-if="sequenceMessage" show variant="success" class="mt-3 mb-0">
+        {{ sequenceMessage }}
+      </BAlert>
+      <BAlert v-if="sequenceError" show variant="danger" class="mt-3 mb-0">
+        {{ sequenceError }}
+      </BAlert>
+
+      <div class="sequence-form">
+        <div>
+          <label class="form-label">Próximo correlativo</label>
+          <BFormInput
+            v-model.number="sequenceForm.next_number"
+            type="number"
+            min="1"
+            step="1"
+            placeholder="Ej.: 994"
+          />
+        </div>
+        <div class="sequence-reason">
+          <label class="form-label">Motivo del ajuste</label>
+          <BFormInput
+            v-model="sequenceForm.reason"
+            maxlength="500"
+            placeholder="Ej.: Continuidad con certificados físicos históricos"
+            @keyup.enter="saveSequence"
+          />
+        </div>
+        <BButton variant="primary" :disabled="sequenceSaving" @click="saveSequence">
+          <i class="mdi me-1" :class="sequenceSaving ? 'mdi-loading mdi-spin' : 'mdi-content-save-check-outline'"></i>
+          {{ sequenceSaving ? "Guardando..." : "Guardar correlativo" }}
+        </BButton>
+      </div>
+    </BCard>
 
     <BCard class="school-insurance-filters mb-3">
       <div class="row g-3 align-items-end">
@@ -384,10 +479,78 @@ export default {
 }
 
 .school-insurance-filters,
-.school-insurance-records {
+.school-insurance-records,
+.school-insurance-sequence {
   border: 1px solid #e2e8f3;
   border-radius: 8px;
   box-shadow: none;
+}
+
+.sequence-heading {
+  align-items: center;
+  display: flex;
+  gap: 0.9rem;
+}
+
+.sequence-heading h5 {
+  color: #303846;
+  font-size: 1rem;
+  font-weight: 700;
+  margin: 0 0 0.2rem;
+}
+
+.sequence-heading p {
+  color: #68738a;
+  font-size: 0.84rem;
+  margin: 0;
+  max-width: 720px;
+}
+
+.sequence-icon {
+  align-items: center;
+  background: #eaf2ff;
+  border-radius: 10px;
+  color: #3267bd;
+  display: flex;
+  flex: 0 0 42px;
+  font-size: 1.35rem;
+  height: 42px;
+  justify-content: center;
+}
+
+.sequence-current {
+  margin-left: auto;
+  text-align: right;
+}
+
+.sequence-current small {
+  color: #7b8495;
+  display: block;
+  font-size: 0.72rem;
+}
+
+.sequence-current strong {
+  color: #2d5da8;
+  display: block;
+  font-size: 1.05rem;
+}
+
+.sequence-form {
+  align-items: end;
+  background: #f8fafc;
+  border: 1px solid #e9edf4;
+  border-radius: 8px;
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: minmax(150px, 0.35fr) minmax(280px, 1fr) auto;
+  margin-top: 1rem;
+  padding: 0.9rem;
+}
+
+.sequence-form .form-label {
+  color: #4b5565;
+  font-size: 0.8rem;
+  font-weight: 600;
 }
 
 .school-insurance-filters .form-label {
@@ -469,6 +632,21 @@ export default {
 
   .school-insurance-header p {
     font-size: 0.85rem;
+  }
+
+  .sequence-heading {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .sequence-current {
+    margin-left: 0;
+    text-align: left;
+    width: 100%;
+  }
+
+  .sequence-form {
+    grid-template-columns: 1fr;
   }
 }
 </style>

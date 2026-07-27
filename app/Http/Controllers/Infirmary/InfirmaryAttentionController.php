@@ -60,7 +60,9 @@ class InfirmaryAttentionController extends Controller
                         ->orWhere('initial_description', 'like', "%{$search}%");
 
                     if ($correlativeSearch !== null) {
-                        $inner->orWhere('correlative_number', $correlativeSearch);
+                        $inner
+                            ->orWhere('correlative_number', $correlativeSearch)
+                            ->orWhere('school_insurance_number', $correlativeSearch);
                     }
                 });
             })

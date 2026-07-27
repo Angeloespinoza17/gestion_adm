@@ -20,6 +20,7 @@ class InfirmaryAttentionService
     public function __construct(
         private readonly InfirmaryStudentContextService $studentContextService,
         private readonly InfirmaryMedicationStockService $stockService,
+        private readonly InfirmarySequenceService $sequenceService,
     ) {
     }
 
@@ -157,6 +158,14 @@ class InfirmaryAttentionService
         if ($creating) {
             $attention->correlative_number = $this->nextCorrelativeNumber($subjectType);
             $attention->created_by = $user->id;
+        }
+
+        if (
+            ! $attention->school_insurance_number
+            && $subjectType === InfirmaryAttention::SUBJECT_STUDENT
+            && $isAccidentCategory
+        ) {
+            $attention->school_insurance_number = $this->sequenceService->nextSchoolInsuranceNumber();
         }
     }
 
