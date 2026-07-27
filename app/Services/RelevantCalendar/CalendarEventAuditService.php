@@ -57,6 +57,7 @@ class CalendarEventAuditService
             'requires_signature' => $event->requires_signature,
             'requires_review' => $event->requires_review,
             'requires_approval' => $event->requires_approval,
+            'is_disseminable' => $event->is_disseminable,
             'external_url' => $event->external_url,
             'internal_observations' => $event->internal_observations,
             'participants' => $event->eventUsers

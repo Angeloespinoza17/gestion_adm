@@ -44,6 +44,7 @@ const emptyForm = () => ({
   requires_signature: false,
   requires_review: false,
   requires_approval: false,
+  is_disseminable: true,
   participant_user_ids: [],
   informed_user_ids: [],
   reminders: [emptyReminder()],
@@ -215,6 +216,7 @@ export default {
         requires_signature: Boolean(event.requires_signature),
         requires_review: Boolean(event.requires_review),
         requires_approval: Boolean(event.requires_approval),
+        is_disseminable: Boolean(event.is_disseminable),
         participant_user_ids: (event.event_users || []).filter((item) => item.role_in_event === "participant").map((item) => item.user_id),
         informed_user_ids: (event.event_users || []).filter((item) => item.role_in_event === "informed").map((item) => item.user_id),
         reminders: (event.reminders || []).length
@@ -342,6 +344,7 @@ export default {
         requires_signature: this.form.requires_signature,
         requires_review: this.form.requires_review,
         requires_approval: this.form.requires_approval,
+        is_disseminable: this.form.is_disseminable,
         participant_user_ids: this.form.participant_user_ids || [],
         informed_user_ids: this.form.informed_user_ids || [],
         reminders: this.sanitizeReminders(this.form.reminders),
@@ -541,6 +544,12 @@ export default {
           <BFormCheckbox v-model="form.requires_signature">Requiere firma</BFormCheckbox>
           <BFormCheckbox v-model="form.requires_review">Requiere revisión</BFormCheckbox>
           <BFormCheckbox v-model="form.requires_approval">Requiere aprobación</BFormCheckbox>
+          <BFormCheckbox v-model="form.is_disseminable">
+            Difundir en Inicio
+          </BFormCheckbox>
+        </div>
+        <div class="form-text mt-2">
+          Al activarlo, esta fecha podrá aparecer en el calendario maestro respetando los permisos de cada usuario.
         </div>
       </div>
     </div>

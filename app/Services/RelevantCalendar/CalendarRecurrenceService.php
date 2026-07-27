@@ -234,6 +234,7 @@ class CalendarRecurrenceService
             'requires_signature' => $master->requires_signature,
             'requires_review' => $master->requires_review,
             'requires_approval' => $master->requires_approval,
+            'is_disseminable' => $master->is_disseminable,
             'is_recurring' => true,
             'auto_generate_occurrences' => false,
             'recurrence_rule' => null,

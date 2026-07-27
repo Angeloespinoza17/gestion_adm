@@ -60,6 +60,7 @@ class SaveCalendarEventRequest extends FormRequest
             'requires_signature' => ['sometimes', 'boolean'],
             'requires_review' => ['sometimes', 'boolean'],
             'requires_approval' => ['sometimes', 'boolean'],
+            'is_disseminable' => ['sometimes', 'boolean'],
             'participant_user_ids' => ['nullable', 'array'],
             'participant_user_ids.*' => ['integer', $staffUserExists],
             'informed_user_ids' => ['nullable', 'array'],

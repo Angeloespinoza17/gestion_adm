@@ -550,6 +550,7 @@ class CalendarEventService
                 'requires_signature' => $master->requires_signature,
                 'requires_review' => $master->requires_review,
                 'requires_approval' => $master->requires_approval,
+                'is_disseminable' => $master->is_disseminable,
                 'external_url' => $master->external_url,
                 'internal_observations' => $master->internal_observations,
                 'updated_by' => $actor->id,
@@ -629,6 +630,7 @@ class CalendarEventService
             'requires_signature' => (bool) ($payload['requires_signature'] ?? false),
             'requires_review' => (bool) ($payload['requires_review'] ?? false),
             'requires_approval' => (bool) ($payload['requires_approval'] ?? false),
+            'is_disseminable' => (bool) ($payload['is_disseminable'] ?? $existing?->is_disseminable ?? true),
             'is_recurring' => false,
             'auto_generate_occurrences' => false,
             'recurrence_rule' => null,
@@ -717,6 +719,7 @@ class CalendarEventService
             'requires_signature',
             'requires_review',
             'requires_approval',
+            'is_disseminable',
         ]);
     }
 

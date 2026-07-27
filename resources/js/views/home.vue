@@ -14,11 +14,14 @@ const emptyDashboard = () => ({
   user: {},
   capabilities: {},
   metrics: [],
-  calendar: { events: [], range: {} },
+  calendar: { events: [], range: {}, sources: [] },
   agenda: { today: [], upcoming: [] },
   relevant_calendar: { upcoming: [], overdue_count: 0, current_month_count: 0 },
   reservations: { upcoming: [], pending: [], upcoming_count: 0, pending_count: 0 },
   public_events: { upcoming: [], upcoming_count: 0 },
+  tasks: { items: [], pending_count: 0, overdue_count: 0, today_count: 0, blocked_count: 0 },
+  documents: { items: [], total: 0, new_count: 0 },
+  attention: { items: [], total: 0, critical_count: 0, today_count: 0 },
   news: [],
   internal_announcements: { items: [], unread_count: 0, pending_ack_count: 0 },
   quick_links: [],
@@ -37,6 +40,7 @@ export default {
       error: null,
       dashboard: emptyDashboard(),
       calendarOptions: null,
+      calendarSourceFilters: [],
       showEventModal: false,
       selectedEvent: null,
     };
@@ -75,6 +79,31 @@ export default {
     upcomingPublicEvents() {
       return this.dashboard.public_events?.upcoming || [];
     },
+    attentionItems() {
+      return this.dashboard.attention?.items || [];
+    },
+    taskItems() {
+      return this.dashboard.tasks?.items || [];
+    },
+    disseminatedDocuments() {
+      return this.dashboard.documents?.items || [];
+    },
+    calendarSources() {
+      return this.dashboard.calendar?.sources || [];
+    },
+    filteredCalendarEvents() {
+      const events = this.dashboard.calendar?.events || [];
+
+      if (!this.calendarSourceFilters.length) {
+        return [];
+      }
+
+      return events.filter((event) => this.calendarSourceFilters.includes(event.source));
+    },
+    allCalendarSourcesActive() {
+      return this.calendarSources.length > 0
+        && this.calendarSources.every((source) => this.calendarSourceFilters.includes(source.key));
+    },
     visibleNews() {
       return this.dashboard.news || [];
     },
@@ -97,7 +126,7 @@ export default {
       return value.charAt(0).toUpperCase() + value.slice(1);
     },
     attentionCount() {
-      return this.unreadInternalAnnouncements + this.pendingReservations.length;
+      return this.dashboard.attention?.total || 0;
     },
     lastUpdatedText() {
       if (!this.dashboard.generated_at) {
@@ -123,7 +152,8 @@ export default {
           ...emptyDashboard(),
           ...response.data,
         };
-        this.calendarOptions = this.buildCalendarOptions(this.dashboard.calendar?.events || []);
+        this.syncCalendarSourceFilters();
+        this.refreshCalendarEvents();
       } catch (error) {
         this.error = this.formatError(error);
       } finally {
@@ -162,6 +192,45 @@ export default {
         events,
         eventClick: this.handleCalendarClick,
       };
+    },
+    syncCalendarSourceFilters() {
+      const available = this.calendarSources.map((source) => source.key);
+      let stored = [];
+
+      try {
+        stored = JSON.parse(localStorage.getItem("inicio_calendar_sources") || "[]");
+      } catch (error) {
+        stored = [];
+      }
+
+      const validStored = Array.isArray(stored)
+        ? stored.filter((source) => available.includes(source))
+        : [];
+
+      this.calendarSourceFilters = validStored.length ? validStored : available;
+    },
+    toggleCalendarSource(sourceKey) {
+      if (this.calendarSourceFilters.includes(sourceKey)) {
+        this.calendarSourceFilters = this.calendarSourceFilters.filter((key) => key !== sourceKey);
+      } else {
+        this.calendarSourceFilters = [...this.calendarSourceFilters, sourceKey];
+      }
+
+      this.persistCalendarSourceFilters();
+      this.refreshCalendarEvents();
+    },
+    toggleAllCalendarSources() {
+      this.calendarSourceFilters = this.allCalendarSourcesActive
+        ? []
+        : this.calendarSources.map((source) => source.key);
+      this.persistCalendarSourceFilters();
+      this.refreshCalendarEvents();
+    },
+    persistCalendarSourceFilters() {
+      localStorage.setItem("inicio_calendar_sources", JSON.stringify(this.calendarSourceFilters));
+    },
+    refreshCalendarEvents() {
+      this.calendarOptions = this.buildCalendarOptions(this.filteredCalendarEvents);
     },
     handleCalendarClick(info) {
       info.jsEvent?.preventDefault();
@@ -210,6 +279,7 @@ export default {
         relevant_calendar: "bg-primary-subtle text-primary",
         reservation: "bg-success-subtle text-success",
         public_event: "bg-info-subtle text-info",
+        task: "bg-warning-subtle text-warning",
       }[source] || "bg-secondary-subtle text-secondary";
     },
     eventIcon(source) {
@@ -217,11 +287,15 @@ export default {
         relevant_calendar: "bx-calendar-event",
         reservation: "bx-building-house",
         public_event: "bx-broadcast",
+        task: "bx-list-check",
       }[source] || "bx-calendar";
     },
     statusClass(status) {
       return {
         pendiente: "bg-warning-subtle text-warning",
+        en_progreso: "bg-primary-subtle text-primary",
+        bloqueada: "bg-danger-subtle text-danger",
+        en_revision: "bg-info-subtle text-info",
         aprobada: "bg-success-subtle text-success",
         vencido: "bg-danger-subtle text-danger",
         completado: "bg-success-subtle text-success",
@@ -243,6 +317,35 @@ export default {
         "inicio-announcement--unread": !announcement.read_at,
       };
     },
+    attentionClass(urgency) {
+      return `inicio-attention-item--${urgency || "normal"}`;
+    },
+    attentionLabel(item) {
+      if (!item.due_at) return item.detail || "Pendiente";
+
+      const date = this.parseDateValue(item.due_at);
+      const today = new Date();
+      const tomorrow = new Date();
+      tomorrow.setDate(today.getDate() + 1);
+
+      if (date.toDateString() === today.toDateString()) return "Hoy";
+      if (date.toDateString() === tomorrow.toDateString()) return "Mañana";
+
+      return this.formatDate(item.due_at);
+    },
+    taskPriorityClass(priority) {
+      return {
+        urgente: "bg-danger-subtle text-danger",
+        alta: "bg-warning-subtle text-warning",
+        media: "bg-primary-subtle text-primary",
+        baja: "bg-secondary-subtle text-secondary",
+      }[priority] || "bg-secondary-subtle text-secondary";
+    },
+    documentStatusClass(status) {
+      return status === "por_vencer"
+        ? "bg-warning-subtle text-warning"
+        : "bg-success-subtle text-success";
+    },
     async markInternalAnnouncement(announcement, acknowledged = false) {
       try {
         const response = await axios.post(`/api/internal-communications/${announcement.id}/read`, {
@@ -254,6 +357,8 @@ export default {
         if (acknowledged) {
           announcement.acknowledged_at = response.data?.data?.acknowledged_at || new Date().toISOString();
         }
+
+        await this.loadDashboard();
       } catch (error) {
         this.error = this.formatError(error);
       }
@@ -268,7 +373,7 @@ export default {
         day: "2-digit",
         month: "short",
         year: "numeric",
-      }).format(new Date(value));
+      }).format(this.parseDateValue(value));
     },
     formatTime(value) {
       if (!value) return "";
@@ -288,6 +393,21 @@ export default {
         minute: "2-digit",
       }).format(new Date(value));
     },
+    parseDateValue(value) {
+      const text = String(value || "");
+
+      return /^\d{4}-\d{2}-\d{2}$/.test(text)
+        ? new Date(`${text}T12:00:00`)
+        : new Date(value);
+    },
+    calendarDay(value) {
+      return this.parseDateValue(value).getDate();
+    },
+    calendarMonth(value) {
+      return new Intl.DateTimeFormat("es-CL", { month: "short" })
+        .format(this.parseDateValue(value))
+        .replace(".", "");
+    },
     formatRange(item) {
       const start = item.start || item.starts_at;
       const end = item.end || item.ends_at;
@@ -304,7 +424,7 @@ export default {
         return startText;
       }
 
-      const sameDay = new Date(start).toDateString() === new Date(end).toDateString();
+      const sameDay = this.parseDateValue(start).toDateString() === this.parseDateValue(end).toDateString();
 
       return sameDay
         ? `${startText} - ${this.formatTime(end)}`
@@ -360,6 +480,102 @@ export default {
                 <div class="inicio-metric__detail">{{ metric.detail }}</div>
               </BCardBody>
             </BCard>
+          </BCol>
+        </BRow>
+
+        <BRow class="g-4 mb-4">
+          <BCol lg="7">
+            <section class="inicio-focus-card h-100">
+              <header class="inicio-focus-card__header">
+                <div class="inicio-card-heading">
+                  <span class="inicio-card-heading__icon inicio-card-heading__icon--attention">
+                    <i class="bx bx-bell"></i>
+                  </span>
+                  <div>
+                    <h4 class="mb-1">Requiere mi atención</h4>
+                    <small>Ordenado por urgencia, sin importar el módulo de origen</small>
+                  </div>
+                </div>
+                <span class="inicio-focus-total">{{ dashboard.attention?.total || 0 }}</span>
+              </header>
+
+              <div v-if="attentionItems.length" class="inicio-attention-list">
+                <button
+                  v-for="item in attentionItems"
+                  :key="item.id"
+                  type="button"
+                  class="inicio-attention-item"
+                  :class="attentionClass(item.urgency)"
+                  @click="openRoute(item.route)"
+                >
+                  <span class="inicio-attention-item__icon"><i :class="['bx', item.icon]"></i></span>
+                  <span class="inicio-attention-item__content">
+                    <span class="inicio-attention-item__meta">
+                      <span>{{ item.type_label }}</span>
+                      <strong>{{ attentionLabel(item) }}</strong>
+                    </span>
+                    <strong>{{ item.title }}</strong>
+                    <small>{{ item.detail }}</small>
+                  </span>
+                  <span class="inicio-attention-item__action">
+                    {{ item.action_label }} <i class="bx bx-right-arrow-alt"></i>
+                  </span>
+                </button>
+              </div>
+              <div v-else class="inicio-agenda-empty inicio-agenda-empty--compact">
+                <i class="bx bx-check-shield"></i>
+                <strong>Todo al día</strong>
+                <span>No hay elementos urgentes o pendientes para ti.</span>
+              </div>
+            </section>
+          </BCol>
+
+          <BCol lg="5">
+            <section class="inicio-focus-card h-100">
+              <header class="inicio-focus-card__header">
+                <div class="inicio-card-heading">
+                  <span class="inicio-card-heading__icon inicio-card-heading__icon--tasks">
+                    <i class="bx bx-list-check"></i>
+                  </span>
+                  <div>
+                    <h4 class="mb-1">Mis tareas</h4>
+                    <small>{{ dashboard.tasks?.overdue_count || 0 }} vencidas · {{ dashboard.tasks?.today_count || 0 }} para hoy</small>
+                  </div>
+                </div>
+                <BButton
+                  v-if="dashboard.capabilities?.can_view_tasks"
+                  size="sm"
+                  variant="outline-primary"
+                  @click="openRoute('/tasks/backlog')"
+                >
+                  Ver backlog
+                </BButton>
+              </header>
+
+              <div v-if="taskItems.length" class="inicio-task-list">
+                <button
+                  v-for="task in taskItems"
+                  :key="task.id"
+                  type="button"
+                  class="inicio-task-item"
+                  @click="openRoute(task.route)"
+                >
+                  <span class="inicio-task-item__check"><i class="bx bx-circle"></i></span>
+                  <span class="inicio-task-item__content">
+                    <strong>{{ task.title }}</strong>
+                    <small :class="{ 'text-danger': task.is_overdue }">
+                      {{ task.due_date ? (task.is_overdue ? `Venció ${formatDate(task.due_date)}` : `Vence ${formatDate(task.due_date)}`) : "Sin fecha límite" }}
+                    </small>
+                  </span>
+                  <span class="badge" :class="taskPriorityClass(task.priority)">{{ task.priority_label }}</span>
+                </button>
+              </div>
+              <div v-else class="inicio-agenda-empty inicio-agenda-empty--compact">
+                <i class="bx bx-task"></i>
+                <strong>Sin tareas pendientes</strong>
+                <span>Las tareas asignadas aparecerán aquí.</span>
+              </div>
+            </section>
           </BCol>
         </BRow>
 
@@ -440,15 +656,37 @@ export default {
             <div class="inicio-card-heading">
               <span class="inicio-card-heading__icon"><i class="bx bx-calendar"></i></span>
               <div>
-                <h4 class="mb-1">Calendario institucional</h4>
-                <p class="mb-0">Selecciona un evento para ver todos sus detalles.</p>
+                <h4 class="mb-1">Calendario maestro institucional</h4>
+                <p class="mb-0">Reúne las fuentes difundibles y la agenda personal visible para ti.</p>
               </div>
             </div>
             <div class="inicio-legend">
-              <span><i class="inicio-dot inicio-dot--calendar"></i> Fechas relevantes</span>
-              <span><i class="inicio-dot inicio-dot--reservation"></i> Reservas</span>
-              <span><i class="inicio-dot inicio-dot--public"></i> Eventos públicos</span>
+              <span>{{ filteredCalendarEvents.length }} eventos visibles</span>
             </div>
+          </div>
+          <div v-if="calendarSources.length" class="inicio-calendar-filters" aria-label="Filtrar fuentes del calendario">
+            <button
+              type="button"
+              class="inicio-calendar-filter"
+              :class="{ 'inicio-calendar-filter--active': allCalendarSourcesActive }"
+              @click="toggleAllCalendarSources"
+            >
+              <i class="bx bx-layer"></i>
+              Todas
+            </button>
+            <button
+              v-for="source in calendarSources"
+              :key="source.key"
+              type="button"
+              class="inicio-calendar-filter"
+              :class="{ 'inicio-calendar-filter--active': calendarSourceFilters.includes(source.key) }"
+              :style="{ '--source-color': source.color }"
+              @click="toggleCalendarSource(source.key)"
+            >
+              <i :class="['bx', source.icon]"></i>
+              {{ source.label }}
+              <span>{{ source.count }}</span>
+            </button>
           </div>
           <div class="inicio-calendar-wrap">
             <FullCalendar v-if="calendarOptions" :options="calendarOptions" />
@@ -513,8 +751,8 @@ export default {
                   @click="showAgendaItem(item)"
                 >
                   <span class="inicio-milestone__date">
-                    <strong>{{ new Date(item.start || item.starts_at).getDate() }}</strong>
-                    <small>{{ new Intl.DateTimeFormat('es-CL', { month: 'short' }).format(new Date(item.start || item.starts_at)).replace('.', '') }}</small>
+                    <strong>{{ calendarDay(item.start || item.starts_at) }}</strong>
+                    <small>{{ calendarMonth(item.start || item.starts_at) }}</small>
                   </span>
                   <span class="inicio-milestone__content">
                     <span class="badge" :class="badgeClass(item.source)">{{ item.source_label }}</span>
@@ -592,8 +830,8 @@ export default {
                     @click="showAgendaItem(item)"
                   >
                     <span class="inicio-compact-item__date">
-                      <strong>{{ new Date(item.start || item.starts_at).getDate() }}</strong>
-                      <small>{{ new Intl.DateTimeFormat('es-CL', { month: 'short' }).format(new Date(item.start || item.starts_at)).replace('.', '') }}</small>
+                      <strong>{{ calendarDay(item.start || item.starts_at) }}</strong>
+                      <small>{{ calendarMonth(item.start || item.starts_at) }}</small>
                     </span>
                     <span class="inicio-compact-item__content">
                       <strong>{{ item.title }}</strong>
@@ -639,8 +877,8 @@ export default {
                       @click="showAgendaItem(event)"
                     >
                       <span class="inicio-public-event__date">
-                        <strong>{{ new Date(event.start || event.starts_at).getDate() }}</strong>
-                        <small>{{ new Intl.DateTimeFormat('es-CL', { month: 'short' }).format(new Date(event.start || event.starts_at)).replace('.', '') }}</small>
+                        <strong>{{ calendarDay(event.start || event.starts_at) }}</strong>
+                        <small>{{ calendarMonth(event.start || event.starts_at) }}</small>
                       </span>
                       <span class="inicio-public-event__content">
                         <span>{{ event.category || "Evento" }}</span>
@@ -671,6 +909,78 @@ export default {
                 <div v-else class="inicio-panel-empty">
                   <span><i class="bx bx-news"></i></span>
                   <div><strong>Sin noticias recientes</strong><small>Las nuevas publicaciones aparecerán aquí.</small></div>
+                </div>
+              </div>
+            </section>
+          </BCol>
+        </BRow>
+
+        <BRow v-if="disseminatedDocuments.length || dashboard.quick_links?.length" class="g-4 mt-4 inicio-information-row">
+          <BCol v-if="disseminatedDocuments.length" xl="7">
+            <section class="inicio-information-card h-100">
+              <header class="inicio-information-card__header">
+                <div class="inicio-card-heading">
+                  <span class="inicio-card-heading__icon inicio-card-heading__icon--documents"><i class="bx bx-file-blank"></i></span>
+                  <div>
+                    <h5 class="mb-0">Documentos difundidos</h5>
+                    <small>Protocolos y documentación oficial disponible</small>
+                  </div>
+                </div>
+                <BButton size="sm" variant="outline-primary" @click="openRoute('/risk-prevention/document-management')">
+                  Ver todos
+                </BButton>
+              </header>
+              <div class="inicio-information-card__body">
+                <div class="inicio-document-list">
+                  <button
+                    v-for="document in disseminatedDocuments"
+                    :key="document.id"
+                    type="button"
+                    class="inicio-document-item"
+                    @click="openRoute(document.route)"
+                  >
+                    <span class="inicio-document-item__icon"><i class="bx bx-file"></i></span>
+                    <span class="inicio-document-item__content">
+                      <span>{{ document.document_type || "Documento" }} · v{{ document.version_number || "-" }}</span>
+                      <strong>{{ document.title }}</strong>
+                      <small>
+                        {{ document.responsible_name || "Prevención de Riesgos" }}
+                        <template v-if="document.valid_until"> · Vigente hasta {{ formatDate(document.valid_until) }}</template>
+                      </small>
+                    </span>
+                    <span class="badge" :class="documentStatusClass(document.status)">
+                      {{ document.status === "por_vencer" ? "Por vencer" : "Vigente" }}
+                    </span>
+                  </button>
+                </div>
+              </div>
+            </section>
+          </BCol>
+
+          <BCol :xl="disseminatedDocuments.length ? 5 : 12">
+            <section class="inicio-information-card h-100">
+              <header class="inicio-information-card__header">
+                <div class="inicio-card-heading">
+                  <span class="inicio-card-heading__icon inicio-card-heading__icon--links"><i class="bx bx-grid-alt"></i></span>
+                  <div>
+                    <h5 class="mb-0">Accesos rápidos</h5>
+                    <small>Herramientas disponibles según tu perfil</small>
+                  </div>
+                </div>
+              </header>
+              <div class="inicio-information-card__body">
+                <div class="inicio-quick-links">
+                  <button
+                    v-for="link in dashboard.quick_links"
+                    :key="link.route"
+                    type="button"
+                    class="inicio-quick-link"
+                    @click="openRoute(link.route)"
+                  >
+                    <span><i :class="['bx', link.icon]"></i></span>
+                    <span><strong>{{ link.title }}</strong><small>{{ link.description }}</small></span>
+                    <i class="bx bx-chevron-right"></i>
+                  </button>
                 </div>
               </div>
             </section>
@@ -865,6 +1175,10 @@ export default {
 
 .inicio-metric--warning {
   border-top-color: #f1b44c !important;
+}
+
+.inicio-metric--danger {
+  border-top-color: #f46a6a !important;
 }
 
 .inicio-metric--success {
@@ -1088,6 +1402,10 @@ export default {
 
 .inicio-card-heading__icon--green { background: #e9f8f2; color: #218762; }
 .inicio-card-heading__icon--blue { background: #eaf4fd; color: #2c82c5; }
+.inicio-card-heading__icon--attention { background: #fff0f0; color: #d84d4d; }
+.inicio-card-heading__icon--tasks { background: #fff7e7; color: #b87718; }
+.inicio-card-heading__icon--documents { background: #eef1ff; color: #4a5fc7; }
+.inicio-card-heading__icon--links { background: #eef7f4; color: #278060; }
 
 .inicio-subsection-heading {
   align-items: center;
@@ -1276,6 +1594,58 @@ export default {
   padding: 1.25rem;
 }
 
+.inicio-calendar-filters {
+  align-items: center;
+  border-bottom: 1px solid #edf0f5;
+  display: flex;
+  flex-wrap: wrap;
+  gap: .55rem;
+  padding: .8rem 1.25rem;
+}
+
+.inicio-calendar-filter {
+  --source-color: #556ee6;
+  align-items: center;
+  background: #fff;
+  border: 1px solid #dfe4ec;
+  border-radius: 999px;
+  color: #606979;
+  display: inline-flex;
+  font-size: .78rem;
+  font-weight: 650;
+  gap: .35rem;
+  padding: .42rem .7rem;
+  transition: border-color .15s ease, box-shadow .15s ease, color .15s ease;
+}
+
+.inicio-calendar-filter > i {
+  color: var(--source-color);
+  font-size: 1rem;
+}
+
+.inicio-calendar-filter > span {
+  align-items: center;
+  background: #f0f2f6;
+  border-radius: 999px;
+  display: inline-flex;
+  font-size: .68rem;
+  height: 20px;
+  justify-content: center;
+  min-width: 20px;
+  padding: 0 .3rem;
+}
+
+.inicio-calendar-filter:hover,
+.inicio-calendar-filter--active {
+  border-color: var(--source-color);
+  box-shadow: 0 3px 10px color-mix(in srgb, var(--source-color) 16%, transparent);
+  color: #2d3442;
+}
+
+.inicio-calendar-filter--active {
+  background: color-mix(in srgb, var(--source-color) 9%, white);
+}
+
 .inicio-agenda-card {
   padding: 1.2rem;
 }
@@ -1353,6 +1723,7 @@ export default {
 
 .inicio-timeline-item__icon--reservation { background: #e8f8f2; color: #218762; }
 .inicio-timeline-item__icon--public_event { background: #eaf5fe; color: #2c82c5; }
+.inicio-timeline-item__icon--task { background: #fff6e5; color: #b87718; }
 
 .inicio-timeline-item__content,
 .inicio-milestone__content {
@@ -1454,6 +1825,7 @@ export default {
 
 .inicio-event-detail__hero--reservation { background: linear-gradient(125deg, #258362, #41ad83); }
 .inicio-event-detail__hero--public_event { background: linear-gradient(125deg, #287ab7, #50a5f1); }
+.inicio-event-detail__hero--task { background: linear-gradient(125deg, #a96f17, #d99a32); }
 .inicio-event-detail__hero > div > span { color: rgba(255,255,255,.72); font-size: .76rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
 .inicio-event-detail__hero h3 { color: #fff; font-size: clamp(1.25rem, 3vw, 1.7rem); margin: .3rem 2rem 0 0; }
 .inicio-event-detail__icon { align-items: center; background: rgba(255,255,255,.16); border-radius: 12px; display: flex; flex: 0 0 52px; font-size: 1.5rem; height: 52px; justify-content: center; }
@@ -1511,10 +1883,271 @@ export default {
 :deep(.fc .fc-daygrid-more-link) { color: #556ee6; font-weight: 700; margin: 3px; }
 :deep(.fc .fc-list-event:hover td) { background: #f5f7fb; }
 
+.inicio-focus-card {
+  background: #fff;
+  border: 1px solid #e8ebf2;
+  border-radius: 14px;
+  box-shadow: 0 6px 24px rgba(35, 44, 72, .06);
+  overflow: hidden;
+}
+
+.inicio-focus-card__header {
+  align-items: center;
+  border-bottom: 1px solid #edf0f5;
+  display: flex;
+  gap: 1rem;
+  justify-content: space-between;
+  padding: 1.1rem 1.2rem;
+}
+
+.inicio-focus-total {
+  align-items: center;
+  background: #fff0f0;
+  border-radius: 999px;
+  color: #c63e3e;
+  display: inline-flex;
+  font-size: .8rem;
+  font-weight: 800;
+  height: 32px;
+  justify-content: center;
+  min-width: 32px;
+  padding: 0 .55rem;
+}
+
+.inicio-attention-list,
+.inicio-task-list {
+  display: grid;
+  gap: .55rem;
+  padding: 1rem 1.15rem;
+}
+
+.inicio-attention-item {
+  align-items: center;
+  background: #fff;
+  border: 1px solid #e8ecf2;
+  border-left: 4px solid #9aa3b2;
+  border-radius: 10px;
+  color: inherit;
+  display: grid;
+  gap: .75rem;
+  grid-template-columns: 40px minmax(0, 1fr) auto;
+  padding: .7rem .8rem;
+  text-align: left;
+  transition: border-color .15s ease, box-shadow .15s ease, transform .15s ease;
+  width: 100%;
+}
+
+.inicio-attention-item--critical { border-left-color: #f46a6a; }
+.inicio-attention-item--high { border-left-color: #f1b44c; }
+.inicio-attention-item--normal { border-left-color: #50a5f1; }
+
+.inicio-attention-item:hover,
+.inicio-task-item:hover,
+.inicio-document-item:hover,
+.inicio-quick-link:hover {
+  border-color: #cbd3e2;
+  box-shadow: 0 6px 16px rgba(38, 47, 74, .07);
+  transform: translateY(-1px);
+}
+
+.inicio-attention-item__icon {
+  align-items: center;
+  background: #f4f6fa;
+  border-radius: 9px;
+  color: #5c6677;
+  display: flex;
+  font-size: 1.15rem;
+  height: 40px;
+  justify-content: center;
+  width: 40px;
+}
+
+.inicio-attention-item--critical .inicio-attention-item__icon { background: #fff0f0; color: #d84d4d; }
+.inicio-attention-item--high .inicio-attention-item__icon { background: #fff7e7; color: #b87718; }
+
+.inicio-attention-item__content {
+  display: grid;
+  gap: .18rem;
+  min-width: 0;
+}
+
+.inicio-attention-item__content > strong,
+.inicio-task-item__content > strong,
+.inicio-document-item__content > strong {
+  color: var(--inicio-ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.inicio-attention-item__content > small,
+.inicio-task-item__content > small,
+.inicio-document-item__content > small {
+  color: var(--inicio-muted);
+  font-size: .75rem;
+}
+
+.inicio-attention-item__meta {
+  align-items: center;
+  color: var(--inicio-muted);
+  display: flex;
+  font-size: .7rem;
+  justify-content: space-between;
+  text-transform: uppercase;
+}
+
+.inicio-attention-item__meta strong {
+  color: #4f5868;
+  font-size: .68rem;
+}
+
+.inicio-attention-item__action {
+  align-items: center;
+  color: var(--inicio-primary);
+  display: inline-flex;
+  font-size: .75rem;
+  font-weight: 700;
+  gap: .2rem;
+}
+
+.inicio-task-item {
+  align-items: center;
+  background: #fff;
+  border: 1px solid #e8ecf2;
+  border-radius: 10px;
+  color: inherit;
+  display: grid;
+  gap: .65rem;
+  grid-template-columns: 28px minmax(0, 1fr) auto;
+  padding: .7rem;
+  text-align: left;
+  transition: border-color .15s ease, box-shadow .15s ease, transform .15s ease;
+  width: 100%;
+}
+
+.inicio-task-item__check {
+  color: #9ba5b5;
+  font-size: 1.1rem;
+  text-align: center;
+}
+
+.inicio-task-item__content {
+  display: grid;
+  gap: .15rem;
+  min-width: 0;
+}
+
+.inicio-agenda-empty--compact {
+  margin: 1rem;
+  min-height: 135px;
+}
+
+.inicio-document-list,
+.inicio-quick-links {
+  display: grid;
+  gap: .6rem;
+}
+
+.inicio-document-item {
+  align-items: center;
+  background: #fff;
+  border: 1px solid #e8ecf2;
+  border-radius: 10px;
+  color: inherit;
+  display: grid;
+  gap: .7rem;
+  grid-template-columns: 42px minmax(0, 1fr) auto;
+  padding: .75rem;
+  text-align: left;
+  transition: border-color .15s ease, box-shadow .15s ease, transform .15s ease;
+  width: 100%;
+}
+
+.inicio-document-item__icon {
+  align-items: center;
+  background: #eef1ff;
+  border-radius: 9px;
+  color: #5064c9;
+  display: flex;
+  font-size: 1.2rem;
+  height: 42px;
+  justify-content: center;
+  width: 42px;
+}
+
+.inicio-document-item__content {
+  display: grid;
+  gap: .16rem;
+  min-width: 0;
+}
+
+.inicio-document-item__content > span {
+  color: #6373c9;
+  font-size: .67rem;
+  font-weight: 750;
+  text-transform: uppercase;
+}
+
+.inicio-quick-links {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.inicio-quick-link {
+  align-items: center;
+  background: #fff;
+  border: 1px solid #e8ecf2;
+  border-radius: 10px;
+  color: inherit;
+  display: grid;
+  gap: .6rem;
+  grid-template-columns: 36px minmax(0, 1fr) auto;
+  padding: .7rem;
+  text-align: left;
+  transition: border-color .15s ease, box-shadow .15s ease, transform .15s ease;
+  width: 100%;
+}
+
+.inicio-quick-link > span:first-child {
+  align-items: center;
+  background: #f2f4fa;
+  border-radius: 8px;
+  color: #586ac6;
+  display: flex;
+  font-size: 1.05rem;
+  height: 36px;
+  justify-content: center;
+  width: 36px;
+}
+
+.inicio-quick-link > span:nth-child(2) {
+  display: grid;
+  min-width: 0;
+}
+
+.inicio-quick-link strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.inicio-quick-link small {
+  color: var(--inicio-muted);
+  font-size: .7rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.inicio-quick-link > .bx {
+  color: #a0a7b5;
+  font-size: 1.1rem;
+}
+
 @media (max-width: 991.98px) {
   .inicio-calendar-heading { align-items: flex-start; flex-direction: column; gap: 1rem; }
   .inicio-milestones { grid-template-columns: 1fr; }
   .inicio-information-row { gap: 1rem !important; }
+  .inicio-quick-links { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
 
 @media (max-width: 767.98px) {
@@ -1532,7 +2165,8 @@ export default {
   }
 
   .inicio-public-events,
-  .inicio-news-grid {
+  .inicio-news-grid,
+  .inicio-quick-links {
     grid-template-columns: 1fr;
   }
 
@@ -1548,7 +2182,13 @@ export default {
 
   .inicio-calendar-wrap { padding: .75rem; }
   .inicio-calendar-heading { padding: 1rem; }
+  .inicio-calendar-filters { padding: .75rem; }
   .inicio-legend { gap: .45rem .75rem; }
+  .inicio-focus-card__header { align-items: flex-start; }
+  .inicio-attention-item { grid-template-columns: 40px minmax(0, 1fr); }
+  .inicio-attention-item__action { grid-column: 2; }
+  .inicio-document-item { grid-template-columns: 42px minmax(0, 1fr); }
+  .inicio-document-item > .badge { grid-column: 2; justify-self: start; }
   .inicio-event-detail__hero { align-items: flex-start; flex-direction: column; }
   .inicio-event-detail__actions { flex-direction: column-reverse; }
   .inicio-event-detail__actions .btn { width: 100%; }

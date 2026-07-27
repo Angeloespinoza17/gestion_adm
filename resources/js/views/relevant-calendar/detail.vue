@@ -458,6 +458,7 @@ export default {
             <li>Requiere firma: {{ event.requires_signature ? "Sí" : "No" }}</li>
             <li>Requiere revisión: {{ event.requires_review ? "Sí" : "No" }}</li>
             <li>Requiere aprobación: {{ event.requires_approval ? "Sí" : "No" }}</li>
+            <li>Difundido en Inicio: {{ event.is_disseminable ? "Sí" : "No" }}</li>
           </ul>
         </BCard>
 

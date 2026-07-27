@@ -6,12 +6,15 @@ use App\Models\CalendarEvent;
 use App\Models\DependencyReservation;
 use App\Models\InternalCommunications\InternalAnnouncement;
 use App\Models\NewsPost;
+use App\Models\RiskPrevention\RiskPreventionDocument;
 use App\Models\SiteEvent;
 use App\Models\SystemModule;
+use App\Models\Task;
 use App\Models\User;
 use App\Services\RelevantCalendar\CalendarEventAccessService;
 use App\Services\RelevantCalendar\CalendarRecurrenceService;
 use App\Services\Rbac\SensitiveModuleAccessService;
+use App\Services\Tasks\TaskAccessService;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
@@ -23,6 +26,7 @@ class HomeDashboardService
         private readonly CalendarEventAccessService $calendarAccess,
         private readonly CalendarRecurrenceService $recurrenceService,
         private readonly SensitiveModuleAccessService $sensitiveModuleAccessService,
+        private readonly TaskAccessService $taskAccess,
     ) {
     }
 
@@ -38,13 +42,15 @@ class HomeDashboardService
         $calendar = $this->relevantCalendar($user, $rangeStart, $rangeEnd, $todayStart);
         $reservations = $this->reservations($user, $rangeStart, $rangeEnd, $todayStart);
         $publicEvents = $this->publicEvents($rangeStart, $rangeEnd, $todayStart);
+        $tasks = $this->tasks($user, $rangeStart, $rangeEnd, $todayStart);
+        $documents = $this->disseminatedDocuments($user);
         $news = $this->news();
-        $modules = $this->accessibleModules($user);
         $internalAnnouncements = $this->internalAnnouncements($user);
 
         $calendarItems = collect($calendar['calendar'])
             ->merge($reservations['calendar'])
             ->merge($publicEvents['calendar'])
+            ->merge($tasks['calendar'])
             ->sortBy('start')
             ->values();
 
@@ -57,6 +63,15 @@ class HomeDashboardService
             ->filter(fn (array $item) => Carbon::parse((string) $item['start'], $timezone)->greaterThan($todayEnd))
             ->take(10)
             ->values();
+
+        $attention = $this->attentionCenter(
+            $user,
+            $calendar,
+            $reservations,
+            $tasks,
+            $internalAnnouncements,
+            $todayStart,
+        );
 
         return [
             'generated_at' => $now->toIso8601String(),
@@ -76,14 +91,17 @@ class HomeDashboardService
                 'can_manage_public_events' => $this->hasAny($user, ['gestionar_eventos']),
                 'can_view_internal_communications' => $this->hasAny($user, ['ver_comunicaciones_internas']),
                 'can_manage_internal_communications' => $this->hasAny($user, ['gestionar_comunicaciones_internas']),
+                'can_view_tasks' => $this->hasAny($user, ['ver_tareas']),
+                'can_view_disseminated_documents' => $this->hasAny($user, ['ver_documentos_prevencion_difundibles']),
             ],
-            'metrics' => $this->metrics($todayItems, $calendar, $reservations, $publicEvents, $modules),
+            'metrics' => $this->metrics($todayItems, $attention, $tasks, $documents),
             'calendar' => [
                 'range' => [
                     'from' => $rangeStart->toDateString(),
                     'to' => $rangeEnd->toDateString(),
                 ],
                 'events' => $calendarItems->all(),
+                'sources' => $this->calendarSources($calendarItems),
             ],
             'agenda' => [
                 'today' => $todayItems->all(),
@@ -104,6 +122,9 @@ class HomeDashboardService
                 'upcoming' => $publicEvents['upcoming'],
                 'upcoming_count' => $publicEvents['upcoming_count'],
             ],
+            'tasks' => $tasks,
+            'documents' => $documents,
+            'attention' => $attention,
             'news' => $news,
             'internal_announcements' => $internalAnnouncements,
             'quick_links' => $this->quickLinks($user),
@@ -115,6 +136,7 @@ class HomeDashboardService
         $empty = [
             'calendar' => [],
             'upcoming' => [],
+            'attention' => [],
             'overdue_count' => 0,
             'current_month_count' => 0,
         ];
@@ -126,6 +148,7 @@ class HomeDashboardService
         $this->calendarAccess
             ->visibleEventsQuery($user)
             ->where('event_kind', CalendarEvent::KIND_SERIES_MASTER)
+            ->where('is_disseminable', true)
             ->get()
             ->each(fn (CalendarEvent $master) => $this->recurrenceService->ensureOccurrencesForEvent(
                 $master,
@@ -194,9 +217,50 @@ class HomeDashboardService
             })
             ->count();
 
+        $attentionLimit = $todayStart->copy()->addDays(7)->toDateString();
+        $attention = (clone $baseQuery)
+            ->with($this->calendarRelations())
+            ->whereNotIn('status', CalendarEvent::TERMINAL_STATUSES)
+            ->where(function (Builder $builder) use ($todayStart, $attentionLimit) {
+                $builder
+                    ->whereRaw('COALESCE(end_date, start_date) < ?', [$todayStart->toDateString()])
+                    ->orWhere(function (Builder $upcoming) use ($attentionLimit) {
+                        $upcoming
+                            ->whereIn('priority', ['alta', 'critica'])
+                            ->whereRaw('COALESCE(end_date, start_date) <= ?', [$attentionLimit]);
+                    });
+            })
+            ->orderByRaw('COALESCE(end_date, start_date) asc')
+            ->orderByRaw($this->prioritySortExpression())
+            ->limit(6)
+            ->get()
+            ->map(function (CalendarEvent $event) use ($todayStart) {
+                $dueDate = $event->end_date ?: $event->start_date;
+                $isOverdue = $dueDate?->lt($todayStart);
+
+                return [
+                    'id' => 'calendar-'.$event->id,
+                    'type' => 'relevant_calendar',
+                    'type_label' => 'Fecha relevante',
+                    'title' => $event->title,
+                    'detail' => $isOverdue
+                        ? 'Fecha institucional vencida'
+                        : 'Hito institucional de prioridad '.$event->priority,
+                    'urgency' => $isOverdue || $event->priority === 'critica' ? 'critical' : 'high',
+                    'due_at' => $dueDate?->toDateString(),
+                    'route' => '/relevant-calendar/events/'.$event->id,
+                    'action_label' => 'Revisar',
+                    'icon' => 'bx-calendar-exclamation',
+                    'status' => $event->effective_status,
+                ];
+            })
+            ->values()
+            ->all();
+
         return [
             'calendar' => $calendarEvents,
             'upcoming' => $upcoming,
+            'attention' => $attention,
             'overdue_count' => $overdueCount,
             'current_month_count' => $currentMonthCount,
         ];
@@ -329,6 +393,158 @@ class HomeDashboardService
         ];
     }
 
+    private function tasks(User $user, Carbon $rangeStart, Carbon $rangeEnd, Carbon $todayStart): array
+    {
+        $empty = [
+            'calendar' => [],
+            'items' => [],
+            'attention' => [],
+            'pending_count' => 0,
+            'overdue_count' => 0,
+            'today_count' => 0,
+            'blocked_count' => 0,
+        ];
+
+        if (! Schema::hasTable('tasks') || ! $this->hasAny($user, ['ver_tareas'])) {
+            return $empty;
+        }
+
+        $baseQuery = $this->taskAccess
+            ->visibleQuery($user)
+            ->where('owner_user_id', $user->id)
+            ->whereNotIn('status', [Task::STATUS_COMPLETED, Task::STATUS_CANCELLED]);
+
+        $calendar = (clone $baseQuery)
+            ->whereNotNull('due_date')
+            ->whereBetween('due_date', [$rangeStart->toDateString(), $rangeEnd->toDateString()])
+            ->orderBy('due_date')
+            ->limit(100)
+            ->get()
+            ->map(fn (Task $task) => $this->formatTaskCalendarEvent($task))
+            ->values()
+            ->all();
+
+        $items = (clone $baseQuery)
+            ->orderByRaw('CASE WHEN due_date IS NULL THEN 1 ELSE 0 END')
+            ->orderBy('due_date')
+            ->orderByRaw("CASE priority WHEN 'urgente' THEN 0 WHEN 'alta' THEN 1 WHEN 'media' THEN 2 ELSE 3 END")
+            ->limit(8)
+            ->get()
+            ->map(fn (Task $task) => $this->formatTaskListItem($task))
+            ->values()
+            ->all();
+
+        $attention = (clone $baseQuery)
+            ->where(function (Builder $builder) use ($todayStart) {
+                $builder
+                    ->where('status', Task::STATUS_BLOCKED)
+                    ->orWhereDate('due_date', '<=', $todayStart->toDateString());
+            })
+            ->orderByRaw("CASE WHEN status = 'bloqueada' THEN 0 WHEN due_date < ? THEN 1 ELSE 2 END", [$todayStart->toDateString()])
+            ->orderBy('due_date')
+            ->limit(6)
+            ->get()
+            ->map(function (Task $task) use ($todayStart) {
+                $isOverdue = $task->due_date?->lt($todayStart);
+                $isBlocked = $task->status === Task::STATUS_BLOCKED;
+
+                return [
+                    'id' => 'task-'.$task->id,
+                    'type' => 'task',
+                    'type_label' => 'Tarea',
+                    'title' => $task->title,
+                    'detail' => $isBlocked
+                        ? 'Tarea bloqueada'
+                        : ($isOverdue ? 'Tarea vencida' : 'Vence hoy'),
+                    'urgency' => $isBlocked || $isOverdue || $task->priority === Task::PRIORITY_URGENT
+                        ? 'critical'
+                        : 'high',
+                    'due_at' => $task->due_date?->toDateString(),
+                    'route' => '/tasks/backlog',
+                    'action_label' => 'Abrir tarea',
+                    'icon' => $isBlocked ? 'bx-block' : 'bx-list-check',
+                    'status' => $task->status,
+                ];
+            })
+            ->values()
+            ->all();
+
+        return [
+            'calendar' => $calendar,
+            'items' => $items,
+            'attention' => $attention,
+            'pending_count' => (clone $baseQuery)->count(),
+            'overdue_count' => (clone $baseQuery)
+                ->whereDate('due_date', '<', $todayStart->toDateString())
+                ->count(),
+            'today_count' => (clone $baseQuery)
+                ->whereDate('due_date', $todayStart->toDateString())
+                ->count(),
+            'blocked_count' => (clone $baseQuery)
+                ->where('status', Task::STATUS_BLOCKED)
+                ->count(),
+        ];
+    }
+
+    private function disseminatedDocuments(User $user): array
+    {
+        $empty = [
+            'items' => [],
+            'total' => 0,
+            'new_count' => 0,
+        ];
+
+        if (
+            ! Schema::hasTable('prevent_documents')
+            || ! $this->hasAny($user, ['ver_documentos_prevencion_difundibles'])
+        ) {
+            return $empty;
+        }
+
+        $query = RiskPreventionDocument::query()
+            ->where('is_disseminable', true)
+            ->whereNotNull('document_path')
+            ->where(function (Builder $builder) {
+                $builder
+                    ->whereNull('valid_until')
+                    ->orWhereDate('valid_until', '>=', now(config('app.timezone'))->toDateString());
+            })
+            ->whereIn('status', [
+                RiskPreventionDocument::STATUS_VIGENTE,
+                RiskPreventionDocument::STATUS_POR_VENCER,
+            ]);
+
+        $items = (clone $query)
+            ->orderByDesc('disseminated_at')
+            ->orderBy('title')
+            ->limit(6)
+            ->get()
+            ->map(fn (RiskPreventionDocument $document) => [
+                'id' => $document->id,
+                'title' => $document->title,
+                'document_type' => $document->document_type,
+                'document_group' => $document->document_group,
+                'version_number' => $document->version_number,
+                'valid_until' => $document->valid_until?->toDateString(),
+                'status' => $document->current_status,
+                'responsible_name' => $document->responsible_name,
+                'document_name' => $document->document_name,
+                'file_extension' => $document->file_extension,
+                'disseminated_at' => $document->disseminated_at?->toIso8601String(),
+                'route' => '/risk-prevention/document-management',
+            ])
+            ->values()
+            ->all();
+
+        return [
+            'items' => $items,
+            'total' => (clone $query)->count(),
+            'new_count' => (clone $query)
+                ->where('disseminated_at', '>=', now(config('app.timezone'))->subDays(30))
+                ->count(),
+        ];
+    }
+
     private function news(): array
     {
         if (! Schema::hasTable('news_posts')) {
@@ -412,7 +628,97 @@ class HomeDashboardService
         ];
     }
 
-    private function metrics(Collection $todayItems, array $calendar, array $reservations, array $publicEvents, Collection $modules): array
+    private function attentionCenter(
+        User $user,
+        array $calendar,
+        array $reservations,
+        array $tasks,
+        array $internalAnnouncements,
+        Carbon $todayStart,
+    ): array {
+        $items = collect($calendar['attention'] ?? [])
+            ->merge($tasks['attention'] ?? []);
+
+        if ($this->hasAny($user, ['editar_reservas', 'cancelar_reservas', 'administrar_calendario'])) {
+            $items = $items->merge(
+                collect($reservations['pending'] ?? [])->map(fn (array $reservation) => [
+                    'id' => 'reservation-'.$reservation['id'],
+                    'type' => 'reservation',
+                    'type_label' => 'Reserva',
+                    'title' => $reservation['title'],
+                    'detail' => 'Solicitud pendiente de revisión',
+                    'urgency' => 'high',
+                    'due_at' => $reservation['starts_at'],
+                    'route' => '/spaces/reservations',
+                    'action_label' => 'Revisar',
+                    'icon' => 'bx-building-house',
+                    'status' => $reservation['status'],
+                ]),
+            );
+        }
+
+        $items = $items->merge(
+            collect($internalAnnouncements['items'] ?? [])
+                ->filter(fn (array $announcement) => empty($announcement['read_at'])
+                    || ($announcement['requires_ack'] && empty($announcement['acknowledged_at'])))
+                ->map(function (array $announcement) {
+                    $needsAcknowledgement = $announcement['requires_ack'] && empty($announcement['acknowledged_at']);
+
+                    return [
+                        'id' => 'announcement-'.$announcement['id'],
+                        'type' => 'announcement',
+                        'type_label' => 'Comunicación',
+                        'title' => $announcement['title'],
+                        'detail' => $needsAcknowledgement
+                            ? 'Requiere confirmar recepción'
+                            : 'Comunicación sin leer',
+                        'urgency' => $announcement['priority'] === InternalAnnouncement::PRIORITY_URGENT
+                            ? 'critical'
+                            : ($announcement['priority'] === InternalAnnouncement::PRIORITY_IMPORTANT ? 'high' : 'normal'),
+                        'due_at' => $announcement['published_at'],
+                        'route' => '/comunicaciones',
+                        'action_label' => $needsAcknowledgement ? 'Confirmar' : 'Leer',
+                        'icon' => 'bx-message-square-detail',
+                        'status' => $announcement['priority'],
+                    ];
+                }),
+        );
+
+        $urgencyOrder = ['critical' => 0, 'high' => 1, 'normal' => 2];
+        $sortedItems = $items
+            ->unique(fn (array $item) => $item['type'].'-'.$item['id'])
+            ->sort(function (array $left, array $right) use ($urgencyOrder) {
+                $leftKey = [
+                    $urgencyOrder[$left['urgency']] ?? 9,
+                    $left['due_at'] ?: '9999-12-31',
+                ];
+                $rightKey = [
+                    $urgencyOrder[$right['urgency']] ?? 9,
+                    $right['due_at'] ?: '9999-12-31',
+                ];
+
+                return $leftKey <=> $rightKey;
+            })
+            ->values();
+
+        return [
+            'items' => $sortedItems->take(10)->values()->all(),
+            'total' => $sortedItems->count(),
+            'critical_count' => $sortedItems->where('urgency', 'critical')->count(),
+            'today_count' => $sortedItems
+                ->filter(function (array $item) use ($todayStart) {
+                    if (empty($item['due_at'])) {
+                        return false;
+                    }
+
+                    return Carbon::parse((string) $item['due_at'], config('app.timezone'))
+                        ->isSameDay($todayStart);
+                })
+                ->count(),
+        ];
+    }
+
+    private function metrics(Collection $todayItems, array $attention, array $tasks, array $documents): array
     {
         return [
             [
@@ -424,30 +730,70 @@ class HomeDashboardService
                 'tone' => 'primary',
             ],
             [
-                'key' => 'calendar',
-                'label' => 'Fechas relevantes',
-                'value' => count($calendar['upcoming']),
-                'detail' => $calendar['overdue_count'].' vencidas',
-                'icon' => 'bx-calendar-star',
-                'tone' => 'warning',
+                'key' => 'attention',
+                'label' => 'Requiere atención',
+                'value' => $attention['total'],
+                'detail' => $attention['critical_count'].' elementos críticos',
+                'icon' => 'bx-bell',
+                'tone' => $attention['critical_count'] > 0 ? 'danger' : 'warning',
             ],
             [
-                'key' => 'reservations',
-                'label' => 'Reservas próximas',
-                'value' => $reservations['upcoming_count'],
-                'detail' => $reservations['pending_count'].' pendientes',
-                'icon' => 'bx-buildings',
+                'key' => 'tasks',
+                'label' => 'Tareas pendientes',
+                'value' => $tasks['pending_count'],
+                'detail' => $tasks['overdue_count'].' vencidas · '.$tasks['today_count'].' para hoy',
+                'icon' => 'bx-list-check',
                 'tone' => 'success',
             ],
             [
-                'key' => 'modules',
-                'label' => 'Módulos disponibles',
-                'value' => $modules->whereNull('parent_id')->count(),
-                'detail' => $publicEvents['upcoming_count'].' eventos publicados',
-                'icon' => 'bx-grid-alt',
+                'key' => 'documents',
+                'label' => 'Documentos difundidos',
+                'value' => $documents['total'],
+                'detail' => $documents['new_count'].' nuevos en los últimos 30 días',
+                'icon' => 'bx-file-blank',
                 'tone' => 'info',
             ],
         ];
+    }
+
+    private function calendarSources(Collection $calendarItems): array
+    {
+        $sources = [
+            'relevant_calendar' => [
+                'key' => 'relevant_calendar',
+                'label' => 'Fechas relevantes',
+                'color' => '#556ee6',
+                'icon' => 'bx-calendar-event',
+            ],
+            'reservation' => [
+                'key' => 'reservation',
+                'label' => 'Reservas',
+                'color' => '#34c38f',
+                'icon' => 'bx-building-house',
+            ],
+            'public_event' => [
+                'key' => 'public_event',
+                'label' => 'Eventos públicos',
+                'color' => '#50a5f1',
+                'icon' => 'bx-broadcast',
+            ],
+            'task' => [
+                'key' => 'task',
+                'label' => 'Mis tareas',
+                'color' => '#f1b44c',
+                'icon' => 'bx-list-check',
+            ],
+        ];
+
+        return collect($sources)
+            ->map(function (array $source) use ($calendarItems) {
+                $source['count'] = $calendarItems->where('source', $source['key'])->count();
+
+                return $source;
+            })
+            ->filter(fn (array $source) => $source['count'] > 0)
+            ->values()
+            ->all();
     }
 
     private function quickLinks(User $user): array
@@ -508,6 +854,14 @@ class HomeDashboardService
                 'icon' => 'bx-message-square-detail',
                 'tone' => 'info',
                 'permissions' => ['ver_comunicaciones_internas'],
+            ],
+            [
+                'title' => 'Documentos difundidos',
+                'description' => 'Protocolos y documentación oficial',
+                'route' => '/risk-prevention/document-management',
+                'icon' => 'bx-file-blank',
+                'tone' => 'warning',
+                'permissions' => ['ver_documentos_prevencion_difundibles'],
             ],
             [
                 'title' => 'Noticias',
@@ -581,6 +935,7 @@ class HomeDashboardService
     {
         return $this->calendarAccess
             ->visibleEventsQuery($user)
+            ->where('is_disseminable', true)
             ->where('event_kind', '!=', CalendarEvent::KIND_SERIES_MASTER)
             ->where(function (Builder $builder) {
                 $builder
@@ -620,6 +975,7 @@ class HomeDashboardService
             'route' => '/relevant-calendar/events/'.$event->id,
             'status' => $event->effective_status,
             'priority' => $event->priority,
+            'is_disseminable' => $event->is_disseminable,
             'detail' => $event->institution?->name ?: $event->department?->name,
             'extendedProps' => [
                 'route' => '/relevant-calendar/events/'.$event->id,
@@ -627,6 +983,7 @@ class HomeDashboardService
                 'source_label' => 'Fecha relevante',
                 'status' => $event->effective_status,
                 'priority' => $event->priority,
+                'is_disseminable' => $event->is_disseminable,
                 'department' => $event->department?->name,
                 'institution' => $event->institution?->name,
                 'responsible' => $event->responsibleUser?->name,
@@ -720,6 +1077,64 @@ class HomeDashboardService
                 'category' => $event->category,
                 'location' => $event->location,
             ],
+        ];
+    }
+
+    private function formatTaskCalendarEvent(Task $task): array
+    {
+        $start = $task->due_date?->toDateString();
+        $color = match ($task->priority) {
+            Task::PRIORITY_URGENT => '#f46a6a',
+            Task::PRIORITY_HIGH => '#f1b44c',
+            Task::PRIORITY_LOW => '#74788d',
+            default => '#d99a32',
+        };
+
+        return [
+            'id' => 'task-'.$task->id,
+            'model_id' => $task->id,
+            'source' => 'task',
+            'source_label' => 'Mi tarea',
+            'title' => $task->title,
+            'start' => $start,
+            'end' => $start
+                ? Carbon::parse($start, config('app.timezone'))->addDay()->toDateString()
+                : null,
+            'allDay' => true,
+            'backgroundColor' => $color,
+            'borderColor' => $task->is_overdue ? '#b02a37' : $color,
+            'textColor' => '#ffffff',
+            'route' => '/tasks/backlog',
+            'status' => $task->status,
+            'priority' => $task->priority,
+            'detail' => $task->status_label,
+            'extendedProps' => [
+                'route' => '/tasks/backlog',
+                'source' => 'task',
+                'source_label' => 'Mi tarea',
+                'status' => $task->status,
+                'priority' => $task->priority,
+                'detail' => $task->description,
+            ],
+        ];
+    }
+
+    private function formatTaskListItem(Task $task): array
+    {
+        return [
+            'id' => $task->id,
+            'source' => 'task',
+            'source_label' => 'Tarea',
+            'title' => $task->title,
+            'description' => $task->description,
+            'priority' => $task->priority,
+            'priority_label' => $task->priority_label,
+            'status' => $task->status,
+            'status_label' => $task->status_label,
+            'due_date' => $task->due_date?->toDateString(),
+            'is_overdue' => $task->is_overdue,
+            'is_due_soon' => $task->is_due_soon,
+            'route' => '/tasks/backlog',
         ];
     }
 
