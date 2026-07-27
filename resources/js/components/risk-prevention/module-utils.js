@@ -107,6 +107,7 @@ export function statusVariant(status) {
     archivado: "secondary",
     repuesto: "info",
     no_asiste: "secondary",
+    no_aplica: "secondary",
     cerrado: "primary",
   };
 

@@ -161,16 +161,24 @@ class SaveInfirmaryAttentionRequest extends FormRequest
                 return;
             }
 
-            $allowedCargoSlugs = InfirmaryAttention::STAFF_COMPANION_CARGO_SLUGS[$this->input('accompanied_by_type')] ?? [];
+            $allowedDepartmentSlugs = InfirmaryAttention::STAFF_COMPANION_DEPARTMENT_SLUGS[$this->input('accompanied_by_type')] ?? [];
 
             $exists = Staff::query()
                 ->whereKey($value)
                 ->where('active', true)
-                ->whereHas('cargo', fn ($query) => $query->whereIn('slug', $allowedCargoSlugs))
+                ->where(function ($query) use ($allowedDepartmentSlugs) {
+                    $query
+                        ->whereHas('departments', fn ($departmentQuery) => $departmentQuery
+                            ->where('departments.active', true)
+                            ->whereIn('departments.slug', $allowedDepartmentSlugs))
+                        ->orWhereHas('managedDepartments', fn ($departmentQuery) => $departmentQuery
+                            ->where('departments.active', true)
+                            ->whereIn('departments.slug', $allowedDepartmentSlugs));
+                })
                 ->exists();
 
             if (! $exists) {
-                $fail('La funcionaria seleccionada no corresponde al tipo de acompañante.');
+                $fail('La funcionaria seleccionada no pertenece al departamento habilitado para este tipo de acompañante.');
             }
         };
     }
@@ -179,7 +187,7 @@ class SaveInfirmaryAttentionRequest extends FormRequest
     {
         return array_key_exists(
             (string) $this->input('accompanied_by_type'),
-            InfirmaryAttention::STAFF_COMPANION_CARGO_SLUGS
+            InfirmaryAttention::STAFF_COMPANION_DEPARTMENT_SLUGS
         );
     }
 

@@ -48,9 +48,9 @@ class InfirmaryAttention extends Model
         ['value' => 'otro', 'label' => 'Otro'],
     ];
 
-    public const STAFF_COMPANION_CARGO_SLUGS = [
-        'inspectora' => ['inspectoria'],
-        'asistente_aula' => ['asistente-de-aula'],
+    public const STAFF_COMPANION_DEPARTMENT_SLUGS = [
+        'inspectora' => ['inspectoria-general'],
+        'asistente_aula' => ['asistentes-de-aula'],
     ];
 
     protected $table = 'infirmary_attentions';

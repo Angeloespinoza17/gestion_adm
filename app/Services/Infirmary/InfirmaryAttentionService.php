@@ -104,7 +104,7 @@ class InfirmaryAttentionService
         $isAccidentCategory = in_array($payload['attention_category'] ?? null, ['accidente_menor', 'accidente_mayor'], true);
         $accidentLocationType = $isAccidentCategory ? ($payload['accident_location_type'] ?? null) : null;
         $companionType = $payload['accompanied_by_type'];
-        $companionStaffId = array_key_exists($companionType, InfirmaryAttention::STAFF_COMPANION_CARGO_SLUGS)
+        $companionStaffId = array_key_exists($companionType, InfirmaryAttention::STAFF_COMPANION_DEPARTMENT_SLUGS)
             ? ($payload['accompanied_by_staff_id'] ?? null)
             : null;
         $companionStaff = $companionStaffId ? Staff::query()->find($companionStaffId) : null;

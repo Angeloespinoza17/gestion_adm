@@ -3,11 +3,13 @@
 namespace App\Http\Controllers\RiskPrevention;
 
 use App\Http\Controllers\Controller;
+use App\Models\Department;
 use App\Models\RiskPrevention\RiskPreventionDocument;
+use App\Models\RiskPrevention\RiskPreventionEmergencyPlan;
 use App\Models\RiskPrevention\RiskPreventionEppDelivery;
 use App\Models\RiskPrevention\RiskPreventionEppItem;
-use App\Models\RiskPrevention\RiskPreventionEmergencyPlan;
 use App\Models\RiskPrevention\RiskPreventionFireExtinguisher;
+use App\Models\RiskPrevention\RiskPreventionStaffRequirementType;
 use App\Models\RiskPrevention\RiskPreventionTrainingParticipant;
 use App\Models\Staff;
 use App\Services\RiskPrevention\RiskPreventionAccessService;
@@ -17,8 +19,7 @@ class RiskPreventionCatalogController extends Controller
 {
     public function __construct(
         private readonly RiskPreventionAccessService $accessService,
-    ) {
-    }
+    ) {}
 
     public function __invoke(): JsonResponse
     {
@@ -74,6 +75,44 @@ class RiskPreventionCatalogController extends Controller
                 ['Presencial', 'Online', 'Mixta'],
                 [],
             ),
+            'personnel_requirements' => RiskPreventionStaffRequirementType::query()
+                ->where('active', true)
+                ->orderBy('sort_order')
+                ->orderBy('name')
+                ->get(['id', 'name', 'kind', 'validity_months']),
+            'staff_members' => Staff::query()
+                ->with([
+                    'cargo:id,name',
+                    'departments:id,name',
+                ])
+                ->where('active', true)
+                ->orderBy('full_name')
+                ->limit(500)
+                ->get(['id', 'full_name', 'rut', 'cargo_id'])
+                ->map(fn (Staff $staff) => [
+                    'id' => $staff->id,
+                    'name' => $staff->full_name,
+                    'rut' => $staff->rut,
+                    'position' => $staff->cargo?->name,
+                    'department_ids' => $staff->departments->pluck('id')->values(),
+                    'departments' => $staff->departments->pluck('name')->values(),
+                ])
+                ->values(),
+            'staff_departments' => Department::query()
+                ->where('active', true)
+                ->whereHas('staff', fn ($query) => $query->where('staff.active', true))
+                ->withCount([
+                    'staff as active_staff_count' => fn ($query) => $query->where('staff.active', true),
+                ])
+                ->orderBy('sort_order')
+                ->orderBy('name')
+                ->get(['id', 'name'])
+                ->map(fn (Department $department) => [
+                    'id' => $department->id,
+                    'name' => $department->name,
+                    'staff_count' => $department->active_staff_count,
+                ])
+                ->values(),
             'training_compliance_statuses' => [
                 ['value' => 'cumplido', 'label' => 'Cumplido'],
                 ['value' => 'pendiente', 'label' => 'Pendiente'],

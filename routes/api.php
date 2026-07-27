@@ -84,6 +84,7 @@ use App\Http\Controllers\RiskPrevention\RiskPreventionDocumentController;
 use App\Http\Controllers\RiskPrevention\RiskPreventionEmergencyController;
 use App\Http\Controllers\RiskPrevention\RiskPreventionEppController;
 use App\Http\Controllers\RiskPrevention\RiskPreventionFireExtinguisherController;
+use App\Http\Controllers\RiskPrevention\RiskPreventionPersonnelController;
 use App\Http\Controllers\RiskPrevention\RiskPreventionReportController;
 use App\Http\Controllers\RiskPrevention\RiskPreventionTrainingController;
 use App\Http\Controllers\RoleController;
@@ -786,6 +787,20 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::put('/trainings/{training}', [RiskPreventionTrainingController::class, 'update'])->middleware('permission:gestionar_prevencion_riesgos');
         Route::delete('/trainings/{training}', [RiskPreventionTrainingController::class, 'destroy'])->middleware('permission:gestionar_prevencion_riesgos');
         Route::get('/trainings/{training}/evidence', [RiskPreventionTrainingController::class, 'downloadEvidence'])->middleware('permission:ver_prevencion_riesgos');
+
+        Route::get('/personnel/matrix', [RiskPreventionPersonnelController::class, 'matrix'])->middleware('permission:ver_prevencion_riesgos');
+        Route::get('/personnel/requirement-types', [RiskPreventionPersonnelController::class, 'requirementTypes'])->middleware('permission:ver_prevencion_riesgos');
+        Route::post('/personnel/requirement-types', [RiskPreventionPersonnelController::class, 'storeRequirement'])->middleware('permission:gestionar_prevencion_riesgos');
+        Route::put('/personnel/requirement-types/{requirement}', [RiskPreventionPersonnelController::class, 'updateRequirement'])->middleware('permission:gestionar_prevencion_riesgos');
+        Route::delete('/personnel/requirement-types/{requirement}', [RiskPreventionPersonnelController::class, 'destroyRequirement'])->middleware('permission:gestionar_prevencion_riesgos');
+        Route::post('/personnel/staff/{staff}/requirements/{requirement}/compliance', [RiskPreventionPersonnelController::class, 'storeCompliance'])->middleware('permission:gestionar_prevencion_riesgos');
+        Route::delete('/personnel/compliances/{compliance}', [RiskPreventionPersonnelController::class, 'destroyCompliance'])->middleware('permission:gestionar_prevencion_riesgos');
+        Route::get('/personnel/compliances/{compliance}/download', [RiskPreventionPersonnelController::class, 'downloadCompliance'])->middleware('permission:ver_prevencion_riesgos');
+        Route::get('/personnel/staff/{staff}/documents/download', [RiskPreventionPersonnelController::class, 'downloadStaffArchive'])->middleware('permission:exportar_prevencion_riesgos');
+        Route::get('/personnel/committees', [RiskPreventionPersonnelController::class, 'committees'])->middleware('permission:ver_prevencion_riesgos');
+        Route::post('/personnel/committees', [RiskPreventionPersonnelController::class, 'storeCommittee'])->middleware('permission:gestionar_prevencion_riesgos');
+        Route::put('/personnel/committees/{committee}', [RiskPreventionPersonnelController::class, 'updateCommittee'])->middleware('permission:gestionar_prevencion_riesgos');
+        Route::delete('/personnel/committees/{committee}', [RiskPreventionPersonnelController::class, 'destroyCommittee'])->middleware('permission:gestionar_prevencion_riesgos');
 
         Route::get('/documents', [RiskPreventionDocumentController::class, 'index'])->middleware('permission:ver_prevencion_riesgos');
         Route::post('/documents', [RiskPreventionDocumentController::class, 'store'])->middleware('permission:gestionar_prevencion_riesgos');

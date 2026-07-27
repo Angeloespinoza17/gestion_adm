@@ -431,7 +431,11 @@ export default {
     companionStaffItems(type) {
       return (this.catalogs.companion_staff?.[type] || []).map((item) => ({
         value: item.id,
-        text: item.cargo_name ? `${item.full_name} · ${item.cargo_name}` : item.full_name,
+        text: [
+          item.full_name,
+          item.cargo_name,
+          ...(item.department_names || []),
+        ].filter(Boolean).join(" · "),
       }));
     },
     treatmentHasCategory(treatment, category) {
@@ -929,6 +933,15 @@ export default {
         : '<div class="swal-medical-ok"><i class="bx bxs-check-shield"></i> Sin alertas médicas registradas</div>';
       const medications = (context.permanent_medications || [])
         .map((item) => [item.medication_name, [item.dose_amount, item.dose_unit].filter(Boolean).join(" ") || item.dose, item.frequency || item.schedule_text].filter(Boolean).join(" · "));
+      const guardianContacts = (context.emergency_contacts || [])
+        .map((contact) => `
+          <div class="swal-guardian-contact">
+            <span>${this.escapeHtml(contact.label || (contact.type === "backup" ? "Apoderado suplente" : "Apoderado principal"))}</span>
+            <strong>${this.escapeHtml(contact.name || "Sin nombre registrado")}</strong>
+            <small><i class="bx bx-phone"></i> ${this.escapeHtml(contact.phone || "Sin teléfono registrado")}</small>
+          </div>
+        `)
+        .join("");
 
       return `
         <div class="swal-medical-context">
@@ -941,6 +954,12 @@ export default {
             <div><span>Grupo sanguíneo</span><strong>${this.escapeHtml(context.blood_type || "Sin información")}</strong></div>
             <div><span>Previsión</span><strong>${this.escapeHtml(context.health_insurance || "Sin información")}</strong></div>
             <div><span>Educación Física</span><strong>${context.fit_for_physical_education === false ? "No apta" : context.fit_for_physical_education === true ? "Apta" : "Sin información"}</strong></div>
+          </div>
+          <div class="swal-guardian-contacts">
+            <div class="swal-guardian-contacts__title"><i class="bx bx-phone-call"></i> Contactos de apoderados</div>
+            <div class="swal-guardian-contacts__grid">
+              ${guardianContacts || '<div class="swal-guardian-contact swal-guardian-contact--empty">Sin apoderados registrados.</div>'}
+            </div>
           </div>
           ${medications.length ? `<div class="swal-medical-detail"><strong>Medicación vigente</strong><span>${medications.map((item) => this.escapeHtml(item)).join("<br>")}</span></div>` : ""}
           ${context.health_observations ? `<div class="swal-medical-detail"><strong>Observaciones de salud</strong><span>${this.escapeHtml(context.health_observations)}</span></div>` : ""}
@@ -3031,6 +3050,70 @@ export default {
   font-size: 0.78rem;
 }
 
+.infirmary-attention-swal .swal-guardian-contacts {
+  margin: 0 0.9rem 0.7rem;
+  padding: 0.65rem;
+  border: 1px solid #dbe5f2;
+  border-radius: 6px;
+  background: #f7faff;
+}
+
+.infirmary-attention-swal .swal-guardian-contacts__title {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin-bottom: 0.5rem;
+  color: #526078;
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.infirmary-attention-swal .swal-guardian-contacts__grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.5rem;
+}
+
+.infirmary-attention-swal .swal-guardian-contact {
+  min-width: 0;
+  padding: 0.55rem 0.65rem;
+  border: 1px solid #e0e7f1;
+  border-radius: 5px;
+  background: #fff;
+}
+
+.infirmary-attention-swal .swal-guardian-contact span,
+.infirmary-attention-swal .swal-guardian-contact strong,
+.infirmary-attention-swal .swal-guardian-contact small {
+  display: block;
+}
+
+.infirmary-attention-swal .swal-guardian-contact span {
+  color: #707b8d;
+  font-size: 0.66rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.infirmary-attention-swal .swal-guardian-contact strong {
+  margin-top: 0.15rem;
+  overflow-wrap: anywhere;
+  font-size: 0.78rem;
+}
+
+.infirmary-attention-swal .swal-guardian-contact small {
+  margin-top: 0.25rem;
+  color: #526078;
+  font-size: 0.73rem;
+}
+
+.infirmary-attention-swal .swal-guardian-contact--empty {
+  grid-column: 1 / -1;
+  color: #707b8d;
+  font-size: 0.75rem;
+}
+
 .infirmary-attention-swal .swal-medical-detail {
   margin: 0 0.9rem 0.7rem;
   padding: 0.6rem;
@@ -3050,6 +3133,10 @@ export default {
   .infirmary-treatment-toolbar .btn,
   .infirmary-treatment-card__header .btn {
     width: 100%;
+  }
+
+  .infirmary-attention-swal .swal-guardian-contacts__grid {
+    grid-template-columns: 1fr;
   }
 }
 </style>

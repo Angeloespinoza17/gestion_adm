@@ -5,7 +5,7 @@ const axios = window.axios;
 import { menuItems } from "./menu";
 import { useAuthStore } from "@/state/pinia";
 import LoadingState from "@/components/ui/loading-state.vue";
-import avatar1 from "@/assets/images/users/avatar-1.jpg";
+import avatarPlaceholder from "@/assets/images/users/user-dummy-img.jpg";
 
 const cnscLogo = "/brand/logo-cnsc.png";
 
@@ -211,7 +211,7 @@ export default {
       menuItems: [],
       isLoadingMenu: true,
       cnscLogo,
-      avatar1,
+      avatarPlaceholder,
       auth: useAuthStore(),
     };
   },
@@ -496,6 +496,12 @@ export default {
           },
           {
             id: "fallback-risk-prevention-documents",
+            label: "Gestión del personal",
+            link: "/risk-prevention/personnel",
+            parentId: "fallback-risk-prevention",
+          },
+          {
+            id: "fallback-risk-prevention-company-documents",
             label: "Gestión documental empresa",
             link: "/risk-prevention/documents",
             parentId: "fallback-risk-prevention",
@@ -893,6 +899,7 @@ export default {
               "/risk-prevention/emergencies",
               "/risk-prevention/epp",
               "/risk-prevention/trainings",
+              "/risk-prevention/personnel",
               "/risk-prevention/documents",
               "/risk-prevention/document-management",
               "/risk-prevention/reports",
@@ -1395,7 +1402,7 @@ export default {
       }
     },
     sidebarAvatar() {
-      return this.sidebarUser.profile_photo_url || this.avatar1;
+      return this.sidebarUser.profile_photo_url || this.avatarPlaceholder;
     },
     userInitial() {
       return (this.sidebarUser.name || "U").trim().charAt(0).toUpperCase();
@@ -1477,7 +1484,7 @@ export default {
       <div class="sidebar-account">
         <router-link to="/account/profile" class="sidebar-account__user" @click="onLeafNavigation">
           <div class="sidebar-account__avatar">
-            <img :src="sidebarAvatar" alt="" />
+            <img :src="sidebarAvatar" :alt="`Foto de perfil de ${sidebarUser.name}`" />
             <span>{{ userInitial }}</span>
           </div>
           <div class="sidebar-account__meta">

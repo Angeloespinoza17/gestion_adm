@@ -13,9 +13,11 @@ class RiskPreventionTraining extends Model
 
     protected $fillable = [
         'name',
+        'requirement_type_id',
         'training_type',
         'training_date',
         'modality',
+        'is_requirement',
         'evidence_path',
         'evidence_name',
         'observations',
@@ -25,11 +27,17 @@ class RiskPreventionTraining extends Model
 
     protected $casts = [
         'training_date' => 'date',
+        'is_requirement' => 'boolean',
     ];
 
     public function participants(): HasMany
     {
         return $this->hasMany(RiskPreventionTrainingParticipant::class, 'training_id')->orderBy('employee_name');
+    }
+
+    public function requirement(): BelongsTo
+    {
+        return $this->belongsTo(RiskPreventionStaffRequirementType::class, 'requirement_type_id');
     }
 
     public function createdBy(): BelongsTo

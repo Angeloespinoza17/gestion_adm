@@ -14,8 +14,12 @@ import {
 } from "../../components/risk-prevention/module-utils";
 
 const emptyParticipant = () => ({
+  id: null,
+  staff_id: "",
   employee_name: "",
   compliance_status: "pendiente",
+  issued_on: "",
+  expires_on: "",
   notes: "",
 });
 
@@ -25,6 +29,7 @@ const emptyTraining = () => ({
   training_type: "induccion",
   training_date: "",
   modality: "Presencial",
+  is_requirement: true,
   observations: "",
   evidence: null,
   participants: [emptyParticipant()],
@@ -42,11 +47,17 @@ export default {
       items: [],
       showModal: false,
       form: emptyTraining(),
+      selectedDepartmentId: "",
     };
   },
   computed: {
     isEditing() {
       return Boolean(this.form.id);
+    },
+    selectedParticipantCount() {
+      return this.form.participants.filter((participant) => (
+        participant.staff_id || String(participant.employee_name || "").trim()
+      )).length;
     },
   },
   mounted() {
@@ -78,6 +89,7 @@ export default {
         ...emptyTraining(),
         training_date: new Date().toISOString().slice(0, 10),
       };
+      this.selectedDepartmentId = "";
       this.showModal = true;
     },
     openEdit(item) {
@@ -87,16 +99,22 @@ export default {
         training_type: item.training_type || "induccion",
         training_date: item.training_date || "",
         modality: item.modality || "Presencial",
+        is_requirement: item.is_requirement !== false,
         observations: item.observations || "",
         evidence: null,
         participants: (item.participants || []).length
           ? (item.participants || []).map((participant) => ({
+              id: participant.id,
+              staff_id: participant.staff_id || "",
               employee_name: participant.employee_name || "",
               compliance_status: participant.compliance_status || "pendiente",
+              issued_on: participant.issued_on || item.training_date || "",
+              expires_on: participant.expires_on || "",
               notes: participant.notes || "",
             }))
           : [emptyParticipant()],
       };
+      this.selectedDepartmentId = "";
       this.showModal = true;
     },
     addParticipant() {
@@ -106,19 +124,72 @@ export default {
       if (this.form.participants.length === 1) return;
       this.form.participants.splice(index, 1);
     },
+    participantFromStaff(staff) {
+      return {
+        ...emptyParticipant(),
+        staff_id: staff.id,
+        employee_name: staff.name,
+      };
+    },
+    addStaffParticipants(staffMembers) {
+      const selectedIds = new Set(
+        this.form.participants
+          .map((participant) => Number(participant.staff_id))
+          .filter(Boolean),
+      );
+      const additions = staffMembers
+        .filter((staff) => !selectedIds.has(Number(staff.id)))
+        .map((staff) => this.participantFromStaff(staff));
+
+      if (!additions.length) return;
+
+      const existingParticipants = this.form.participants.filter((participant) => (
+        participant.id
+        || participant.staff_id
+        || String(participant.employee_name || "").trim()
+      ));
+      this.form.participants = [...existingParticipants, ...additions];
+    },
+    addAllParticipants() {
+      this.addStaffParticipants(this.catalogs.staff_members || []);
+    },
+    addDepartmentParticipants() {
+      const departmentId = Number(this.selectedDepartmentId);
+      if (!departmentId) return;
+
+      const staffMembers = (this.catalogs.staff_members || []).filter((staff) => (
+        (staff.department_ids || []).some((id) => Number(id) === departmentId)
+      ));
+      this.addStaffParticipants(staffMembers);
+    },
+    applyPlannedDateToAllParticipants() {
+      if (!this.form.training_date || !this.selectedParticipantCount) return;
+
+      this.form.participants.forEach((participant) => {
+        if (!participant.staff_id && !String(participant.employee_name || "").trim()) return;
+
+        participant.issued_on = this.form.training_date;
+        participant.expires_on = this.form.training_date;
+      });
+    },
     buildFormData() {
       const formData = new FormData();
       formData.append("name", this.form.name);
       formData.append("training_type", this.form.training_type);
       formData.append("training_date", this.form.training_date);
       formData.append("modality", this.form.modality);
+      formData.append("is_requirement", this.form.is_requirement ? "1" : "0");
       formData.append("observations", this.form.observations || "");
       if (this.form.evidence) {
         formData.append("evidence", this.form.evidence);
       }
       this.form.participants.forEach((participant, index) => {
+        if (participant.id) formData.append(`participants[${index}][id]`, participant.id);
+        if (participant.staff_id) formData.append(`participants[${index}][staff_id]`, participant.staff_id);
         formData.append(`participants[${index}][employee_name]`, participant.employee_name || "");
         formData.append(`participants[${index}][compliance_status]`, participant.compliance_status || "pendiente");
+        formData.append(`participants[${index}][issued_on]`, participant.issued_on || "");
+        formData.append(`participants[${index}][expires_on]`, participant.expires_on || "");
         formData.append(`participants[${index}][notes]`, participant.notes || "");
       });
       return formData;
@@ -172,6 +243,30 @@ export default {
     completedCount(item) {
       return (item.participants || []).filter((participant) => participant.compliance_status === "cumplido").length;
     },
+    staffOptions(participant) {
+      const options = [{ value: "", text: "Seleccionar funcionario" }];
+      const selectedIds = new Set(
+        this.form.participants
+          .filter((item) => item !== participant)
+          .map((item) => Number(item.staff_id))
+          .filter(Boolean),
+      );
+      const members = (this.catalogs.staff_members || [])
+        .filter((item) => !selectedIds.has(Number(item.id)))
+        .map((item) => ({
+          value: item.id,
+          text: `${item.name}${item.rut ? ` · ${item.rut}` : ""}`,
+        }));
+      if (participant.staff_id && !members.some((item) => Number(item.value) === Number(participant.staff_id))) {
+        options.push({ value: participant.staff_id, text: participant.employee_name || "Funcionario inactivo" });
+      }
+      return [...options, ...members];
+    },
+    onParticipantStaffChange(participant) {
+      const staff = (this.catalogs.staff_members || [])
+        .find((item) => Number(item.id) === Number(participant.staff_id));
+      if (staff) participant.employee_name = staff.name;
+    },
   },
 };
 </script>
@@ -205,7 +300,7 @@ export default {
             { value: 'obligatoria', text: 'Obligatoria' },
           ]" />
         </div>
-        <div class="col-md-2">
+        <div class="col-md-3">
           <BFormSelect v-model="filters.compliance_status" :options="[
             { value: '', text: 'Todos los estados' },
             { value: 'cumplido', text: 'Cumplido' },
@@ -231,6 +326,9 @@ export default {
               <div class="small text-muted">
                 {{ formatRiskDate(item.training_date) }} · {{ item.modality }} · {{ item.training_type }}
               </div>
+              <BBadge :variant="item.is_requirement ? 'primary' : 'secondary'" class="mt-2">
+                {{ item.is_requirement ? "Es requisito" : "No es requisito" }}
+              </BBadge>
             </div>
             <div class="d-flex flex-wrap gap-2">
               <BBadge variant="success">Cumplidos: {{ completedCount(item) }}</BBadge>
@@ -246,6 +344,7 @@ export default {
                 <tr>
                   <th>Funcionario</th>
                   <th>Estado</th>
+                  <th>Vencimiento</th>
                   <th>Observación</th>
                 </tr>
               </thead>
@@ -253,10 +352,11 @@ export default {
                 <tr v-for="participant in item.participants || []" :key="participant.id">
                   <td>{{ participant.employee_name }}</td>
                   <td><StatusBadge :status="participant.compliance_status" /></td>
+                  <td>{{ formatRiskDate(participant.expires_on) }}</td>
                   <td>{{ participant.notes || "-" }}</td>
                 </tr>
                 <tr v-if="!(item.participants || []).length">
-                  <td colspan="3" class="text-center text-muted py-3">Sin participantes registrados.</td>
+                  <td colspan="4" class="text-center text-muted py-3">Sin participantes registrados.</td>
                 </tr>
               </tbody>
             </table>
@@ -288,7 +388,7 @@ export default {
           <label class="form-label">Nombre</label>
           <BFormInput v-model="form.name" />
         </div>
-        <div class="col-md-2">
+        <div class="col-md-3">
           <label class="form-label">Tipo</label>
           <BFormSelect v-model="form.training_type" :options="[
             { value: 'induccion', text: 'Inducción' },
@@ -296,42 +396,118 @@ export default {
             { value: 'obligatoria', text: 'Obligatoria' },
           ]" />
         </div>
-        <div class="col-md-2">
+        <div class="col-md-3">
           <label class="form-label">Fecha</label>
           <BFormInput v-model="form.training_date" type="date" />
         </div>
-        <div class="col-md-2">
+        <div class="col-md-3">
           <label class="form-label">Modalidad</label>
           <BFormSelect
             v-model="form.modality"
             :options="(catalogs.training_modalities || []).map((item) => ({ value: item, text: item }))"
           />
         </div>
-        <div class="col-md-6">
+        <div class="col-md-9">
           <label class="form-label">Evidencia documental</label>
           <BFormFile @change="form.evidence = $event.target.files[0] || null" />
         </div>
-        <div class="col-md-6">
+        <div class="col-12">
           <label class="form-label">Observaciones</label>
           <BFormTextarea v-model="form.observations" rows="3" />
+        </div>
+        <div class="col-12">
+          <div class="border rounded p-3 bg-light">
+            <BFormCheckbox v-model="form.is_requirement" switch>
+              <strong>Es requisito para los funcionarios</strong>
+            </BFormCheckbox>
+            <div class="small text-muted mt-1">
+              Activado por defecto. Si se desmarca, esta capacitación no generará alertas pendientes en la gestión del personal.
+            </div>
+          </div>
         </div>
       </div>
 
       <BCard class="mt-4">
-        <div class="d-flex justify-content-between align-items-center mb-3">
+        <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
           <div>
             <h5 class="mb-0">Participantes</h5>
-            <div class="small text-muted">Estado de cumplimiento por funcionario.</div>
+            <div class="small text-muted">
+              Agrega funcionarios individualmente, por departamento o de forma masiva.
+            </div>
           </div>
-          <BButton size="sm" variant="outline-primary" @click="addParticipant">Agregar participante</BButton>
+          <div class="d-flex flex-wrap gap-2">
+            <BButton size="sm" variant="outline-primary" @click="addParticipant">
+              Agregar individual
+            </BButton>
+            <BButton size="sm" variant="outline-primary" @click="addAllParticipants">
+              Agregar todos
+            </BButton>
+          </div>
+        </div>
+
+        <div class="row g-2 align-items-end bg-light border rounded p-2 mb-3">
+          <div class="col-md-8">
+            <label class="form-label mb-1">Agregar por departamento</label>
+            <BFormSelect
+              v-model="selectedDepartmentId"
+              :options="[
+                { value: '', text: 'Seleccionar departamento' },
+                ...(catalogs.staff_departments || []).map((item) => ({
+                  value: item.id,
+                  text: `${item.name} (${item.staff_count} ${Number(item.staff_count) === 1 ? 'funcionario' : 'funcionarios'})`,
+                })),
+              ]"
+            />
+          </div>
+          <div class="col-md-4">
+            <BButton
+              class="w-100"
+              variant="outline-secondary"
+              :disabled="!selectedDepartmentId"
+              @click="addDepartmentParticipants"
+            >
+              Agregar departamento
+            </BButton>
+          </div>
+        </div>
+
+        <div class="small text-muted mb-2">
+          {{ selectedParticipantCount }}
+          {{ selectedParticipantCount === 1 ? "participante seleccionado" : "participantes seleccionados" }}
+        </div>
+
+        <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 border rounded p-2 mb-3">
+          <div class="small text-muted">
+            Copia la fecha planificada en realización y vencimiento. Luego podrás modificar cada persona.
+          </div>
+          <BButton
+            size="sm"
+            variant="outline-success"
+            :disabled="!form.training_date || !selectedParticipantCount"
+            @click="applyPlannedDateToAllParticipants"
+          >
+            <i class="bx bx-calendar-check"></i>
+            Usar fecha planificada para todos
+          </BButton>
         </div>
 
         <div v-for="(participant, index) in form.participants" :key="index" class="row g-3 align-items-end border rounded p-2 mb-2">
-          <div class="col-md-5">
+          <div class="col-md-4">
             <label class="form-label">Funcionario</label>
-            <BFormInput v-model="participant.employee_name" list="risk-training-employees" />
+            <BFormSelect
+              v-model="participant.staff_id"
+              :options="staffOptions(participant)"
+              @change="onParticipantStaffChange(participant)"
+            />
+            <BFormInput
+              v-if="!participant.staff_id"
+              v-model="participant.employee_name"
+              class="mt-2"
+              placeholder="Nombre histórico o externo"
+              list="risk-training-employees"
+            />
           </div>
-          <div class="col-md-3">
+          <div class="col-md-2">
             <label class="form-label">Estado</label>
             <BFormSelect v-model="participant.compliance_status" :options="[
               { value: 'cumplido', text: 'Cumplido' },
@@ -339,12 +515,20 @@ export default {
               { value: 'no_asiste', text: 'No asiste' },
             ]" />
           </div>
-          <div class="col-md-3">
-            <label class="form-label">Observación</label>
-            <BFormInput v-model="participant.notes" />
+          <div class="col-md-2">
+            <label class="form-label">Realización</label>
+            <BFormInput v-model="participant.issued_on" type="date" />
+          </div>
+          <div class="col-md-2">
+            <label class="form-label">Vencimiento</label>
+            <BFormInput v-model="participant.expires_on" type="date" />
           </div>
           <div class="col-md-1">
             <BButton size="sm" variant="outline-danger" class="w-100" @click="removeParticipant(index)">X</BButton>
+          </div>
+          <div class="col-12">
+            <label class="form-label">Observación individual</label>
+            <BFormInput v-model="participant.notes" />
           </div>
         </div>
 

@@ -1,7 +1,8 @@
 <script>
 import axios from "axios";
 import simplebar from "simplebar-vue";
-import { avatar3, avatar4, avatar1 } from "@/assets/images/users/data"
+import { avatar3, avatar4 } from "@/assets/images/users/data"
+import avatarPlaceholder from "@/assets/images/users/user-dummy-img.jpg";
 import { useAuthStore, useLayoutStore } from '@/state/pinia'
 import flagArabic from "@/assets/images/flags/arabic.png";
 import flagChaina from "@/assets/images/flags/chaina.png";
@@ -23,7 +24,7 @@ export default {
       text: null,
       flag: null,
       value: null,
-      avatar3, avatar4, avatar1,
+      avatar3, avatar4, avatarPlaceholder,
       languages: [
         {
           flag: flagUs,
@@ -80,7 +81,7 @@ export default {
       }
     },
     headerAvatar() {
-      return this.currentUser?.profile_photo_url || this.avatar1;
+      return this.currentUser?.profile_photo_url || this.avatarPlaceholder;
     },
     headerName() {
       return this.currentUser?.displayName || this.currentUser?.name || "Cuenta";
@@ -619,7 +620,11 @@ export default {
 
         <BDropdown right variant="black" toggle-class="header-item" menu-class="dropdown-menu-end">
           <template v-slot:button-content>
-            <img class="rounded-circle header-profile-user" :src="headerAvatar" alt="Header Avatar" />
+            <img
+              class="rounded-circle header-profile-user"
+              :src="headerAvatar"
+              :alt="`Foto de perfil de ${headerName}`"
+            />
             <span class="d-none d-xl-inline-block ms-1">
               {{ headerName }}
             </span>

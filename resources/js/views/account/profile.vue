@@ -3,14 +3,14 @@ import axios from "axios";
 import Swal from "sweetalert2";
 import Layout from "../../layouts/main.vue";
 import LoadingState from "../../components/ui/loading-state.vue";
-import avatar1 from "@/assets/images/users/avatar-1.jpg";
+import avatarPlaceholder from "@/assets/images/users/user-dummy-img.jpg";
 import { useAuthStore } from "@/state/pinia";
 
 export default {
   components: { Layout, LoadingState },
   data() {
     return {
-      avatar1,
+      avatarPlaceholder,
       auth: useAuthStore(),
       loading: true,
       savingProfile: false,
@@ -35,7 +35,7 @@ export default {
   },
   computed: {
     avatarUrl() {
-      return this.photoPreview || this.profile?.profile_photo_url || this.avatar1;
+      return this.photoPreview || this.profile?.profile_photo_url || this.avatarPlaceholder;
     },
     userInitial() {
       return (this.profile?.name || "U").trim().charAt(0).toUpperCase();
@@ -210,7 +210,7 @@ export default {
           <BCard no-body class="profile-summary-card">
             <BCardBody>
               <div class="profile-avatar mx-auto mb-3">
-                <img :src="avatarUrl" alt="" />
+                <img :src="avatarUrl" :alt="`Foto de perfil de ${profile.name}`" />
                 <span>{{ userInitial }}</span>
               </div>
               <div class="text-center">

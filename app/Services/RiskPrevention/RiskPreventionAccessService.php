@@ -11,8 +11,11 @@ use Illuminate\Support\Facades\Schema;
 class RiskPreventionAccessService
 {
     public const VIEW_PERMISSION = 'ver_prevencion_riesgos';
+
     public const MANAGE_PERMISSION = 'gestionar_prevencion_riesgos';
+
     public const EXPORT_PERMISSION = 'exportar_prevencion_riesgos';
+
     public const DISSEMINATED_DOCUMENTS_PERMISSION = 'ver_documentos_prevencion_difundibles';
 
     /**
@@ -32,13 +35,17 @@ class RiskPreventionAccessService
             'prevent_trainings',
             'prevent_training_participants',
             'prevent_documents',
+            'prevent_staff_requirement_types',
+            'prevent_staff_compliances',
+            'prevent_joint_committees',
+            'prevent_joint_committee_staff',
         ];
     }
 
     public function isInstalled(): bool
     {
         foreach ($this->requiredTables() as $table) {
-            if (!Schema::hasTable($table)) {
+            if (! Schema::hasTable($table)) {
                 return false;
             }
         }
@@ -59,7 +66,7 @@ class RiskPreventionAccessService
 
     public function canView(?User $user): bool
     {
-        if (!$user) {
+        if (! $user) {
             return false;
         }
 
@@ -75,7 +82,7 @@ class RiskPreventionAccessService
 
     public function canExport(?User $user): bool
     {
-        if (!$user) {
+        if (! $user) {
             return false;
         }
 
@@ -84,7 +91,7 @@ class RiskPreventionAccessService
 
     public function refreshDynamicStatuses(): void
     {
-        if (!$this->isInstalled()) {
+        if (! $this->isInstalled()) {
             return;
         }
 

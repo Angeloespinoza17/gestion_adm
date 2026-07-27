@@ -2,10 +2,15 @@
 
 namespace App\Models;
 
-use App\Models\Security\SecurityShift;
+use App\Models\Remuneration\RemunerationContractSetting;
+use App\Models\Remuneration\RemunerationEmployeeProfile;
+use App\Models\Remuneration\RemunerationPayroll;
+use App\Models\RiskPrevention\RiskPreventionJointCommittee;
+use App\Models\RiskPrevention\RiskPreventionStaffCompliance;
 use App\Models\Schedule\ScheduleEvent;
 use App\Models\Schedule\TeacherContract;
 use App\Models\Schedule\TeacherScheduleLayer;
+use App\Models\Security\SecurityShift;
 use DateTimeInterface;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -14,9 +19,6 @@ use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Support\Facades\Storage;
-use App\Models\Remuneration\RemunerationContractSetting;
-use App\Models\Remuneration\RemunerationEmployeeProfile;
-use App\Models\Remuneration\RemunerationPayroll;
 
 class Staff extends Model
 {
@@ -107,7 +109,7 @@ class Staff extends Model
 
     public function getProfilePhotoUrlAttribute(): ?string
     {
-        if (!$this->profile_photo_path) {
+        if (! $this->profile_photo_path) {
             return null;
         }
 
@@ -115,7 +117,7 @@ class Staff extends Model
         $parts = parse_url((string) $url);
 
         if (is_array($parts) && isset($parts['path'])) {
-            return $parts['path'] . (isset($parts['query']) ? '?' . $parts['query'] : '');
+            return $parts['path'].(isset($parts['query']) ? '?'.$parts['query'] : '');
         }
 
         return $url;
@@ -123,7 +125,7 @@ class Staff extends Model
 
     public function getMaintenanceRoleLabelAttribute(): ?string
     {
-        if (!$this->maintenance_role) {
+        if (! $this->maintenance_role) {
             return null;
         }
 
@@ -168,6 +170,28 @@ class Staff extends Model
     public function documents(): HasMany
     {
         return $this->hasMany(StaffDocument::class);
+    }
+
+    public function preventiveCompliances(): HasMany
+    {
+        return $this->hasMany(RiskPreventionStaffCompliance::class);
+    }
+
+    public function jointCommittees(): BelongsToMany
+    {
+        return $this->belongsToMany(
+            RiskPreventionJointCommittee::class,
+            'prevent_joint_committee_staff',
+            'staff_id',
+            'committee_id',
+        )->withPivot([
+            'representation',
+            'member_role',
+            'position_name',
+            'joined_on',
+            'ended_on',
+            'active',
+        ])->withTimestamps();
     }
 
     public function contracts(): HasMany

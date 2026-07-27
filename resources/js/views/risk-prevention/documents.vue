@@ -62,7 +62,6 @@ export default {
       loading: false,
       saving: false,
       downloadingId: null,
-      warningShown: false,
       error: null,
       items: [],
       summary: { total: 0, disseminable: 0, due: 0, without_file: 0 },
@@ -133,21 +132,12 @@ export default {
           total: response.data.total || 0,
           last_page: response.data.last_page || 1,
         };
-        this.maybeShowWarnings();
       } catch (error) {
         this.error = formatRiskError(error, "No se pudieron cargar los documentos.");
         showRiskError(this.error);
       } finally {
         this.loading = false;
       }
-    },
-    async maybeShowWarnings() {
-      if (this.warningShown || !this.summary.due) return;
-      this.warningShown = true;
-      await showRiskWarning(
-        `Hay ${this.summary.due} documentos próximos a vencer o vencidos.`,
-        "Vigencia documental",
-      );
     },
     applyFilters() {
       this.pagination.current_page = 1;
@@ -463,6 +453,15 @@ export default {
           <div><strong>{{ summary.without_file }}</strong><span>Registros sin archivo</span></div>
         </article>
       </section>
+
+      <BAlert v-if="summary.due" show variant="warning" class="document-inline-alert mb-3">
+        <i class="bx bx-time-five"></i>
+        <span>
+          Hay <strong>{{ summary.due }}</strong>
+          {{ summary.due === 1 ? "documento próximo a vencer o vencido" : "documentos próximos a vencer o vencidos" }}.
+          Revisa su vigencia en el listado.
+        </span>
+      </BAlert>
 
       <section class="document-filter-card">
         <div class="document-filter-card__heading">

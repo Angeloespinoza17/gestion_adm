@@ -10,7 +10,6 @@ import {
   formatRiskError,
   showRiskError,
   showRiskSuccess,
-  showRiskWarning,
 } from "../../components/risk-prevention/module-utils";
 
 const emptyForm = () => ({
@@ -32,7 +31,6 @@ export default {
     return {
       loading: false,
       saving: false,
-      warningShown: false,
       error: null,
       items: [],
       catalogs: { extinguisher_types: [] },
@@ -47,6 +45,9 @@ export default {
   computed: {
     isEditing() {
       return Boolean(this.form.id);
+    },
+    dueCount() {
+      return this.items.filter((item) => ["por_vencer", "vencido"].includes(item.current_status)).length;
     },
   },
   mounted() {
@@ -70,20 +71,12 @@ export default {
           },
         });
         this.items = response.data.data || [];
-        this.maybeShowAlerts();
       } catch (error) {
         this.error = formatRiskError(error, "No se pudo cargar la gestión de extintores.");
         showRiskError(this.error);
       } finally {
         this.loading = false;
       }
-    },
-    async maybeShowAlerts() {
-      if (this.warningShown) return;
-      const due = this.items.filter((item) => ["por_vencer", "vencido"].includes(item.current_status)).length;
-      if (!due) return;
-      this.warningShown = true;
-      await showRiskWarning(`Hay ${due} extintores próximos a vencer o vencidos.`, "Vencimientos de extintores");
     },
     openCreate() {
       this.form = emptyForm();
@@ -192,6 +185,11 @@ export default {
     </BCard>
 
     <BAlert v-if="error" show variant="danger" class="mb-3">{{ error }}</BAlert>
+    <BAlert v-if="dueCount" show variant="warning" class="mb-3">
+      Hay <strong>{{ dueCount }}</strong>
+      {{ dueCount === 1 ? "extintor próximo a vencer o vencido" : "extintores próximos a vencer o vencidos" }}.
+      Revisa los registros destacados en la tabla.
+    </BAlert>
 
     <BCard>
       <LoadingState v-if="loading" message="Cargando extintores..." />

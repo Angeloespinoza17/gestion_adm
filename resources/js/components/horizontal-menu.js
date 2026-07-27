@@ -110,18 +110,24 @@ export const menuItems = [
             },
             {
                 id: 90657,
+                label: 'Gestión del personal',
+                link: '/risk-prevention/personnel',
+                parentId: 9065
+            },
+            {
+                id: 90658,
                 label: 'Gestión documental empresa',
                 link: '/risk-prevention/documents',
                 parentId: 9065
             },
             {
-                id: 90658,
+                id: 90659,
                 label: 'Gestión documental',
                 link: '/risk-prevention/document-management',
                 parentId: 9065
             },
             {
-                id: 90659,
+                id: 906510,
                 label: 'Reportes',
                 link: '/risk-prevention/reports',
                 parentId: 9065

@@ -193,6 +193,11 @@ const routes = [
         component: () => import('../views/risk-prevention/trainings.vue'),
     },
     {
+        path: '/risk-prevention/personnel',
+        meta: { authRequired: true, title: 'Gestión del personal', permission: 'ver_prevencion_riesgos' },
+        component: () => import('../views/risk-prevention/personnel.vue'),
+    },
+    {
         path: '/risk-prevention/documents',
         meta: { authRequired: true, title: 'Gestión documental empresa', permission: 'ver_prevencion_riesgos' },
         component: () => import('../views/risk-prevention/documents.vue'),

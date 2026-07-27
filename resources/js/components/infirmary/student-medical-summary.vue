@@ -11,6 +11,9 @@ export default {
     medications() {
       return this.context?.permanent_medications || [];
     },
+    guardianContacts() {
+      return this.context?.emergency_contacts || [];
+    },
   },
   methods: {
     value(value, fallback = "Sin información") {
@@ -59,6 +62,18 @@ export default {
         <div><span>Educación Física</span><strong>{{ context.fit_for_physical_education === false ? "No apta" : context.fit_for_physical_education === true ? "Apta" : "Sin información" }}</strong></div>
       </div>
 
+      <div class="medical-summary__guardians">
+        <span>Contactos de apoderados</span>
+        <div v-if="guardianContacts.length" class="medical-summary__guardian-grid">
+          <div v-for="contact in guardianContacts" :key="contact.type || contact.label || contact.name">
+            <small>{{ contact.label || (contact.type === "backup" ? "Apoderado suplente" : "Apoderado principal") }}</small>
+            <strong>{{ value(contact.name, "Sin nombre registrado") }}</strong>
+            <p><i class="bx bx-phone"></i> {{ value(contact.phone, "Sin teléfono registrado") }}</p>
+          </div>
+        </div>
+        <p v-else class="medical-summary__guardian-empty">Sin apoderados registrados.</p>
+      </div>
+
       <div v-if="medications.length" class="medical-summary__medications">
         <span>Medicación vigente</span>
         <ul><li v-for="item in medications" :key="item.id">{{ medicationLabel(item) }}</li></ul>
@@ -75,7 +90,7 @@ export default {
 .medical-summary { border: 1px solid #dbe3ef; border-radius: 8px; background: #f8fafc; overflow: hidden; }
 .medical-summary__loading { padding: 18px; color: #6b7484; }
 .medical-summary__header { display: flex; justify-content: space-between; gap: 16px; padding: 15px 17px; background: #eef4fc; border-bottom: 1px solid #dbe3ef; }
-.medical-summary__header span, .medical-summary__grid span, .medical-summary__medications > span, .medical-summary__observations > span { display: block; color: #687386; font-size: 11px; font-weight: 700; text-transform: uppercase; }
+.medical-summary__header span, .medical-summary__grid span, .medical-summary__guardians > span, .medical-summary__medications > span, .medical-summary__observations > span { display: block; color: #687386; font-size: 11px; font-weight: 700; text-transform: uppercase; }
 .medical-summary__header strong { display: block; margin-top: 2px; font-size: 16px; }
 .medical-summary__header small { color: #687386; }
 .medical-summary__status { align-self: center; padding: 7px 10px; border-radius: 999px; background: #e6f5ef; color: #197252; font-size: 12px; font-weight: 700; white-space: nowrap; }
@@ -89,8 +104,13 @@ export default {
 .medical-summary__grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 1px; margin: 12px 16px; background: #dfe6ef; border: 1px solid #dfe6ef; }
 .medical-summary__grid > div { padding: 10px; background: #fff; }
 .medical-summary__grid strong { display: block; margin-top: 3px; font-size: 13px; }
-.medical-summary__medications, .medical-summary__observations { margin: 0 16px 12px; padding: 11px; border-radius: 5px; background: #fff; border: 1px solid #e1e7ef; }
+.medical-summary__guardians, .medical-summary__medications, .medical-summary__observations { margin: 0 16px 12px; padding: 11px; border-radius: 5px; background: #fff; border: 1px solid #e1e7ef; }
+.medical-summary__guardian-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-top: 7px; }
+.medical-summary__guardian-grid > div { min-width: 0; padding: 9px 10px; border: 1px solid #e1e7ef; border-radius: 5px; background: #f8fafc; }
+.medical-summary__guardian-grid small { display: block; color: #687386; font-size: 10px; font-weight: 700; text-transform: uppercase; }
+.medical-summary__guardian-grid strong { display: block; margin-top: 2px; overflow-wrap: anywhere; font-size: 13px; }
+.medical-summary__guardian-grid p, .medical-summary__guardian-empty { margin: 4px 0 0; color: #526078; font-size: 12px; }
 .medical-summary__medications ul { margin: 6px 0 0; padding-left: 18px; font-size: 12px; }
 .medical-summary__observations p { margin: 5px 0 0; font-size: 12px; white-space: pre-wrap; }
-@media (max-width: 767px) { .medical-summary__header { flex-direction: column; } .medical-summary__status { align-self: flex-start; } .medical-summary__grid { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 767px) { .medical-summary__header { flex-direction: column; } .medical-summary__status { align-self: flex-start; } .medical-summary__grid { grid-template-columns: repeat(2, 1fr); } .medical-summary__guardian-grid { grid-template-columns: 1fr; } }
 </style>

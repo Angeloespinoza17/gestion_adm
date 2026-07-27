@@ -246,31 +246,72 @@ class InfirmaryCatalogController extends Controller
 
     private function companionStaffOptions(): array
     {
-        $cargoSlugToType = [];
+        $departmentSlugToType = [];
 
-        foreach (InfirmaryAttention::STAFF_COMPANION_CARGO_SLUGS as $type => $slugs) {
+        foreach (InfirmaryAttention::STAFF_COMPANION_DEPARTMENT_SLUGS as $type => $slugs) {
             foreach ($slugs as $slug) {
-                $cargoSlugToType[$slug] = $type;
+                $departmentSlugToType[$slug] = $type;
             }
         }
 
+        $departmentSlugs = array_keys($departmentSlugToType);
         $items = Staff::query()
-            ->with('cargo:id,slug,name')
+            ->with([
+                'cargo:id,slug,name',
+                'departments' => fn ($query) => $query
+                    ->where('departments.active', true)
+                    ->whereIn('departments.slug', $departmentSlugs)
+                    ->select('departments.id', 'departments.name', 'departments.slug'),
+                'managedDepartments' => fn ($query) => $query
+                    ->where('departments.active', true)
+                    ->whereIn('departments.slug', $departmentSlugs)
+                    ->select('departments.id', 'departments.name', 'departments.slug', 'departments.responsible_staff_id'),
+            ])
             ->where('active', true)
-            ->whereHas('cargo', fn ($query) => $query->whereIn('slug', array_keys($cargoSlugToType)))
+            ->where(function ($query) use ($departmentSlugs) {
+                $query
+                    ->whereHas('departments', fn ($departmentQuery) => $departmentQuery
+                        ->where('departments.active', true)
+                        ->whereIn('departments.slug', $departmentSlugs))
+                    ->orWhereHas('managedDepartments', fn ($departmentQuery) => $departmentQuery
+                        ->where('departments.active', true)
+                        ->whereIn('departments.slug', $departmentSlugs));
+            })
             ->orderBy('full_name')
             ->get(['id', 'full_name', 'cargo_id', 'institutional_email'])
-            ->groupBy(fn (Staff $staff) => $cargoSlugToType[$staff->cargo?->slug] ?? null)
-            ->map(fn ($staff) => $staff->map(fn (Staff $item) => [
-                'id' => $item->id,
-                'full_name' => $item->full_name,
-                'cargo_name' => $item->cargo?->name,
-                'cargo_slug' => $item->cargo?->slug,
-                'institutional_email' => $item->institutional_email,
-            ])->values()->all())
+            ->flatMap(function (Staff $staff) use ($departmentSlugToType) {
+                $departments = $staff->departments
+                    ->concat($staff->managedDepartments)
+                    ->unique('id')
+                    ->values();
+
+                return $departments
+                    ->groupBy(fn ($department) => $departmentSlugToType[$department->slug] ?? null)
+                    ->filter(fn ($departments, $type) => filled($type))
+                    ->map(fn ($departments, $type) => [
+                        'type' => $type,
+                        'staff' => [
+                            'id' => $staff->id,
+                            'full_name' => $staff->full_name,
+                            'cargo_name' => $staff->cargo?->name,
+                            'cargo_slug' => $staff->cargo?->slug,
+                            'department_names' => $departments->pluck('name')->unique()->values()->all(),
+                            'department_slugs' => $departments->pluck('slug')->unique()->values()->all(),
+                            'institutional_email' => $staff->institutional_email,
+                        ],
+                    ])
+                    ->values();
+            })
+            ->groupBy('type')
+            ->map(fn ($entries) => $entries
+                ->pluck('staff')
+                ->unique('id')
+                ->sortBy('full_name')
+                ->values()
+                ->all())
             ->all();
 
-        foreach (array_keys(InfirmaryAttention::STAFF_COMPANION_CARGO_SLUGS) as $type) {
+        foreach (array_keys(InfirmaryAttention::STAFF_COMPANION_DEPARTMENT_SLUGS) as $type) {
             $items[$type] ??= [];
         }
 

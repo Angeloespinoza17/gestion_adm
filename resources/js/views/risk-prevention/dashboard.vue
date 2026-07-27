@@ -4,7 +4,7 @@ import Layout from "../../layouts/main.vue";
 import LoadingState from "../../components/ui/loading-state.vue";
 import HelpButton from "../../components/risk-prevention/help-button.vue";
 import StatusBadge from "../../components/risk-prevention/status-badge.vue";
-import { formatRiskDate, formatRiskDateTime, formatRiskError, showRiskError, showRiskWarning } from "../../components/risk-prevention/module-utils";
+import { formatRiskDate, formatRiskDateTime, formatRiskError, showRiskError } from "../../components/risk-prevention/module-utils";
 
 export default {
   components: { Layout, LoadingState, HelpButton, StatusBadge },
@@ -12,7 +12,6 @@ export default {
     return {
       loading: false,
       error: null,
-      warningShown: false,
       data: {
         metrics: {},
         extinguisher_alert_summary: {},
@@ -37,26 +36,12 @@ export default {
       try {
         const response = await axios.get("/api/risk-prevention/dashboard");
         this.data = response.data;
-        this.maybeShowAlerts();
       } catch (error) {
         this.error = formatRiskError(error, "No se pudo cargar el dashboard del módulo.");
         showRiskError(this.error);
       } finally {
         this.loading = false;
       }
-    },
-    async maybeShowAlerts() {
-      if (this.warningShown) return;
-
-      const due = Number(this.data.metrics?.extinguishers_due || 0);
-      const docs = Number(this.data.metrics?.documents_due || 0);
-      if (due <= 0 && docs <= 0) return;
-
-      this.warningShown = true;
-      await showRiskWarning(
-        `Hay ${due} extintores y ${docs} documentos con vencimiento próximo o vencido.`,
-        "Alertas del módulo"
-      );
     },
   },
 };
@@ -82,6 +67,17 @@ export default {
     <LoadingState v-if="loading" message="Cargando dashboard de prevención..." />
 
     <template v-else>
+      <BAlert
+        v-if="(data.metrics.extinguishers_due || 0) + (data.metrics.documents_due || 0)"
+        show
+        variant="warning"
+        class="mb-3"
+      >
+        Hay <strong>{{ data.metrics.extinguishers_due || 0 }}</strong> extintores y
+        <strong>{{ data.metrics.documents_due || 0 }}</strong> documentos con vencimiento próximo o vencido.
+        Revisa los paneles de seguimiento de esta página.
+      </BAlert>
+
       <div class="row g-3 mb-3">
         <div class="col-md-6 col-xl-3">
           <BCard class="shadow-sm border-0 h-100 risk-card risk-card--warning">

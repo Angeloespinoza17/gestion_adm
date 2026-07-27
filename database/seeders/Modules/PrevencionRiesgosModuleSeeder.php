@@ -62,9 +62,10 @@ class PrevencionRiesgosModuleSeeder extends Seeder
             ['slug' => 'risk_prevention_emergencies', 'name' => 'Emergencias y planes', 'route' => '/risk-prevention/emergencies', 'sort' => 4],
             ['slug' => 'risk_prevention_epp', 'name' => 'EPP y seguridad', 'route' => '/risk-prevention/epp', 'sort' => 5],
             ['slug' => 'risk_prevention_trainings', 'name' => 'Capacitaciones', 'route' => '/risk-prevention/trainings', 'sort' => 6],
-            ['slug' => 'risk_prevention_documents', 'name' => 'Gestión documental empresa', 'route' => '/risk-prevention/documents', 'sort' => 7],
-            ['slug' => 'risk_prevention_staff_documents', 'name' => 'Gestión documental', 'route' => '/risk-prevention/document-management', 'sort' => 8],
-            ['slug' => 'risk_prevention_reports', 'name' => 'Reportes', 'route' => '/risk-prevention/reports', 'sort' => 9],
+            ['slug' => 'risk_prevention_personnel', 'name' => 'Gestión del personal', 'route' => '/risk-prevention/personnel', 'sort' => 7],
+            ['slug' => 'risk_prevention_documents', 'name' => 'Gestión documental empresa', 'route' => '/risk-prevention/documents', 'sort' => 8],
+            ['slug' => 'risk_prevention_staff_documents', 'name' => 'Gestión documental', 'route' => '/risk-prevention/document-management', 'sort' => 9],
+            ['slug' => 'risk_prevention_reports', 'name' => 'Reportes', 'route' => '/risk-prevention/reports', 'sort' => 10],
         ];
 
         foreach ($children as $child) {
@@ -109,8 +110,8 @@ class PrevencionRiesgosModuleSeeder extends Seeder
     {
         $user = User::query()->where('email', 'superadmin@cnscgestion.cl')->first();
 
-        if (!$user) {
-            $user = new User();
+        if (! $user) {
+            $user = new User;
             $user->name = 'Super Admin';
             $user->email = 'superadmin@cnscgestion.cl';
             $user->password = Hash::make('Demo123!');
@@ -150,13 +151,14 @@ class PrevencionRiesgosModuleSeeder extends Seeder
             'risk_prevention_emergencies',
             'risk_prevention_epp',
             'risk_prevention_trainings',
+            'risk_prevention_personnel',
             'risk_prevention_documents',
             'risk_prevention_staff_documents',
             'risk_prevention_reports',
         ])->get();
 
         foreach (['super_admin', 'administrador', 'prevencion_riesgos'] as $roleSlug) {
-            if (!$roles->has($roleSlug)) {
+            if (! $roles->has($roleSlug)) {
                 continue;
             }
 
@@ -165,7 +167,7 @@ class PrevencionRiesgosModuleSeeder extends Seeder
         }
 
         foreach (['direccion', 'rrhh', 'inspectoria'] as $roleSlug) {
-            if (!$roles->has($roleSlug)) {
+            if (! $roles->has($roleSlug)) {
                 continue;
             }
 

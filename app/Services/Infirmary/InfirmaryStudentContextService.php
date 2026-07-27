@@ -14,6 +14,7 @@ use App\Models\Infirmary\InfirmaryMedicationAuthorization;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Str;
 
 class InfirmaryStudentContextService
 {
@@ -145,6 +146,13 @@ class InfirmaryStudentContextService
     public function studentSearchQuery(string $search, ?int $courseSectionId = null): Builder
     {
         $activeYear = $this->activeAcademicYear();
+        $tokens = $this->studentSearchTokens($search);
+        $searchableColumns = [
+            $this->normalizedSearchColumn('first_name'),
+            $this->normalizedSearchColumn('last_name'),
+            $this->normalizedSearchColumn('registered_name'),
+        ];
+        $normalizedRutColumn = $this->normalizedRutColumn();
 
         return StudentProfile::query()
             ->with([
@@ -152,14 +160,22 @@ class InfirmaryStudentContextService
                     ->when($activeYear, fn ($inner) => $inner->where('academic_year_id', $activeYear->id))
                     ->with('courseSection:id,display_name'),
             ])
-            ->when($search !== '', function (Builder $query) use ($search) {
-                $query->where(function (Builder $inner) use ($search) {
-                    $inner
-                        ->where('first_name', 'like', "%{$search}%")
-                        ->orWhere('last_name', 'like', "%{$search}%")
-                        ->orWhere('registered_name', 'like', "%{$search}%")
-                        ->orWhere('rut', 'like', "%{$search}%");
-                });
+            ->when($tokens !== [], function (Builder $query) use ($tokens, $searchableColumns, $normalizedRutColumn) {
+                foreach ($tokens as $token) {
+                    $like = "%{$token}%";
+
+                    $query->where(function (Builder $inner) use ($like, $searchableColumns, $normalizedRutColumn) {
+                        foreach ($searchableColumns as $index => $column) {
+                            $method = $index === 0 ? 'whereRaw' : 'orWhereRaw';
+                            $inner->{$method}("{$column} LIKE ?", [$like]);
+                        }
+
+                        $inner->orWhereRaw("{$normalizedRutColumn} LIKE ?", [$like]);
+                    });
+                }
+            })
+            ->when($search !== '' && $tokens === [], function (Builder $query) {
+                $query->whereRaw('1 = 0');
             })
             ->when($courseSectionId, function (Builder $query) use ($courseSectionId, $activeYear) {
                 $query->whereHas('enrollments', function (Builder $inner) use ($courseSectionId, $activeYear) {
@@ -180,8 +196,22 @@ class InfirmaryStudentContextService
     public function searchPayload(string $search, ?int $courseSectionId = null, int $limit = 12): array
     {
         return $this->studentSearchQuery($search, $courseSectionId)
-            ->limit($limit)
+            ->limit(max($limit * 10, 120))
             ->get()
+            ->sort(function (StudentProfile $left, StudentProfile $right) use ($search) {
+                $scoreComparison = $this->studentSearchScore($right, $search)
+                    <=> $this->studentSearchScore($left, $search);
+
+                if ($scoreComparison !== 0) {
+                    return $scoreComparison;
+                }
+
+                return strnatcasecmp(
+                    "{$left->last_name} {$left->first_name}",
+                    "{$right->last_name} {$right->first_name}",
+                );
+            })
+            ->take($limit)
             ->map(function (StudentProfile $student) {
                 $summary = $this->studentSummary($student);
 
@@ -210,6 +240,110 @@ class InfirmaryStudentContextService
             })
             ->values()
             ->all();
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    private function studentSearchTokens(string $search): array
+    {
+        $normalized = $this->normalizeStudentSearchText($search);
+
+        if ($normalized === '') {
+            return [];
+        }
+
+        return collect(explode(' ', $normalized))
+            ->filter()
+            ->unique()
+            ->take(8)
+            ->values()
+            ->all();
+    }
+
+    private function studentSearchScore(StudentProfile $student, string $search): int
+    {
+        $query = $this->normalizeStudentSearchText($search);
+        $tokens = $this->studentSearchTokens($search);
+        $fullName = $this->normalizeStudentSearchText($student->full_name);
+        $registeredName = $this->normalizeStudentSearchText((string) $student->registered_name);
+        $nameWords = collect(explode(' ', trim("{$fullName} {$registeredName}")))
+            ->filter()
+            ->unique()
+            ->values();
+        $normalizedRut = preg_replace('/[^a-z0-9]+/', '', Str::lower(Str::ascii((string) $student->rut))) ?: '';
+        $compactQuery = preg_replace('/[^a-z0-9]+/', '', $query) ?: '';
+        $score = 0;
+
+        if ($query !== '' && $fullName === $query) {
+            $score += 1200;
+        } elseif ($query !== '' && str_starts_with($fullName, $query)) {
+            $score += 700;
+        }
+
+        if ($query !== '' && $registeredName === $query) {
+            $score += 1100;
+        } elseif ($query !== '' && str_starts_with($registeredName, $query)) {
+            $score += 650;
+        }
+
+        if ($compactQuery !== '' && $normalizedRut === $compactQuery) {
+            $score += 1300;
+        } elseif ($compactQuery !== '' && str_contains($normalizedRut, $compactQuery)) {
+            $score += 500;
+        }
+
+        foreach ($tokens as $token) {
+            if ($nameWords->contains($token)) {
+                $score += 120;
+            } elseif ($nameWords->contains(fn (string $word) => str_starts_with($word, $token))) {
+                $score += 85;
+            } elseif (str_contains("{$fullName} {$registeredName}", $token)) {
+                $score += 45;
+            }
+        }
+
+        return $score;
+    }
+
+    private function normalizeStudentSearchText(string $value): string
+    {
+        $normalized = Str::lower(Str::ascii(trim($value)));
+        $normalized = preg_replace('/[^a-z0-9]+/', ' ', $normalized) ?: '';
+
+        return trim(preg_replace('/\s+/', ' ', $normalized) ?: '');
+    }
+
+    private function normalizedSearchColumn(string $column): string
+    {
+        $expression = "COALESCE({$column}, '')";
+        $replacements = [
+            'Á' => 'A',
+            'É' => 'E',
+            'Í' => 'I',
+            'Ó' => 'O',
+            'Ú' => 'U',
+            'Ü' => 'U',
+            'Ñ' => 'N',
+            'á' => 'a',
+            'é' => 'e',
+            'í' => 'i',
+            'ó' => 'o',
+            'ú' => 'u',
+            'ü' => 'u',
+            'ñ' => 'n',
+        ];
+
+        foreach ($replacements as $from => $to) {
+            $expression = "REPLACE({$expression}, '{$from}', '{$to}')";
+        }
+
+        return "LOWER({$expression})";
+    }
+
+    private function normalizedRutColumn(): string
+    {
+        return "LOWER(REPLACE(REPLACE(REPLACE(COALESCE(rut, ''), '.', ''), '-', ''), ' ', ''))";
     }
 
     private function medicalAlerts(StudentProfile $student, Collection $permanentMedications): array
@@ -264,12 +398,16 @@ class InfirmaryStudentContextService
     {
         return collect([
             [
+                'type' => 'primary',
+                'label' => 'Apoderado principal',
                 'name' => $student->guardian_name,
                 'relationship' => $student->guardian_relationship ?: $student->guardian_role,
                 'phone' => $student->guardian_phone,
                 'email' => $student->guardian_email,
             ],
             [
+                'type' => 'backup',
+                'label' => 'Apoderado suplente',
                 'name' => $student->guardian_backup_name,
                 'relationship' => $student->guardian_backup_relationship ?: $student->guardian_backup_role,
                 'phone' => $student->guardian_backup_phone,
