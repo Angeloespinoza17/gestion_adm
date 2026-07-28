@@ -25,8 +25,19 @@ class SaveBibliotecaObraRequest extends FormRequest
             'secondary_authors' => ['nullable', 'array'],
             'secondary_authors.*' => ['string', 'max:191'],
             'publisher' => ['nullable', 'string', 'max:191'],
-            'publication_year' => ['nullable', 'integer', 'min:1900', 'max:' . (date('Y') + 1)],
+            'publication_year' => ['nullable', 'integer', 'min:1900', 'max:'.(date('Y') + 1)],
             'isbn' => ['nullable', 'string', 'max:50'],
+            'biblioteca_categoria_id' => ['nullable', 'integer', 'exists:biblioteca_categorias,id'],
+            'biblioteca_subcategoria_id' => [
+                'nullable',
+                'integer',
+                Rule::exists('biblioteca_subcategorias', 'id')->where(
+                    fn ($query) => $query->where(
+                        'biblioteca_categoria_id',
+                        $this->input('biblioteca_categoria_id')
+                    )
+                ),
+            ],
             'category' => ['nullable', 'string', 'max:120'],
             'subcategory' => ['nullable', 'string', 'max:120'],
             'genre' => ['nullable', 'string', 'max:120'],
@@ -38,13 +49,20 @@ class SaveBibliotecaObraRequest extends FormRequest
             'keywords' => ['nullable', 'array'],
             'keywords.*' => ['string', 'max:80'],
             'cover_image_url' => ['nullable', 'string', 'max:2048'],
-            'internal_code' => ['required', 'string', 'max:80', Rule::unique('biblioteca_obras', 'internal_code')->ignore($obraId)],
+            'internal_code' => ['nullable', 'string', 'max:80', Rule::unique('biblioteca_obras', 'internal_code')->ignore($obraId)],
             'barcode' => ['nullable', 'string', 'max:120', Rule::unique('biblioteca_obras', 'barcode')->ignore($obraId)],
+            'biblioteca_ubicacion_id' => ['nullable', 'integer', 'exists:biblioteca_ubicaciones,id'],
             'physical_location' => ['nullable', 'string', 'max:120'],
             'shelf' => ['nullable', 'string', 'max:120'],
             'section' => ['nullable', 'string', 'max:120'],
             'general_status' => ['required', Rule::in(BibliotecaObra::STATUS_OPTIONS)],
             'observations' => ['nullable', 'string'],
+            'quantity' => ['sometimes', 'integer', 'min:0', 'max:500'],
+            'additional_quantity' => ['sometimes', 'integer', 'min:0', 'max:500'],
+            'open_library_work_key' => ['nullable', 'string', 'max:80'],
+            'open_library_edition_key' => ['nullable', 'string', 'max:80'],
+            'open_library_cover_id' => ['nullable', 'integer', 'min:1'],
+            'source_metadata' => ['nullable', 'array'],
         ];
     }
 }

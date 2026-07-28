@@ -5,7 +5,8 @@ namespace App\Http\Controllers\Library;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Library\SaveBibliotecaEjemplarRequest;
 use App\Models\Library\BibliotecaEjemplar;
-use App\Models\Library\BibliotecaObra;
+use App\Models\Library\BibliotecaUbicacion;
+use App\Services\Library\BibliotecaCodeService;
 use App\Services\Library\BibliotecaInventoryService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -15,8 +16,8 @@ class BibliotecaInventoryController extends Controller
 {
     public function __construct(
         private readonly BibliotecaInventoryService $inventoryService,
-    ) {
-    }
+        private readonly BibliotecaCodeService $codeService,
+    ) {}
 
     public function index(Request $request): JsonResponse
     {
@@ -24,7 +25,7 @@ class BibliotecaInventoryController extends Controller
 
         $search = trim((string) $request->query('search'));
         $query = BibliotecaEjemplar::query()
-            ->with(['obra:id,title,internal_code,material_type,category', 'registeredBy:id,name'])
+            ->with(['obra:id,title,main_author,cover_image_url,internal_code,material_type,category', 'registeredBy:id,name', 'ubicacion:id,name,code'])
             ->when($search !== '', function ($builder) use ($search) {
                 $builder->where(function ($inner) use ($search) {
                     $inner
@@ -41,7 +42,8 @@ class BibliotecaInventoryController extends Controller
             ->when($request->filled('biblioteca_obra_id'), fn ($builder) => $builder->where('biblioteca_obra_id', $request->query('biblioteca_obra_id')))
             ->when($request->filled('physical_state'), fn ($builder) => $builder->where('physical_state', $request->query('physical_state')))
             ->when($request->filled('availability_status'), fn ($builder) => $builder->where('availability_status', $request->query('availability_status')))
-            ->when($request->filled('physical_location'), fn ($builder) => $builder->where('physical_location', 'like', '%' . $request->query('physical_location') . '%'))
+            ->when($request->filled('biblioteca_ubicacion_id'), fn ($builder) => $builder->where('biblioteca_ubicacion_id', $request->query('biblioteca_ubicacion_id')))
+            ->when($request->filled('physical_location'), fn ($builder) => $builder->where('physical_location', 'like', '%'.$request->query('physical_location').'%'))
             ->when($request->boolean('only_active', true), fn ($builder) => $builder->where('is_active', true));
 
         $currentYear = now()->year;
@@ -80,8 +82,15 @@ class BibliotecaInventoryController extends Controller
         $this->authorize('update', BibliotecaEjemplar::class);
 
         $ejemplar = DB::transaction(function () use ($request) {
+            $validated = $request->validated();
+            $validated['code'] = ($validated['code'] ?? null) ?: $this->codeService->next('EJ');
+            if (! empty($validated['biblioteca_ubicacion_id'])) {
+                $validated['physical_location'] = BibliotecaUbicacion::query()
+                    ->whereKey($validated['biblioteca_ubicacion_id'])
+                    ->value('name');
+            }
             $ejemplar = BibliotecaEjemplar::query()->create(array_merge(
-                $request->validated(),
+                $validated,
                 [
                     'created_by' => $request->user()->id,
                     'updated_by' => $request->user()->id,
@@ -111,6 +120,11 @@ class BibliotecaInventoryController extends Controller
         $this->authorize('update', $ejemplar);
 
         $changes = $request->validated();
+        if (! empty($changes['biblioteca_ubicacion_id'])) {
+            $changes['physical_location'] = BibliotecaUbicacion::query()
+                ->whereKey($changes['biblioteca_ubicacion_id'])
+                ->value('name');
+        }
         $movementType = 'ajuste';
 
         if (($changes['physical_location'] ?? $ejemplar->physical_location) !== $ejemplar->physical_location) {

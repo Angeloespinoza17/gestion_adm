@@ -7,6 +7,7 @@ use App\Models\Cargo;
 use App\Models\CourseSection;
 use App\Models\EducationLevel;
 use App\Models\Library\BibliotecaAlerta;
+use App\Models\Library\BibliotecaCategoria;
 use App\Models\Library\BibliotecaEjemplar;
 use App\Models\Library\BibliotecaEspacio;
 use App\Models\Library\BibliotecaInventarioMovimiento;
@@ -14,6 +15,8 @@ use App\Models\Library\BibliotecaObra;
 use App\Models\Library\BibliotecaPlanLector;
 use App\Models\Library\BibliotecaPrestamo;
 use App\Models\Library\BibliotecaReserva;
+use App\Models\Library\BibliotecaSubcategoria;
+use App\Models\Library\BibliotecaUbicacion;
 use App\Models\Library\BibliotecaUsoEspacio;
 use App\Models\Permission;
 use App\Models\Role;
@@ -29,6 +32,7 @@ use Database\Seeders\Modules\StaffModuleSeeder;
 use Database\Seeders\Modules\StudentModuleSeeder;
 use Database\Seeders\Support\PreventsProductionSeeding;
 use Faker\Factory as Faker;
+use Faker\Generator;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Hash;
@@ -38,7 +42,7 @@ class BibliotecaSeeder extends Seeder
 {
     use PreventsProductionSeeding;
 
-    private \Faker\Generator $faker;
+    private Generator $faker;
 
     private User $actor;
 
@@ -104,6 +108,11 @@ class BibliotecaSeeder extends Seeder
             ['slug' => 'gestionar_reservas_biblioteca', 'name' => 'Gestionar reservas de Biblioteca'],
             ['slug' => 'gestionar_plan_lector_biblioteca', 'name' => 'Gestionar plan lector de Biblioteca'],
             ['slug' => 'gestionar_uso_espacios_biblioteca', 'name' => 'Gestionar uso de espacios de Biblioteca'],
+            ['slug' => 'gestionar_categorias_biblioteca', 'name' => 'Gestionar categorías de Biblioteca'],
+            ['slug' => 'gestionar_almacenaje_biblioteca', 'name' => 'Gestionar almacenaje de Biblioteca'],
+            ['slug' => 'gestionar_textos_escolares_biblioteca', 'name' => 'Gestionar textos escolares'],
+            ['slug' => 'gestionar_materiales_biblioteca', 'name' => 'Gestionar materiales de Biblioteca'],
+            ['slug' => 'gestionar_pases_biblioteca', 'name' => 'Gestionar pases de Biblioteca'],
             ['slug' => 'ver_estadisticas_biblioteca', 'name' => 'Ver estadísticas de Biblioteca'],
             ['slug' => 'exportar_reportes_biblioteca', 'name' => 'Exportar reportes de Biblioteca'],
         ];
@@ -134,12 +143,17 @@ class BibliotecaSeeder extends Seeder
         $children = [
             ['slug' => 'biblioteca_dashboard', 'name' => 'Dashboard', 'route' => '/biblioteca', 'sort' => 1],
             ['slug' => 'biblioteca_catalogo', 'name' => 'Catálogo', 'route' => '/biblioteca/catalogo', 'sort' => 2],
-            ['slug' => 'biblioteca_inventario', 'name' => 'Ejemplares e inventario', 'route' => '/biblioteca/inventario', 'sort' => 3],
-            ['slug' => 'biblioteca_prestamos', 'name' => 'Préstamos y devoluciones', 'route' => '/biblioteca/prestamos', 'sort' => 4],
-            ['slug' => 'biblioteca_reservas', 'name' => 'Reservas de recursos', 'route' => '/biblioteca/reservas', 'sort' => 5],
-            ['slug' => 'biblioteca_plan_lector', 'name' => 'Plan lector', 'route' => '/biblioteca/plan-lector', 'sort' => 6],
-            ['slug' => 'biblioteca_espacios', 'name' => 'Uso de espacios', 'route' => '/biblioteca/espacios', 'sort' => 7],
-            ['slug' => 'biblioteca_reportes', 'name' => 'Reportes', 'route' => '/biblioteca/reportes', 'sort' => 8],
+            ['slug' => 'biblioteca_categorias', 'name' => 'Categorías', 'route' => '/biblioteca/categorias', 'sort' => 3],
+            ['slug' => 'biblioteca_almacenaje', 'name' => 'Salas y estantes', 'route' => '/biblioteca/almacenaje', 'sort' => 4],
+            ['slug' => 'biblioteca_inventario', 'name' => 'Ejemplares e inventario', 'route' => '/biblioteca/inventario', 'sort' => 5],
+            ['slug' => 'biblioteca_prestamos', 'name' => 'Préstamos y devoluciones', 'route' => '/biblioteca/prestamos', 'sort' => 6],
+            ['slug' => 'biblioteca_materiales', 'name' => 'Materiales', 'route' => '/biblioteca/materiales', 'sort' => 7],
+            ['slug' => 'biblioteca_textos_escolares', 'name' => 'Textos escolares', 'route' => '/biblioteca/textos-escolares', 'sort' => 8],
+            ['slug' => 'biblioteca_reservas', 'name' => 'Reservas de recursos', 'route' => '/biblioteca/reservas', 'sort' => 9],
+            ['slug' => 'biblioteca_plan_lector', 'name' => 'Plan lector', 'route' => '/biblioteca/plan-lector', 'sort' => 10],
+            ['slug' => 'biblioteca_espacios', 'name' => 'Uso de espacios', 'route' => '/biblioteca/espacios', 'sort' => 11],
+            ['slug' => 'biblioteca_pases', 'name' => 'Pases de Biblioteca', 'route' => '/biblioteca/pases', 'sort' => 12],
+            ['slug' => 'biblioteca_reportes', 'name' => 'Reportes', 'route' => '/biblioteca/reportes', 'sort' => 13],
         ];
 
         foreach ($children as $child) {
@@ -180,6 +194,7 @@ class BibliotecaSeeder extends Seeder
                 'renovar_prestamos_biblioteca',
                 'gestionar_mora_biblioteca',
                 'gestionar_reservas_biblioteca',
+                'gestionar_pases_biblioteca',
             ],
             'docente' => [
                 'ver_modulo_biblioteca',
@@ -194,14 +209,14 @@ class BibliotecaSeeder extends Seeder
             'administrador' => $modules->keys()->all(),
             'coordinador_academico' => ['biblioteca', 'biblioteca_dashboard', 'biblioteca_catalogo', 'biblioteca_plan_lector', 'biblioteca_reportes'],
             'direccion' => ['biblioteca', 'biblioteca_dashboard', 'biblioteca_reportes'],
-            'inspectoria' => ['biblioteca', 'biblioteca_dashboard', 'biblioteca_prestamos', 'biblioteca_reservas', 'biblioteca_catalogo'],
+            'inspectoria' => ['biblioteca', 'biblioteca_dashboard', 'biblioteca_prestamos', 'biblioteca_reservas', 'biblioteca_catalogo', 'biblioteca_pases'],
             'docente' => ['biblioteca', 'biblioteca_dashboard', 'biblioteca_reservas', 'biblioteca_plan_lector', 'biblioteca_espacios'],
         ];
 
         foreach ($rolePermissionMap as $roleSlug => $permissionSlugs) {
             $role = Role::query()->firstWhere('slug', $roleSlug);
 
-            if (!$role) {
+            if (! $role) {
                 continue;
             }
 
@@ -240,6 +255,50 @@ class BibliotecaSeeder extends Seeder
     private function seedWorks(int $count): Collection
     {
         $categories = ['Narrativa', 'Ciencias', 'Historia', 'Lenguaje', 'Matemática', 'Arte', 'Tecnología', 'CRA', 'Convivencia', 'PIE'];
+        $categoryModels = collect($categories)->mapWithKeys(function (string $name, int $index) {
+            $category = BibliotecaCategoria::query()->updateOrCreate(
+                ['name' => $name],
+                [
+                    'slug' => Str::slug($name),
+                    'code' => strtoupper(Str::substr(Str::ascii($name), 0, 8)),
+                    'color' => ['#556ee6', '#34c38f', '#50a5f1', '#f1b44c', '#f46a6a'][$index % 5],
+                    'sort_order' => $index + 1,
+                    'active' => true,
+                    'created_by' => $this->actor->id,
+                    'updated_by' => $this->actor->id,
+                ]
+            );
+
+            return [$name => $category];
+        });
+        $subcategoryModels = $categoryModels->flatMap(function (
+            BibliotecaCategoria $category,
+            string $categoryName
+        ) {
+            return collect(range('A', 'E'))->mapWithKeys(function (string $letter) use (
+                $category,
+                $categoryName
+            ) {
+                $name = 'Colección '.$letter;
+                $subcategory = BibliotecaSubcategoria::query()->updateOrCreate(
+                    [
+                        'biblioteca_categoria_id' => $category->id,
+                        'name' => $name,
+                    ],
+                    [
+                        'slug' => Str::slug($name),
+                        'sort_order' => ord($letter) - 64,
+                        'active' => true,
+                        'created_by' => $this->actor->id,
+                        'updated_by' => $this->actor->id,
+                    ]
+                );
+
+                return [$categoryName.'|'.$name => $subcategory];
+            });
+        });
+        $mediaRoomId = BibliotecaUbicacion::query()->where('code', 'SALA-1')->value('id');
+        $basicRoomId = BibliotecaUbicacion::query()->where('code', 'SALA-2')->value('id');
         $genres = ['Novela', 'Cuento', 'Poesía', 'Ensayo', 'Manual', 'Atlas', 'Investigación'];
         $levels = ['NT1', 'NT2', '1° básico', '3° básico', '5° básico', '7° básico', '1° medio', '3° medio'];
         $languages = ['Español', 'Inglés', 'Mapudungun'];
@@ -250,30 +309,37 @@ class BibliotecaSeeder extends Seeder
 
         foreach (range(1, $count) as $index) {
             $materialType = $materialTypes[$index - 1] ?? 'otro';
+            $categoryName = $categories[array_rand($categories)];
+            $subcategoryName = 'Colección '.chr(64 + (($index % 5) + 1));
+            $recommendedLevel = $levels[array_rand($levels)];
+            $locationId = str_contains($recommendedLevel, 'medio') ? $mediaRoomId : $basicRoomId;
             $obra = BibliotecaObra::query()->create([
                 'material_type' => $materialType,
                 'title' => $this->titleForMaterialType($materialType, $index),
-                'subtitle' => $index % 4 === 0 ? 'Edición CRA ' . $this->faker->year() : null,
+                'subtitle' => $index % 4 === 0 ? 'Edición CRA '.$this->faker->year() : null,
                 'main_author' => $this->faker->name(),
                 'secondary_authors' => $index % 3 === 0 ? [$this->faker->name(), $this->faker->name()] : [],
                 'publisher' => $this->faker->company(),
                 'publication_year' => random_int(1998, 2026),
                 'isbn' => sprintf('978-956-%04d-%03d-%d', random_int(1000, 9999), $index, random_int(0, 9)),
-                'category' => $categories[array_rand($categories)],
-                'subcategory' => 'Colección ' . chr(64 + (($index % 5) + 1)),
+                'category' => $categoryName,
+                'biblioteca_categoria_id' => $categoryModels[$categoryName]->id,
+                'biblioteca_subcategoria_id' => $subcategoryModels[$categoryName.'|'.$subcategoryName]->id,
+                'subcategory' => $subcategoryName,
                 'genre' => $genres[array_rand($genres)],
-                'recommended_level' => $levels[array_rand($levels)],
+                'recommended_level' => $recommendedLevel,
                 'recommended_course_section_id' => $courses->random()?->id,
                 'language' => $languages[array_rand($languages)],
                 'page_count' => in_array($materialType, ['tablet', 'notebook', 'proyector', 'parlante'], true) ? null : random_int(40, 420),
                 'description' => $this->faker->paragraph(2),
                 'keywords' => [$this->faker->word(), $this->faker->word(), $this->faker->word()],
-                'cover_image_url' => 'https://picsum.photos/seed/biblioteca-obra-' . $index . '/320/480',
+                'cover_image_url' => 'https://picsum.photos/seed/biblioteca-obra-'.$index.'/320/480',
                 'internal_code' => sprintf('BIB-OBR-%04d', $index),
                 'barcode' => sprintf('QR-OBR-%05d', $index),
-                'physical_location' => 'Biblioteca Central',
-                'shelf' => 'Estante ' . chr(64 + (($index % 8) + 1)),
-                'section' => 'Zona ' . (($index % 4) + 1),
+                'biblioteca_ubicacion_id' => $locationId,
+                'physical_location' => str_contains($recommendedLevel, 'medio') ? 'Sala 1 · Enseñanza Media' : 'Sala 2 · Enseñanza Básica',
+                'shelf' => 'Estante '.chr(64 + (($index % 8) + 1)),
+                'section' => 'Zona '.(($index % 4) + 1),
                 'general_status' => 'disponible',
                 'observations' => $index % 9 === 0 ? 'Recurso con alta demanda en plan lector.' : null,
                 'created_by' => $this->actor->id,
@@ -305,12 +371,13 @@ class BibliotecaSeeder extends Seeder
                 'ingress_date' => $this->now->copy()->subDays(random_int(10, 1200))->format('Y-m-d'),
                 'origin' => $origins[array_rand($origins)],
                 'estimated_value' => random_int(4000, 65000),
+                'biblioteca_ubicacion_id' => $obra->biblioteca_ubicacion_id,
                 'physical_location' => $obra->physical_location,
                 'physical_state' => $states[array_rand($states)],
                 'availability_status' => 'disponible',
                 'registered_by' => $this->actor->id,
                 'observations' => $index % 11 === 0 ? 'Ejemplar utilizado en apoyo de aula.' : null,
-                'photo_urls' => ['https://picsum.photos/seed/biblioteca-ejemplar-' . $index . '/640/480'],
+                'photo_urls' => ['https://picsum.photos/seed/biblioteca-ejemplar-'.$index.'/640/480'],
                 'last_inventory_checked_at' => $index % 3 === 0 ? $this->now->copy()->subMonths(random_int(0, 11))->format('Y-m-d') : null,
                 'is_active' => true,
                 'created_by' => $this->actor->id,
@@ -327,8 +394,8 @@ class BibliotecaSeeder extends Seeder
     private function seedSpaces(): Collection
     {
         $spaceNames = [
-            'Biblioteca',
-            'Sala de lectura',
+            'Sala 1 · Enseñanza Media',
+            'Sala 2 · Enseñanza Básica',
             'Sala CRA',
             'Rincón lector',
             'Sala audiovisual',
@@ -342,9 +409,9 @@ class BibliotecaSeeder extends Seeder
         return collect($spaceNames)->map(function (string $name, int $index) {
             return BibliotecaEspacio::query()->create([
                 'name' => $name,
-                'location' => 'Piso ' . (($index % 2) + 1),
+                'location' => 'Piso '.(($index % 2) + 1),
                 'capacity' => random_int(12, 45),
-                'resources' => ['Notebook', 'Proyector', 'Colección apoyo #' . ($index + 1)],
+                'resources' => ['Notebook', 'Proyector', 'Colección apoyo #'.($index + 1)],
                 'active' => true,
                 'notes' => 'Espacio disponible para actividades CRA.',
                 'created_by' => $this->actor->id,
@@ -379,7 +446,7 @@ class BibliotecaSeeder extends Seeder
                 'subject' => $subjects[array_rand($subjects)],
                 'responsible_staff_id' => $teachers->random()?->id,
                 'biblioteca_obra_id' => $obra->id,
-                'period' => 'Periodo ' . (($index % 4) + 1),
+                'period' => 'Periodo '.(($index % 4) + 1),
                 'start_date' => $startDate->format('Y-m-d'),
                 'end_date' => $endDate->format('Y-m-d'),
                 'objective' => 'Fortalecer comprensión lectora y conversación literaria.',
@@ -394,7 +461,7 @@ class BibliotecaSeeder extends Seeder
                 'fulfillment_percentage' => random_int(0, 100),
                 'status' => $statuses[array_rand($statuses)],
                 'notes' => $index % 5 === 0 ? 'Curso con seguimiento por alta demanda.' : null,
-                'attachments' => ['https://example.com/guia-' . $index, 'https://example.com/pauta-' . $index],
+                'attachments' => ['https://example.com/guia-'.$index, 'https://example.com/pauta-'.$index],
                 'created_by' => $this->actor->id,
                 'updated_by' => $this->actor->id,
             ]));
@@ -719,7 +786,7 @@ class BibliotecaSeeder extends Seeder
             BibliotecaUsoEspacio::query()->create([
                 'biblioteca_espacio_id' => $spaces->random()->id,
                 'activity_type' => $types[array_rand($types)],
-                'title' => 'Actividad CRA #' . $index,
+                'title' => 'Actividad CRA #'.$index,
                 'course_section_id' => $courses->random()?->id,
                 'responsible_staff_id' => $staff->random()?->id,
                 'requested_by_user_id' => $this->actor->id,
@@ -729,7 +796,7 @@ class BibliotecaSeeder extends Seeder
                 'end_at' => $end,
                 'status' => $statuses[array_rand($statuses)],
                 'observations' => 'Actividad planificada en agenda CRA.',
-                'evidence' => $index % 5 === 0 ? ['https://example.com/evidencia-' . $index] : [],
+                'evidence' => $index % 5 === 0 ? ['https://example.com/evidencia-'.$index] : [],
                 'created_by' => $this->actor->id,
                 'updated_by' => $this->actor->id,
             ]);
@@ -758,7 +825,7 @@ class BibliotecaSeeder extends Seeder
 
     private function ensureAcademicScaffolding(): void
     {
-        if (!AcademicYear::query()->exists()) {
+        if (! AcademicYear::query()->exists()) {
             $year = AcademicYear::query()->create([
                 'name' => 'Año académico 2026',
                 'year' => 2026,
@@ -785,7 +852,7 @@ class BibliotecaSeeder extends Seeder
                         'academic_year_id' => $year->id,
                         'education_level_id' => $level->id,
                         'section_name' => $section,
-                        'display_name' => trim($level->name . ' ' . $section),
+                        'display_name' => trim($level->name.' '.$section),
                         'capacity' => 35,
                         'active' => true,
                         'created_by' => 1,
@@ -810,18 +877,18 @@ class BibliotecaSeeder extends Seeder
         foreach (range($current + 1, $target) as $index) {
             $student = StudentProfile::query()->create([
                 'first_name' => $this->faker->firstName(),
-                'last_name' => $this->faker->lastName() . ' ' . $this->faker->lastName(),
+                'last_name' => $this->faker->lastName().' '.$this->faker->lastName(),
                 'registered_name' => null,
                 'rut' => sprintf('%d-%d', 32000000 + $index, (($index % 9) + 1)),
                 'birthdate' => $this->now->copy()->subYears(random_int(10, 17))->subDays(random_int(1, 360))->format('Y-m-d'),
-                'email' => 'estudiante.biblioteca' . $index . '@cnscgestion.local',
-                'phone' => '+5699' . str_pad((string) random_int(1000000, 9999999), 7, '0', STR_PAD_LEFT),
+                'email' => 'estudiante.biblioteca'.$index.'@cnscgestion.local',
+                'phone' => '+5699'.str_pad((string) random_int(1000000, 9999999), 7, '0', STR_PAD_LEFT),
                 'address' => $this->faker->streetAddress(),
                 'general_status' => 'activo',
                 'guardian_name' => $this->faker->name(),
                 'guardian_relationship' => random_int(0, 1) ? 'Madre' : 'Padre',
-                'guardian_phone' => '+5698' . str_pad((string) random_int(1000000, 9999999), 7, '0', STR_PAD_LEFT),
-                'guardian_email' => 'apoderado.biblioteca' . $index . '@example.com',
+                'guardian_phone' => '+5698'.str_pad((string) random_int(1000000, 9999999), 7, '0', STR_PAD_LEFT),
+                'guardian_email' => 'apoderado.biblioteca'.$index.'@example.com',
                 'created_by' => $creatorId,
                 'updated_by' => $creatorId,
             ]);
@@ -868,18 +935,18 @@ class BibliotecaSeeder extends Seeder
     private function titleForMaterialType(string $materialType, int $index): string
     {
         return match ($materialType) {
-            'libro' => 'Libro CRA ' . $index . ': ' . Str::title($this->faker->words(3, true)),
-            'diccionario' => 'Diccionario escolar ' . $index,
-            'enciclopedia' => 'Enciclopedia temática ' . $index,
-            'tablet' => 'Tablet educativa ' . $index,
-            'notebook' => 'Notebook CRA ' . $index,
-            'proyector' => 'Proyector multimedia ' . $index,
-            'parlante' => 'Parlante portátil ' . $index,
-            'juego_educativo' => 'Juego educativo ' . $index,
-            'material_didactico' => 'Material didáctico ' . $index,
-            'kit_pedagogico' => 'Kit pedagógico ' . $index,
-            'audiovisual' => 'Recurso audiovisual ' . $index,
-            default => 'Recurso biblioteca ' . $index,
+            'libro' => 'Libro CRA '.$index.': '.Str::title($this->faker->words(3, true)),
+            'diccionario' => 'Diccionario escolar '.$index,
+            'enciclopedia' => 'Enciclopedia temática '.$index,
+            'tablet' => 'Tablet educativa '.$index,
+            'notebook' => 'Notebook CRA '.$index,
+            'proyector' => 'Proyector multimedia '.$index,
+            'parlante' => 'Parlante portátil '.$index,
+            'juego_educativo' => 'Juego educativo '.$index,
+            'material_didactico' => 'Material didáctico '.$index,
+            'kit_pedagogico' => 'Kit pedagógico '.$index,
+            'audiovisual' => 'Recurso audiovisual '.$index,
+            default => 'Recurso biblioteca '.$index,
         };
     }
 

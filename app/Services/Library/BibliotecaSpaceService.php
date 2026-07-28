@@ -13,15 +13,14 @@ class BibliotecaSpaceService
 {
     public function __construct(
         private readonly BibliotecaAlertService $alertService,
-    ) {
-    }
+    ) {}
 
     public function storeSpace(array $payload, User $actor): BibliotecaEspacio
     {
         return DB::transaction(function () use ($payload, $actor) {
-            $space = !empty($payload['id'])
+            $space = ! empty($payload['id'])
                 ? BibliotecaEspacio::query()->findOrFail($payload['id'])
-                : new BibliotecaEspacio();
+                : new BibliotecaEspacio;
 
             $space->fill([
                 'name' => $payload['name'],
@@ -33,7 +32,7 @@ class BibliotecaSpaceService
                 'updated_by' => $actor->id,
             ]);
 
-            if (!$space->exists) {
+            if (! $space->exists) {
                 $space->created_by = $actor->id;
             }
 
@@ -60,6 +59,11 @@ class BibliotecaSpaceService
                 'course_section_id' => $payload['course_section_id'] ?? null,
                 'responsible_staff_id' => $payload['responsible_staff_id'] ?? null,
                 'requested_by_user_id' => $payload['requested_by_user_id'] ?? $actor->id,
+                'requester_type' => $payload['requester_type'] ?? 'interno',
+                'external_name' => $payload['requester_type'] === 'externo' ? ($payload['external_name'] ?? null) : null,
+                'external_email' => $payload['requester_type'] === 'externo' ? ($payload['external_email'] ?? null) : null,
+                'external_institution' => $payload['requester_type'] === 'externo' ? ($payload['external_institution'] ?? null) : null,
+                'external_phone' => $payload['requester_type'] === 'externo' ? ($payload['external_phone'] ?? null) : null,
                 'attendee_count' => $payload['attendee_count'] ?? null,
                 'requested_resources' => array_values($payload['requested_resources'] ?? []),
                 'start_at' => Carbon::parse($payload['start_at']),
@@ -93,6 +97,11 @@ class BibliotecaSpaceService
                 'course_section_id' => $payload['course_section_id'] ?? $usage->course_section_id,
                 'responsible_staff_id' => $payload['responsible_staff_id'] ?? $usage->responsible_staff_id,
                 'requested_by_user_id' => $payload['requested_by_user_id'] ?? $usage->requested_by_user_id,
+                'requester_type' => $payload['requester_type'] ?? $usage->requester_type,
+                'external_name' => ($payload['requester_type'] ?? $usage->requester_type) === 'externo' ? ($payload['external_name'] ?? $usage->external_name) : null,
+                'external_email' => ($payload['requester_type'] ?? $usage->requester_type) === 'externo' ? ($payload['external_email'] ?? $usage->external_email) : null,
+                'external_institution' => ($payload['requester_type'] ?? $usage->requester_type) === 'externo' ? ($payload['external_institution'] ?? $usage->external_institution) : null,
+                'external_phone' => ($payload['requester_type'] ?? $usage->requester_type) === 'externo' ? ($payload['external_phone'] ?? $usage->external_phone) : null,
                 'attendee_count' => $payload['attendee_count'] ?? $usage->attendee_count,
                 'requested_resources' => array_values($payload['requested_resources'] ?? $usage->requested_resources ?? []),
                 'start_at' => $startAt,
@@ -113,7 +122,7 @@ class BibliotecaSpaceService
     {
         $usage->forceFill([
             'status' => $status,
-            'observations' => trim(($usage->observations ? $usage->observations . PHP_EOL : '') . ($notes ?? '')),
+            'observations' => trim(($usage->observations ? $usage->observations.PHP_EOL : '').($notes ?? '')),
             'updated_by' => $actor->id,
         ])->save();
 

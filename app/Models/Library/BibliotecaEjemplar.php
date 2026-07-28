@@ -49,6 +49,7 @@ class BibliotecaEjemplar extends Model
         'ingress_date',
         'origin',
         'estimated_value',
+        'biblioteca_ubicacion_id',
         'physical_location',
         'physical_state',
         'availability_status',
@@ -78,6 +79,11 @@ class BibliotecaEjemplar extends Model
     public function obra(): BelongsTo
     {
         return $this->belongsTo(BibliotecaObra::class, 'biblioteca_obra_id');
+    }
+
+    public function ubicacion(): BelongsTo
+    {
+        return $this->belongsTo(BibliotecaUbicacion::class, 'biblioteca_ubicacion_id');
     }
 
     public function prestamos(): HasMany

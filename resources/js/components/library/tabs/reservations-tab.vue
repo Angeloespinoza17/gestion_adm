@@ -11,6 +11,14 @@ import {
   showLibrarySuccess,
 } from "../module-utils";
 
+const requesterTypeLabels = {
+  student: "Estudiante",
+  staff: "Funcionario/a",
+  teacher: "Docente",
+  guardian: "Apoderado/a",
+  course: "Curso",
+};
+
 const emptyForm = () => ({
   requester_type: "student",
   requested_by_user_id: null,
@@ -55,30 +63,145 @@ export default {
       },
       showModal: false,
       form: emptyForm(),
+      requesterSearch: "",
+      filterSearches: {
+        student: "",
+        staff: "",
+        course: "",
+      },
     };
+  },
+  computed: {
+    requesterTypeOptions() {
+      const types = this.catalogs.reservation_requester_types || [];
+      return types.map((item) => ({
+        value: item.value,
+        text: requesterTypeLabels[item.value] || item.label,
+      }));
+    },
+    requesterCandidates() {
+      return this.buildRequesterCandidates(this.form.requester_type);
+    },
+    hasSelectedRequester() {
+      return Boolean(this.form[this.requesterModel()]);
+    },
   },
   mounted() {
     this.load();
   },
   methods: {
     formatLibraryDate,
-    requesterOptions() {
-      return this.form.requester_type === "student"
-        ? (this.catalogs.students || []).map((item) => ({ value: item.id, text: item.name }))
-        : this.form.requester_type === "staff" || this.form.requester_type === "teacher"
-        ? (this.catalogs.staff || []).map((item) => ({ value: item.id, text: item.full_name }))
-        : this.form.requester_type === "course"
-        ? (this.catalogs.courses || []).map((item) => ({ value: item.id, text: item.display_name }))
-        : (this.catalogs.users || []).map((item) => ({ value: item.id, text: item.name }));
+    requesterTypeLabel(type) {
+      return requesterTypeLabels[type] || type || "Solicitante";
+    },
+    isTeachingStaff(item) {
+      const role = `${item?.cargo?.name || ""} ${item?.cargo?.slug || ""}`
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .toLowerCase();
+
+      return ["docent", "profesor", "educador"].some((term) => role.includes(term));
+    },
+    buildRequesterCandidates(type) {
+      if (type === "student") {
+        return (this.catalogs.students || []).map((item) => ({
+          value: item.id,
+          text: `${item.name} · ${item.rut || "Sin RUT"} · ${item.course || "Sin curso"}`,
+        }));
+      }
+
+      if (type === "guardian") {
+        return (this.catalogs.guardians || []).map((item) => ({
+          value: item.student_profile_id,
+          text: `${item.name} · ${item.rut || "Sin RUT"} · Apoderado/a de ${item.student_name}`,
+        }));
+      }
+
+      if (type === "teacher" || type === "staff") {
+        const staff = type === "teacher"
+          ? (this.catalogs.staff || []).filter((item) => this.isTeachingStaff(item))
+          : (this.catalogs.staff || []);
+
+        return staff.map((item) => ({
+          value: item.id,
+          text: `${item.full_name} · ${item.rut || "Sin RUT"} · ${item.cargo?.name || this.requesterTypeLabel(type)}`,
+        }));
+      }
+
+      if (type === "course") {
+        return (this.catalogs.courses || []).map((item) => ({
+          value: item.id,
+          text: item.display_name,
+        }));
+      }
+
+      return [];
     },
     requesterModel() {
-      return this.form.requester_type === "student"
+      return this.form.requester_type === "student" || this.form.requester_type === "guardian"
         ? "student_profile_id"
         : this.form.requester_type === "staff" || this.form.requester_type === "teacher"
         ? "staff_id"
         : this.form.requester_type === "course"
         ? "course_section_id"
         : "requested_by_user_id";
+    },
+    resetRequesterIds() {
+      this.form.requested_by_user_id = null;
+      this.form.student_profile_id = null;
+      this.form.staff_id = null;
+      this.form.course_section_id = null;
+    },
+    changeRequesterType(type) {
+      this.form.requester_type = type;
+      this.requesterSearch = "";
+      this.resetRequesterIds();
+    },
+    resolveRequesterSelection(value) {
+      this.requesterSearch = value || "";
+      this.resetRequesterIds();
+      const candidate = this.requesterCandidates.find((item) => item.text === this.requesterSearch);
+      if (candidate) {
+        this.form[this.requesterModel()] = candidate.value;
+      }
+    },
+    filterCandidates(type) {
+      return this.buildRequesterCandidates(type);
+    },
+    resolveFilterSelection(type, value) {
+      const filterFields = {
+        student: "student_profile_id",
+        staff: "staff_id",
+        course: "course_section_id",
+      };
+      const field = filterFields[type];
+      this.filterSearches[type] = value || "";
+      this.filters[field] = this.filterCandidates(type).find(
+        (item) => item.text === this.filterSearches[type]
+      )?.value || null;
+    },
+    clearFilters() {
+      this.filters = {
+        search: "",
+        status: null,
+        resource_type: null,
+        student_profile_id: null,
+        staff_id: null,
+        course_section_id: null,
+        date_from: "",
+        date_to: "",
+      };
+      this.filterSearches = {
+        student: "",
+        staff: "",
+        course: "",
+      };
+      this.load();
+    },
+    resourceTypeLabel(type) {
+      return (this.catalogs.material_types || []).find((item) => item.value === type)?.label
+        || type
+        || "Sin tipo";
     },
     async load(page = 1) {
       this.loading = true;
@@ -101,6 +224,7 @@ export default {
     },
     openCreate() {
       this.form = emptyForm();
+      this.requesterSearch = "";
       this.showModal = true;
     },
     async save() {
@@ -180,14 +304,50 @@ export default {
         <div class="col-md-4"><label class="form-label">Buscar</label><BFormInput v-model="filters.search" placeholder="Código, recurso, tipo..." @keyup.enter="load" /></div>
         <div class="col-md-2"><label class="form-label">Estado</label><BFormSelect v-model="filters.status" :options="[{ value: null, text: 'Todos' }].concat((catalogs.reservation_statuses || []).map((item) => ({ value: item.value, text: item.label })))" /></div>
         <div class="col-md-2"><label class="form-label">Tipo recurso</label><BFormSelect v-model="filters.resource_type" :options="[{ value: null, text: 'Todos' }].concat((catalogs.material_types || []).map((item) => ({ value: item.value, text: item.label })))" /></div>
-        <div class="col-md-2"><label class="form-label">Estudiante</label><BFormSelect v-model="filters.student_profile_id" :options="[{ value: null, text: 'Todos' }].concat((catalogs.students || []).map((item) => ({ value: item.id, text: item.name })))" /></div>
-        <div class="col-md-2"><label class="form-label">Funcionario</label><BFormSelect v-model="filters.staff_id" :options="[{ value: null, text: 'Todos' }].concat((catalogs.staff || []).map((item) => ({ value: item.id, text: item.full_name })))" /></div>
-        <div class="col-md-2"><label class="form-label">Curso</label><BFormSelect v-model="filters.course_section_id" :options="[{ value: null, text: 'Todos' }].concat((catalogs.courses || []).map((item) => ({ value: item.id, text: item.display_name })))" /></div>
+        <div class="col-md-2">
+          <label class="form-label">Estudiante</label>
+          <BFormInput
+            :model-value="filterSearches.student"
+            list="reservation-filter-students"
+            placeholder="Nombre, RUT o curso"
+            autocomplete="off"
+            @update:model-value="resolveFilterSelection('student', $event)"
+          />
+          <datalist id="reservation-filter-students">
+            <option v-for="item in filterCandidates('student')" :key="item.value" :value="item.text" />
+          </datalist>
+        </div>
+        <div class="col-md-2">
+          <label class="form-label">Funcionario</label>
+          <BFormInput
+            :model-value="filterSearches.staff"
+            list="reservation-filter-staff"
+            placeholder="Nombre, RUT o cargo"
+            autocomplete="off"
+            @update:model-value="resolveFilterSelection('staff', $event)"
+          />
+          <datalist id="reservation-filter-staff">
+            <option v-for="item in filterCandidates('staff')" :key="item.value" :value="item.text" />
+          </datalist>
+        </div>
+        <div class="col-md-2">
+          <label class="form-label">Curso</label>
+          <BFormInput
+            :model-value="filterSearches.course"
+            list="reservation-filter-courses"
+            placeholder="Buscar curso"
+            autocomplete="off"
+            @update:model-value="resolveFilterSelection('course', $event)"
+          />
+          <datalist id="reservation-filter-courses">
+            <option v-for="item in filterCandidates('course')" :key="item.value" :value="item.text" />
+          </datalist>
+        </div>
         <div class="col-md-2"><label class="form-label">Desde</label><BFormInput v-model="filters.date_from" type="date" /></div>
         <div class="col-md-2"><label class="form-label">Hasta</label><BFormInput v-model="filters.date_to" type="date" /></div>
         <div class="col-md-3">
           <BButton variant="secondary" class="me-2" @click="load">Filtrar</BButton>
-          <BButton variant="light" @click="filters = { search: '', status: null, resource_type: null, student_profile_id: null, staff_id: null, course_section_id: null, date_from: '', date_to: '' }; load();">Limpiar</BButton>
+          <BButton variant="light" @click="clearFilters">Limpiar</BButton>
         </div>
       </div>
     </BCard>
@@ -209,9 +369,9 @@ export default {
       >
         <template #cell(obra_title)="{ item }">
           <div class="fw-semibold">{{ item.obra?.title || item.ejemplar?.label || "-" }}</div>
-          <div class="small text-muted">{{ item.ejemplar?.code || item.resource_type }}</div>
+          <div class="small text-muted">{{ item.ejemplar?.code || resourceTypeLabel(item.resource_type) }}</div>
         </template>
-        <template #cell(resource_type)="{ item }">{{ item.resource_type }}</template>
+        <template #cell(resource_type)="{ item }">{{ resourceTypeLabel(item.resource_type) }}</template>
         <template #cell(pickup_at)="{ item }">{{ formatLibraryDate(item.pickup_at) }}</template>
         <template #cell(status)="{ item }"><LibraryStatusBadge :status="item.status" /></template>
         <template #cell(actions)="{ item }">
@@ -237,8 +397,33 @@ export default {
         />
       </div>
       <div class="row g-3">
-        <div class="col-md-4"><label class="form-label">Tipo solicitante</label><BFormSelect v-model="form.requester_type" :options="(catalogs.reservation_requester_types || []).map((item) => ({ value: item.value, text: item.label }))" /></div>
-        <div class="col-md-8"><label class="form-label">Solicitante / curso</label><BFormSelect :model-value="form[requesterModel()]" :options="requesterOptions()" @update:model-value="form[requesterModel()] = $event" /></div>
+        <div class="col-md-4">
+          <label class="form-label">Tipo de solicitante</label>
+          <BFormSelect
+            :model-value="form.requester_type"
+            :options="requesterTypeOptions"
+            @update:model-value="changeRequesterType"
+          />
+        </div>
+        <div class="col-md-8">
+          <label class="form-label">Buscar solicitante o curso</label>
+          <BFormInput
+            :model-value="requesterSearch"
+            list="reservation-requester-options"
+            :placeholder="`Escribe nombre, RUT o ${form.requester_type === 'course' ? 'curso' : 'dato del solicitante'}`"
+            autocomplete="off"
+            @update:model-value="resolveRequesterSelection"
+          />
+          <datalist id="reservation-requester-options">
+            <option v-for="item in requesterCandidates" :key="item.value" :value="item.text" />
+          </datalist>
+          <div v-if="requesterSearch && !hasSelectedRequester" class="small text-warning mt-1">
+            Selecciona una coincidencia de la lista para continuar.
+          </div>
+          <div v-else-if="hasSelectedRequester" class="small text-success mt-1">
+            {{ requesterTypeLabel(form.requester_type) }} seleccionado/a correctamente.
+          </div>
+        </div>
         <div class="col-md-6"><label class="form-label">Obra / recurso</label><BFormSelect v-model="form.biblioteca_obra_id" :options="(catalogs.works || []).map((item) => ({ value: item.id, text: item.title }))" /></div>
         <div class="col-md-6"><label class="form-label">Ejemplar específico</label><BFormSelect v-model="form.biblioteca_ejemplar_id" :options="[{ value: null, text: 'Asignación automática' }].concat((catalogs.exemplars || []).map((item) => ({ value: item.id, text: item.label })))" /></div>
         <div class="col-md-4"><label class="form-label">Fecha solicitud</label><BFormInput v-model="form.requested_at" type="datetime-local" /></div>
@@ -250,7 +435,7 @@ export default {
       </div>
       <div class="d-flex justify-content-end gap-2 mt-4">
         <BButton variant="light" @click="closeModal">Cancelar</BButton>
-        <BButton variant="primary" :disabled="saving" @click="save">{{ saving ? "Guardando..." : "Registrar reserva" }}</BButton>
+        <BButton variant="primary" :disabled="saving || !hasSelectedRequester" @click="save">{{ saving ? "Guardando..." : "Registrar reserva" }}</BButton>
       </div>
     </BModal>
   </div>

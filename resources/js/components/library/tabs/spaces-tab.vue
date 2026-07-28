@@ -34,6 +34,11 @@ const emptyUsage = () => ({
   title: "",
   course_section_id: null,
   responsible_staff_id: null,
+  requester_type: "interno",
+  external_name: "",
+  external_email: "",
+  external_institution: "",
+  external_phone: "",
   attendee_count: "",
   requested_resources_text: "",
   start_at: "",
@@ -174,6 +179,11 @@ export default {
         title: this.usageForm.title,
         course_section_id: this.usageForm.course_section_id || null,
         responsible_staff_id: this.usageForm.responsible_staff_id || null,
+        requester_type: this.usageForm.requester_type,
+        external_name: this.usageForm.requester_type === "externo" ? this.usageForm.external_name : null,
+        external_email: this.usageForm.requester_type === "externo" ? this.usageForm.external_email : null,
+        external_institution: this.usageForm.requester_type === "externo" ? this.usageForm.external_institution : null,
+        external_phone: this.usageForm.requester_type === "externo" ? this.usageForm.external_phone || null : null,
         attendee_count: this.usageForm.attendee_count || null,
         requested_resources: this.usageForm.requested_resources_text.split(",").map((item) => item.trim()).filter(Boolean),
         start_at: this.usageForm.start_at,
@@ -204,6 +214,35 @@ export default {
       await this.loadCalendar();
       await showLibrarySuccess("Estado actualizado correctamente.");
     },
+    exportCalendar() {
+      const events = this.calendarOptions.events || [];
+      const formatIcsDate = (value) => new Date(value).toISOString().replaceAll("-", "").replaceAll(":", "").replace(".000", "");
+      const escapeIcs = (value) => String(value || "").replaceAll("\\", "\\\\").replaceAll(",", "\\,").replaceAll(";", "\\;").replaceAll("\n", "\\n");
+      const rows = [
+        "BEGIN:VCALENDAR",
+        "VERSION:2.0",
+        "PRODID:-//AVIS//Biblioteca Escolar//ES",
+        "CALSCALE:GREGORIAN",
+        ...events.flatMap((event) => [
+          "BEGIN:VEVENT",
+          `UID:biblioteca-${event.id}@avis`,
+          `DTSTAMP:${formatIcsDate(new Date())}`,
+          `DTSTART:${formatIcsDate(event.start)}`,
+          `DTEND:${formatIcsDate(event.end)}`,
+          `SUMMARY:${escapeIcs(event.title)}`,
+          `DESCRIPTION:${escapeIcs("Reserva de espacio de biblioteca")}`,
+          "END:VEVENT",
+        ]),
+        "END:VCALENDAR",
+      ];
+      const blob = new Blob([rows.join("\r\n")], { type: "text/calendar;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `calendario-biblioteca-${new Date().toISOString().slice(0, 10)}.ics`;
+      link.click();
+      URL.revokeObjectURL(url);
+    },
     async closeSpaceModal() {
       const confirmed = await confirmLibraryCancel("el formulario del espacio");
       if (confirmed.isConfirmed) this.showSpaceModal = false;
@@ -217,24 +256,25 @@ export default {
 </script>
 
 <template>
-  <div class="d-flex flex-column gap-3">
-    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
-      <div class="fw-semibold">Reservas y calendario de espacios</div>
+  <div class="space-view">
+    <section class="space-head">
+      <div><span>AGENDA DE BIBLIOTECA</span><h5>Sala 1 media · Sala 2 básica</h5><p>Reservas internas y solicitudes externas en un calendario único y exportable.</p></div>
       <div class="d-flex gap-2 flex-wrap">
         <LibraryHelpButton
           title="Ayuda: uso de espacios"
           text="Aquí se administran los espacios CRA, sus capacidades, recursos asociados y el calendario diario, semanal o mensual de actividades."
         />
+        <BButton variant="light" class="head-button" @click="exportCalendar"><i class="bx bx-calendar-export me-1"></i>Exportar calendario</BButton>
         <BButton variant="outline-secondary" @click="openSpaceCreate">Nuevo espacio</BButton>
         <BButton variant="primary" @click="openUsageCreate">Nueva reserva</BButton>
       </div>
-    </div>
+    </section>
 
     <BAlert v-if="error" show variant="danger">{{ error }}</BAlert>
 
     <div class="row g-3">
       <div class="col-xl-4">
-        <BCard class="border-0 shadow-sm h-100">
+        <BCard class="room-card border-0 h-100">
           <template #header><div class="fw-semibold">Espacios disponibles</div></template>
           <LoadingState v-if="loadingSpaces" message="Cargando espacios..." compact />
           <div v-else class="d-flex flex-column gap-2">
@@ -251,8 +291,8 @@ export default {
         </BCard>
       </div>
       <div class="col-xl-8">
-        <BCard class="border-0 shadow-sm h-100">
-          <template #header><div class="fw-semibold">Calendario de reservas</div></template>
+        <BCard class="calendar-card border-0 h-100">
+          <template #header><div class="d-flex justify-content-between align-items-center"><div class="fw-semibold">Calendario de reservas</div><BButton size="sm" variant="outline-primary" @click="exportCalendar">Exportar .ics</BButton></div></template>
           <FullCalendar :options="calendarOptions" />
         </BCard>
       </div>
@@ -323,9 +363,17 @@ export default {
         <div class="col-md-4"><label class="form-label">Espacio</label><BFormSelect v-model="usageForm.biblioteca_espacio_id" :options="(catalogs.spaces || []).map((item) => ({ value: item.id, text: item.name }))" /></div>
         <div class="col-md-4"><label class="form-label">Tipo actividad</label><BFormSelect v-model="usageForm.activity_type" :options="(catalogs.space_activity_types || []).map((item) => ({ value: item.value, text: item.label }))" /></div>
         <div class="col-md-4"><label class="form-label">Estado</label><BFormSelect v-model="usageForm.status" :options="(catalogs.space_statuses || []).map((item) => ({ value: item.value, text: item.label }))" /></div>
+        <div class="col-md-4"><label class="form-label">Solicitante</label><BFormSelect v-model="usageForm.requester_type" :options="[{value:'interno',text:'Interno del establecimiento'},{value:'externo',text:'Persona o institución externa'}]" /></div>
         <div class="col-md-6"><label class="form-label">Título / actividad</label><BFormInput v-model="usageForm.title" /></div>
         <div class="col-md-3"><label class="form-label">Curso</label><BFormSelect v-model="usageForm.course_section_id" :options="[{ value: null, text: 'Sin curso' }].concat((catalogs.courses || []).map((item) => ({ value: item.id, text: item.display_name })))" /></div>
         <div class="col-md-3"><label class="form-label">Docente responsable</label><BFormSelect v-model="usageForm.responsible_staff_id" :options="[{ value: null, text: 'Sin responsable' }].concat((catalogs.staff || []).map((item) => ({ value: item.id, text: item.full_name })))" /></div>
+        <template v-if="usageForm.requester_type === 'externo'">
+          <div class="col-12"><div class="external-title"><i class="bx bx-buildings"></i> Datos de la solicitud externa</div></div>
+          <div class="col-md-4"><label class="form-label">Nombre completo *</label><BFormInput v-model="usageForm.external_name" /></div>
+          <div class="col-md-3"><label class="form-label">Correo *</label><BFormInput v-model="usageForm.external_email" type="email" /></div>
+          <div class="col-md-3"><label class="form-label">Institución *</label><BFormInput v-model="usageForm.external_institution" /></div>
+          <div class="col-md-2"><label class="form-label">Teléfono</label><BFormInput v-model="usageForm.external_phone" /></div>
+        </template>
         <div class="col-md-2"><label class="form-label">Asistentes</label><BFormInput v-model="usageForm.attendee_count" type="number" /></div>
         <div class="col-md-5"><label class="form-label">Recursos solicitados</label><BFormInput v-model="usageForm.requested_resources_text" placeholder="Separar por coma" /></div>
         <div class="col-md-2"><label class="form-label">Inicio</label><BFormInput v-model="usageForm.start_at" type="datetime-local" /></div>
@@ -340,3 +388,7 @@ export default {
     </BModal>
   </div>
 </template>
+
+<style scoped>
+.space-view{display:flex;flex-direction:column;gap:1rem}.space-head{display:flex;justify-content:space-between;align-items:center;gap:1rem;padding:1.35rem 1.5rem;color:#fff;border-radius:19px;background:linear-gradient(135deg,#26465f,#31778a 58%,#40a58d);box-shadow:0 16px 36px rgba(38,90,101,.18)}.space-head>div:first-child>span{font-size:.66rem;font-weight:800;letter-spacing:.15em;color:#b8eee3}.space-head h5{color:#fff;margin:.25rem 0}.space-head p{margin:0;color:rgba(255,255,255,.72)}.head-button{color:#245c69!important;font-weight:700}.room-card,.calendar-card{border-radius:16px;box-shadow:0 12px 28px rgba(28,52,86,.08)}.external-title{display:flex;align-items:center;gap:.5rem;padding:.7rem .85rem;color:#8b6320;border-radius:11px;background:#fff7e8;font-weight:750}@media(max-width:900px){.space-head{align-items:flex-start;flex-direction:column}}
+</style>

@@ -486,6 +486,16 @@ const routes = [
         component: () => import('../views/library/index.vue'),
     },
     {
+        path: '/biblioteca/categorias',
+        meta: { authRequired: true, title: 'Categorías de Biblioteca', permission: 'ver_modulo_biblioteca' },
+        component: () => import('../views/library/index.vue'),
+    },
+    {
+        path: '/biblioteca/almacenaje',
+        meta: { authRequired: true, title: 'Almacenaje de Biblioteca', permission: 'ver_modulo_biblioteca' },
+        component: () => import('../views/library/index.vue'),
+    },
+    {
         path: '/biblioteca/inventario',
         meta: { authRequired: true, title: 'Ejemplares e Inventario', permission: 'ver_modulo_biblioteca' },
         component: () => import('../views/library/index.vue'),
@@ -493,6 +503,16 @@ const routes = [
     {
         path: '/biblioteca/prestamos',
         meta: { authRequired: true, title: 'Préstamos y Devoluciones', permission: 'ver_modulo_biblioteca' },
+        component: () => import('../views/library/index.vue'),
+    },
+    {
+        path: '/biblioteca/materiales',
+        meta: { authRequired: true, title: 'Materiales de Biblioteca', permission: 'ver_modulo_biblioteca' },
+        component: () => import('../views/library/index.vue'),
+    },
+    {
+        path: '/biblioteca/textos-escolares',
+        meta: { authRequired: true, title: 'Textos Escolares', permission: 'ver_modulo_biblioteca' },
         component: () => import('../views/library/index.vue'),
     },
     {
@@ -508,6 +528,11 @@ const routes = [
     {
         path: '/biblioteca/espacios',
         meta: { authRequired: true, title: 'Uso de Espacios', permission: 'ver_modulo_biblioteca' },
+        component: () => import('../views/library/index.vue'),
+    },
+    {
+        path: '/biblioteca/pases',
+        meta: { authRequired: true, title: 'Pases de Biblioteca', permission: 'ver_modulo_biblioteca' },
         component: () => import('../views/library/index.vue'),
     },
     {

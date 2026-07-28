@@ -49,6 +49,8 @@ class BibliotecaObra extends Model
         'publisher',
         'publication_year',
         'isbn',
+        'biblioteca_categoria_id',
+        'biblioteca_subcategoria_id',
         'category',
         'subcategory',
         'genre',
@@ -62,6 +64,7 @@ class BibliotecaObra extends Model
         'internal_code',
         'barcode',
         'physical_location',
+        'biblioteca_ubicacion_id',
         'shelf',
         'section',
         'general_status',
@@ -69,6 +72,10 @@ class BibliotecaObra extends Model
         'total_copies',
         'available_copies',
         'loan_count',
+        'open_library_work_key',
+        'open_library_edition_key',
+        'open_library_cover_id',
+        'source_metadata',
         'created_by',
         'updated_by',
     ];
@@ -81,11 +88,28 @@ class BibliotecaObra extends Model
         'total_copies' => 'integer',
         'available_copies' => 'integer',
         'loan_count' => 'integer',
+        'open_library_cover_id' => 'integer',
+        'source_metadata' => 'array',
     ];
 
     public function recommendedCourse(): BelongsTo
     {
         return $this->belongsTo(CourseSection::class, 'recommended_course_section_id');
+    }
+
+    public function categoria(): BelongsTo
+    {
+        return $this->belongsTo(BibliotecaCategoria::class, 'biblioteca_categoria_id');
+    }
+
+    public function subcategoria(): BelongsTo
+    {
+        return $this->belongsTo(BibliotecaSubcategoria::class, 'biblioteca_subcategoria_id');
+    }
+
+    public function ubicacion(): BelongsTo
+    {
+        return $this->belongsTo(BibliotecaUbicacion::class, 'biblioteca_ubicacion_id');
     }
 
     public function ejemplares(): HasMany

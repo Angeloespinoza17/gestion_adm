@@ -19,11 +19,12 @@ class SaveBibliotecaEjemplarRequest extends FormRequest
 
         return [
             'biblioteca_obra_id' => ['required', 'integer', 'exists:biblioteca_obras,id'],
-            'code' => ['required', 'string', 'max:80', Rule::unique('biblioteca_ejemplares', 'code')->ignore($ejemplarId)],
+            'code' => ['nullable', 'string', 'max:80', Rule::unique('biblioteca_ejemplares', 'code')->ignore($ejemplarId)],
             'barcode' => ['nullable', 'string', 'max:120', Rule::unique('biblioteca_ejemplares', 'barcode')->ignore($ejemplarId)],
             'ingress_date' => ['nullable', 'date'],
             'origin' => ['required', Rule::in(BibliotecaEjemplar::ORIGIN_OPTIONS)],
             'estimated_value' => ['nullable', 'numeric', 'min:0'],
+            'biblioteca_ubicacion_id' => ['nullable', 'integer', 'exists:biblioteca_ubicaciones,id'],
             'physical_location' => ['nullable', 'string', 'max:120'],
             'physical_state' => ['required', Rule::in(BibliotecaEjemplar::STATE_OPTIONS)],
             'availability_status' => ['required', Rule::in(BibliotecaEjemplar::AVAILABILITY_OPTIONS)],

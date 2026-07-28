@@ -104,7 +104,7 @@ class NavigationModuleBackfillSeeder extends Seeder
                     ->values()
                     ->all();
 
-                if (!empty($ids)) {
+                if (! empty($ids)) {
                     $role->modules()->syncWithoutDetaching($ids);
                 }
             });
@@ -112,7 +112,7 @@ class NavigationModuleBackfillSeeder extends Seeder
 
     private function hasAnyPermission(array $rolePermissionSlugs, array $requiredPermissionSlugs): bool
     {
-        return !empty(array_intersect($rolePermissionSlugs, $requiredPermissionSlugs));
+        return ! empty(array_intersect($rolePermissionSlugs, $requiredPermissionSlugs));
     }
 
     private function allModuleSlugs(array $definitions): array
@@ -217,12 +217,17 @@ class NavigationModuleBackfillSeeder extends Seeder
                 'children' => [
                     ['slug' => 'biblioteca_dashboard', 'name' => 'Dashboard', 'route' => '/biblioteca', 'sort_order' => 1, 'permissions' => ['ver_modulo_biblioteca']],
                     ['slug' => 'biblioteca_catalogo', 'name' => 'Catalogo', 'route' => '/biblioteca/catalogo', 'sort_order' => 2, 'permissions' => ['ver_modulo_biblioteca', 'administrar_catalogo_biblioteca', 'crear_libros_biblioteca', 'editar_libros_biblioteca', 'eliminar_libros_biblioteca']],
-                    ['slug' => 'biblioteca_inventario', 'name' => 'Ejemplares e inventario', 'route' => '/biblioteca/inventario', 'sort_order' => 3, 'permissions' => ['administrar_inventario_biblioteca']],
-                    ['slug' => 'biblioteca_prestamos', 'name' => 'Prestamos y devoluciones', 'route' => '/biblioteca/prestamos', 'sort_order' => 4, 'permissions' => ['registrar_prestamos_biblioteca', 'registrar_devoluciones_biblioteca', 'renovar_prestamos_biblioteca', 'gestionar_mora_biblioteca']],
-                    ['slug' => 'biblioteca_reservas', 'name' => 'Reservas de recursos', 'route' => '/biblioteca/reservas', 'sort_order' => 5, 'permissions' => ['gestionar_reservas_biblioteca']],
-                    ['slug' => 'biblioteca_plan_lector', 'name' => 'Plan lector', 'route' => '/biblioteca/plan-lector', 'sort_order' => 6, 'permissions' => ['gestionar_plan_lector_biblioteca']],
-                    ['slug' => 'biblioteca_espacios', 'name' => 'Uso de espacios', 'route' => '/biblioteca/espacios', 'sort_order' => 7, 'permissions' => ['gestionar_uso_espacios_biblioteca']],
-                    ['slug' => 'biblioteca_reportes', 'name' => 'Reportes', 'route' => '/biblioteca/reportes', 'sort_order' => 8, 'permissions' => ['ver_estadisticas_biblioteca', 'exportar_reportes_biblioteca']],
+                    ['slug' => 'biblioteca_categorias', 'name' => 'Categorias', 'route' => '/biblioteca/categorias', 'sort_order' => 3, 'permissions' => ['gestionar_categorias_biblioteca', 'administrar_catalogo_biblioteca']],
+                    ['slug' => 'biblioteca_almacenaje', 'name' => 'Salas y estantes', 'route' => '/biblioteca/almacenaje', 'sort_order' => 4, 'permissions' => ['gestionar_almacenaje_biblioteca', 'administrar_inventario_biblioteca']],
+                    ['slug' => 'biblioteca_inventario', 'name' => 'Ejemplares e inventario', 'route' => '/biblioteca/inventario', 'sort_order' => 5, 'permissions' => ['administrar_inventario_biblioteca']],
+                    ['slug' => 'biblioteca_prestamos', 'name' => 'Prestamos y devoluciones', 'route' => '/biblioteca/prestamos', 'sort_order' => 6, 'permissions' => ['registrar_prestamos_biblioteca', 'registrar_devoluciones_biblioteca', 'renovar_prestamos_biblioteca', 'gestionar_mora_biblioteca']],
+                    ['slug' => 'biblioteca_materiales', 'name' => 'Materiales', 'route' => '/biblioteca/materiales', 'sort_order' => 7, 'permissions' => ['gestionar_materiales_biblioteca', 'registrar_prestamos_biblioteca']],
+                    ['slug' => 'biblioteca_textos_escolares', 'name' => 'Textos escolares', 'route' => '/biblioteca/textos-escolares', 'sort_order' => 8, 'permissions' => ['gestionar_textos_escolares_biblioteca']],
+                    ['slug' => 'biblioteca_reservas', 'name' => 'Reservas de recursos', 'route' => '/biblioteca/reservas', 'sort_order' => 9, 'permissions' => ['gestionar_reservas_biblioteca']],
+                    ['slug' => 'biblioteca_plan_lector', 'name' => 'Plan lector', 'route' => '/biblioteca/plan-lector', 'sort_order' => 10, 'permissions' => ['gestionar_plan_lector_biblioteca']],
+                    ['slug' => 'biblioteca_espacios', 'name' => 'Uso de espacios', 'route' => '/biblioteca/espacios', 'sort_order' => 11, 'permissions' => ['gestionar_uso_espacios_biblioteca']],
+                    ['slug' => 'biblioteca_pases', 'name' => 'Pases de Biblioteca', 'route' => '/biblioteca/pases', 'sort_order' => 12, 'permissions' => ['gestionar_pases_biblioteca']],
+                    ['slug' => 'biblioteca_reportes', 'name' => 'Reportes', 'route' => '/biblioteca/reportes', 'sort_order' => 13, 'permissions' => ['ver_estadisticas_biblioteca', 'exportar_reportes_biblioteca']],
                 ],
             ],
             [

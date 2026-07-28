@@ -84,6 +84,11 @@ class PermissionBackfillSeeder extends Seeder
             ['slug' => 'gestionar_reservas_biblioteca', 'name' => 'Gestionar reservas de Biblioteca', 'description' => 'Permite crear, aprobar, cancelar o administrar reservas de recursos de Biblioteca.'],
             ['slug' => 'gestionar_plan_lector_biblioteca', 'name' => 'Gestionar plan lector de Biblioteca', 'description' => 'Permite crear y administrar planes lectores, obras asignadas y seguimiento lector.'],
             ['slug' => 'gestionar_uso_espacios_biblioteca', 'name' => 'Gestionar uso de espacios de Biblioteca', 'description' => 'Permite registrar y administrar uso de salas, espacios o recursos de Biblioteca.'],
+            ['slug' => 'gestionar_categorias_biblioteca', 'name' => 'Gestionar categorías de Biblioteca', 'description' => 'Permite administrar la clasificación interna del catálogo de Biblioteca.'],
+            ['slug' => 'gestionar_almacenaje_biblioteca', 'name' => 'Gestionar almacenaje de Biblioteca', 'description' => 'Permite administrar salas, estantes y repisas de Biblioteca.'],
+            ['slug' => 'gestionar_textos_escolares_biblioteca', 'name' => 'Gestionar textos escolares', 'description' => 'Permite registrar recepción, órdenes y entregas de textos escolares.'],
+            ['slug' => 'gestionar_materiales_biblioteca', 'name' => 'Gestionar materiales de Biblioteca', 'description' => 'Permite administrar y prestar materiales individuales, a docentes o cursos.'],
+            ['slug' => 'gestionar_pases_biblioteca', 'name' => 'Gestionar pases de Biblioteca', 'description' => 'Permite emitir, editar y cerrar pases de Biblioteca.'],
             ['slug' => 'ver_estadisticas_biblioteca', 'name' => 'Ver estadisticas de Biblioteca', 'description' => 'Permite consultar estadisticas e indicadores del modulo Biblioteca.'],
             ['slug' => 'exportar_reportes_biblioteca', 'name' => 'Exportar reportes de Biblioteca', 'description' => 'Permite exportar reportes, indicadores o listados del modulo Biblioteca.'],
 

@@ -4,9 +4,12 @@ namespace App\Services\Library;
 
 use App\Models\Library\BibliotecaAlerta;
 use App\Models\Library\BibliotecaEjemplar;
+use App\Models\Library\BibliotecaPase;
 use App\Models\Library\BibliotecaPlanLector;
 use App\Models\Library\BibliotecaPrestamo;
 use App\Models\Library\BibliotecaReserva;
+use App\Models\Library\BibliotecaTextoEntrega;
+use App\Models\Library\BibliotecaTextoOrden;
 use App\Models\Library\BibliotecaUsoEspacio;
 use Carbon\Carbon;
 
@@ -39,6 +42,15 @@ class BibliotecaReportService
             })
             ->get();
 
+        $dueLoans = BibliotecaPrestamo::query()
+            ->whereBetween('due_at', [$from->toDateString(), $to->toDateString()])
+            ->where('status', '!=', 'cancelado')
+            ->get(['due_at', 'returned_at', 'status']);
+        $lateLoans = $dueLoans->filter(fn (BibliotecaPrestamo $loan) => $loan->status === 'vencido'
+            || ($loan->returned_at && $loan->returned_at->startOfDay()->greaterThan($loan->due_at->startOfDay())))
+            ->count();
+        $overdueRate = $dueLoans->isEmpty() ? 0 : round(($lateLoans / $dueLoans->count()) * 100, 1);
+
         return [
             'summary' => [
                 'from' => $from->toDateString(),
@@ -46,9 +58,13 @@ class BibliotecaReportService
                 'total_loans' => $loans->count(),
                 'total_returns' => $loans->whereNotNull('returned_at')->count(),
                 'total_overdue' => $loans->where('status', 'vencido')->count(),
+                'overdue_rate' => $overdueRate,
                 'total_reservations' => $reservations->count(),
                 'total_spaces' => $spaceUsage->count(),
                 'total_reading_plans' => $readingPlans->count(),
+                'pending_textbook_deliveries' => BibliotecaTextoEntrega::query()->whereIn('status', ['pendiente', 'parcial'])->count(),
+                'textbook_orders_with_shortages' => BibliotecaTextoOrden::query()->whereHas('items', fn ($query) => $query->where('shortage_quantity', '>', 0))->count(),
+                'active_library_passes' => BibliotecaPase::query()->where('status', 'emitido')->where('valid_until', '>=', now())->count(),
                 'inventory_status' => BibliotecaEjemplar::query()
                     ->selectRaw('availability_status as label, count(*) as total')
                     ->groupBy('availability_status')
@@ -59,7 +75,15 @@ class BibliotecaReportService
                 'loans_by_course' => $loans->groupBy('course_name_snapshot')->map->count()->sortDesc()->take(15),
                 'loans_by_book' => $loans->groupBy(fn ($loan) => $loan->obra?->title ?? 'Sin título')->map->count()->sortDesc()->take(15),
                 'loans_by_category' => $loans->groupBy(fn ($loan) => $loan->obra?->category ?? 'Sin categoría')->map->count()->sortDesc()->take(15),
+                'loans_by_estate' => $loans->groupBy(fn ($loan) => $loan->borrower_estate ?: $loan->borrower_type ?: 'Sin estamento')->map->count()->sortDesc(),
                 'overdue_by_user' => $loans->where('status', 'vencido')->groupBy('borrower_name_snapshot')->map->count()->sortDesc()->take(15),
+                'inventory_by_location' => BibliotecaEjemplar::query()
+                    ->leftJoin('biblioteca_ubicaciones', 'biblioteca_ubicaciones.id', '=', 'biblioteca_ejemplares.biblioteca_ubicacion_id')
+                    ->selectRaw("coalesce(biblioteca_ubicaciones.name, biblioteca_ejemplares.physical_location, 'Sin ubicación') as label, count(*) as total")
+                    ->groupBy('biblioteca_ubicaciones.name', 'biblioteca_ejemplares.physical_location')
+                    ->orderByDesc('total')
+                    ->get()
+                    ->pluck('total', 'label'),
                 'reservations_by_type' => $reservations->groupBy('resource_type')->map->count()->sortDesc(),
                 'reading_plan_by_status' => $readingPlans->groupBy('status')->map->count()->sortDesc(),
                 'spaces_by_activity' => $spaceUsage->groupBy('activity_type')->map->count()->sortDesc(),
@@ -80,8 +104,8 @@ class BibliotecaReportService
     private function resolveRange(array $filters): array
     {
         $period = $filters['period'] ?? 'monthly';
-        $from = !empty($filters['date_from']) ? Carbon::parse($filters['date_from'])->startOfDay() : null;
-        $to = !empty($filters['date_to']) ? Carbon::parse($filters['date_to'])->endOfDay() : null;
+        $from = ! empty($filters['date_from']) ? Carbon::parse($filters['date_from'])->startOfDay() : null;
+        $to = ! empty($filters['date_to']) ? Carbon::parse($filters['date_to'])->endOfDay() : null;
 
         if ($from && $to) {
             return [$from, $to];

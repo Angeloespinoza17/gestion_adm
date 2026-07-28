@@ -11,6 +11,10 @@ use Illuminate\Support\Facades\DB;
 
 class BibliotecaInventoryService
 {
+    public function __construct(
+        private readonly BibliotecaCodeService $codeService,
+    ) {}
+
     public function refreshWorkAvailability(BibliotecaObra $obra): BibliotecaObra
     {
         $obra->loadMissing('ejemplares');
@@ -66,6 +70,7 @@ class BibliotecaInventoryService
             $previousState = $ejemplar->physical_state;
 
             $ejemplar->fill([
+                'biblioteca_ubicacion_id' => $changes['biblioteca_ubicacion_id'] ?? $ejemplar->biblioteca_ubicacion_id,
                 'physical_location' => $changes['physical_location'] ?? $ejemplar->physical_location,
                 'physical_state' => $changes['physical_state'] ?? $ejemplar->physical_state,
                 'availability_status' => $changes['availability_status'] ?? $ejemplar->availability_status,
@@ -94,6 +99,50 @@ class BibliotecaInventoryService
             $this->refreshWorkAvailability($ejemplar->obra()->firstOrFail());
 
             return $movement;
+        });
+    }
+
+    public function addCopies(BibliotecaObra $obra, int $quantity, User $user, array $defaults = []): void
+    {
+        if ($quantity <= 0) {
+            return;
+        }
+
+        DB::transaction(function () use ($obra, $quantity, $user, $defaults) {
+            foreach (range(1, $quantity) as $index) {
+                $ejemplar = BibliotecaEjemplar::query()->create([
+                    'biblioteca_obra_id' => $obra->id,
+                    'code' => $this->codeService->next('EJ'),
+                    'barcode' => null,
+                    'ingress_date' => $defaults['ingress_date'] ?? now()->toDateString(),
+                    'origin' => $defaults['origin'] ?? 'inventario_inicial',
+                    'estimated_value' => $defaults['estimated_value'] ?? null,
+                    'biblioteca_ubicacion_id' => $defaults['biblioteca_ubicacion_id'] ?? $obra->biblioteca_ubicacion_id,
+                    'physical_location' => $defaults['physical_location'] ?? $obra->physical_location,
+                    'physical_state' => $defaults['physical_state'] ?? 'bueno',
+                    'availability_status' => $defaults['availability_status'] ?? 'disponible',
+                    'registered_by' => $user->id,
+                    'observations' => $defaults['observations'] ?? null,
+                    'photo_urls' => [],
+                    'is_active' => true,
+                    'created_by' => $user->id,
+                    'updated_by' => $user->id,
+                ]);
+
+                $ejemplar->movimientos()->create([
+                    'movement_type' => 'alta',
+                    'previous_location' => null,
+                    'new_location' => $ejemplar->physical_location,
+                    'previous_state' => null,
+                    'new_state' => $ejemplar->physical_state,
+                    'movement_date' => now(),
+                    'notes' => sprintf('Alta automática de ejemplar %d de %d.', $index, $quantity),
+                    'responsible_user_id' => $user->id,
+                    'metadata' => ['bulk_quantity' => $quantity, 'source' => 'catalog'],
+                ]);
+            }
+
+            $this->refreshWorkAvailability($obra->fresh());
         });
     }
 }

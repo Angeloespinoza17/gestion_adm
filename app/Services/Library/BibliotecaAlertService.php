@@ -4,9 +4,12 @@ namespace App\Services\Library;
 
 use App\Models\Library\BibliotecaAlerta;
 use App\Models\Library\BibliotecaEjemplar;
+use App\Models\Library\BibliotecaPase;
 use App\Models\Library\BibliotecaPlanLector;
 use App\Models\Library\BibliotecaPrestamo;
 use App\Models\Library\BibliotecaReserva;
+use App\Models\Library\BibliotecaTextoEntrega;
+use App\Models\Library\BibliotecaTextoOrdenItem;
 use App\Models\Library\BibliotecaUsoEspacio;
 use App\Models\User;
 use Carbon\Carbon;
@@ -21,6 +24,8 @@ class BibliotecaAlertService
         $this->refreshAvailabilityAlerts($actor);
         $this->refreshReadingPlanAlerts($actor);
         $this->refreshSpaceAlerts($actor);
+        $this->refreshTextbookAlerts($actor);
+        $this->refreshPassAlerts($actor);
     }
 
     public function markResolved(string $relatedType, int $relatedId): void
@@ -230,8 +235,87 @@ class BibliotecaAlertService
         );
     }
 
+    private function refreshTextbookAlerts(?User $actor = null): void
+    {
+        $shortages = BibliotecaTextoOrdenItem::query()
+            ->with(['order.courseSection:id,display_name', 'textoTitulo:id,title'])
+            ->where('shortage_quantity', '>', 0)
+            ->whereHas('order', fn ($query) => $query->whereNotIn('status', ['cerrada', 'cancelada']))
+            ->get();
+
+        $pending = BibliotecaTextoEntrega::query()
+            ->with(['order.courseSection:id,display_name'])
+            ->whereIn('status', ['pendiente', 'parcial'])
+            ->get();
+
+        $this->replaceAlerts(
+            'texto_escolar_faltante',
+            $shortages,
+            fn (BibliotecaTextoOrdenItem $item) => [
+                'alert_level' => 'warning',
+                'title' => 'Faltan textos escolares',
+                'message' => sprintf(
+                    'Faltan %d ejemplar(es) de "%s" para %s.',
+                    $item->shortage_quantity,
+                    $item->textoTitulo?->title ?? $item->title,
+                    $item->order?->courseSection?->display_name ?? 'la orden de entrega',
+                ),
+                'due_at' => null,
+                'recipient_scope' => 'bibliotecaria',
+                'metadata' => ['order_id' => $item->biblioteca_texto_orden_id],
+            ],
+            $actor
+        );
+
+        $this->replaceAlerts(
+            'texto_escolar_pendiente',
+            $pending,
+            fn (BibliotecaTextoEntrega $delivery) => [
+                'alert_level' => 'info',
+                'title' => 'Entrega de texto pendiente',
+                'message' => sprintf(
+                    '%s mantiene una entrega pendiente en %s.',
+                    $delivery->student_name_snapshot,
+                    $delivery->order?->courseSection?->display_name ?? 'su curso',
+                ),
+                'due_at' => null,
+                'recipient_scope' => 'bibliotecaria',
+                'metadata' => ['order_id' => $delivery->biblioteca_texto_orden_id],
+            ],
+            $actor
+        );
+    }
+
+    private function refreshPassAlerts(?User $actor = null): void
+    {
+        $passes = BibliotecaPase::query()
+            ->where('status', 'emitido')
+            ->whereBetween('valid_until', [now(), now()->addMinutes(30)])
+            ->get();
+
+        $this->replaceAlerts(
+            'pase_biblioteca_por_vencer',
+            $passes,
+            fn (BibliotecaPase $pass) => [
+                'alert_level' => 'info',
+                'title' => 'Pase de biblioteca por vencer',
+                'message' => sprintf(
+                    'El pase %s de %s vence a las %s.',
+                    $pass->pass_code,
+                    $pass->student_name_snapshot,
+                    $pass->valid_until?->format('H:i') ?? '--:--',
+                ),
+                'due_at' => $pass->valid_until,
+                'recipient_scope' => 'inspectoria',
+                'metadata' => ['pass_code' => $pass->pass_code],
+            ],
+            $actor
+        );
+    }
+
     /**
      * @template TItem of mixed
+     *
      * @param  Collection<int, TItem>  $items
      * @param  callable(TItem): array<string, mixed>  $payloadBuilder
      */
@@ -246,7 +330,7 @@ class BibliotecaAlertService
 
         BibliotecaAlerta::query()
             ->where('alert_type', $alertType)
-            ->when(!empty($relatedIds), fn ($query) => $query->whereNotIn('related_id', $relatedIds))
+            ->when(! empty($relatedIds), fn ($query) => $query->whereNotIn('related_id', $relatedIds))
             ->update([
                 'status' => 'resuelta',
                 'resolved_at' => now(),

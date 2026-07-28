@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Library\RenewBibliotecaPrestamoRequest;
 use App\Http\Requests\Library\ReturnBibliotecaPrestamoRequest;
 use App\Http\Requests\Library\SaveBibliotecaPrestamoRequest;
+use App\Http\Requests\Library\UpdateBibliotecaPrestamoRequest;
 use App\Models\Library\BibliotecaPrestamo;
 use App\Services\Library\BibliotecaLoanService;
 use Illuminate\Http\JsonResponse;
@@ -15,8 +16,7 @@ class BibliotecaLoanController extends Controller
 {
     public function __construct(
         private readonly BibliotecaLoanService $loanService,
-    ) {
-    }
+    ) {}
 
     public function index(Request $request): JsonResponse
     {
@@ -27,10 +27,10 @@ class BibliotecaLoanController extends Controller
 
         $query = BibliotecaPrestamo::query()
             ->with([
-                'obra:id,title,category',
+                'obra:id,title,main_author,isbn,cover_image_url,category,material_type',
                 'ejemplar:id,code',
                 'student:id,first_name,last_name',
-                'staff:id,full_name',
+                'staff:id,full_name,rut',
                 'courseSection:id,display_name',
                 'deliveredBy:id,name',
                 'receivedBy:id,name',
@@ -45,6 +45,8 @@ class BibliotecaLoanController extends Controller
                 });
             })
             ->when($request->filled('status'), fn ($builder) => $builder->where('status', $request->query('status')))
+            ->when($request->filled('borrower_type'), fn ($builder) => $builder->where('borrower_type', $request->query('borrower_type')))
+            ->when($request->filled('borrower_estate'), fn ($builder) => $builder->where('borrower_estate', $request->query('borrower_estate')))
             ->when($request->filled('student_profile_id'), fn ($builder) => $builder->where('student_profile_id', $request->query('student_profile_id')))
             ->when($request->filled('staff_id'), fn ($builder) => $builder->where('staff_id', $request->query('staff_id')))
             ->when($request->filled('course_section_id'), fn ($builder) => $builder->where('course_section_id', $request->query('course_section_id')))
@@ -79,12 +81,23 @@ class BibliotecaLoanController extends Controller
     {
         $this->authorize('create', BibliotecaPrestamo::class);
 
-        $loan = $this->loanService->create($request->validated(), $request->user());
+        $loans = $this->loanService->createBatch($request->validated(), $request->user());
 
         return response()->json([
-            'message' => 'Préstamo registrado correctamente.',
-            'data' => $loan,
+            'message' => $loans->count() > 1 ? 'Préstamos registrados correctamente.' : 'Préstamo registrado correctamente.',
+            'data' => $loans->count() === 1 ? $loans->first() : $loans,
+            'batch' => $loans->count() > 1,
         ], 201);
+    }
+
+    public function update(UpdateBibliotecaPrestamoRequest $request, BibliotecaPrestamo $prestamo): JsonResponse
+    {
+        $this->authorize('update', $prestamo);
+
+        return response()->json([
+            'message' => 'Ficha de préstamo actualizada correctamente.',
+            'data' => $this->loanService->update($prestamo, $request->validated(), $request->user()),
+        ]);
     }
 
     public function renew(RenewBibliotecaPrestamoRequest $request, BibliotecaPrestamo $prestamo): JsonResponse

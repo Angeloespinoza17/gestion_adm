@@ -30,4 +30,10 @@ return [
         'region' => env('AWS_DEFAULT_REGION', 'us-east-1'),
     ],
 
+    'open_library' => [
+        'base_url' => env('OPEN_LIBRARY_BASE_URL', 'https://openlibrary.org'),
+        'application_name' => env('OPEN_LIBRARY_APP_NAME', env('APP_NAME', 'Biblioteca Escolar')),
+        'contact' => env('OPEN_LIBRARY_CONTACT', env('MAIL_FROM_ADDRESS', 'biblioteca@example.invalid')),
+    ],
+
 ];

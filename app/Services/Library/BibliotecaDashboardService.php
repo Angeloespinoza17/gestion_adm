@@ -5,9 +5,12 @@ namespace App\Services\Library;
 use App\Models\Library\BibliotecaAlerta;
 use App\Models\Library\BibliotecaEjemplar;
 use App\Models\Library\BibliotecaObra;
+use App\Models\Library\BibliotecaPase;
 use App\Models\Library\BibliotecaPlanLector;
 use App\Models\Library\BibliotecaPrestamo;
 use App\Models\Library\BibliotecaReserva;
+use App\Models\Library\BibliotecaTextoEntrega;
+use App\Models\Library\BibliotecaTextoOrden;
 use App\Models\Library\BibliotecaUsoEspacio;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -17,8 +20,7 @@ class BibliotecaDashboardService
     public function __construct(
         private readonly BibliotecaLoanService $loanService,
         private readonly BibliotecaAlertService $alertService,
-    ) {
-    }
+    ) {}
 
     public function build(): array
     {
@@ -47,6 +49,10 @@ class BibliotecaDashboardService
             'new_entries' => BibliotecaEjemplar::query()->whereDate('ingress_date', '>=', $monthStart)->count(),
             'month_loans' => BibliotecaPrestamo::query()->whereDate('borrowed_at', '>=', $monthStart)->count(),
             'month_returns' => BibliotecaPrestamo::query()->whereDate('returned_at', '>=', $monthStart)->count(),
+            'overdue_rate' => $this->overdueRate($yearStart, $today->copy()->endOfDay()),
+            'pending_textbook_deliveries' => BibliotecaTextoEntrega::query()->whereIn('status', ['pendiente', 'parcial'])->count(),
+            'textbook_orders_with_shortages' => BibliotecaTextoOrden::query()->whereHas('items', fn ($query) => $query->where('shortage_quantity', '>', 0))->count(),
+            'active_library_passes' => BibliotecaPase::query()->where('status', 'emitido')->where('valid_until', '>=', now())->count(),
         ];
 
         $alerts = [
@@ -80,10 +86,13 @@ class BibliotecaDashboardService
                 'loans_by_course' => $this->queryCourseTotals(),
                 'most_loaned_books' => $this->queryWorkTotals(),
                 'categories_usage' => $this->queryCategoryTotals(),
+                'subcategories_usage' => $this->querySubcategoryTotals(),
                 'overdue_by_course' => $this->queryOverdueByCourse(),
                 'space_usage_by_month' => $this->groupByMonth(BibliotecaUsoEspacio::query(), 'start_at', $yearStart),
                 'reading_plan_participation' => $this->queryReadingPlanParticipation(),
                 'inventory_availability' => $this->inventoryAvailability(),
+                'loans_by_estate' => $this->queryLoansByEstate(),
+                'inventory_by_location' => $this->queryInventoryByLocation(),
             ],
             'recent' => [
                 'loans' => BibliotecaPrestamo::query()->with(['obra:id,title', 'ejemplar:id,code', 'deliveredBy:id,name'])->latest('borrowed_at')->limit(8)->get(),
@@ -95,8 +104,12 @@ class BibliotecaDashboardService
 
     private function groupByMonth($query, string $column, Carbon $from): array
     {
+        $monthExpression = DB::connection()->getDriverName() === 'sqlite'
+            ? "strftime('%Y-%m', {$column})"
+            : "DATE_FORMAT({$column}, '%Y-%m')";
+
         $items = $query
-            ->selectRaw("DATE_FORMAT({$column}, '%Y-%m') as label, count(*) as total")
+            ->selectRaw("{$monthExpression} as label, count(*) as total")
             ->whereDate($column, '>=', $from)
             ->groupBy('label')
             ->orderBy('label')
@@ -136,7 +149,7 @@ class BibliotecaDashboardService
     {
         return BibliotecaPrestamo::query()
             ->join('biblioteca_obras', 'biblioteca_obras.id', '=', 'biblioteca_prestamos.biblioteca_obra_id')
-            ->selectRaw('coalesce(biblioteca_obras.category, "Sin categoría") as label, count(*) as total')
+            ->selectRaw("coalesce(biblioteca_obras.category, 'Sin categoría') as label, count(*) as total")
             ->groupBy('biblioteca_obras.category')
             ->orderByDesc('total')
             ->limit(10)
@@ -144,10 +157,45 @@ class BibliotecaDashboardService
             ->toArray();
     }
 
+    private function querySubcategoryTotals(): array
+    {
+        return BibliotecaPrestamo::query()
+            ->join('biblioteca_obras', 'biblioteca_obras.id', '=', 'biblioteca_prestamos.biblioteca_obra_id')
+            ->leftJoin(
+                'biblioteca_categorias',
+                'biblioteca_categorias.id',
+                '=',
+                'biblioteca_obras.biblioteca_categoria_id'
+            )
+            ->leftJoin(
+                'biblioteca_subcategorias',
+                'biblioteca_subcategorias.id',
+                '=',
+                'biblioteca_obras.biblioteca_subcategoria_id'
+            )
+            ->selectRaw("coalesce(biblioteca_categorias.name, biblioteca_obras.category, 'Sin categoría') as category_label")
+            ->selectRaw("coalesce(biblioteca_subcategorias.name, biblioteca_obras.subcategory, 'Sin subcategoría') as label")
+            ->selectRaw('count(*) as total')
+            ->groupBy(
+                'biblioteca_categorias.name',
+                'biblioteca_obras.category',
+                'biblioteca_subcategorias.name',
+                'biblioteca_obras.subcategory'
+            )
+            ->orderByDesc('total')
+            ->limit(10)
+            ->get()
+            ->map(fn ($item) => [
+                'label' => $item->category_label.' · '.$item->label,
+                'total' => (int) $item->total,
+            ])
+            ->all();
+    }
+
     private function queryOverdueByCourse(): array
     {
         return BibliotecaPrestamo::query()
-            ->selectRaw('coalesce(course_name_snapshot, "Sin curso") as label, count(*) as total')
+            ->selectRaw("coalesce(course_name_snapshot, 'Sin curso') as label, count(*) as total")
             ->where('status', 'vencido')
             ->groupBy('course_name_snapshot')
             ->orderByDesc('total')
@@ -174,5 +222,47 @@ class BibliotecaDashboardService
             ->orderBy('availability_status')
             ->get()
             ->toArray();
+    }
+
+    private function queryLoansByEstate(): array
+    {
+        return BibliotecaPrestamo::query()
+            ->selectRaw("coalesce(borrower_estate, borrower_type, 'sin_estamento') as label, count(*) as total")
+            ->where('status', '!=', 'cancelado')
+            ->groupBy('borrower_estate', 'borrower_type')
+            ->orderByDesc('total')
+            ->get()
+            ->toArray();
+    }
+
+    private function queryInventoryByLocation(): array
+    {
+        return BibliotecaEjemplar::query()
+            ->leftJoin('biblioteca_ubicaciones', 'biblioteca_ubicaciones.id', '=', 'biblioteca_ejemplares.biblioteca_ubicacion_id')
+            ->selectRaw("coalesce(biblioteca_ubicaciones.name, biblioteca_ejemplares.physical_location, 'Sin ubicación') as label, count(*) as total")
+            ->where('biblioteca_ejemplares.is_active', true)
+            ->groupBy('biblioteca_ubicaciones.name', 'biblioteca_ejemplares.physical_location')
+            ->orderByDesc('total')
+            ->limit(12)
+            ->get()
+            ->toArray();
+    }
+
+    private function overdueRate(Carbon $from, Carbon $to): float
+    {
+        $dueLoans = BibliotecaPrestamo::query()
+            ->whereBetween('due_at', [$from->toDateString(), $to->toDateString()])
+            ->where('status', '!=', 'cancelado')
+            ->get(['due_at', 'returned_at', 'status']);
+
+        if ($dueLoans->isEmpty()) {
+            return 0.0;
+        }
+
+        $late = $dueLoans->filter(fn (BibliotecaPrestamo $loan) => $loan->status === 'vencido'
+            || ($loan->returned_at && $loan->returned_at->startOfDay()->greaterThan($loan->due_at->startOfDay())))
+            ->count();
+
+        return round(($late / $dueLoans->count()) * 100, 1);
     }
 }
