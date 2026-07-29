@@ -3,6 +3,7 @@
 namespace App\Models\Accounting;
 
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\MorphMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
@@ -43,5 +44,10 @@ class AccountingIncome extends AccountingModel
     public function documents(): MorphMany
     {
         return $this->morphMany(AccountingDocument::class, 'documentable');
+    }
+
+    public function subsidyMatches(): HasMany
+    {
+        return $this->hasMany(AccountingSubsidyMatch::class, 'income_id');
     }
 }

@@ -22,6 +22,10 @@ class AccountingAccessService
     public const FUNDS_RENDER_PERMISSION = 'contabilidad.fondos_rendir.gestionar';
     public const RECONCILIATION_PERMISSION = 'contabilidad.conciliacion.gestionar';
     public const FUNDING_PANEL_PERMISSION = 'contabilidad.subvenciones.ver';
+    public const SUBSIDY_IMPORT_PERMISSION = 'contabilidad.subvenciones.importar';
+    public const SUBSIDY_APPROVE_PERMISSION = 'contabilidad.subvenciones.aprobar';
+    public const SUBSIDY_RECONCILE_PERMISSION = 'contabilidad.subvenciones.conciliar';
+    public const SUBSIDY_POST_PERMISSION = 'contabilidad.subvenciones.contabilizar';
     public const CHEQUES_PERMISSION = 'contabilidad.cheques.gestionar';
     public const INVOICES_PERMISSION = 'contabilidad.facturas.gestionar';
     public const HONORARIES_PERMISSION = 'contabilidad.boletas.gestionar';
@@ -53,6 +57,10 @@ class AccountingAccessService
             ['slug' => self::FUNDS_RENDER_PERMISSION, 'name' => 'Gestionar fondos por rendir'],
             ['slug' => self::RECONCILIATION_PERMISSION, 'name' => 'Gestionar conciliación bancaria'],
             ['slug' => self::FUNDING_PANEL_PERMISSION, 'name' => 'Ver panel de subvenciones'],
+            ['slug' => self::SUBSIDY_IMPORT_PERMISSION, 'name' => 'Importar liquidaciones de subvenciones'],
+            ['slug' => self::SUBSIDY_APPROVE_PERMISSION, 'name' => 'Aprobar liquidaciones de subvenciones'],
+            ['slug' => self::SUBSIDY_RECONCILE_PERMISSION, 'name' => 'Conciliar subvenciones'],
+            ['slug' => self::SUBSIDY_POST_PERMISSION, 'name' => 'Contabilizar subvenciones'],
             ['slug' => self::CHEQUES_PERMISSION, 'name' => 'Gestionar cheques'],
             ['slug' => self::INVOICES_PERMISSION, 'name' => 'Gestionar facturas'],
             ['slug' => self::HONORARIES_PERMISSION, 'name' => 'Gestionar boletas de honorarios'],
@@ -87,6 +95,11 @@ class AccountingAccessService
             'accounting_budget_lines',
             'accounting_bank_accounts',
             'accounting_incomes',
+            'accounting_subsidy_imports',
+            'accounting_subsidy_settlements',
+            'accounting_subsidy_settlement_lines',
+            'accounting_subsidy_allocations',
+            'accounting_subsidy_matches',
             'accounting_expenses',
             'accounting_cash_funds',
             'accounting_renderings',

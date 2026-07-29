@@ -29,6 +29,10 @@ class AccountingRemunerationPermissionsTest extends TestCase
         'contabilidad.fondos_rendir.gestionar',
         'contabilidad.conciliacion.gestionar',
         'contabilidad.subvenciones.ver',
+        'contabilidad.subvenciones.importar',
+        'contabilidad.subvenciones.aprobar',
+        'contabilidad.subvenciones.conciliar',
+        'contabilidad.subvenciones.contabilizar',
         'contabilidad.cheques.gestionar',
         'contabilidad.facturas.gestionar',
         'contabilidad.boletas.gestionar',
@@ -130,7 +134,16 @@ class AccountingRemunerationPermissionsTest extends TestCase
             'permission_id' => Permission::query()->where('slug', 'remuneraciones.acceso_confidencial')->value('id'),
         ]);
 
-        $expectedPermissions = array_merge(self::ACCOUNTING_PERMISSIONS, self::REMUNERATION_PERMISSIONS);
+        $subsidyWorkflowPermissions = [
+            'contabilidad.subvenciones.importar',
+            'contabilidad.subvenciones.aprobar',
+            'contabilidad.subvenciones.conciliar',
+            'contabilidad.subvenciones.contabilizar',
+        ];
+        $expectedPermissions = array_merge(
+            array_values(array_diff(self::ACCOUNTING_PERMISSIONS, $subsidyWorkflowPermissions)),
+            self::REMUNERATION_PERMISSIONS,
+        );
         $this->assertEqualsCanonicalizing(
             $expectedPermissions,
             $superAdmin->permissions()

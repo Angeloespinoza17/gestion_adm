@@ -27,4 +27,9 @@ class AccountingFundingSource extends AccountingModel
     {
         return $this->hasMany(AccountingExpense::class, 'funding_source_id');
     }
+
+    public function subsidySettlements(): HasMany
+    {
+        return $this->hasMany(AccountingSubsidySettlement::class, 'funding_source_id');
+    }
 }

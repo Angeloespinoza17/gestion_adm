@@ -80,9 +80,12 @@ class AccountingModuleController extends Controller
                     AccountingAccessService::CASH_FUND_PERMISSION,
                     AccountingAccessService::FUNDS_RENDER_PERMISSION,
                     AccountingAccessService::BALANCE_PERMISSION,
+                    AccountingAccessService::SUBSIDY_POST_PERMISSION,
                 ]) ? \App\Models\Accounting\AccountingCostCenter::query()->where('is_active', true)->orderBy('name')->get(['id', 'code', 'name']) : null,
                 'funding_sources' => $canAny([
                     AccountingAccessService::FUNDING_PANEL_PERMISSION,
+                    AccountingAccessService::SUBSIDY_IMPORT_PERMISSION,
+                    AccountingAccessService::SUBSIDY_POST_PERMISSION,
                     AccountingAccessService::BUDGET_VIEW_PERMISSION,
                     AccountingAccessService::BUDGET_CREATE_PERMISSION,
                     AccountingAccessService::INCOMES_PERMISSION,
@@ -104,6 +107,7 @@ class AccountingModuleController extends Controller
                     AccountingAccessService::INCOMES_PERMISSION,
                     AccountingAccessService::EXPENSES_PERMISSION,
                     AccountingAccessService::BALANCE_PERMISSION,
+                    AccountingAccessService::SUBSIDY_POST_PERMISSION,
                 ]) ? \App\Models\Accounting\AccountingManualAccount::query()->where('is_active', true)->orderBy('code')->get(['id', 'manual_version_id', 'code', 'name', 'type']) : null,
                 'budgets' => $canAny([
                     AccountingAccessService::BUDGET_VIEW_PERMISSION,
@@ -125,6 +129,8 @@ class AccountingModuleController extends Controller
                     AccountingAccessService::PAYMENTS_PERMISSION,
                     AccountingAccessService::CASH_FUND_PERMISSION,
                     AccountingAccessService::CHEQUES_PERMISSION,
+                    AccountingAccessService::SUBSIDY_RECONCILE_PERMISSION,
+                    AccountingAccessService::SUBSIDY_POST_PERMISSION,
                 ]) ? \App\Models\Accounting\AccountingBankAccount::query()->where('is_active', true)->orderBy('bank_name')->get(['id', 'bank_name', 'account_number']) : null,
                 'users' => $canAny([
                     AccountingAccessService::BUDGET_APPROVE_PERMISSION,

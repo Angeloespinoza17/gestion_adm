@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Accounting\AccountingModuleController;
+use App\Http\Controllers\Accounting\AccountingSubsidyController;
 use App\Http\Controllers\Admin\BackupController;
 use App\Http\Controllers\Admin\RoleImpersonationController;
 use App\Http\Controllers\Admin\SuperAdminDashboardController;
@@ -975,6 +976,12 @@ Route::middleware('auth:sanctum')->group(function () {
             Route::get('/dashboard', [AccountingModuleController::class, 'dashboard'])->middleware('permission:contabilidad.ver');
             Route::get('/reportes', [AccountingModuleController::class, 'reports'])->middleware('permission:contabilidad.ver');
             Route::get('/export/{report}', [AccountingModuleController::class, 'export'])->middleware('permission:contabilidad.reportes.exportar');
+            Route::get('/subvenciones/dashboard', [AccountingSubsidyController::class, 'dashboard'])->middleware('permission:contabilidad.subvenciones.ver');
+            Route::get('/subvenciones/{settlement}', [AccountingSubsidyController::class, 'show'])->middleware('permission:contabilidad.subvenciones.ver');
+            Route::post('/subvenciones/importar', [AccountingSubsidyController::class, 'import'])->middleware('permission:contabilidad.subvenciones.importar');
+            Route::post('/subvenciones/manual', [AccountingSubsidyController::class, 'manual'])->middleware('permission:contabilidad.subvenciones.importar');
+            Route::post('/subvenciones/{settlement}/aprobar', [AccountingSubsidyController::class, 'approve'])->middleware('permission:contabilidad.subvenciones.aprobar');
+            Route::post('/subvenciones/{settlement}/contabilizar', [AccountingSubsidyController::class, 'post'])->middleware('permission:contabilidad.subvenciones.contabilizar');
             Route::get('/resources/{resource}', [AccountingModuleController::class, 'index'])->middleware('permission:contabilidad.ver');
             Route::get('/resources/{resource}/{record}', [AccountingModuleController::class, 'show'])->middleware('permission:contabilidad.ver');
             Route::post('/resources/{resource}', [AccountingModuleController::class, 'store'])->middleware('permission:contabilidad.ver');
