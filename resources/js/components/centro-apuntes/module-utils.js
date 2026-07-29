@@ -221,73 +221,211 @@ export function extractChartTotals(items, key = "total") {
   return (items || []).map((item) => Number(item?.[key] || 0));
 }
 
-export function downloadExcelWorkbook(fileName, sections) {
-  const rows = [];
-
-  (sections || []).forEach((section) => {
-    rows.push([section.title || "Sección"]);
-    if (section.headers?.length) {
-      rows.push(section.headers);
-    }
-    (section.rows || []).forEach((row) => rows.push(row));
-    rows.push([]);
-  });
-
-  const escapeHtml = (value) => String(value ?? "")
+function escapeExportXml(value) {
+  return String(value ?? "")
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#039;");
+    .replace(/'/g, "&apos;");
+}
 
-  const html = `<table>${rows
-    .map((row) => `<tr>${row.map((cell) => `<td>${escapeHtml(cell)}</td>`).join("")}</tr>`)
-    .join("")}</table>`;
+function excelCell(value, styleId = null) {
+  const style = styleId ? ` ss:StyleID="${styleId}"` : "";
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return `<Cell${style || ' ss:StyleID="Number"'}><Data ss:Type="Number">${value}</Data></Cell>`;
+  }
+  if (typeof value === "boolean") {
+    return `<Cell${style}><Data ss:Type="Boolean">${value ? 1 : 0}</Data></Cell>`;
+  }
+  return `<Cell${style}><Data ss:Type="String">${escapeExportXml(value)}</Data></Cell>`;
+}
 
-  const blob = new Blob([`\uFEFF<html><body>${html}</body></html>`], {
+function excelColumnWidths(section, columnCount) {
+  const rows = [section.headers || [], ...(section.rows || [])];
+  return Array.from({ length: columnCount }, (_, columnIndex) => {
+    if (section.columnWidths?.[columnIndex]) {
+      return section.columnWidths[columnIndex];
+    }
+    const maxLength = rows.reduce((longest, row) => {
+      const length = String(row?.[columnIndex] ?? "").length;
+      return Math.max(longest, Math.min(length, 40));
+    }, 10);
+    return Math.min(250, Math.max(72, maxLength * 7.2));
+  });
+}
+
+export function downloadExcelWorkbook(fileName, sections, options = {}) {
+  const usedSheetNames = new Set();
+  const normalizedSections = (sections || []).length ? sections : [{ title: "Reporte", rows: [["Sin datos"]] }];
+  const worksheets = normalizedSections.map((section, sectionIndex) => {
+    const fallbackName = `Hoja ${sectionIndex + 1}`;
+    const baseName = String(section.title || fallbackName)
+      .replace(/[\\/?*\[\]:]/g, " ")
+      .trim()
+      .slice(0, 31) || fallbackName;
+    let sheetName = baseName;
+    let suffix = 2;
+    while (usedSheetNames.has(sheetName)) {
+      const label = ` (${suffix})`;
+      sheetName = `${baseName.slice(0, 31 - label.length)}${label}`;
+      suffix += 1;
+    }
+    usedSheetNames.add(sheetName);
+
+    const rows = section.rows || [];
+    const columnCount = Math.max(
+      1,
+      section.headers?.length || 0,
+      ...rows.map((row) => row.length)
+    );
+    const columns = excelColumnWidths(section, columnCount)
+      .map((width) => `<Column ss:AutoFitWidth="0" ss:Width="${width}"/>`)
+      .join("");
+    const titleRow = `<Row ss:Height="28"><Cell ss:StyleID="Title" ss:MergeAcross="${columnCount - 1}"><Data ss:Type="String">${escapeExportXml(section.title || options.title || "Reporte")}</Data></Cell></Row>`;
+    const subtitle = section.subtitle || options.subtitle || "";
+    const subtitleRow = subtitle
+      ? `<Row ss:Height="24"><Cell ss:StyleID="Subtitle" ss:MergeAcross="${columnCount - 1}"><Data ss:Type="String">${escapeExportXml(subtitle)}</Data></Cell></Row>`
+      : "";
+    const headerRow = section.headers?.length
+      ? `<Row ss:Height="24">${section.headers.map((header) => excelCell(header, "Header")).join("")}</Row>`
+      : "";
+    const dataRows = (rows.length ? rows : [["Sin datos"]])
+      .map((row) => `<Row>${row.map((value) => excelCell(value)).join("")}</Row>`)
+      .join("");
+    const splitRow = 1 + (subtitleRow ? 1 : 0) + (headerRow ? 1 : 0);
+
+    return `<Worksheet ss:Name="${escapeExportXml(sheetName)}">
+      <Table>${columns}${titleRow}${subtitleRow}${headerRow}${dataRows}</Table>
+      <WorksheetOptions xmlns="urn:schemas-microsoft-com:office:excel">
+        <FreezePanes/><FrozenNoSplit/><SplitHorizontal>${splitRow}</SplitHorizontal>
+        <TopRowBottomPane>${splitRow}</TopRowBottomPane><ActivePane>2</ActivePane>
+        <ProtectObjects>False</ProtectObjects><ProtectScenarios>False</ProtectScenarios>
+      </WorksheetOptions>
+    </Worksheet>`;
+  }).join("");
+
+  const workbook = `<?xml version="1.0" encoding="UTF-8"?>
+<?mso-application progid="Excel.Sheet"?>
+<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet"
+ xmlns:o="urn:schemas-microsoft-com:office:office"
+ xmlns:x="urn:schemas-microsoft-com:office:excel"
+ xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">
+  <DocumentProperties xmlns="urn:schemas-microsoft-com:office:office">
+    <Title>${escapeExportXml(options.title || "Reporte Centro de Apuntes")}</Title>
+    <Author>${escapeExportXml(options.author || "Centro de Apuntes")}</Author>
+    <Created>${new Date().toISOString()}</Created>
+  </DocumentProperties>
+  <Styles>
+    <Style ss:ID="Default" ss:Name="Normal">
+      <Alignment ss:Vertical="Center"/><Font ss:FontName="Arial" ss:Size="10"/>
+    </Style>
+    <Style ss:ID="Title">
+      <Alignment ss:Vertical="Center"/><Font ss:FontName="Arial" ss:Size="16" ss:Bold="1" ss:Color="#FFFFFF"/>
+      <Interior ss:Color="#405189" ss:Pattern="Solid"/>
+    </Style>
+    <Style ss:ID="Subtitle">
+      <Alignment ss:Vertical="Center" ss:WrapText="1"/><Font ss:FontName="Arial" ss:Size="9" ss:Color="#586174"/>
+      <Interior ss:Color="#EEF2FF" ss:Pattern="Solid"/>
+    </Style>
+    <Style ss:ID="Header">
+      <Alignment ss:Vertical="Center" ss:WrapText="1"/><Font ss:FontName="Arial" ss:Size="9" ss:Bold="1" ss:Color="#2A3042"/>
+      <Interior ss:Color="#DDE5FF" ss:Pattern="Solid"/>
+      <Borders><Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#AEBBDD"/></Borders>
+    </Style>
+    <Style ss:ID="Number"><Alignment ss:Horizontal="Right" ss:Vertical="Center"/><NumberFormat ss:Format="#,##0.00"/></Style>
+  </Styles>
+  ${worksheets}
+</Workbook>`;
+
+  const blob = new Blob(["\uFEFF", workbook], {
     type: "application/vnd.ms-excel;charset=utf-8;",
   });
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;
-  link.download = fileName.endsWith(".xls") ? fileName : `${fileName}.xls`;
+  link.download = String(fileName).toLowerCase().endsWith(".xls") ? fileName : `${fileName}.xls`;
   document.body.appendChild(link);
   link.click();
   link.remove();
   URL.revokeObjectURL(url);
 }
 
-export function downloadPdfReport(fileName, title, subtitle, sections) {
+export function downloadPdfReport(fileName, title, subtitle, sections, options = {}) {
   const pdfMake = getPdfMake();
   const content = [{ text: title, style: "title" }];
+  const generatedAt = options.generatedAt || new Date().toLocaleString("es-CL");
 
   if (subtitle) {
     content.push({ text: subtitle, style: "subtitle" });
   }
 
   (sections || []).forEach((section) => {
-    content.push({ text: section.title, style: "section" });
+    const headers = section.headers || [];
+    const rows = section.rows?.length ? section.rows : [["Sin datos"]];
+    const columnCount = Math.max(1, headers.length, ...(rows || []).map((row) => row.length));
+    const body = []
+      .concat(headers.length ? [headers.map((header) => ({ text: String(header ?? ""), style: "tableHeader" }))] : [])
+      .concat(rows.map((row) => row.map((cell) => ({ text: String(cell ?? "-"), style: "tableCell" }))));
+
+    content.push({ text: section.title || "Sección", style: "section" });
     content.push({
       table: {
-        headerRows: section.headers?.length ? 1 : 0,
-        body: []
-          .concat(section.headers?.length ? [section.headers] : [])
-          .concat(section.rows || []),
+        headerRows: headers.length ? 1 : 0,
+        keepWithHeaderRows: 1,
+        widths: section.widths || Array.from({ length: columnCount }, () => "*"),
+        body,
       },
-      layout: "lightHorizontalLines",
-      margin: [0, 0, 0, 10],
+      layout: {
+        fillColor: (rowIndex) => (headers.length && rowIndex === 0 ? "#DDE5FF" : (rowIndex % 2 === 0 ? "#F8FAFD" : null)),
+        hLineColor: () => "#DCE2EC",
+        vLineColor: () => "#E8ECF2",
+        hLineWidth: (index, node) => (index === 0 || index === node.table.body.length ? 0.8 : 0.35),
+        vLineWidth: () => 0.35,
+        paddingLeft: () => 5,
+        paddingRight: () => 5,
+        paddingTop: () => 4,
+        paddingBottom: () => 4,
+      },
+      margin: [0, 0, 0, 12],
     });
   });
 
   pdfMake.createPdf({
+    pageSize: options.pageSize || "A4",
+    pageOrientation: options.pageOrientation || "portrait",
+    pageMargins: options.pageMargins || [32, 44, 32, 38],
+    header: () => ({
+      text: options.headerText || "CENTRO DE APUNTES - REPORTE OPERATIVO",
+      color: "#7A8498",
+      fontSize: 7,
+      bold: true,
+      margin: [32, 18, 32, 0],
+    }),
+    footer: (currentPage, pageCount) => ({
+      columns: [
+        { text: `Generado ${generatedAt}`, alignment: "left" },
+        { text: `Página ${currentPage} de ${pageCount}`, alignment: "right" },
+      ],
+      color: "#7A8498",
+      fontSize: 7,
+      margin: [32, 10, 32, 0],
+    }),
     content,
     styles: {
-      title: { fontSize: 18, bold: true, color: "#2a3042" },
-      subtitle: { fontSize: 10, color: "#74788d", margin: [0, 0, 0, 10] },
-      section: { fontSize: 12, bold: true, margin: [0, 10, 0, 6] },
+      title: { fontSize: 18, bold: true, color: "#2A3042", margin: [0, 0, 0, 4] },
+      subtitle: { fontSize: 9, color: "#667085", margin: [0, 0, 0, 12] },
+      section: { fontSize: 11, bold: true, color: "#405189", margin: [0, 9, 0, 6] },
+      tableHeader: { bold: true, color: "#2A3042", fontSize: options.tableFontSize || 8 },
+      tableCell: { color: "#3D4657", fontSize: options.tableFontSize || 8 },
     },
-    defaultStyle: { fontSize: 9 },
-  }).download(fileName.endsWith(".pdf") ? fileName : `${fileName}.pdf`);
+    defaultStyle: { fontSize: options.tableFontSize || 8, lineHeight: 1.15 },
+    info: {
+      title,
+      subject: subtitle || "Reporte del Centro de Apuntes",
+      author: options.author || "Centro de Apuntes",
+    },
+  }).download(String(fileName).toLowerCase().endsWith(".pdf") ? fileName : `${fileName}.pdf`);
 }
 
 export function printCentroApuntesHtml(title, html) {

@@ -8,11 +8,15 @@ import LoadingState from "../../ui/loading-state.vue";
 import {
   confirmCentroApuntesAction,
   confirmCentroApuntesCancel,
+  downloadExcelWorkbook,
+  downloadPdfReport,
   formatCentroApuntesDate,
   formatCentroApuntesDateTime,
   formatCentroApuntesError,
+  humanizeCentroApuntesStatus,
   normalizeCentroApuntesNullableFields,
   normalizeOptions,
+  showCentroApuntesError,
   showCentroApuntesSuccess,
 } from "../module-utils";
 
@@ -53,9 +57,18 @@ export default {
       loading: false,
       saving: false,
       detailLoading: false,
+      exportingPdf: false,
+      exportingExcel: false,
       error: null,
       items: [],
       pagination: { current_page: 1, total: 0, per_page: 15 },
+      summary: {
+        total: 0,
+        available: 0,
+        low_stock: 0,
+        out_of_stock: 0,
+        expiring_soon: 0,
+      },
       filters: {
         search: "",
         category: null,
@@ -72,6 +85,9 @@ export default {
     canManage() {
       return Boolean(this.catalogs.capabilities?.can_manage_inventory);
     },
+    canExport() {
+      return Boolean(this.catalogs.capabilities?.can_export_reports);
+    },
     categoryOptions() {
       return normalizeOptions(this.catalogs.supply_categories || []);
     },
@@ -84,6 +100,40 @@ export default {
     supplierOptions() {
       return normalizeOptions(this.catalogs.suppliers || []);
     },
+    metricCards() {
+      return [
+        { key: "total", label: "Insumos", value: this.summary.total, icon: "bx-package", tone: "primary", hint: "Resultados con los filtros actuales" },
+        { key: "available", label: "Disponibles", value: this.summary.available, icon: "bx-check-shield", tone: "success", hint: "Stock por sobre el mínimo" },
+        { key: "low_stock", label: "Stock bajo", value: this.summary.low_stock, icon: "bx-trending-down", tone: "warning", hint: "Requieren reposición" },
+        { key: "out_of_stock", label: "Agotados", value: this.summary.out_of_stock, icon: "bx-error-circle", tone: "danger", hint: "Sin existencias disponibles" },
+        { key: "expiring_soon", label: "Por vencer", value: this.summary.expiring_soon, icon: "bx-calendar", tone: "info", hint: "Dentro de los próximos 30 días" },
+      ];
+    },
+    tableFields() {
+      return [
+        { key: "name", label: "Insumo" },
+        { key: "category", label: "Categoría" },
+        { key: "current_stock", label: "Nivel de stock" },
+        { key: "supplier", label: "Proveedor" },
+        { key: "expires_at", label: "Vencimiento" },
+        { key: "status", label: "Estado" },
+        { key: "actions", label: "", thClass: "text-end", tdClass: "text-end" },
+      ];
+    },
+    resultRangeLabel() {
+      if (!this.pagination.total) return "0 resultados";
+      const start = (this.pagination.current_page - 1) * this.pagination.per_page + 1;
+      const end = Math.min(this.pagination.current_page * this.pagination.per_page, this.pagination.total);
+      return `${start}-${end} de ${this.pagination.total} insumos`;
+    },
+    hasActiveFilters() {
+      return Boolean(
+        String(this.filters.search || "").trim()
+        || this.filters.category
+        || this.filters.status
+        || this.filters.critical_only
+      );
+    },
   },
   mounted() {
     this.load();
@@ -92,6 +142,7 @@ export default {
   methods: {
     formatCentroApuntesDate,
     formatCentroApuntesDateTime,
+    humanizeCentroApuntesStatus,
     async load(page = 1) {
       this.loading = true;
       this.error = null;
@@ -108,6 +159,10 @@ export default {
           current_page: response.data.current_page,
           total: response.data.total,
           per_page: response.data.per_page,
+        };
+        this.summary = {
+          ...this.summary,
+          ...(response.data.summary || {}),
         };
       } catch (error) {
         this.error = formatCentroApuntesError(error, "No se pudieron cargar los insumos.");
@@ -259,6 +314,173 @@ export default {
       };
       this.load();
     },
+    categoryLabel(value) {
+      return this.categoryOptions.find((item) => item.value === value)?.label
+        || humanizeCentroApuntesStatus(value);
+    },
+    categoryIcon(category) {
+      const icons = {
+        papel: "bx-file",
+        tinta: "bx-droplet",
+        toner: "bx-printer",
+        espirales: "bx-link",
+        micas: "bx-layer",
+        tapas: "bx-book",
+        contratapas: "bx-book",
+        corchetes: "bx-paperclip",
+        carpetas: "bx-folder",
+        plumones: "bx-highlight",
+        lapices: "bx-pencil",
+        cartulinas: "bx-palette",
+        material_de_oficina: "bx-briefcase",
+        material_pedagogico: "bx-book-reader",
+      };
+      return icons[category] || "bx-box";
+    },
+    formatStock(value) {
+      return Number(value || 0).toLocaleString("es-CL", {
+        minimumFractionDigits: 0,
+        maximumFractionDigits: 2,
+      });
+    },
+    stockPercent(item) {
+      const current = Number(item.current_stock || 0);
+      const maximum = Number(item.maximum_stock || 0);
+      const minimum = Number(item.minimum_stock || 0);
+      const reference = maximum > 0 ? maximum : Math.max(minimum * 2, current, 1);
+      return Math.max(0, Math.min(100, Math.round((current / reference) * 100)));
+    },
+    stockTone(item) {
+      const current = Number(item.current_stock || 0);
+      const minimum = Number(item.minimum_stock || 0);
+      if (current <= 0) return "danger";
+      if (current <= minimum) return "warning";
+      return "success";
+    },
+    expirationMeta(value) {
+      if (!value) {
+        return { label: "Sin vencimiento", tone: "neutral", hint: "No informado" };
+      }
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const date = new Date(`${String(value).slice(0, 10)}T00:00:00`);
+      const days = Math.ceil((date.getTime() - today.getTime()) / 86400000);
+      if (days < 0) return { label: formatCentroApuntesDate(value), tone: "danger", hint: "Vencido" };
+      if (days <= 30) return { label: formatCentroApuntesDate(value), tone: "warning", hint: days === 0 ? "Vence hoy" : `En ${days} días` };
+      return { label: formatCentroApuntesDate(value), tone: "success", hint: "Vigente" };
+    },
+    exportFileBase() {
+      return `inventario-insumos-${new Date().toISOString().slice(0, 10)}`;
+    },
+    exportSubtitle(total) {
+      const filters = [];
+      if (String(this.filters.search || "").trim()) filters.push(`Búsqueda: ${this.filters.search.trim()}`);
+      if (this.filters.category) filters.push(`Categoría: ${this.categoryLabel(this.filters.category)}`);
+      if (this.filters.status) filters.push(`Estado: ${humanizeCentroApuntesStatus(this.filters.status)}`);
+      if (this.filters.critical_only) filters.push("Solo stock crítico");
+      return `${total} insumos - ${filters.length ? filters.join(" - ") : "Inventario completo"}`;
+    },
+    async loadExportData() {
+      const response = await axios.get("/api/centro-apuntes/insumos", {
+        params: {
+          ...this.filters,
+          critical_only: this.filters.critical_only ? 1 : "",
+          export: 1,
+        },
+      });
+      if (response.data.truncated) {
+        throw new Error("La exportación supera el límite de 10.000 insumos. Aplica filtros más específicos e inténtalo nuevamente.");
+      }
+      return response.data;
+    },
+    exportSections(items, summary) {
+      return [
+        {
+          title: "Resumen",
+          subtitle: this.exportSubtitle(summary.total ?? items.length),
+          headers: ["Indicador", "Cantidad"],
+          widths: ["*", 80],
+          columnWidths: [220, 90],
+          rows: [
+            ["Insumos", Number(summary.total || 0)],
+            ["Disponibles", Number(summary.available || 0)],
+            ["Stock bajo", Number(summary.low_stock || 0)],
+            ["Agotados", Number(summary.out_of_stock || 0)],
+            ["Por vencer en 30 días", Number(summary.expiring_soon || 0)],
+          ],
+        },
+        {
+          title: "Inventario",
+          subtitle: "Detalle de existencias y abastecimiento",
+          headers: ["Insumo", "Categoría", "Stock", "Mínimo", "Máximo", "Unidad", "Estado", "Vencimiento", "Ubicación", "Proveedor"],
+          widths: [110, 72, 45, 45, 45, 52, 62, 62, 82, 88],
+          columnWidths: [190, 115, 72, 72, 72, 85, 100, 100, 140, 150],
+          rows: items.map((item) => [
+            item.name,
+            this.categoryLabel(item.category),
+            Number(item.current_stock || 0),
+            Number(item.minimum_stock || 0),
+            item.maximum_stock === null ? "-" : Number(item.maximum_stock || 0),
+            humanizeCentroApuntesStatus(item.unit_of_measure),
+            humanizeCentroApuntesStatus(item.status),
+            item.expires_at ? formatCentroApuntesDate(item.expires_at) : "-",
+            item.location || "-",
+            item.supplier?.name || "-",
+          ]),
+        },
+      ];
+    },
+    async exportPdf() {
+      if (!this.canExport || this.exportingPdf) return;
+      this.exportingPdf = true;
+      try {
+        const payload = await this.loadExportData();
+        const items = payload.data || [];
+        if (!items.length) {
+          await showCentroApuntesError("No hay insumos que coincidan con los filtros actuales.", "Sin datos para exportar");
+          return;
+        }
+        downloadPdfReport(
+          this.exportFileBase(),
+          "Inventario de insumos",
+          this.exportSubtitle(payload.summary?.total ?? items.length),
+          this.exportSections(items, payload.summary || {}),
+          {
+            pageOrientation: "landscape",
+            tableFontSize: 6.8,
+            headerText: "CENTRO DE APUNTES - INVENTARIO DE INSUMOS",
+          }
+        );
+      } catch (error) {
+        await showCentroApuntesError(formatCentroApuntesError(error, "No fue posible generar el PDF."));
+      } finally {
+        this.exportingPdf = false;
+      }
+    },
+    async exportExcel() {
+      if (!this.canExport || this.exportingExcel) return;
+      this.exportingExcel = true;
+      try {
+        const payload = await this.loadExportData();
+        const items = payload.data || [];
+        if (!items.length) {
+          await showCentroApuntesError("No hay insumos que coincidan con los filtros actuales.", "Sin datos para exportar");
+          return;
+        }
+        downloadExcelWorkbook(
+          this.exportFileBase(),
+          this.exportSections(items, payload.summary || {}),
+          {
+            title: "Inventario de insumos",
+            subtitle: this.exportSubtitle(payload.summary?.total ?? items.length),
+          }
+        );
+      } catch (error) {
+        await showCentroApuntesError(formatCentroApuntesError(error, "No fue posible generar el archivo Excel."));
+      } finally {
+        this.exportingExcel = false;
+      }
+    },
     async closeModal() {
       const confirmed = await confirmCentroApuntesCancel("la edición del insumo");
       if (confirmed.isConfirmed) {
@@ -271,82 +493,156 @@ export default {
 
 <template>
   <div class="centro-apuntes-tab d-flex flex-column gap-3">
-    <CentroApuntesSectionToolbar title="Inventario de insumos" description="Consulta existencias, mínimos, vencimientos y ubicación de cada material." icon="bx-box">
-      <div class="d-flex gap-2">
+    <CentroApuntesSectionToolbar
+      title="Inventario de insumos"
+      description="Controla existencias, mínimos, vencimientos y abastecimiento desde una sola vista."
+      icon="bx-box"
+      eyebrow="Pañol y abastecimiento"
+    >
+      <div class="d-flex flex-wrap gap-2">
         <CentroApuntesHelpButton
           title="Ayuda: inventario de insumos"
           text="Aquí se registran y actualizan los insumos del pañol de librería, controlando stock, vencimientos, proveedor, ubicación y estado de disponibilidad."
         />
+        <BButton v-if="canExport" variant="outline-danger" :disabled="loading || exportingPdf" @click="exportPdf">
+          <i class="bx bxs-file-pdf me-1"></i>{{ exportingPdf ? "Generando..." : "PDF" }}
+        </BButton>
+        <BButton v-if="canExport" variant="outline-success" :disabled="loading || exportingExcel" @click="exportExcel">
+          <i class="bx bx-spreadsheet me-1"></i>{{ exportingExcel ? "Generando..." : "Excel" }}
+        </BButton>
         <BButton v-if="canManage" variant="primary" @click="openCreate"><i class="bx bx-plus me-1"></i>Nuevo insumo</BButton>
       </div>
     </CentroApuntesSectionToolbar>
 
     <BAlert v-if="error" show variant="danger">{{ error }}</BAlert>
 
-    <BCard class="filter-card border-0 shadow-sm">
-      <div class="row g-3 align-items-end">
-        <div class="col-md-5">
-          <label class="form-label">Buscar</label>
-          <BFormInput v-model="filters.search" placeholder="Nombre, categoría, ubicación..." @keyup.enter="load" />
+    <div class="inventory-metrics">
+      <article v-for="card in metricCards" :key="card.key" class="inventory-metric" :class="`inventory-metric--${card.tone}`">
+        <span class="inventory-metric__icon"><i class="bx" :class="card.icon"></i></span>
+        <span class="inventory-metric__copy">
+          <small>{{ card.label }}</small>
+          <strong>{{ card.value }}</strong>
+          <span>{{ card.hint }}</span>
+        </span>
+      </article>
+    </div>
+
+    <BCard class="filter-card inventory-filter-card border-0 shadow-sm">
+      <div class="inventory-filter-card__header">
+        <div>
+          <span class="inventory-filter-card__eyebrow">Búsqueda avanzada</span>
+          <h6>Filtros de inventario</h6>
         </div>
-        <div class="col-md-3">
+        <span v-if="hasActiveFilters" class="inventory-filter-card__active">
+          <i class="bx bx-filter-alt"></i> Filtros activos
+        </span>
+      </div>
+      <div class="row g-3 align-items-end">
+        <div class="col-lg-5">
+          <label class="form-label">Buscar</label>
+          <div class="input-group inventory-search">
+            <span class="input-group-text"><i class="bx bx-search"></i></span>
+            <BFormInput v-model="filters.search" placeholder="Nombre, categoría, ubicación o estado..." @keyup.enter="load(1)" />
+          </div>
+        </div>
+        <div class="col-sm-6 col-lg-3">
           <label class="form-label">Categoría</label>
           <BFormSelect v-model="filters.category" :options="[{ value: null, text: 'Todas' }].concat(categoryOptions.map((item) => ({ value: item.value, text: item.label })))" />
         </div>
-        <div class="col-md-2">
+        <div class="col-sm-6 col-lg-2">
           <label class="form-label">Estado</label>
           <BFormSelect v-model="filters.status" :options="[{ value: null, text: 'Todos' }].concat(statusOptions.map((item) => ({ value: item.value, text: item.label })))" />
         </div>
-        <div class="col-md-2">
-          <BFormCheckbox v-model="filters.critical_only">Solo críticos</BFormCheckbox>
+        <div class="col-lg-2">
+          <div class="critical-filter" :class="{ 'critical-filter--active': filters.critical_only }">
+            <BFormCheckbox v-model="filters.critical_only" class="mb-0">Solo críticos</BFormCheckbox>
+            <i class="bx bx-error-circle"></i>
+          </div>
         </div>
-        <div class="col-md-3">
-          <BButton variant="secondary" class="me-2" @click="load">Filtrar</BButton>
-          <BButton variant="light" @click="clearFilters">Limpiar</BButton>
+        <div class="col-12">
+          <div class="inventory-filter-actions">
+            <BButton variant="primary" :disabled="loading" @click="load(1)">
+              <i class="bx bx-filter-alt me-1"></i>Aplicar filtros
+            </BButton>
+            <BButton variant="light" :disabled="loading || !hasActiveFilters" @click="clearFilters">
+              <i class="bx bx-reset me-1"></i>Limpiar
+            </BButton>
+          </div>
         </div>
       </div>
     </BCard>
 
-    <BCard class="data-card border-0 shadow-sm">
+    <BCard class="data-card inventory-data-card border-0 shadow-sm">
+      <div class="inventory-data-card__header">
+        <div>
+          <span class="inventory-data-card__eyebrow">Existencias</span>
+          <h6>Detalle del inventario</h6>
+        </div>
+        <span class="inventory-data-card__count">{{ resultRangeLabel }}</span>
+      </div>
       <LoadingState v-if="loading || detailLoading" message="Cargando insumos..." compact />
       <BTable
         v-else
         responsive
+        hover
         show-empty
         empty-text="No hay insumos que coincidan con los filtros."
         :items="items"
-        :fields="[
-          { key: 'name', label: 'Insumo' },
-          { key: 'category', label: 'Categoría' },
-          { key: 'current_stock', label: 'Stock' },
-          { key: 'expires_at', label: 'Vencimiento' },
-          { key: 'status', label: 'Estado' },
-          { key: 'actions', label: 'Acciones' },
-        ]"
+        :fields="tableFields"
+        class="inventory-table align-middle"
       >
         <template #cell(name)="{ item }">
-          <div class="fw-semibold">{{ item.name }}</div>
-          <div class="small text-muted">{{ item.location || "Sin ubicación" }}</div>
+          <div class="inventory-item">
+            <span class="inventory-item__icon"><i class="bx" :class="categoryIcon(item.category)"></i></span>
+            <span>
+              <strong>{{ item.name }}</strong>
+              <small><i class="bx bx-map me-1"></i>{{ item.location || "Sin ubicación asignada" }}</small>
+            </span>
+          </div>
+        </template>
+        <template #cell(category)="{ item }">
+          <span class="inventory-category">{{ categoryLabel(item.category) }}</span>
         </template>
         <template #cell(current_stock)="{ item }">
-          {{ item.current_stock }} {{ item.unit_of_measure }}
-          <div class="small text-muted">Mín. {{ item.minimum_stock }}</div>
+          <div class="stock-cell">
+            <div class="stock-cell__top">
+              <strong>{{ formatStock(item.current_stock) }}</strong>
+              <span>{{ humanizeCentroApuntesStatus(item.unit_of_measure) }}</span>
+            </div>
+            <div class="stock-cell__track">
+              <span :class="`stock-cell__bar stock-cell__bar--${stockTone(item)}`" :style="{ width: `${stockPercent(item)}%` }"></span>
+            </div>
+            <small>Mín. {{ formatStock(item.minimum_stock) }}<template v-if="item.maximum_stock !== null"> · Máx. {{ formatStock(item.maximum_stock) }}</template></small>
+          </div>
+        </template>
+        <template #cell(supplier)="{ item }">
+          <div class="supplier-cell">
+            <i class="bx bx-store-alt"></i>
+            <span>{{ item.supplier?.name || "Sin proveedor" }}</span>
+          </div>
         </template>
         <template #cell(expires_at)="{ item }">
-          {{ formatCentroApuntesDate(item.expires_at) }}
+          <div class="expiry-cell" :class="`expiry-cell--${expirationMeta(item.expires_at).tone}`">
+            <span class="expiry-cell__dot"></span>
+            <span>
+              <strong>{{ expirationMeta(item.expires_at).label }}</strong>
+              <small>{{ expirationMeta(item.expires_at).hint }}</small>
+            </span>
+          </div>
         </template>
         <template #cell(status)="{ item }">
           <CentroApuntesStatusBadge :status="item.status" />
         </template>
         <template #cell(actions)="{ item }">
-          <div class="d-flex flex-wrap gap-2">
-            <BButton size="sm" variant="outline-info" @click="openDetail(item)">Ver</BButton>
-            <BButton v-if="canManage" size="sm" variant="outline-primary" @click="openEdit(item)">Editar</BButton>
-            <BButton v-if="canManage" size="sm" variant="outline-danger" @click="destroy(item)">Eliminar</BButton>
+          <div class="inventory-actions">
+            <BButton size="sm" variant="light" title="Ver detalle" aria-label="Ver detalle" @click="openDetail(item)"><i class="bx bx-show"></i></BButton>
+            <BButton v-if="canManage" size="sm" variant="light" title="Editar insumo" aria-label="Editar insumo" @click="openEdit(item)"><i class="bx bx-edit-alt"></i></BButton>
+            <BButton v-if="canManage" size="sm" variant="light" class="inventory-actions__danger" title="Eliminar insumo" aria-label="Eliminar insumo" @click="destroy(item)"><i class="bx bx-trash"></i></BButton>
           </div>
         </template>
       </BTable>
-      <div class="d-flex justify-content-end mt-3">
+      <div v-if="pagination.total > pagination.per_page" class="inventory-pagination">
+        <span>{{ resultRangeLabel }}</span>
         <BPagination
           v-model="pagination.current_page"
           :total-rows="pagination.total"
@@ -445,7 +741,19 @@ export default {
           </div>
           <div class="col-md-4">
             <div class="text-muted small">Stock actual</div>
-            <div>{{ selectedSupply.current_stock }} {{ selectedSupply.unit_of_measure }}</div>
+            <div>{{ formatStock(selectedSupply.current_stock) }} {{ humanizeCentroApuntesStatus(selectedSupply.unit_of_measure) }}</div>
+          </div>
+          <div class="col-md-4">
+            <div class="text-muted small">Categoría</div>
+            <div>{{ categoryLabel(selectedSupply.category) }}</div>
+          </div>
+          <div class="col-md-4">
+            <div class="text-muted small">Stock mínimo</div>
+            <div>{{ formatStock(selectedSupply.minimum_stock) }}</div>
+          </div>
+          <div class="col-md-4">
+            <div class="text-muted small">Stock máximo</div>
+            <div>{{ selectedSupply.maximum_stock === null ? "Sin límite" : formatStock(selectedSupply.maximum_stock) }}</div>
           </div>
           <div class="col-md-6">
             <div class="text-muted small">Proveedor</div>
@@ -454,6 +762,29 @@ export default {
           <div class="col-md-6">
             <div class="text-muted small">Ubicación</div>
             <div>{{ selectedSupply.location || "-" }}</div>
+          </div>
+          <div class="col-md-4">
+            <div class="text-muted small">Última compra</div>
+            <div>{{ formatCentroApuntesDate(selectedSupply.last_purchase_at) }}</div>
+          </div>
+          <div class="col-md-4">
+            <div class="text-muted small">Vencimiento</div>
+            <div>{{ formatCentroApuntesDate(selectedSupply.expires_at) }}</div>
+          </div>
+          <div class="col-md-4">
+            <div class="text-muted small">Registro</div>
+            <div>{{ selectedSupply.active ? "Activo" : "Inactivo" }}</div>
+          </div>
+        </div>
+
+        <div v-if="selectedSupply.observations || selectedSupply.photo_url" class="row g-3 mt-1">
+          <div v-if="selectedSupply.observations" class="col-md-8">
+            <div class="modal-section-title">Observaciones</div>
+            <div class="supply-detail-note">{{ selectedSupply.observations }}</div>
+          </div>
+          <div v-if="selectedSupply.photo_url" class="col-md-4">
+            <div class="modal-section-title">Fotografía</div>
+            <img :src="selectedSupply.photo_url" :alt="`Foto de ${selectedSupply.name}`" class="supply-detail-photo" />
           </div>
         </div>
 
@@ -491,3 +822,419 @@ export default {
     </BModal>
   </div>
 </template>
+
+<style scoped>
+.inventory-metrics {
+  display: grid;
+  gap: .8rem;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+.inventory-metric {
+  --metric-rgb: var(--bs-primary-rgb);
+  align-items: center;
+  background: var(--bs-body-bg);
+  border: 1px solid rgba(var(--metric-rgb), .16);
+  border-radius: .85rem;
+  box-shadow: 0 .55rem 1.5rem rgba(48, 65, 102, .055);
+  display: flex;
+  gap: .75rem;
+  min-height: 6rem;
+  overflow: hidden;
+  padding: .9rem;
+  position: relative;
+}
+
+.inventory-metric::before {
+  background: rgb(var(--metric-rgb));
+  border-radius: 0 999px 999px 0;
+  content: "";
+  height: 2.2rem;
+  left: 0;
+  opacity: .9;
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  width: .2rem;
+}
+
+.inventory-metric--success { --metric-rgb: var(--bs-success-rgb); }
+.inventory-metric--warning { --metric-rgb: var(--bs-warning-rgb); }
+.inventory-metric--danger { --metric-rgb: var(--bs-danger-rgb); }
+.inventory-metric--info { --metric-rgb: var(--bs-info-rgb); }
+
+.inventory-metric__icon {
+  align-items: center;
+  background: rgba(var(--metric-rgb), .1);
+  border-radius: .7rem;
+  color: rgb(var(--metric-rgb));
+  display: inline-flex;
+  flex: 0 0 auto;
+  font-size: 1.3rem;
+  height: 2.75rem;
+  justify-content: center;
+  width: 2.75rem;
+}
+
+.inventory-metric__copy {
+  display: grid;
+  min-width: 0;
+}
+
+.inventory-metric__copy small {
+  color: var(--bs-secondary-color);
+  font-size: .66rem;
+  font-weight: 750;
+  letter-spacing: .045em;
+  text-transform: uppercase;
+}
+
+.inventory-metric__copy strong {
+  color: var(--bs-heading-color);
+  font-size: 1.45rem;
+  line-height: 1.15;
+}
+
+.inventory-metric__copy > span {
+  color: var(--bs-secondary-color);
+  font-size: .65rem;
+  line-height: 1.25;
+  margin-top: .12rem;
+}
+
+.inventory-filter-card :deep(.card-body) { padding: 0 !important; }
+
+.inventory-filter-card__header,
+.inventory-data-card__header {
+  align-items: center;
+  border-bottom: 1px solid var(--bs-border-color);
+  display: flex;
+  gap: 1rem;
+  justify-content: space-between;
+  padding: .9rem 1.1rem;
+}
+
+.inventory-filter-card__header + .row {
+  margin: 0;
+  padding: .15rem 1.1rem 1.1rem;
+}
+
+.inventory-filter-card__eyebrow,
+.inventory-data-card__eyebrow {
+  color: var(--bs-primary);
+  display: block;
+  font-size: .61rem;
+  font-weight: 800;
+  letter-spacing: .08em;
+  margin-bottom: .08rem;
+  text-transform: uppercase;
+}
+
+.inventory-filter-card__header h6,
+.inventory-data-card__header h6 {
+  color: var(--bs-heading-color);
+  font-size: .86rem;
+  font-weight: 750;
+  margin: 0;
+}
+
+.inventory-filter-card__active,
+.inventory-data-card__count {
+  align-items: center;
+  background: rgba(var(--bs-primary-rgb), .08);
+  border: 1px solid rgba(var(--bs-primary-rgb), .14);
+  border-radius: 999px;
+  color: var(--bs-primary);
+  display: inline-flex;
+  font-size: .67rem;
+  font-weight: 700;
+  gap: .3rem;
+  padding: .3rem .58rem;
+  white-space: nowrap;
+}
+
+.inventory-search .input-group-text {
+  background: var(--bs-body-bg);
+  border-color: var(--bs-border-color);
+  border-radius: .55rem 0 0 .55rem;
+  border-right: 0;
+  color: var(--bs-secondary-color);
+  padding-left: .8rem;
+  padding-right: .35rem;
+}
+
+.inventory-search :deep(.form-control) {
+  border-left: 0;
+  border-radius: 0 .55rem .55rem 0 !important;
+  padding-left: .35rem;
+}
+
+.critical-filter {
+  align-items: center;
+  background: var(--bs-body-bg);
+  border: 1px solid var(--bs-border-color);
+  border-radius: .55rem;
+  display: flex;
+  justify-content: space-between;
+  min-height: 2.55rem;
+  padding: .48rem .7rem;
+  transition: border-color .15s ease, background-color .15s ease;
+}
+
+.critical-filter > i {
+  color: var(--bs-secondary-color);
+  font-size: 1rem;
+}
+
+.critical-filter--active {
+  background: rgba(var(--bs-warning-rgb), .09);
+  border-color: rgba(var(--bs-warning-rgb), .32);
+}
+
+.critical-filter--active > i { color: rgb(var(--bs-warning-rgb)); }
+.critical-filter :deep(.form-check-label) { font-size: .74rem; font-weight: 650; }
+
+.inventory-filter-actions {
+  align-items: center;
+  border-top: 1px dashed var(--bs-border-color);
+  display: flex;
+  gap: .5rem;
+  justify-content: flex-end;
+  padding-top: .85rem;
+}
+
+.inventory-data-card :deep(.card-body) { padding: 0 !important; }
+.inventory-data-card__header { padding: .95rem 1.15rem; }
+
+.inventory-table { min-width: 1040px; }
+
+.inventory-table :deep(tbody tr) {
+  transition: background-color .15s ease, box-shadow .15s ease;
+}
+
+.inventory-table :deep(tbody td) { padding-block: .78rem; }
+
+.inventory-item {
+  align-items: center;
+  display: flex;
+  gap: .68rem;
+  min-width: 205px;
+}
+
+.inventory-item__icon {
+  align-items: center;
+  background: rgba(var(--bs-primary-rgb), .085);
+  border: 1px solid rgba(var(--bs-primary-rgb), .12);
+  border-radius: .62rem;
+  color: var(--bs-primary);
+  display: inline-flex;
+  flex: 0 0 auto;
+  font-size: 1rem;
+  height: 2.35rem;
+  justify-content: center;
+  width: 2.35rem;
+}
+
+.inventory-item strong {
+  color: var(--bs-heading-color);
+  display: block;
+  font-size: .78rem;
+  font-weight: 720;
+  line-height: 1.25;
+}
+
+.inventory-item small {
+  color: var(--bs-secondary-color);
+  display: block;
+  font-size: .66rem;
+  margin-top: .18rem;
+}
+
+.inventory-category {
+  background: var(--bs-tertiary-bg);
+  border: 1px solid var(--bs-border-color);
+  border-radius: 999px;
+  color: var(--bs-body-color);
+  display: inline-flex;
+  font-size: .66rem;
+  font-weight: 650;
+  padding: .3rem .55rem;
+  white-space: nowrap;
+}
+
+.stock-cell { min-width: 150px; }
+
+.stock-cell__top {
+  align-items: baseline;
+  display: flex;
+  gap: .32rem;
+}
+
+.stock-cell__top strong {
+  color: var(--bs-heading-color);
+  font-size: .9rem;
+}
+
+.stock-cell__top span,
+.stock-cell small {
+  color: var(--bs-secondary-color);
+  font-size: .63rem;
+}
+
+.stock-cell__track {
+  background: var(--bs-tertiary-bg);
+  border-radius: 999px;
+  height: .32rem;
+  margin: .33rem 0 .25rem;
+  overflow: hidden;
+  width: 100%;
+}
+
+.stock-cell__bar {
+  border-radius: inherit;
+  display: block;
+  height: 100%;
+  min-width: .25rem;
+}
+
+.stock-cell__bar--success { background: var(--bs-success); }
+.stock-cell__bar--warning { background: var(--bs-warning); }
+.stock-cell__bar--danger { background: var(--bs-danger); }
+
+.supplier-cell {
+  align-items: center;
+  color: var(--bs-body-color);
+  display: flex;
+  font-size: .71rem;
+  gap: .4rem;
+  max-width: 165px;
+}
+
+.supplier-cell i {
+  color: var(--bs-secondary-color);
+  flex: 0 0 auto;
+  font-size: .95rem;
+}
+
+.expiry-cell {
+  --expiry-color: var(--bs-secondary-rgb);
+  align-items: center;
+  display: flex;
+  gap: .45rem;
+  min-width: 95px;
+}
+
+.expiry-cell--success { --expiry-color: var(--bs-success-rgb); }
+.expiry-cell--warning { --expiry-color: var(--bs-warning-rgb); }
+.expiry-cell--danger { --expiry-color: var(--bs-danger-rgb); }
+
+.expiry-cell__dot {
+  background: rgb(var(--expiry-color));
+  border-radius: 50%;
+  box-shadow: 0 0 0 .22rem rgba(var(--expiry-color), .1);
+  flex: 0 0 auto;
+  height: .42rem;
+  width: .42rem;
+}
+
+.expiry-cell strong {
+  color: var(--bs-heading-color);
+  display: block;
+  font-size: .7rem;
+  font-weight: 650;
+  white-space: nowrap;
+}
+
+.expiry-cell small {
+  color: rgb(var(--expiry-color));
+  display: block;
+  font-size: .61rem;
+  margin-top: .12rem;
+}
+
+.expiry-cell--neutral small { color: var(--bs-secondary-color); }
+
+.inventory-actions {
+  display: inline-flex;
+  gap: .3rem;
+  justify-content: flex-end;
+}
+
+.inventory-actions :deep(.btn) {
+  align-items: center;
+  border: 1px solid var(--bs-border-color);
+  color: var(--bs-secondary-color);
+  display: inline-flex;
+  height: 2rem;
+  justify-content: center;
+  padding: 0;
+  width: 2rem;
+}
+
+.inventory-actions :deep(.btn:hover) {
+  border-color: rgba(var(--bs-primary-rgb), .25);
+  color: var(--bs-primary);
+}
+
+.inventory-actions :deep(.inventory-actions__danger:hover) {
+  background: rgba(var(--bs-danger-rgb), .08);
+  border-color: rgba(var(--bs-danger-rgb), .2);
+  color: var(--bs-danger);
+}
+
+.inventory-pagination {
+  align-items: center;
+  border-top: 1px solid var(--bs-border-color);
+  display: flex;
+  justify-content: space-between;
+  padding: .85rem 1.15rem .35rem;
+}
+
+.inventory-pagination > span {
+  color: var(--bs-secondary-color);
+  font-size: .68rem;
+}
+
+.inventory-pagination :deep(.pagination) { margin-bottom: .5rem; }
+
+.supply-detail-note {
+  background: var(--bs-tertiary-bg);
+  border: 1px solid var(--bs-border-color);
+  border-radius: .72rem;
+  color: var(--bs-body-color);
+  font-size: .76rem;
+  line-height: 1.55;
+  min-height: 5.2rem;
+  padding: .8rem;
+  white-space: pre-line;
+}
+
+.supply-detail-photo {
+  aspect-ratio: 16 / 10;
+  border: 1px solid var(--bs-border-color);
+  border-radius: .72rem;
+  object-fit: cover;
+  width: 100%;
+}
+
+@media (max-width: 1399.98px) {
+  .inventory-metrics { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+
+@media (max-width: 767.98px) {
+  .inventory-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .inventory-filter-actions { justify-content: stretch; }
+  .inventory-filter-actions :deep(.btn) { flex: 1 1 auto; }
+}
+
+@media (max-width: 575.98px) {
+  .inventory-metrics { grid-template-columns: 1fr; }
+  .inventory-metric { min-height: 5.4rem; }
+  .inventory-filter-card__header,
+  .inventory-data-card__header { align-items: flex-start; }
+  .inventory-filter-card__active,
+  .inventory-data-card__count { font-size: .6rem; }
+  .inventory-filter-actions { align-items: stretch; flex-direction: column; }
+  .inventory-pagination { align-items: stretch; flex-direction: column; gap: .5rem; }
+}
+</style>
