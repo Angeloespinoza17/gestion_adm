@@ -100,6 +100,7 @@ use App\Http\Controllers\Library\BibliotecaTextbookController;
 use App\Http\Controllers\Library\OpenLibraryController;
 use App\Http\Controllers\MaintenanceAnnualPlanController;
 use App\Http\Controllers\MaintenanceDependencyController;
+use App\Http\Controllers\MaintenanceReportController;
 use App\Http\Controllers\MaintenanceVisitController;
 use App\Http\Controllers\MaintenanceWorkOrderController;
 use App\Http\Controllers\MeController;
@@ -1126,6 +1127,8 @@ Route::middleware('auth:sanctum')->group(function () {
     });
 
     // Mantención: OT
+    Route::get('/maintenance/reports', MaintenanceReportController::class)
+        ->middleware('permission:ver_reportes_mantencion');
     Route::get('/maintenance/work-orders/catalogs', [MaintenanceWorkOrderController::class, 'catalogs'])
         ->middleware('permission:ver_mantencion');
     Route::get('/maintenance/work-orders/workload', [MaintenanceWorkOrderController::class, 'workload'])

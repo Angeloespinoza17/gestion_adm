@@ -12,16 +12,15 @@ use App\Models\CentroApuntes\PanolMovimiento;
 use App\Models\Department;
 use App\Models\Supplier;
 use App\Models\User;
+use App\Services\CentroApuntes\CentroApuntesAccessService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use App\Services\CentroApuntes\CentroApuntesAccessService;
 
 class CentroApuntesCatalogsController extends Controller
 {
     public function __construct(
         private readonly CentroApuntesAccessService $accessService,
-    ) {
-    }
+    ) {}
 
     public function __invoke(Request $request): JsonResponse
     {
@@ -65,14 +64,20 @@ class CentroApuntesCatalogsController extends Controller
             'movement_types' => $this->toOptions(PanolMovimiento::TYPE_OPTIONS),
             'delivery_statuses' => $this->toOptions(PanolEntrega::STATUS_OPTIONS),
             'report_periods' => $this->toOptions(['diario', 'semanal', 'mensual', 'semestral', 'anual']),
-            'users' => $users->map(fn (User $user) => [
-                'id' => $user->id,
-                'name' => $user->name,
-                'email' => $user->email,
-                'cargo' => $user->staff?->cargo?->name,
-                'departments' => $user->staff?->departments?->pluck('name')->values()->all() ?? [],
-                'label' => trim(sprintf('%s%s', $user->name, $user->staff?->cargo?->name ? ' · ' . $user->staff->cargo->name : '')),
-            ])->values(),
+            'users' => $users->map(function (User $user): array {
+                $primaryDepartment = $user->staff?->departments?->first();
+
+                return [
+                    'id' => $user->id,
+                    'name' => $user->name,
+                    'email' => $user->email,
+                    'cargo' => $user->staff?->cargo?->name,
+                    'departments' => $user->staff?->departments?->pluck('name')->values()->all() ?? [],
+                    'primary_department_id' => $primaryDepartment?->id,
+                    'primary_department_name' => $primaryDepartment?->name,
+                    'label' => trim(sprintf('%s%s', $user->name, $user->staff?->cargo?->name ? ' · '.$user->staff->cargo->name : '')),
+                ];
+            })->values(),
             'subjects' => CentroApuntesAsignatura::query()->orderBy('name')->get(['id', 'name', 'code', 'area', 'education_level', 'status']),
             'machines' => CentroApuntesMaquina::query()->orderBy('name')->get(['id', 'name', 'internal_code', 'type', 'status']),
             'supplies' => PanolInsumo::query()->orderBy('name')->get(['id', 'name', 'category', 'unit_of_measure', 'current_stock', 'status']),

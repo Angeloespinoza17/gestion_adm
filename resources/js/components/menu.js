@@ -20,6 +20,12 @@ export const menuItems = [
         icon: "bx-wrench",
         subItems: [
             {
+                id: 9001,
+                label: "Resumen y reportes",
+                link: "/maintenance",
+                parentId: 900
+            },
+            {
                 id: 901,
                 label: "Áreas técnicas",
                 link: "/maintenance/dependencies",

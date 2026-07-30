@@ -17,8 +17,7 @@ class CentroApuntesSolicitudController extends Controller
 {
     public function __construct(
         private readonly CentroApuntesSolicitudService $solicitudService,
-    ) {
-    }
+    ) {}
 
     public function index(Request $request): JsonResponse
     {
@@ -27,12 +26,13 @@ class CentroApuntesSolicitudController extends Controller
         $search = trim((string) $request->query('search'));
 
         $items = CentroApuntesSolicitud::query()
-            ->with(['requester:id,name', 'subject:id,name', 'machine:id,name', 'receivedBy:id,name'])
+            ->with(['requester:id,name', 'department:id,name', 'subject:id,name', 'machine:id,name', 'receivedBy:id,name'])
             ->when($search !== '', function ($builder) use ($search) {
                 $builder->where(function ($query) use ($search) {
                     $query
                         ->where('request_code', 'like', "%{$search}%")
                         ->orWhere('requested_by_name_snapshot', 'like', "%{$search}%")
+                        ->orWhere('department_name_snapshot', 'like', "%{$search}%")
                         ->orWhere('subject_name_snapshot', 'like', "%{$search}%")
                         ->orWhere('machine_name_snapshot', 'like', "%{$search}%")
                         ->orWhere('task_type_other', 'like', "%{$search}%")
@@ -40,6 +40,7 @@ class CentroApuntesSolicitudController extends Controller
                 });
             })
             ->when($request->filled('requested_by_user_id'), fn ($builder) => $builder->where('requested_by_user_id', $request->query('requested_by_user_id')))
+            ->when($request->filled('department_id'), fn ($builder) => $builder->where('department_id', $request->query('department_id')))
             ->when($request->filled('subject_id'), fn ($builder) => $builder->where('subject_id', $request->query('subject_id')))
             ->when($request->filled('machine_id'), fn ($builder) => $builder->where('machine_id', $request->query('machine_id')))
             ->when($request->filled('task_type'), fn ($builder) => $builder->where('task_type', $request->query('task_type')))
@@ -63,6 +64,7 @@ class CentroApuntesSolicitudController extends Controller
         return response()->json([
             'data' => $solicitud->load([
                 'requester:id,name,email,user_type',
+                'department:id,name',
                 'subject:id,name,code,area,education_level',
                 'machine:id,name,internal_code,type,status',
                 'receivedBy:id,name,email',

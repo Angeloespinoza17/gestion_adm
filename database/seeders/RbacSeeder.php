@@ -301,11 +301,12 @@ class RbacSeeder extends Seeder
 
             // Mantención (padre + submódulos)
             ['slug' => 'maintenance', 'name' => 'Mantención', 'frontend_route' => null, 'icon' => 'bx-wrench', 'sort' => 90],
-            ['slug' => 'maintenance_dependencies', 'name' => 'Áreas técnicas', 'frontend_route' => '/maintenance/dependencies', 'icon' => null, 'sort' => 1, 'parent' => 'maintenance'],
-            ['slug' => 'maintenance_work_orders', 'name' => 'Órdenes de trabajo', 'frontend_route' => '/maintenance/work-orders', 'icon' => null, 'sort' => 2, 'parent' => 'maintenance'],
-            ['slug' => 'maintenance_workload', 'name' => 'Carga de trabajo', 'frontend_route' => '/maintenance/workload', 'icon' => null, 'sort' => 3, 'parent' => 'maintenance'],
-            ['slug' => 'maintenance_visits', 'name' => 'Planificación visitas', 'frontend_route' => '/maintenance/visits', 'icon' => null, 'sort' => 4, 'parent' => 'maintenance'],
-            ['slug' => 'maintenance_annual_plans', 'name' => 'Plan anual mantención', 'frontend_route' => '/maintenance/annual-plans', 'icon' => null, 'sort' => 5, 'parent' => 'maintenance'],
+            ['slug' => 'maintenance_reports', 'name' => 'Resumen y reportes', 'frontend_route' => '/maintenance', 'icon' => null, 'sort' => 1, 'parent' => 'maintenance'],
+            ['slug' => 'maintenance_dependencies', 'name' => 'Áreas técnicas', 'frontend_route' => '/maintenance/dependencies', 'icon' => null, 'sort' => 2, 'parent' => 'maintenance'],
+            ['slug' => 'maintenance_work_orders', 'name' => 'Órdenes de trabajo', 'frontend_route' => '/maintenance/work-orders', 'icon' => null, 'sort' => 3, 'parent' => 'maintenance'],
+            ['slug' => 'maintenance_workload', 'name' => 'Carga de trabajo', 'frontend_route' => '/maintenance/workload', 'icon' => null, 'sort' => 4, 'parent' => 'maintenance'],
+            ['slug' => 'maintenance_visits', 'name' => 'Planificación visitas', 'frontend_route' => '/maintenance/visits', 'icon' => null, 'sort' => 5, 'parent' => 'maintenance'],
+            ['slug' => 'maintenance_annual_plans', 'name' => 'Plan anual mantención', 'frontend_route' => '/maintenance/annual-plans', 'icon' => null, 'sort' => 6, 'parent' => 'maintenance'],
 
             // Inventario (padre + submódulos)
             ['slug' => 'inventory', 'name' => 'Inventario', 'frontend_route' => null, 'icon' => 'bx-box', 'sort' => 100],
@@ -581,6 +582,7 @@ class RbacSeeder extends Seeder
             'contracts_clauses',
             'contracts_signatures',
             'maintenance',
+            'maintenance_reports',
             'maintenance_dependencies',
             'maintenance_work_orders',
             'maintenance_workload',
@@ -698,6 +700,7 @@ class RbacSeeder extends Seeder
             'contracts',
             'contracts_list',
             'maintenance',
+            'maintenance_reports',
             'maintenance_work_orders',
             'maintenance_workload',
             'maintenance_visits',
@@ -980,6 +983,7 @@ class RbacSeeder extends Seeder
         $rolesBySlug['encargado_mantencion']->modules()->sync($this->ids($modulesBySlug, [
             'dashboard',
             'maintenance',
+            'maintenance_reports',
             'maintenance_dependencies',
             'maintenance_work_orders',
             'maintenance_workload',
@@ -1034,6 +1038,7 @@ class RbacSeeder extends Seeder
             'spaces_calendar',
             'spaces_statistics',
             'maintenance',
+            'maintenance_reports',
             'maintenance_work_orders',
             'maintenance_workload',
             'security',
@@ -1203,7 +1208,11 @@ class RbacSeeder extends Seeder
      */
     private function ids($collection, array $slugs): array
     {
-        return $collection->only($slugs)->pluck('id')->values()->all();
+        return collect($slugs)
+            ->map(fn (string $slug) => $collection->get($slug)?->id)
+            ->filter()
+            ->values()
+            ->all();
     }
 
     private function seedSuperAdminUser(): void

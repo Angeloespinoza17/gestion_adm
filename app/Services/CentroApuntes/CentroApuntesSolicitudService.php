@@ -7,6 +7,7 @@ use App\Models\CentroApuntes\CentroApuntesAsignatura;
 use App\Models\CentroApuntes\CentroApuntesHistorialEstado;
 use App\Models\CentroApuntes\CentroApuntesMaquina;
 use App\Models\CentroApuntes\CentroApuntesSolicitud;
+use App\Models\Department;
 use App\Models\User;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Carbon;
@@ -99,7 +100,7 @@ class CentroApuntesSolicitudService
                 'status_changed_at' => Carbon::now(),
                 'updated_by' => $actor->id,
                 'internal_observations' => $notes
-                    ? trim((string) $solicitud->internal_observations . PHP_EOL . '[' . Carbon::now()->format('d-m-Y H:i') . '] ' . $notes)
+                    ? trim((string) $solicitud->internal_observations.PHP_EOL.'['.Carbon::now()->format('d-m-Y H:i').'] '.$notes)
                     : $solicitud->internal_observations,
             ])->save();
 
@@ -130,7 +131,7 @@ class CentroApuntesSolicitudService
         return DB::transaction(function () use ($solicitud, $file, $actor) {
             $path = $file->storePubliclyAs(
                 sprintf('centro-apuntes/solicitudes/%d', $solicitud->id),
-                now()->format('Ymd_His') . '_' . uniqid('', true) . '.' . $file->getClientOriginalExtension(),
+                now()->format('Ymd_His').'_'.uniqid('', true).'.'.$file->getClientOriginalExtension(),
                 ['disk' => 'public']
             );
 
@@ -163,6 +164,7 @@ class CentroApuntesSolicitudService
     {
         return [
             'requester:id,name,email,user_type,staff_id',
+            'department:id,name',
             'subject:id,name,code,area,education_level,status',
             'machine:id,name,internal_code,type,status',
             'receivedBy:id,name,email',
@@ -174,8 +176,13 @@ class CentroApuntesSolicitudService
     private function preparePayload(array $payload, User $actor, ?CentroApuntesSolicitud $current = null): array
     {
         $machine = CentroApuntesMaquina::query()->findOrFail($payload['machine_id']);
-        $requester = User::query()->findOrFail($payload['requested_by_user_id']);
+        $requester = User::query()
+            ->with(['staff.departments' => fn ($query) => $query->where('departments.active', true)->orderBy('sort_order')->orderBy('name')])
+            ->findOrFail($payload['requested_by_user_id']);
         $subject = CentroApuntesAsignatura::query()->findOrFail($payload['subject_id']);
+        $department = ! empty($payload['department_id'])
+            ? Department::query()->where('active', true)->findOrFail($payload['department_id'])
+            : $requester->staff?->departments?->first();
 
         $priority = $payload['priority'];
         $isImmediate = $priority === 'entrega_inmediata' || ($payload['is_immediate'] ?? false);
@@ -191,6 +198,8 @@ class CentroApuntesSolicitudService
             'request_code' => $current?->request_code ?? $this->nextRequestCode(),
             'requested_by_user_id' => $requester->id,
             'requested_by_name_snapshot' => $requester->name,
+            'department_id' => $department?->id,
+            'department_name_snapshot' => $department?->name,
             'subject_id' => $subject->id,
             'subject_name_snapshot' => $subject->name,
             'machine_id' => $machine->id,

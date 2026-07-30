@@ -2,6 +2,7 @@
 
 namespace App\Models\CentroApuntes;
 
+use App\Models\Department;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -55,6 +56,8 @@ class CentroApuntesSolicitud extends Model
         'request_code',
         'requested_by_user_id',
         'requested_by_name_snapshot',
+        'department_id',
+        'department_name_snapshot',
         'subject_id',
         'subject_name_snapshot',
         'machine_id',
@@ -103,6 +106,11 @@ class CentroApuntesSolicitud extends Model
     public function requester(): BelongsTo
     {
         return $this->belongsTo(User::class, 'requested_by_user_id');
+    }
+
+    public function department(): BelongsTo
+    {
+        return $this->belongsTo(Department::class);
     }
 
     public function subject(): BelongsTo

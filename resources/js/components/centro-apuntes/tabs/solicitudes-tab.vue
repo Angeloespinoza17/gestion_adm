@@ -22,6 +22,7 @@ import {
 const emptyForm = () => ({
   id: null,
   requested_by_user_id: null,
+  department_id: null,
   subject_id: null,
   machine_id: null,
   task_type: "guia",
@@ -63,6 +64,7 @@ export default {
       filters: {
         search: "",
         requested_by_user_id: null,
+        department_id: null,
         subject_id: null,
         machine_id: null,
         task_type: null,
@@ -87,6 +89,9 @@ export default {
     },
     subjectOptions() {
       return normalizeOptions(this.catalogs.subjects || []);
+    },
+    departmentOptions() {
+      return normalizeOptions(this.catalogs.departments || []);
     },
     machineOptions() {
       return normalizeOptions(this.catalogs.machines || []);
@@ -158,6 +163,7 @@ export default {
           ...emptyForm(),
           id: this.selectedRequest.id,
           requested_by_user_id: this.selectedRequest.requested_by_user_id,
+          department_id: this.selectedRequest.department_id,
           subject_id: this.selectedRequest.subject_id,
           machine_id: this.selectedRequest.machine_id,
           task_type: this.selectedRequest.task_type,
@@ -209,6 +215,7 @@ export default {
       ]);
       [
         "requested_by_user_id",
+        "department_id",
         "subject_id",
         "machine_id",
         "task_type",
@@ -269,6 +276,10 @@ export default {
       } finally {
         this.saving = false;
       }
+    },
+    applyRequesterDepartment(userId) {
+      const user = (this.catalogs.users || []).find((item) => Number(item.id) === Number(userId));
+      this.form.department_id = user?.primary_department_id || null;
     },
     async promptStatus(item) {
       const optionsHtml = this.statusOptions
@@ -364,6 +375,7 @@ export default {
       this.filters = {
         search: "",
         requested_by_user_id: null,
+        department_id: null,
         subject_id: null,
         machine_id: null,
         task_type: null,
@@ -408,6 +420,10 @@ export default {
         <div class="col-md-2">
           <label class="form-label">Solicitante</label>
           <BFormSelect v-model="filters.requested_by_user_id" :options="[{ value: null, text: 'Todos' }].concat(userOptions.map((item) => ({ value: item.value, text: item.label })))" />
+        </div>
+        <div class="col-md-2">
+          <label class="form-label">Departamento</label>
+          <BFormSelect v-model="filters.department_id" :options="[{ value: null, text: 'Todos' }].concat(departmentOptions.map((item) => ({ value: item.value, text: item.label })))" />
         </div>
         <div class="col-md-2">
           <label class="form-label">Asignatura</label>
@@ -455,6 +471,7 @@ export default {
         :fields="[
           { key: 'request_code', label: 'Solicitud' },
           { key: 'requested_by_name_snapshot', label: 'Solicitante' },
+          { key: 'department_name_snapshot', label: 'Departamento' },
           { key: 'subject_name_snapshot', label: 'Asignatura' },
           { key: 'machine_name_snapshot', label: 'Máquina' },
           { key: 'volume', label: 'Volumen' },
@@ -469,8 +486,8 @@ export default {
           <div class="small text-muted">{{ taskLabel(item) }}</div>
         </template>
         <template #cell(volume)="{ item }">
-          <div>{{ item.sheet_count }} hoja(s)</div>
-          <div class="small text-muted">{{ item.copies_count }} copia(s)</div>
+          <div class="fw-semibold">{{ item.estimated_total_impressions }} hoja(s) impresa(s)</div>
+          <div class="small text-muted">{{ item.sheet_count }} página(s) × {{ item.copies_count }} juego(s)</div>
         </template>
         <template #cell(priority)="{ item }">
           <CentroApuntesStatusBadge :status="item.priority" />
@@ -506,16 +523,24 @@ export default {
       <CentroApuntesModalIntro title="Trabajo de impresión" text="Los detalles, observaciones y el archivo adjunto son opcionales; los datos operativos marcados con * son necesarios." icon="bx-printer">
         <CentroApuntesHelpButton
           title="Ayuda: formulario de solicitud"
-          text="Use este formulario para registrar solicitudes de impresión, asignando solicitante, asignatura, máquina, hojas, copias, prioridad y observaciones internas."
+          text="Use este formulario para registrar solicitudes de impresión. Las hojas impresas se calculan multiplicando las páginas originales por los juegos de copias."
         />
       </CentroApuntesModalIntro>
 
       <div class="modal-form-grid row g-3">
-        <div class="col-md-6">
+        <div class="col-md-4">
           <label class="form-label">Solicitante <span class="field-required">*</span></label>
-          <BFormSelect v-model="form.requested_by_user_id" :options="userOptions.map((item) => ({ value: item.value, text: item.label }))" />
+          <BFormSelect
+            v-model="form.requested_by_user_id"
+            :options="userOptions.map((item) => ({ value: item.value, text: item.label }))"
+            @update:model-value="applyRequesterDepartment"
+          />
         </div>
-        <div class="col-md-6">
+        <div class="col-md-4">
+          <label class="form-label">Departamento</label>
+          <BFormSelect v-model="form.department_id" :options="[{ value: null, text: 'Sin departamento' }].concat(departmentOptions.map((item) => ({ value: item.value, text: item.label })))" />
+        </div>
+        <div class="col-md-4">
           <label class="form-label">Asignatura <span class="field-required">*</span></label>
           <BFormSelect v-model="form.subject_id" :options="subjectOptions.map((item) => ({ value: item.value, text: item.label }))" />
         </div>
@@ -540,11 +565,11 @@ export default {
           <BFormSelect v-model="form.machine_id" :options="machineOptions.map((item) => ({ value: item.value, text: item.label }))" />
         </div>
         <div class="col-md-3">
-          <label class="form-label">Cantidad de hojas <span class="field-required">*</span></label>
+          <label class="form-label">Páginas originales <span class="field-required">*</span></label>
           <BFormInput v-model="form.sheet_count" type="number" min="1" />
         </div>
         <div class="col-md-3">
-          <label class="form-label">Cantidad de copias <span class="field-required">*</span></label>
+          <label class="form-label">Juegos de copias <span class="field-required">*</span></label>
           <BFormInput v-model="form.copies_count" type="number" min="1" />
         </div>
         <div class="col-md-3">
@@ -600,6 +625,10 @@ export default {
             <div>{{ selectedRequest.requested_by_name_snapshot || "-" }}</div>
           </div>
           <div class="col-md-4">
+            <div class="text-muted small">Departamento</div>
+            <div>{{ selectedRequest.department_name_snapshot || "Sin departamento" }}</div>
+          </div>
+          <div class="col-md-4">
             <div class="text-muted small">Asignatura</div>
             <div>{{ selectedRequest.subject_name_snapshot || "-" }}</div>
           </div>
@@ -617,7 +646,8 @@ export default {
           </div>
           <div class="col-md-6">
             <div class="text-muted small">Volumen</div>
-            <div>{{ selectedRequest.sheet_count }} hoja(s) x {{ selectedRequest.copies_count }} copia(s)</div>
+            <div class="fw-semibold">{{ selectedRequest.estimated_total_impressions }} hoja(s) impresa(s)</div>
+            <div class="small text-muted">{{ selectedRequest.sheet_count }} página(s) × {{ selectedRequest.copies_count }} juego(s)</div>
           </div>
           <div class="col-md-6">
             <div class="text-muted small">Fecha de entrega</div>

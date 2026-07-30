@@ -103,6 +103,11 @@ const routes = [
         component: () => import('../views/dashboard/test.vue'),
     },
     {
+        path: '/maintenance',
+        meta: { authRequired: true, title: 'Resumen y reportes de Mantención', permission: 'ver_reportes_mantencion' },
+        component: () => import('../views/maintenance/reports.vue'),
+    },
+    {
         path: '/maintenance/dependencies',
         meta: { authRequired: true, title: 'Áreas técnicas', permission: 'ver_mantencion' },
         component: () => import('../views/maintenance/dependencies.vue'),

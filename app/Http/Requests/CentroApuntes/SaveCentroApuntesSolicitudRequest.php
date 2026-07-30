@@ -16,6 +16,7 @@ class SaveCentroApuntesSolicitudRequest extends FormRequest
         $this->normalizeNullableFields([
             'task_type_other',
             'requested_at',
+            'department_id',
             'instructions',
             'observations',
             'internal_observations',
@@ -31,6 +32,7 @@ class SaveCentroApuntesSolicitudRequest extends FormRequest
     {
         return [
             'requested_by_user_id' => ['required', Rule::exists('users', 'id')->where(fn ($query) => $query->where('user_type', 'staff')->where('active', true))],
+            'department_id' => ['nullable', 'integer', Rule::exists('departments', 'id')->where(fn ($query) => $query->where('active', true))],
             'subject_id' => ['required', 'integer', 'exists:centro_apuntes_asignaturas,id'],
             'machine_id' => ['required', 'integer', 'exists:centro_apuntes_maquinas,id'],
             'task_type' => ['required', Rule::in(CentroApuntesSolicitud::TASK_TYPES)],

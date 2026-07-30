@@ -134,6 +134,7 @@ export function statusVariant(status) {
     disponible: "success",
     stock_bajo: "warning",
     agotado: "danger",
+    proximo_a_vencer: "warning",
     vencido: "danger",
     dado_de_baja: "secondary",
     ingreso: "success",
@@ -362,17 +363,21 @@ export function downloadPdfReport(fileName, title, subtitle, sections, options =
 
   (sections || []).forEach((section) => {
     const headers = section.headers || [];
-    const rows = section.rows?.length ? section.rows : [["Sin datos"]];
-    const columnCount = Math.max(1, headers.length, ...(rows || []).map((row) => row.length));
+    const sourceRows = section.rows?.length ? section.rows : [["Sin datos"]];
+    const columnCount = Math.max(1, headers.length, ...sourceRows.map((row) => row.length));
+    const rows = sourceRows.map((row) =>
+      Array.from({ length: columnCount }, (_, columnIndex) =>
+        columnIndex < row.length ? row[columnIndex] : ""
+      )
+    );
     const body = []
       .concat(headers.length ? [headers.map((header) => ({ text: String(header ?? ""), style: "tableHeader" }))] : [])
       .concat(rows.map((row) => row.map((cell) => ({ text: String(cell ?? "-"), style: "tableCell" }))));
-
-    content.push({ text: section.title || "Sección", style: "section" });
-    content.push({
+    const tableNode = {
       table: {
         headerRows: headers.length ? 1 : 0,
         keepWithHeaderRows: 1,
+        dontBreakRows: true,
         widths: section.widths || Array.from({ length: columnCount }, () => "*"),
         body,
       },
@@ -388,7 +393,15 @@ export function downloadPdfReport(fileName, title, subtitle, sections, options =
         paddingBottom: () => 4,
       },
       margin: [0, 0, 0, 12],
-    });
+    };
+    const titleNode = { text: section.title || "Sección", style: "section" };
+    const fitsAsBlock = rows.length <= 10 && columnCount <= 7;
+
+    if (fitsAsBlock) {
+      content.push({ stack: [titleNode, tableNode], unbreakable: true });
+    } else {
+      content.push({ ...titleNode, pageBreak: "before" }, tableNode);
+    }
   });
 
   pdfMake.createPdf({
