@@ -395,6 +395,7 @@ class RbacSeeder extends Seeder
             ['slug' => 'inspectoria', 'name' => 'Inspectoría', 'description' => 'Inspectoría.'],
             ['slug' => 'porteria', 'name' => 'Portería', 'description' => 'Operación diaria de portería.'],
             ['slug' => 'encargado_mantencion', 'name' => 'Encargado de Mantención', 'description' => 'Mantención: OT + visitas + exportaciones.'],
+            ['slug' => 'encargado_biblioteca', 'name' => 'Encargado de Biblioteca', 'description' => 'Gestión integral del módulo Biblioteca Escolar / CRA.'],
             ['slug' => 'nochero', 'name' => 'Nochero', 'description' => 'Registro de rondas nocturnas.'],
             ['slug' => 'docente', 'name' => 'Docente', 'description' => 'Acceso a estudiantes asociados.'],
             ['slug' => 'estudiante', 'name' => 'Estudiante', 'description' => 'Acceso acotado a su información.'],
@@ -1020,6 +1021,47 @@ class RbacSeeder extends Seeder
             'security_incidents',
             'tasks',
             'tasks_backlog',
+        ]));
+
+        // Encargado de Biblioteca
+        $rolesBySlug['encargado_biblioteca']->permissions()->sync($this->ids($permissionsBySlug, [
+            'ver_modulo_biblioteca',
+            'crear_libros_biblioteca',
+            'editar_libros_biblioteca',
+            'eliminar_libros_biblioteca',
+            'administrar_catalogo_biblioteca',
+            'administrar_inventario_biblioteca',
+            'registrar_prestamos_biblioteca',
+            'registrar_devoluciones_biblioteca',
+            'renovar_prestamos_biblioteca',
+            'gestionar_mora_biblioteca',
+            'gestionar_reservas_biblioteca',
+            'gestionar_plan_lector_biblioteca',
+            'gestionar_uso_espacios_biblioteca',
+            'gestionar_categorias_biblioteca',
+            'gestionar_almacenaje_biblioteca',
+            'gestionar_textos_escolares_biblioteca',
+            'gestionar_materiales_biblioteca',
+            'gestionar_pases_biblioteca',
+            'ver_estadisticas_biblioteca',
+            'exportar_reportes_biblioteca',
+        ]));
+
+        $rolesBySlug['encargado_biblioteca']->modules()->sync($this->ids($modulesBySlug, [
+            'biblioteca',
+            'biblioteca_dashboard',
+            'biblioteca_catalogo',
+            'biblioteca_categorias',
+            'biblioteca_almacenaje',
+            'biblioteca_inventario',
+            'biblioteca_prestamos',
+            'biblioteca_materiales',
+            'biblioteca_textos_escolares',
+            'biblioteca_reservas',
+            'biblioteca_plan_lector',
+            'biblioteca_espacios',
+            'biblioteca_pases',
+            'biblioteca_reportes',
         ]));
 
         // Prevención de Riesgos (gestión completa del módulo)

@@ -176,6 +176,7 @@ class BibliotecaSeeder extends Seeder
         $rolePermissionMap = [
             'super_admin' => array_keys($permissionsBySlug->all()),
             'administrador' => array_keys($permissionsBySlug->all()),
+            'encargado_biblioteca' => array_keys($permissionsBySlug->all()),
             'coordinador_academico' => [
                 'ver_modulo_biblioteca',
                 'gestionar_plan_lector_biblioteca',
@@ -207,6 +208,7 @@ class BibliotecaSeeder extends Seeder
         $roleModuleMap = [
             'super_admin' => $modules->keys()->all(),
             'administrador' => $modules->keys()->all(),
+            'encargado_biblioteca' => $modules->keys()->all(),
             'coordinador_academico' => ['biblioteca', 'biblioteca_dashboard', 'biblioteca_catalogo', 'biblioteca_plan_lector', 'biblioteca_reportes'],
             'direccion' => ['biblioteca', 'biblioteca_dashboard', 'biblioteca_reportes'],
             'inspectoria' => ['biblioteca', 'biblioteca_dashboard', 'biblioteca_prestamos', 'biblioteca_reservas', 'biblioteca_catalogo', 'biblioteca_pases'],
@@ -913,7 +915,7 @@ class BibliotecaSeeder extends Seeder
 
     private function ensureLibraryUser(): void
     {
-        $role = Role::query()->firstWhere('slug', 'administrador');
+        $role = Role::query()->firstWhere('slug', 'encargado_biblioteca');
         $cargoId = Cargo::query()->firstWhere('slug', 'administrativo')?->id;
 
         $user = User::query()->updateOrCreate(
