@@ -22,6 +22,12 @@ class SaveBibliotecaPrestamoRequest extends FormRequest
             'user_id' => ['nullable', 'integer', 'exists:users,id'],
             'student_profile_id' => ['nullable', 'integer', 'exists:student_profiles,id'],
             'staff_id' => ['nullable', 'integer', 'exists:staff,id'],
+            'biblioteca_lector_temporal_id' => [
+                'nullable',
+                Rule::requiredIf(fn () => $this->input('borrower_type') === 'temporary'),
+                'integer',
+                'exists:biblioteca_lectores_temporales,id',
+            ],
             'course_section_id' => ['nullable', 'integer', 'exists:course_sections,id'],
             'academic_year_id' => ['nullable', 'integer', 'exists:academic_years,id'],
             'biblioteca_ejemplar_id' => ['nullable', 'required_without:biblioteca_ejemplar_ids', 'integer', 'exists:biblioteca_ejemplares,id'],

@@ -3,6 +3,7 @@ import axios from "axios";
 import Layout from "../../layouts/main.vue";
 import pdfMake from "pdfmake/build/pdfmake";
 import pdfFonts from "pdfmake/build/vfs_fonts";
+import { fetchPdfCompatibleImage } from "../../utils/pdf-image";
 
 // `vfs_fonts` es CommonJS (module.exports = vfs). Según el bundler puede llegar
 // como objeto `vfs` directo o como `{ pdfMake: { vfs } }`.
@@ -49,7 +50,7 @@ export default {
         {
           label: "OT asignadas",
           value: this.totals.assigned,
-          detail: "Total filtrado",
+          detail: this.selectedDependency ? this.selectedDependency.name : "Total filtrado",
           icon: "mdi-clipboard-check-outline",
           tone: "blue",
         },
@@ -108,6 +109,19 @@ export default {
     hasRows() {
       return this.rows.length > 0;
     },
+    selectedDependency() {
+      return (this.catalogs.dependencies || []).find(
+        (item) => Number(item.id) === Number(this.filters.dependency_id)
+      ) || null;
+    },
+    dependencyOptions() {
+      return [...(this.catalogs.dependencies || [])].sort((left, right) =>
+        this.dependencyOptionLabel(left).localeCompare(this.dependencyOptionLabel(right), "es", {
+          numeric: true,
+          sensitivity: "base",
+        })
+      );
+    },
     assigneeOptions() {
       const catalog = this.catalogs.maintenance_assignees || [];
 
@@ -159,11 +173,27 @@ export default {
       });
     },
     selectedDependencyLabel() {
-      const dependency = (this.catalogs.dependencies || []).find(
-        (item) => Number(item.id) === Number(this.filters.dependency_id)
-      );
+      const dependency = this.selectedDependency;
 
       return dependency ? `${dependency.code} - ${dependency.name}` : "Seleccionada";
+    },
+    dependencyOptionLabel(dependency) {
+      if (!dependency) return "";
+
+      const location = [dependency.distribution, dependency.sector]
+        .map((value) => String(value || "").trim())
+        .filter(Boolean)
+        .join(" / ");
+
+      return `${dependency.code} - ${dependency.name}${location ? ` · ${location}` : ""}`;
+    },
+    dependencyLocationDetail(dependency = this.selectedDependency) {
+      if (!dependency) return "";
+
+      return [dependency.distribution, dependency.sector, dependency.zone, dependency.usage]
+        .map((value) => String(value || "").trim())
+        .filter((value, index, values) => value && values.indexOf(value) === index)
+        .join(" · ") || "Sin detalle adicional de ubicación";
     },
     assigneeLabel(value) {
       if (!value) return "";
@@ -198,6 +228,10 @@ export default {
         priority: "",
         status: "",
       };
+      this.loadWorkload();
+    },
+    clearDependencyFilter() {
+      this.filters.dependency_id = "";
       this.loadWorkload();
     },
     exportAssigneeFromRow(row) {
@@ -503,7 +537,10 @@ export default {
 
         const taskDependency = (task) => {
           if (!task.dependency) return "-";
-          return `${task.dependency.code} - ${task.dependency.name}`;
+
+          const usage = String(task.dependency.usage || "").trim();
+
+          return `${task.dependency.code} - ${task.dependency.name}${usage ? `\nUso: ${usage}` : ""}`;
         };
 
         const taskFocus = (task) => {
@@ -560,30 +597,18 @@ export default {
           margin: [0, 0, 0, 12],
         };
 
-        const fetchImageAsDataUrl = async (url) => {
-          if (!url) return null;
-          try {
-            const absolute = url.startsWith("http") ? url : url.startsWith("/") ? url : `/${url}`;
-            const res = await fetch(absolute);
-            if (!res.ok) return null;
-            const blob = await res.blob();
-            return await new Promise((resolve) => {
-              const reader = new FileReader();
-              reader.onload = () => resolve(reader.result);
-              reader.onerror = () => resolve(null);
-              reader.readAsDataURL(blob);
-            });
-          } catch {
-            return null;
-          }
-        };
-
         const detailSections = [];
+        let includedPhotoCount = 0;
+        let unavailablePhotoCount = 0;
 
         for (let i = 0; i < tasks.length; i++) {
           const task = tasks[i];
-          const photoDataUrl = await fetchImageAsDataUrl(task.photo_url);
+          const photoResult = await fetchPdfCompatibleImage(task.photo_url);
+          const photoDataUrl = photoResult.dataUrl;
           const isOverdue = task.due_date && String(task.due_date).slice(0, 10) < today;
+
+          if (photoDataUrl) includedPhotoCount++;
+          else if (task.photo_url) unavailablePhotoCount++;
 
           detailSections.push(
             { text: `OT #${task.id}`, style: "taskTitle", pageBreak: "before" },
@@ -649,7 +674,12 @@ export default {
             { text: "Foto", style: "label" },
             photoDataUrl
               ? { image: photoDataUrl, fit: [500, 250], margin: [0, 5, 0, 0] }
-              : { text: "Sin foto disponible.", italics: true, color: "#667085", margin: [0, 5, 0, 0] }
+              : {
+                  text: task.photo_url ? "Foto no disponible o formato incompatible." : "Sin foto disponible.",
+                  italics: true,
+                  color: "#667085",
+                  margin: [0, 5, 0, 0],
+                }
           );
         }
 
@@ -673,11 +703,18 @@ export default {
             },
             { canvas: [{ type: "line", x1: 0, y1: 0, x2: 528, y2: 0, lineWidth: 1, lineColor: "#dbe5f4" }], margin: [0, 0, 0, 12] },
             { text: filtersText, style: "filterLine", margin: [0, 0, 0, 12] },
+            unavailablePhotoCount
+              ? {
+                  text: `${unavailablePhotoCount} foto(s) no pudieron incorporarse. La pauta se generó sin esas imágenes.`,
+                  style: "photoWarning",
+                  margin: [0, 0, 0, 12],
+                }
+              : null,
             this.pdfCardTable([
               { label: "OT activas", value: this.formatNumber(tasks.length), detail: "Asignadas a la pauta", fill: "#eef4ff", color: "#3152c9" },
               { label: "Vencidas", value: this.formatNumber(overdueTasks), detail: "Fuera de plazo", fill: "#fef2f2", color: "#b91c1c" },
               { label: "Criticas", value: this.formatNumber(criticalTasks), detail: "Prioridad critica", fill: "#fffbeb", color: "#b45309" },
-              { label: "Con foto", value: this.formatNumber(tasks.filter((task) => task.photo_url).length), detail: "Respaldo visual", fill: "#ecfdf5", color: "#047857" },
+              { label: "Con foto", value: this.formatNumber(includedPhotoCount), detail: "Incluidas en PDF", fill: "#ecfdf5", color: "#047857" },
             ]),
             {
               columns: [
@@ -708,13 +745,14 @@ export default {
             { text: "Resumen de OT activas", style: "sectionTitle" },
             summaryTable,
             ...detailSections,
-          ],
+          ].filter(Boolean),
           styles: {
             eyebrow: { fontSize: 8, bold: true, color: "#5b74df", characterSpacing: 0.8 },
             header: { fontSize: 20, bold: true, color: "#243047", margin: [0, 2, 0, 4] },
             assigneeTitle: { fontSize: 13, color: "#53607a", bold: true },
             muted: { fontSize: 9, color: "#667085" },
             filterLine: { fontSize: 9, color: "#53607a" },
+            photoWarning: { fontSize: 9, color: "#92400e", fillColor: "#fffbeb" },
             sectionTitle: { fontSize: 11, bold: true, color: "#243047", margin: [0, 0, 0, 6] },
             taskTitle: { fontSize: 15, bold: true, color: "#243047", margin: [0, 0, 0, 10] },
             label: { fontSize: 9, bold: true, color: "#667085" },
@@ -741,7 +779,7 @@ export default {
         <div>
           <span class="workload-eyebrow">Mantención</span>
           <h4>Carga de trabajo</h4>
-          <p>Resumen operativo de OT por responsable, estado de avance, vencimientos y criticidad.</p>
+          <p>Distribución operativa de OT por responsable y por la ubicación actual de cada bien.</p>
         </div>
         <div class="workload-header-actions">
           <button class="workload-secondary-button" type="button" :disabled="loading" @click="loadWorkload">
@@ -787,7 +825,8 @@ export default {
         <div class="workload-panel-head">
           <div>
             <span class="workload-eyebrow">Filtros</span>
-            <h5>Consulta de carga</h5>
+            <h5>Ubicación y operación</h5>
+            <p class="workload-panel-description">Acota la carga por dependencia, responsable, período y nivel de atención.</p>
           </div>
           <div class="workload-filter-count" :class="{ 'is-active': activeFiltersCount > 0 }">
             {{ activeFiltersCount }} filtros
@@ -811,11 +850,12 @@ export default {
               <option value="Sin asignar">Sin asignar</option>
             </select>
           </label>
-          <label class="workload-filter-field workload-filter-field--wide">
-            <span>Dependencia</span>
-            <select v-model="filters.dependency_id">
-              <option value="">Todas</option>
-              <option v-for="dep in catalogs.dependencies" :key="dep.id" :value="dep.id">{{ dep.code }} - {{ dep.name }}</option>
+          <label class="workload-filter-field workload-filter-field--wide workload-filter-field--location">
+            <span><i class="mdi mdi-map-marker-outline"></i> Dependencia / ubicación del bien</span>
+            <small>Usa la dependencia actual del bien inventariado o la ubicación registrada en la OT.</small>
+            <select v-model="filters.dependency_id" :disabled="catalogsLoading">
+              <option value="">Todas las dependencias</option>
+              <option v-for="dep in dependencyOptions" :key="dep.id" :value="dep.id">{{ dependencyOptionLabel(dep) }}</option>
             </select>
           </label>
           <label class="workload-filter-field">
@@ -846,6 +886,21 @@ export default {
         <div v-if="activeFilterLabels.length" class="workload-filter-chips">
           <span v-for="label in activeFilterLabels" :key="label">{{ label }}</span>
         </div>
+
+        <div v-if="selectedDependency" class="workload-location-context">
+          <div class="workload-location-context__icon">
+            <i class="mdi mdi-office-building-marker-outline"></i>
+          </div>
+          <div class="workload-location-context__copy">
+            <span>Ubicación seleccionada</span>
+            <strong>{{ selectedDependencyLabel() }}</strong>
+            <small>{{ dependencyLocationDetail() }}</small>
+          </div>
+          <button type="button" :disabled="loading" @click="clearDependencyFilter">
+            <i class="mdi mdi-close"></i>
+            Quitar filtro
+          </button>
+        </div>
       </section>
 
       <section class="workload-table-panel">
@@ -853,6 +908,9 @@ export default {
           <div>
             <span class="workload-eyebrow">Resumen</span>
             <h5>Responsables</h5>
+            <p class="workload-panel-description">
+              {{ selectedDependency ? `Carga correspondiente a ${selectedDependencyLabel()}` : "Carga consolidada de todas las dependencias" }}
+            </p>
           </div>
           <span class="workload-total-label">{{ rows.length }} responsables OT</span>
         </div>
@@ -1144,6 +1202,13 @@ export default {
   margin-bottom: 16px;
 }
 
+.workload-panel-description {
+  margin: 6px 0 0;
+  color: #7b849c;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
 .workload-filter-count,
 .workload-total-label {
   display: inline-flex;
@@ -1186,6 +1251,14 @@ export default {
   line-height: 1.2;
 }
 
+.workload-filter-field > small {
+  min-height: 30px;
+  color: #7b849c;
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.35;
+}
+
 .workload-filter-field input,
 .workload-filter-field select {
   width: 100%;
@@ -1208,6 +1281,24 @@ export default {
 
 .workload-filter-field--wide {
   grid-column: span 2;
+}
+
+.workload-filter-field--location {
+  align-self: stretch;
+  padding: 13px;
+  border: 1px solid #d8e3fb;
+  border-radius: 10px;
+  background: linear-gradient(135deg, #f8faff 0%, #f2f6ff 100%);
+}
+
+.workload-filter-field--location > span {
+  color: #3152c9;
+}
+
+.workload-filter-field--location > span i {
+  margin-right: 3px;
+  font-size: 16px;
+  vertical-align: -1px;
 }
 
 .workload-filter-actions {
@@ -1241,6 +1332,65 @@ export default {
   background: #f8fafc;
   font-size: 12px;
   font-weight: 500;
+}
+
+.workload-location-context {
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  margin-top: 14px;
+  padding: 13px 14px;
+  border: 1px solid #c7d7fe;
+  border-radius: 10px;
+  background: #f5f8ff;
+}
+
+.workload-location-context__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 42px;
+  height: 42px;
+  border-radius: 9px;
+  color: #3152c9;
+  background: #e6edff;
+  font-size: 21px;
+}
+
+.workload-location-context__copy {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.workload-location-context__copy span,
+.workload-location-context__copy small {
+  color: #6d7690;
+  font-size: 12px;
+}
+
+.workload-location-context__copy strong {
+  margin: 2px 0;
+  overflow: hidden;
+  color: #303848;
+  font-size: 14px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workload-location-context button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 34px;
+  padding: 0 11px;
+  border: 1px solid #c7d7fe;
+  border-radius: 8px;
+  color: #3152c9;
+  background: #fff;
+  font-size: 12px;
+  font-weight: 600;
 }
 
 .workload-table-wrap {
@@ -1458,6 +1608,15 @@ export default {
   .workload-panel,
   .workload-table-panel {
     padding: 16px;
+  }
+
+  .workload-location-context {
+    grid-template-columns: 38px minmax(0, 1fr);
+  }
+
+  .workload-location-context button {
+    grid-column: 1 / -1;
+    justify-content: center;
   }
 }
 </style>

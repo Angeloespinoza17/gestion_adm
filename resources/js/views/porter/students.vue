@@ -2,11 +2,13 @@
 import axios from "axios";
 import Layout from "../../layouts/main.vue";
 import LoadingState from "../../components/ui/loading-state.vue";
+import PorterActionDeck from "../../components/porter/action-deck.vue";
+import PorterModuleHeader from "../../components/porter/module-header.vue";
 import PorterStudentSummaryCard from "../../components/porter/student-summary-card.vue";
 import PorterStatusBadge from "../../components/porter/status-badge.vue";
 
 export default {
-  components: { Layout, LoadingState, PorterStudentSummaryCard, PorterStatusBadge },
+  components: { Layout, LoadingState, PorterActionDeck, PorterModuleHeader, PorterStudentSummaryCard, PorterStatusBadge },
   data() {
     return {
       loading: false,
@@ -178,13 +180,21 @@ export default {
 
 <template>
   <Layout>
-    <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
-      <div>
-        <h4 class="mb-0">Consulta de estudiantes</h4>
-        <div class="text-muted">Búsqueda rápida para uso operativo de portería.</div>
-      </div>
-      <router-link to="/porter/withdrawals" class="btn btn-primary">Registrar retiro</router-link>
-    </div>
+    <section class="students-page porter-view">
+      <PorterModuleHeader
+        title="Consulta de estudiantes"
+        subtitle="Busca rápidamente antecedentes, apoderados, autorizaciones y alertas relevantes para portería."
+        eyebrow="Información para decisiones"
+        icon="bx bx-search-alt"
+      >
+        <template #actions>
+          <router-link to="/porter/withdrawals" class="btn btn-primary">
+            <i class="bx bx-log-out-circle me-1"></i>Registrar retiro
+          </router-link>
+        </template>
+      </PorterModuleHeader>
+
+      <PorterActionDeck compact :featured-routes="['/porter/withdrawals', '/porter/dashboard']" />
 
     <BAlert v-if="error" variant="danger" show class="mb-3">{{ error }}</BAlert>
 
@@ -321,6 +331,7 @@ export default {
       <LoadingState v-if="detailLoading" message="Cargando ficha..." compact />
       <PorterStudentSummaryCard v-else :student="selectedStudent" :framed="false" @register-withdrawal="goToWithdrawal" />
     </BModal>
+    </section>
   </Layout>
 </template>
 

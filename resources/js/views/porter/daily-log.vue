@@ -3,6 +3,9 @@ import axios from "axios";
 import Swal from "sweetalert2";
 import Layout from "../../layouts/main.vue";
 import LoadingState from "../../components/ui/loading-state.vue";
+import PorterActionDeck from "../../components/porter/action-deck.vue";
+import PorterModuleHeader from "../../components/porter/module-header.vue";
+import PorterRecordModal from "../../components/porter/record-modal.vue";
 import PorterStatusBadge from "../../components/porter/status-badge.vue";
 
 const emptyForm = () => ({
@@ -24,11 +27,12 @@ const emptyFilters = () => ({
 });
 
 export default {
-  components: { Layout, LoadingState, PorterStatusBadge },
+  components: { Layout, LoadingState, PorterActionDeck, PorterModuleHeader, PorterRecordModal, PorterStatusBadge },
   data() {
     return {
       saving: false,
       loadingList: false,
+      showCreateModal: false,
       showDetailModal: false,
       selectedEntry: null,
       error: null,
@@ -86,6 +90,27 @@ export default {
     await this.loadItems();
   },
   methods: {
+    openCreateModal() {
+      this.error = null;
+      this.showCreateModal = true;
+    },
+    async requestCloseCreateModal() {
+      if (this.saving) return;
+      if (JSON.stringify(this.form) !== JSON.stringify(emptyForm())) {
+        const { isConfirmed } = await Swal.fire({
+          icon: "warning",
+          title: "¿Cerrar el formulario?",
+          text: "Los datos ingresados para esta entrada se descartarán.",
+          showCancelButton: true,
+          confirmButtonText: "Sí, descartar",
+          cancelButtonText: "Continuar registrando",
+          reverseButtons: true,
+        });
+        if (!isConfirmed) return;
+      }
+      this.showCreateModal = false;
+      this.clearForm();
+    },
     async loadCatalogs() {
       try {
         const response = await axios.get("/api/porter/catalogs");
@@ -119,6 +144,7 @@ export default {
           timer: 1800,
           showConfirmButton: false,
         });
+        this.showCreateModal = false;
       } catch (error) {
         await this.showRequestError(error, "No se pudo registrar la entrada");
       } finally {
@@ -245,19 +271,23 @@ export default {
 
 <template>
   <Layout>
-    <div class="daily-log-page">
-      <div class="daily-log-heading">
-        <div>
-          <h4 class="mb-0">Bitácora diaria de portería</h4>
-          <p class="mb-0 text-muted">Registro continuo de novedades, incidencias y observaciones del turno.</p>
-        </div>
-        <div class="heading-actions">
-          <router-link class="btn btn-outline-primary" to="/porter/dashboard">Panel portería</router-link>
+    <div class="daily-log-page porter-view">
+      <PorterModuleHeader
+        title="Bitácora diaria"
+        subtitle="Registro continuo de novedades, incidencias y observaciones relevantes del turno."
+        eyebrow="Continuidad operativa"
+        icon="bx bx-notepad"
+      >
+        <template #actions>
+          <BButton variant="outline-primary" @click="openCreateModal"><i class="bx bx-plus-circle me-1"></i>Nueva entrada</BButton>
           <BButton variant="primary" :disabled="loadingList" @click="loadItems(pagination.current_page || 1)">
-            {{ loadingList ? "Actualizando..." : "Actualizar" }}
+            <i class="bx bx-refresh me-1" :class="{ 'bx-spin': loadingList }"></i>
+            {{ loadingList ? "Actualizando" : "Actualizar" }}
           </BButton>
-        </div>
-      </div>
+        </template>
+      </PorterModuleHeader>
+
+      <PorterActionDeck compact :featured-routes="['/porter/dashboard', '/porter/visits']" />
 
       <BAlert v-if="error" variant="danger" show class="mb-3">{{ error }}</BAlert>
 
@@ -279,6 +309,14 @@ export default {
         </div>
       </div>
 
+      <PorterRecordModal
+        v-model="showCreateModal"
+        title="Registrar entrada de bitácora"
+        subtitle="Documenta la novedad, su prioridad y la información necesaria para la continuidad del turno."
+        eyebrow="Continuidad operativa"
+        icon="bx bx-notepad"
+        @request-close="requestCloseCreateModal"
+      >
       <BCard class="daily-log-panel log-form-panel">
         <div class="panel-title-row">
           <div>
@@ -314,13 +352,14 @@ export default {
             <BFormTextarea v-model="form.detail" rows="4" placeholder="Describe lo ocurrido, personas involucradas, acciones tomadas y observaciones de continuidad" />
           </div>
           <div class="col-12 form-actions">
-            <BButton variant="outline-secondary" :disabled="saving" @click="clearForm">Limpiar</BButton>
+            <BButton variant="outline-secondary" :disabled="saving" @click="requestCloseCreateModal">Cancelar</BButton>
             <BButton variant="primary" :disabled="saving" @click="submit">
               {{ saving ? "Guardando..." : "Registrar entrada" }}
             </BButton>
           </div>
         </div>
       </BCard>
+      </PorterRecordModal>
 
       <BCard class="daily-log-panel">
         <div class="panel-title-row history-title">
@@ -328,6 +367,7 @@ export default {
             <h5 class="mb-1">Bitácora registrada</h5>
             <p class="mb-0 text-muted">La tabla muestra solo el resumen. Abre el modal para revisar el detalle completo.</p>
           </div>
+          <BButton variant="primary" @click="openCreateModal"><i class="bx bx-plus-circle me-1"></i>Nueva entrada</BButton>
         </div>
 
         <div class="history-filters">

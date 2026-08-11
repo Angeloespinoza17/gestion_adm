@@ -2,6 +2,8 @@
 import axios from "axios";
 import Layout from "../../layouts/main.vue";
 import LoadingState from "../../components/ui/loading-state.vue";
+import PorterActionDeck from "../../components/porter/action-deck.vue";
+import PorterModuleHeader from "../../components/porter/module-header.vue";
 import PorterStatusBadge from "../../components/porter/status-badge.vue";
 import { getPdfMake } from "../../utils/pdfmake";
 
@@ -21,7 +23,7 @@ const emptyReport = () => ({
 });
 
 export default {
-  components: { Layout, LoadingState, PorterStatusBadge },
+  components: { Layout, LoadingState, PorterActionDeck, PorterModuleHeader, PorterStatusBadge },
   data() {
     return {
       loading: false,
@@ -398,19 +400,27 @@ export default {
 
 <template>
   <Layout>
-    <section class="porter-reports">
-      <div class="reports-heading">
-        <div>
-          <h4 class="mb-0">Reportes de portería</h4>
-          <p class="mb-0 text-muted">Indicadores de retiros, pendientes y trazabilidad operativa.</p>
-        </div>
-        <div class="heading-actions">
-          <router-link class="btn btn-outline-primary" to="/porter/dashboard">Panel portería</router-link>
-          <BButton variant="primary" :disabled="loading" @click="loadReport">{{ loading ? "Actualizando..." : "Actualizar" }}</BButton>
-          <BButton v-if="canExport" variant="outline-success" :disabled="loading || exporting" @click="exportExcel">Excel</BButton>
-          <BButton v-if="canExport" variant="outline-danger" :disabled="loading || exporting" @click="exportPdf">PDF</BButton>
-        </div>
-      </div>
+    <section class="porter-reports porter-view">
+      <PorterModuleHeader
+        title="Reportes de portería"
+        subtitle="Indicadores de retiros, pendientes y trazabilidad operativa del periodo seleccionado."
+        eyebrow="Análisis y seguimiento"
+        icon="bx bx-bar-chart-alt-2"
+      >
+        <template #actions>
+          <BButton variant="primary" :disabled="loading" @click="loadReport">
+            <i class="bx bx-refresh me-1" :class="{ 'bx-spin': loading }"></i>{{ loading ? "Actualizando" : "Actualizar" }}
+          </BButton>
+          <BButton v-if="canExport" variant="outline-success" :disabled="loading || exporting" @click="exportExcel">
+            <i class="bx bx-spreadsheet me-1"></i>Excel
+          </BButton>
+          <BButton v-if="canExport" variant="outline-danger" :disabled="loading || exporting" @click="exportPdf">
+            <i class="bx bxs-file-pdf me-1"></i>PDF
+          </BButton>
+        </template>
+      </PorterModuleHeader>
+
+      <PorterActionDeck compact :featured-routes="['/porter/dashboard', '/porter/withdrawals']" />
 
       <BAlert v-if="error" variant="danger" show>{{ error }}</BAlert>
 

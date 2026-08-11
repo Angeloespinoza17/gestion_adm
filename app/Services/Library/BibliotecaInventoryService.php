@@ -22,6 +22,7 @@ class BibliotecaInventoryService
         $totalCopies = $obra->ejemplares->count();
         $availableCopies = $obra->ejemplares
             ->where('is_active', true)
+            ->where('is_loanable', true)
             ->where('availability_status', 'disponible')
             ->count();
 

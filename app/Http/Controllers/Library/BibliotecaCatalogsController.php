@@ -9,6 +9,7 @@ use App\Models\EducationLevel;
 use App\Models\Library\BibliotecaCategoria;
 use App\Models\Library\BibliotecaEjemplar;
 use App\Models\Library\BibliotecaEspacio;
+use App\Models\Library\BibliotecaLectorTemporal;
 use App\Models\Library\BibliotecaObra;
 use App\Models\Library\BibliotecaPlanLector;
 use App\Models\Library\BibliotecaPrestamo;
@@ -22,6 +23,7 @@ use App\Models\User;
 use App\Services\Library\BibliotecaAccessService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 class BibliotecaCatalogsController extends Controller
 {
@@ -82,27 +84,50 @@ class BibliotecaCatalogsController extends Controller
             'academic_years' => AcademicYear::query()->ordered()->get(['id', 'name', 'year', 'is_active']),
             'education_levels' => EducationLevel::query()->orderBy('order')->get(['id', 'name', 'type', 'order']),
             'courses' => CourseSection::query()->orderBy('display_name')->get(['id', 'academic_year_id', 'education_level_id', 'display_name']),
-            'works' => BibliotecaObra::query()->orderBy('title')->get(['id', 'title', 'main_author', 'publisher', 'isbn', 'internal_code', 'material_type', 'biblioteca_categoria_id', 'biblioteca_subcategoria_id', 'category', 'subcategory', 'available_copies']),
-            'exemplars' => BibliotecaEjemplar::query()
-                ->with(['obra:id,title,main_author,isbn,material_type,category', 'ubicacion:id,name,code'])
-                ->orderBy('code')
-                ->get()
-                ->map(fn (BibliotecaEjemplar $ejemplar) => [
+            'works' => DB::table('biblioteca_obras')
+                ->orderBy('title')
+                ->get(['id', 'title', 'main_author', 'publisher', 'isbn', 'internal_code', 'material_type', 'biblioteca_categoria_id', 'biblioteca_subcategoria_id', 'category', 'subcategory', 'available_copies']),
+            'exemplars' => DB::table('biblioteca_ejemplares as ejemplar')
+                ->leftJoin('biblioteca_obras as obra', 'obra.id', '=', 'ejemplar.biblioteca_obra_id')
+                ->leftJoin('biblioteca_ubicaciones as ubicacion', 'ubicacion.id', '=', 'ejemplar.biblioteca_ubicacion_id')
+                ->orderBy('ejemplar.code')
+                ->get([
+                    'ejemplar.id',
+                    'ejemplar.biblioteca_obra_id',
+                    'ejemplar.code',
+                    'ejemplar.availability_status',
+                    'ejemplar.is_loanable',
+                    'ejemplar.loan_restriction',
+                    'ejemplar.physical_location',
+                    'obra.title',
+                    'obra.main_author',
+                    'obra.isbn',
+                    'obra.material_type',
+                    'obra.category',
+                    'ubicacion.name as location_name',
+                ])
+                ->map(fn (object $ejemplar) => [
                     'id' => $ejemplar->id,
                     'biblioteca_obra_id' => $ejemplar->biblioteca_obra_id,
                     'code' => $ejemplar->code,
                     'availability_status' => $ejemplar->availability_status,
-                    'title' => $ejemplar->obra?->title,
-                    'main_author' => $ejemplar->obra?->main_author,
-                    'isbn' => $ejemplar->obra?->isbn,
-                    'material_type' => $ejemplar->obra?->material_type,
-                    'category' => $ejemplar->obra?->category,
-                    'location' => $ejemplar->ubicacion?->name ?? $ejemplar->physical_location,
-                    'label' => sprintf('%s · %s', $ejemplar->code, $ejemplar->obra?->title ?? 'Sin título'),
+                    'is_loanable' => (bool) $ejemplar->is_loanable,
+                    'loan_restriction' => $ejemplar->loan_restriction,
+                    'title' => $ejemplar->title,
+                    'main_author' => $ejemplar->main_author,
+                    'isbn' => $ejemplar->isbn,
+                    'material_type' => $ejemplar->material_type,
+                    'category' => $ejemplar->category,
+                    'location' => $ejemplar->location_name ?? $ejemplar->physical_location,
+                    'label' => sprintf('%s · %s', $ejemplar->code, $ejemplar->title ?? 'Sin título'),
                 ]),
             'students' => $students,
             'guardians' => $guardians,
             'staff' => Staff::query()->with('cargo:id,name,slug')->orderBy('full_name')->get(['id', 'full_name', 'rut', 'cargo_id']),
+            'temporary_borrowers' => BibliotecaLectorTemporal::query()
+                ->where('active', true)
+                ->orderBy('full_name')
+                ->get(['id', 'full_name', 'rut', 'person_category', 'course_name', 'email']),
             'users' => User::query()->where('active', true)->orderBy('name')->get(['id', 'name', 'email', 'user_type']),
             'spaces' => BibliotecaEspacio::query()->where('active', true)->orderBy('name')->get(['id', 'name', 'capacity']),
             'categories' => BibliotecaCategoria::query()->where('active', true)->withCount('obras')->orderBy('sort_order')->orderBy('name')->get(['id', 'name', 'slug', 'code', 'color']),
@@ -143,6 +168,7 @@ class BibliotecaCatalogsController extends Controller
             'teacher' => 'Docente',
             'guardian' => 'Apoderado/a',
             'course' => 'Curso',
+            'temporary' => 'Persona temporal / exalumno',
         ];
 
         return collect(BibliotecaPrestamo::BORROWER_TYPES)

@@ -3,6 +3,9 @@ import axios from "axios";
 import Swal from "sweetalert2";
 import Layout from "../../layouts/main.vue";
 import LoadingState from "../../components/ui/loading-state.vue";
+import PorterActionDeck from "../../components/porter/action-deck.vue";
+import PorterModuleHeader from "../../components/porter/module-header.vue";
+import PorterRecordModal from "../../components/porter/record-modal.vue";
 import PorterStatusBadge from "../../components/porter/status-badge.vue";
 import { getPdfMake } from "../../utils/pdfmake";
 
@@ -51,13 +54,14 @@ const emptyFilters = () => ({
 });
 
 export default {
-  components: { Layout, LoadingState, PorterStatusBadge },
+  components: { Layout, LoadingState, PorterActionDeck, PorterModuleHeader, PorterRecordModal, PorterStatusBadge },
   data() {
     return {
       savingKey: false,
       savingGroup: false,
       savingLoan: false,
       loading: false,
+      showLoanModal: false,
       showKeyModal: false,
       showGroupModal: false,
       error: null,
@@ -339,6 +343,7 @@ export default {
           timer: 1600,
           showConfirmButton: false,
         });
+        this.showLoanModal = false;
       } catch (error) {
         await this.showRequestError(error, "No se pudo registrar el préstamo");
       } finally {
@@ -389,7 +394,7 @@ export default {
     selectKeyForLoan(item) {
       if (!item.active || item.active_loans_count) return;
       this.loanForm.porter_key_id = item.id;
-      document.querySelector(".loan-panel")?.scrollIntoView({ behavior: "smooth", block: "start" });
+      this.showLoanModal = true;
     },
     resetFilters() {
       this.filters = emptyFilters();
@@ -397,6 +402,40 @@ export default {
     },
     clearLoan() {
       this.loanForm = emptyLoanForm();
+    },
+    openLoanModal() {
+      this.error = null;
+      this.showLoanModal = true;
+    },
+    async requestCloseLoanModal() {
+      if (this.savingLoan) return;
+      const initial = emptyLoanForm();
+      const hasProgress = Boolean(
+        this.loanForm.porter_key_id ||
+        this.loanForm.requester_name ||
+        this.loanForm.requester_rut ||
+        this.loanForm.staff_id ||
+        this.loanForm.maintenance_dependency_id ||
+        this.loanForm.purpose ||
+        this.loanForm.observations ||
+        this.loanForm.expected_return_at !== initial.expected_return_at
+      );
+
+      if (hasProgress) {
+        const { isConfirmed } = await Swal.fire({
+          icon: "warning",
+          title: "¿Cerrar el formulario?",
+          text: "Los datos ingresados para este préstamo se descartarán.",
+          showCancelButton: true,
+          confirmButtonText: "Sí, descartar",
+          cancelButtonText: "Continuar registrando",
+          reverseButtons: true,
+        });
+        if (!isConfirmed) return;
+      }
+
+      this.showLoanModal = false;
+      this.clearLoan();
     },
     openKeyModal() {
       this.keyForm = emptyKeyForm();
@@ -522,21 +561,25 @@ export default {
 
 <template>
   <Layout>
-    <section class="keys-page">
-      <div class="keys-heading">
-        <div>
-          <h4 class="mb-0">Control de llaves</h4>
-          <p class="mb-0 text-muted">Préstamos, devoluciones y catálogo operativo de portería.</p>
-        </div>
-        <div class="heading-actions">
-          <router-link class="btn btn-outline-primary" to="/porter/dashboard">Panel portería</router-link>
-          <BButton variant="outline-primary" @click="openGroupModal">Nuevo manojo</BButton>
-          <BButton variant="outline-primary" @click="openKeyModal">Nueva llave</BButton>
+    <section class="keys-page porter-view">
+      <PorterModuleHeader
+        title="Control de llaves"
+        subtitle="Préstamos, devoluciones y catálogo operativo de llaves y manojos."
+        eyebrow="Custodia de recursos"
+        icon="bx bx-key"
+      >
+        <template #actions>
+          <BButton variant="outline-primary" :disabled="!availableKeys.length" @click="openLoanModal"><i class="bx bx-log-out-circle me-1"></i>Prestar llave</BButton>
+          <BButton variant="outline-primary" @click="openGroupModal"><i class="bx bx-layer-plus me-1"></i>Nuevo manojo</BButton>
+          <BButton variant="outline-primary" @click="openKeyModal"><i class="bx bx-plus me-1"></i>Nueva llave</BButton>
           <BButton variant="primary" :disabled="loading" @click="loadData(pagination.current_page || 1)">
-            {{ loading ? "Actualizando..." : "Actualizar" }}
+            <i class="bx bx-refresh me-1" :class="{ 'bx-spin': loading }"></i>
+            {{ loading ? "Actualizando" : "Actualizar" }}
           </BButton>
-        </div>
-      </div>
+        </template>
+      </PorterModuleHeader>
+
+      <PorterActionDeck compact :featured-routes="['/porter/dashboard', '/porter/daily-log']" />
 
       <BAlert v-if="error" variant="danger" show>{{ error }}</BAlert>
 
@@ -549,7 +592,14 @@ export default {
         </div>
       </div>
 
-      <div class="top-grid">
+      <PorterRecordModal
+        v-model="showLoanModal"
+        title="Registrar préstamo de llave"
+        subtitle="Selecciona la llave disponible, identifica al solicitante y define su devolución esperada."
+        eyebrow="Custodia de recursos"
+        icon="bx bx-key"
+        @request-close="requestCloseLoanModal"
+      >
         <BCard class="keys-panel loan-panel">
           <div class="panel-title-row">
             <div>
@@ -601,12 +651,13 @@ export default {
           </div>
 
           <div class="form-actions">
-            <BButton variant="outline-secondary" :disabled="savingLoan" @click="clearLoan">Limpiar</BButton>
+            <BButton variant="outline-secondary" :disabled="savingLoan" @click="requestCloseLoanModal">Cancelar</BButton>
             <BButton variant="primary" :disabled="savingLoan || !availableKeys.length" @click="submitLoan">
               {{ savingLoan ? "Guardando..." : "Registrar préstamo" }}
             </BButton>
           </div>
         </BCard>
+      </PorterRecordModal>
 
         <BCard class="keys-panel active-panel">
           <div class="panel-title-row">
@@ -629,7 +680,6 @@ export default {
             </div>
           </div>
         </BCard>
-      </div>
 
       <BCard class="keys-panel">
         <div class="panel-title-row">
@@ -665,6 +715,7 @@ export default {
             <h5 class="mb-1">Historial de préstamos</h5>
             <p class="mb-0 text-muted">Salida y devolución de llaves.</p>
           </div>
+          <BButton variant="primary" :disabled="!availableKeys.length" @click="openLoanModal"><i class="bx bx-plus-circle me-1"></i>Nuevo préstamo</BButton>
         </div>
 
         <div class="history-filters">

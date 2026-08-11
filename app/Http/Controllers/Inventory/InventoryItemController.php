@@ -40,8 +40,7 @@ class InventoryItemController extends Controller
             'dependencies' => MaintenanceDependency::query()
                 ->physicalSpaces()
                 ->where('active', true)
-                ->orderBy('code')
-                ->get([
+                ->select([
                     'id',
                     'code',
                     'name',
@@ -51,7 +50,11 @@ class InventoryItemController extends Controller
                     'usage',
                     'is_inventory_auditable',
                     'is_maintenance_location',
-                ]),
+                ])
+                ->withCount('inventoryItems')
+                ->orderByDesc('inventory_items_count')
+                ->orderBy('code')
+                ->get(),
             'users' => User::query()
                 ->where('active', true)
                 ->where(function ($query) {
@@ -94,7 +97,7 @@ class InventoryItemController extends Controller
 
         $categoryId = $request->query('category_id');
         $subcategoryId = $request->query('subcategory_id');
-        $dependencyId = $request->query('dependency_id');
+        $dependencyId = $request->integer('dependency_id');
         $responsibleUserId = $request->query('responsible_user_id');
         $supplierId = $request->query('supplier_id');
 
@@ -118,12 +121,21 @@ class InventoryItemController extends Controller
                         ->orWhere('name', 'like', "%{$search}%")
                         ->orWhere('serial_number', 'like', "%{$search}%")
                         ->orWhere('brand', 'like', "%{$search}%")
-                        ->orWhere('model', 'like', "%{$search}%");
+                        ->orWhere('model', 'like', "%{$search}%")
+                        ->orWhereHas('dependency', function ($dependencies) use ($search) {
+                            $dependencies
+                                ->where('code', 'like', "%{$search}%")
+                                ->orWhere('name', 'like', "%{$search}%")
+                                ->orWhere('distribution', 'like', "%{$search}%")
+                                ->orWhere('sector', 'like', "%{$search}%")
+                                ->orWhere('zone', 'like', "%{$search}%")
+                                ->orWhere('usage', 'like', "%{$search}%");
+                        });
                 });
             })
             ->when($categoryId, fn ($query) => $query->where('category_id', $categoryId))
             ->when($subcategoryId, fn ($query) => $query->where('subcategory_id', $subcategoryId))
-            ->when($dependencyId, fn ($query) => $query->where('dependency_id', $dependencyId))
+            ->when($dependencyId > 0, fn ($query) => $query->where('dependency_id', $dependencyId))
             ->when($responsibleUserId, fn ($query) => $query->where('responsible_user_id', $responsibleUserId))
             ->when($supplierId, fn ($query) => $query->where('supplier_id', $supplierId))
             ->when($status !== '', fn ($query) => $query->where('status', $status))
@@ -193,7 +205,7 @@ class InventoryItemController extends Controller
         $createMode = $payload['create_mode'] ?? 'single';
         unset($payload['photo'], $payload['create_quantity'], $payload['create_mode']);
 
-        $category = !empty($payload['category_id'])
+        $category = ! empty($payload['category_id'])
             ? InventoryCategory::query()->findOrFail($payload['category_id'])
             : null;
 
@@ -215,7 +227,7 @@ class InventoryItemController extends Controller
             $itemPayload['updated_by'] = $userId;
             $itemPayload = $this->normalizeWarrantyPayload($itemPayload);
 
-            if (($itemPayload['item_type'] ?? 'asset') === 'consumable' && !isset($itemPayload['stock_quantity'])) {
+            if (($itemPayload['item_type'] ?? 'asset') === 'consumable' && ! isset($itemPayload['stock_quantity'])) {
                 $itemPayload['stock_quantity'] = 0;
             }
 
@@ -338,11 +350,11 @@ class InventoryItemController extends Controller
         $path = Storage::disk('public')->putFileAs(
             sprintf('inventory/items/%d', $item->id),
             $photo,
-            'main_' . now()->format('Ymd_His') . '_' . uniqid() . '.' . $extension,
+            'main_'.now()->format('Ymd_His').'_'.uniqid().'.'.$extension,
             ['visibility' => 'public']
         );
 
-        if (!$path) {
+        if (! $path) {
             throw ValidationException::withMessages([
                 'photo' => 'No se pudo guardar la foto del bien. Revisa permisos de storage en producción.',
             ]);
@@ -370,7 +382,7 @@ class InventoryItemController extends Controller
             || array_key_exists('warranty_months', $payload)
             || array_key_exists('purchase_date', $payload);
 
-        if (!$touchesWarranty && $item !== null) {
+        if (! $touchesWarranty && $item !== null) {
             return $payload;
         }
 
@@ -380,7 +392,7 @@ class InventoryItemController extends Controller
 
         $payload['has_warranty'] = $hasWarranty;
 
-        if (!$hasWarranty) {
+        if (! $hasWarranty) {
             $payload['warranty_months'] = null;
             $payload['warranty_expires_at'] = null;
 

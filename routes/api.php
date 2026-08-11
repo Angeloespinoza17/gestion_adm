@@ -96,6 +96,7 @@ use App\Http\Controllers\Library\BibliotecaPlanLectorController;
 use App\Http\Controllers\Library\BibliotecaReportController;
 use App\Http\Controllers\Library\BibliotecaReservationController;
 use App\Http\Controllers\Library\BibliotecaSpaceController;
+use App\Http\Controllers\Library\BibliotecaTemporaryBorrowerController;
 use App\Http\Controllers\Library\BibliotecaTextbookController;
 use App\Http\Controllers\Library\OpenLibraryController;
 use App\Http\Controllers\MaintenanceAnnualPlanController;
@@ -863,6 +864,9 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/prestamos/{prestamo}/renew', [BibliotecaLoanController::class, 'renew'])->middleware('permission:renovar_prestamos_biblioteca');
         Route::post('/prestamos/{prestamo}/return', [BibliotecaLoanController::class, 'return'])->middleware('permission:registrar_devoluciones_biblioteca');
         Route::post('/prestamos/{prestamo}/cancel', [BibliotecaLoanController::class, 'cancel'])->middleware('permission:gestionar_mora_biblioteca');
+        Route::get('/lectores-temporales', [BibliotecaTemporaryBorrowerController::class, 'index'])->middleware('permission:ver_modulo_biblioteca');
+        Route::post('/lectores-temporales', [BibliotecaTemporaryBorrowerController::class, 'store'])->middleware('permission:registrar_prestamos_biblioteca');
+        Route::put('/lectores-temporales/{lectorTemporal}', [BibliotecaTemporaryBorrowerController::class, 'update'])->middleware('permission:registrar_prestamos_biblioteca');
 
         Route::get('/reservas', [BibliotecaReservationController::class, 'index'])->middleware('permission:ver_modulo_biblioteca');
         Route::post('/reservas', [BibliotecaReservationController::class, 'store'])->middleware('permission:gestionar_reservas_biblioteca');
@@ -1143,6 +1147,10 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/maintenance/work-orders/{maintenanceWorkOrder}', [MaintenanceWorkOrderController::class, 'show'])
         ->middleware('permission:ver_mantencion');
     Route::put('/maintenance/work-orders/{maintenanceWorkOrder}', [MaintenanceWorkOrderController::class, 'update'])
+        ->middleware('permission:editar_ot');
+    Route::post('/maintenance/work-orders/{maintenanceWorkOrder}/request-closure', [MaintenanceWorkOrderController::class, 'requestClosure'])
+        ->middleware('permission:editar_ot');
+    Route::post('/maintenance/work-orders/{maintenanceWorkOrder}/close', [MaintenanceWorkOrderController::class, 'close'])
         ->middleware('permission:editar_ot');
     Route::delete('/maintenance/work-orders/{maintenanceWorkOrder}', [MaintenanceWorkOrderController::class, 'destroy'])
         ->middleware('permission:editar_ot');

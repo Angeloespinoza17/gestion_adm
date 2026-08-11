@@ -17,6 +17,7 @@ const emptyForm = () => ({
   borrower_type: "student",
   student_profile_id: null,
   staff_id: null,
+  biblioteca_lector_temporal_id: null,
   user_id: null,
   course_section_id: null,
   biblioteca_ejemplar_id: null,
@@ -32,6 +33,11 @@ const emptyForm = () => ({
   signature_rut: "",
   delivery_notes: "",
   notes: "",
+  temporary_name: "",
+  temporary_rut: "",
+  temporary_category: "exalumno",
+  temporary_course_name: "",
+  temporary_notes: "",
 });
 
 const emptyEditForm = () => ({
@@ -118,6 +124,11 @@ export default {
           (item) => Number(item.id) === Number(this.form.course_section_id)
         ) || null;
       }
+      if (this.form.borrower_type === "temporary") {
+        return (this.catalogs.temporary_borrowers || []).find(
+          (item) => Number(item.id) === Number(this.form.biblioteca_lector_temporal_id)
+        ) || null;
+      }
       return null;
     },
     canRepeatBorrower() {
@@ -134,13 +145,17 @@ export default {
     },
     selectedBorrowerLabel() {
       const selectedValue = this.form[this.selectedBorrowerModel()];
-      return this.borrowerOptions().find(
+      const label = this.borrowerOptions().find(
         (item) => Number(item.value) === Number(selectedValue)
       )?.text || "";
+      if (!label && this.form.borrower_type === "temporary" && this.form.temporary_name) {
+        return `Nuevo registro: ${this.form.temporary_name}`;
+      }
+      return label;
     },
     availableExemplarOptions() {
       return (this.catalogs.exemplars || [])
-        .filter((item) => item.availability_status === "disponible")
+        .filter((item) => item.availability_status === "disponible" && item.is_loanable !== false)
         .map((item) => ({
           ...item,
           searchLabel: [
@@ -157,8 +172,11 @@ export default {
       ) || null;
     },
     canSave() {
+      const hasBorrower = this.form.borrower_type === "temporary"
+        ? Boolean(this.form.biblioteca_lector_temporal_id || this.form.temporary_name.trim())
+        : Boolean(this.form[this.selectedBorrowerModel()]);
       return Boolean(
-        this.form[this.selectedBorrowerModel()] &&
+        hasBorrower &&
         this.form.biblioteca_ejemplar_id &&
         this.form.borrowed_at &&
         this.form.due_at
@@ -229,6 +247,10 @@ export default {
         teacher: "Docente",
         guardian: "Apoderado/a",
         course: "Curso",
+        temporary: "Persona temporal",
+        exalumno: "Exalumno/a",
+        exfuncionario: "Exfuncionario/a",
+        visitante: "Visitante",
       }[type] || "Solicitante";
     },
     loanCoverAvailable(item) {
@@ -254,9 +276,15 @@ export default {
     clearBorrowerSelection({ keepSearch = false } = {}) {
       this.form.student_profile_id = null;
       this.form.staff_id = null;
+      this.form.biblioteca_lector_temporal_id = null;
       this.form.course_section_id = null;
       this.form.user_id = null;
       this.form.same_as_borrower = false;
+      this.form.temporary_name = "";
+      this.form.temporary_rut = "";
+      this.form.temporary_category = "exalumno";
+      this.form.temporary_course_name = "";
+      this.form.temporary_notes = "";
       this.clearPickupDetails();
       if (!keepSearch) this.borrowerSearch = "";
     },
@@ -281,6 +309,7 @@ export default {
       const model = this.selectedBorrowerModel();
       this.form.student_profile_id = null;
       this.form.staff_id = null;
+      this.form.biblioteca_lector_temporal_id = null;
       this.form.course_section_id = null;
       this.form.user_id = null;
       this.form[model] = value;
@@ -313,6 +342,7 @@ export default {
         teacher: "Escribe nombre o RUT del docente",
         guardian: "Escribe nombre, RUT o estudiante relacionada",
         course: "Escribe curso o nivel",
+        temporary: "Escribe nombre, RUT, categoría o curso anterior",
       }[this.form.borrower_type] || "Escribe para buscar";
     },
     borrowerOptions() {
@@ -342,6 +372,12 @@ export default {
       if (this.form.borrower_type === "course") {
         return (this.catalogs.courses || []).map((item) => ({ value: item.id, text: item.display_name }));
       }
+      if (this.form.borrower_type === "temporary") {
+        return (this.catalogs.temporary_borrowers || []).map((item) => ({
+          value: item.id,
+          text: `${item.full_name} · ${item.rut || "Sin RUT"} · ${this.temporaryCategoryLabel(item.person_category)}${item.course_name ? ` · ${item.course_name}` : ""}`,
+        }));
+      }
       return [];
     },
     selectedBorrowerModel() {
@@ -351,7 +387,19 @@ export default {
         ? "staff_id"
         : this.form.borrower_type === "course"
         ? "course_section_id"
+        : this.form.borrower_type === "temporary"
+        ? "biblioteca_lector_temporal_id"
         : "user_id";
+    },
+    temporaryCategoryLabel(value) {
+      return {
+        exalumno: "Exalumno/a",
+        exfuncionario: "Exfuncionario/a",
+        apoderado: "Apoderado/a",
+        visitante: "Visitante",
+        practicante: "Practicante",
+        otro: "Otra persona",
+      }[value] || "Persona temporal";
     },
     isTeachingStaff(item) {
       const role = `${item?.cargo?.name || ""} ${item?.cargo?.slug || ""}`
@@ -363,6 +411,8 @@ export default {
     clearPickupDetails() {
       this.form.pickup_person_type = this.form.borrower_type === "course"
         ? "teacher"
+        : this.form.borrower_type === "temporary"
+        ? "other"
         : this.form.borrower_type;
       this.form.pickup_person_name = "";
       this.form.pickup_person_rut = "";
@@ -376,8 +426,9 @@ export default {
       if (!borrower || this.form.borrower_type === "course") return;
 
       const isStaff = ["staff", "teacher"].includes(this.form.borrower_type);
-      this.form.pickup_person_type = this.form.borrower_type;
-      this.form.pickup_person_name = isStaff ? borrower.full_name || "" : borrower.name || "";
+      const isTemporary = this.form.borrower_type === "temporary";
+      this.form.pickup_person_type = isTemporary ? "other" : this.form.borrower_type;
+      this.form.pickup_person_name = isStaff || isTemporary ? borrower.full_name || "" : borrower.name || "";
       this.form.pickup_person_rut = borrower.rut || "";
       this.form.pickup_person_email = borrower.email || "";
       this.form.pickup_person_relationship = this.form.borrower_type === "guardian"
@@ -421,10 +472,27 @@ export default {
 
       this.saving = true;
       try {
+        if (this.form.borrower_type === "temporary" && !this.form.biblioteca_lector_temporal_id) {
+          const temporaryResponse = await axios.post("/api/biblioteca/lectores-temporales", {
+            full_name: this.form.temporary_name,
+            rut: this.form.temporary_rut || null,
+            person_category: this.form.temporary_category,
+            course_name: this.form.temporary_course_name || null,
+            notes: this.form.temporary_notes || null,
+          });
+          const reader = temporaryResponse.data.data;
+          this.form.biblioteca_lector_temporal_id = reader.id;
+          if (!this.form.pickup_person_name) this.form.pickup_person_name = reader.full_name;
+          if (!this.form.pickup_person_rut) this.form.pickup_person_rut = reader.rut || "";
+          if (!this.form.signature_name) this.form.signature_name = reader.full_name;
+          if (!this.form.signature_rut) this.form.signature_rut = reader.rut || "";
+          this.form.pickup_person_type = "other";
+        }
         const payload = {
           borrower_type: this.form.borrower_type,
           student_profile_id: this.form.student_profile_id || null,
           staff_id: this.form.staff_id || null,
+          biblioteca_lector_temporal_id: this.form.biblioteca_lector_temporal_id || null,
           user_id: this.form.user_id || null,
           course_section_id: this.form.course_section_id || null,
           biblioteca_ejemplar_id: this.form.biblioteca_ejemplar_id,
@@ -828,6 +896,22 @@ export default {
             <small v-else class="form-hint">
               Escribe para ver coincidencias · {{ borrowerOptions().length }} registro(s) disponibles.
             </small>
+          </div>
+        </div>
+        <div v-if="form.borrower_type === 'temporary' && !form.biblioteca_lector_temporal_id" class="temporary-reader-form mt-3">
+          <div class="temporary-reader-form__head">
+            <i class="bx bx-user-plus"></i>
+            <div>
+              <strong>Registrar una persona temporal</strong>
+              <small>Úsalo si no aparece en la búsqueda: por ejemplo exalumno, exfuncionario o visitante.</small>
+            </div>
+          </div>
+          <div class="row g-2 mt-1">
+            <div class="col-md-4"><label class="form-label">Nombre completo</label><BFormInput v-model="form.temporary_name" placeholder="Nombre de la persona" /></div>
+            <div class="col-md-2"><label class="form-label">RUT</label><BFormInput v-model="form.temporary_rut" placeholder="Opcional" /></div>
+            <div class="col-md-2"><label class="form-label">Categoría</label><BFormSelect v-model="form.temporary_category" :options="[{value:'exalumno',text:'Exalumno/a'},{value:'exfuncionario',text:'Exfuncionario/a'},{value:'apoderado',text:'Apoderado/a'},{value:'visitante',text:'Visitante'},{value:'practicante',text:'Practicante'},{value:'otro',text:'Otra persona'}]" /></div>
+            <div class="col-md-2"><label class="form-label">Curso anterior</label><BFormInput v-model="form.temporary_course_name" placeholder="Opcional" /></div>
+            <div class="col-md-2"><label class="form-label">Nota</label><BFormInput v-model="form.temporary_notes" placeholder="Referencia" /></div>
           </div>
         </div>
         <BAlert v-if="isEarlyChildhoodLoan" show variant="info" class="early-alert">
@@ -1508,6 +1592,39 @@ export default {
 
 .form-hint--selected i {
   font-size: .78rem;
+}
+
+.temporary-reader-form {
+  padding: .75rem;
+  border: 1px dashed #9eb2ec;
+  border-radius: 12px;
+  background: #f7f9ff;
+}
+
+.temporary-reader-form__head {
+  display: flex;
+  align-items: center;
+  gap: .55rem;
+  color: #40537a;
+}
+
+.temporary-reader-form__head > i {
+  font-size: 1.2rem;
+}
+
+.temporary-reader-form__head strong,
+.temporary-reader-form__head small {
+  display: block;
+}
+
+.temporary-reader-form__head strong {
+  font-size: .72rem;
+}
+
+.temporary-reader-form__head small {
+  margin-top: .1rem;
+  color: #7d8aa4;
+  font-size: .61rem;
 }
 
 .early-alert {

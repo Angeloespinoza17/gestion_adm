@@ -64,6 +64,7 @@ export default {
         statuses: [],
         conditions: [],
       },
+      showOccupiedDependenciesOnly: false,
       showModal: false,
       form: emptyForm(),
       templateSearch: "",
@@ -128,15 +129,94 @@ export default {
         this.catalogs.dependencies.map((d) => {
           const shortLabel = `${d.code || "Sin código"} - ${d.name || "Sin nombre"}`;
           const usage = String(d.usage || "").trim();
+          const itemsCount = Number(d.inventory_items_count || 0);
 
           return {
             value: d.id,
-            label: usage ? `${shortLabel} · Uso: ${usage}` : shortLabel,
+            label: `${usage ? `${shortLabel} · Uso: ${usage}` : shortLabel} · ${this.dependencyItemsLabel(itemsCount)}`,
             shortLabel,
             usage,
+            itemsCount,
           };
         })
       );
+    },
+    dependencyFilterOptions() {
+      const dependencies = this.dependencyOptions
+        .slice(1)
+        .filter((dependency) => !this.showOccupiedDependenciesOnly || dependency.itemsCount > 0);
+
+      return [
+        {
+          value: null,
+          label: "Todas las dependencias",
+          shortLabel: "Todas las dependencias",
+          usage: "",
+          itemsCount: null,
+        },
+        ...dependencies,
+      ];
+    },
+    occupiedDependenciesCount() {
+      return (this.catalogs.dependencies || []).filter(
+        (dependency) => Number(dependency.inventory_items_count || 0) > 0
+      ).length;
+    },
+    locatedInventoryItemsCount() {
+      return (this.catalogs.dependencies || []).reduce(
+        (total, dependency) => total + Number(dependency.inventory_items_count || 0),
+        0
+      );
+    },
+    categoryFilterOptions() {
+      return [{ value: null, label: "Todas las categorías" }].concat(
+        this.catalogs.categories.map((category) => ({
+          value: category.id,
+          label: category.name,
+        }))
+      );
+    },
+    responsibleFilterOptions() {
+      return [{ value: null, label: "Todos los responsables" }].concat(
+        this.userOptions.slice(1)
+      );
+    },
+    selectedDependency() {
+      return (this.catalogs.dependencies || []).find(
+        (dependency) => Number(dependency.id) === Number(this.filters.dependency_id)
+      ) || null;
+    },
+    activeFiltersCount() {
+      return [
+        String(this.search || "").trim(),
+        this.filters.category_id,
+        this.filters.dependency_id,
+        this.filters.responsible_user_id,
+        this.filters.item_type,
+        this.filters.status,
+        this.filters.condition,
+        this.filters.low_stock,
+      ].filter(Boolean).length;
+    },
+    activeFilterLabels() {
+      const labels = [];
+      const category = (this.catalogs.categories || []).find(
+        (item) => Number(item.id) === Number(this.filters.category_id)
+      );
+      const responsible = (this.catalogs.users || []).find(
+        (item) => Number(item.id) === Number(this.filters.responsible_user_id)
+      );
+
+      if (String(this.search || "").trim()) labels.push(`Búsqueda: ${String(this.search).trim()}`);
+      if (this.selectedDependency) labels.push(`Ubicación: ${this.selectedDependency.code} - ${this.selectedDependency.name}`);
+      if (category) labels.push(`Categoría: ${category.name}`);
+      if (responsible) labels.push(`Responsable: ${responsible.name}`);
+      if (this.filters.item_type) labels.push(`Tipo: ${this.typeLabel(this.filters.item_type)}`);
+      if (this.filters.status) labels.push(`Estado: ${this.filters.status}`);
+      if (this.filters.condition) labels.push(`Condición: ${this.filters.condition}`);
+      if (this.filters.low_stock) labels.push("Stock bajo");
+
+      return labels;
     },
     userOptions() {
       const users = this.catalogs.users || [];
@@ -201,57 +281,33 @@ export default {
       );
     },
     itemFields() {
-      const head = "text-center inventory-table__head";
-      const cell = "text-center align-middle inventory-table__cell";
+      const head = "inventory-table__head";
+      const cell = "align-middle inventory-table__cell";
 
       return [
         {
-          key: "code",
-          label: "Código",
-          thClass: `${head} inventory-col-code`,
-          tdClass: `${cell} inventory-col-code`,
+          key: "summary",
+          label: "Bien",
+          thClass: `${head} inventory-col-summary`,
+          tdClass: `${cell} inventory-col-summary`,
         },
         {
-          key: "name",
-          label: "Nombre",
-          thClass: `${head} inventory-col-name`,
-          tdClass: `${cell} inventory-col-name`,
+          key: "classification",
+          label: "Clasificación",
+          thClass: `${head} inventory-col-classification`,
+          tdClass: `${cell} inventory-col-classification`,
         },
         {
-          key: "category",
-          label: "Categoría",
-          thClass: `${head} inventory-col-category`,
-          tdClass: `${cell} inventory-col-category`,
+          key: "location",
+          label: "Ubicación y responsable",
+          thClass: `${head} inventory-col-location`,
+          tdClass: `${cell} inventory-col-location`,
         },
         {
-          key: "dependency",
-          label: "Dependencia",
-          thClass: `${head} inventory-col-dependency`,
-          tdClass: `${cell} inventory-col-dependency`,
-        },
-        {
-          key: "responsible",
-          label: "Responsable",
-          thClass: `${head} inventory-col-responsible`,
-          tdClass: `${cell} inventory-col-responsible`,
-        },
-        {
-          key: "item_type",
-          label: "Tipo",
-          thClass: `${head} inventory-col-type`,
-          tdClass: `${cell} inventory-col-type`,
-        },
-        {
-          key: "status",
-          label: "Estado",
-          thClass: `${head} inventory-col-status`,
-          tdClass: `${cell} inventory-col-status`,
-        },
-        {
-          key: "condition",
-          label: "Condición",
-          thClass: `${head} inventory-col-condition`,
-          tdClass: `${cell} inventory-col-condition`,
+          key: "operational",
+          label: "Estado operativo",
+          thClass: `${head} inventory-col-operational`,
+          tdClass: `${cell} inventory-col-operational`,
         },
         {
           key: "stock",
@@ -301,6 +357,15 @@ export default {
     "form.item_type"(type) {
       if (type === "consumable") {
         this.creation.quantity = 1;
+      }
+    },
+    showOccupiedDependenciesOnly(enabled) {
+      if (
+        enabled &&
+        this.selectedDependency &&
+        Number(this.selectedDependency.inventory_items_count || 0) === 0
+      ) {
+        this.filters.dependency_id = null;
       }
     },
     showModal(isOpen) {
@@ -393,6 +458,40 @@ export default {
       } finally {
         this.loading = false;
       }
+    },
+    resetFilters() {
+      this.search = "";
+      this.showOccupiedDependenciesOnly = false;
+      this.filters = {
+        category_id: null,
+        subcategory_id: null,
+        dependency_id: null,
+        responsible_user_id: null,
+        supplier_id: null,
+        status: "",
+        condition: "",
+        item_type: "",
+        low_stock: false,
+      };
+      this.loadItems(1);
+    },
+    dependencyLocationDetail(dependency = this.selectedDependency) {
+      if (!dependency) return "";
+
+      return [dependency.distribution, dependency.sector, dependency.zone, dependency.usage]
+        .map((value) => String(value || "").trim())
+        .filter((value, index, values) => value && values.indexOf(value) === index)
+        .join(" · ") || "Sin detalle adicional de ubicación";
+    },
+    dependencyItemsLabel(count) {
+      const safeCount = Number(count || 0);
+      return `${safeCount} ${safeCount === 1 ? "bien" : "bienes"}`;
+    },
+    itemTechnicalDetail(item) {
+      return [item.brand, item.model, item.serial_number ? `Serie ${item.serial_number}` : ""]
+        .map((value) => String(value || "").trim())
+        .filter(Boolean)
+        .join(" · ");
     },
     resetCreationTools() {
       this.templateSearch = "";
@@ -607,7 +706,10 @@ export default {
             createdCount > 1 ? `${createdCount} bienes creados.` : "Bien creado.";
         }
         this.showModal = false;
-        await this.loadItems(this.pagination.current_page);
+        await Promise.all([
+          this.loadCatalogs(),
+          this.loadItems(this.pagination.current_page),
+        ]);
       } catch (error) {
         this.error = this.formatError(error);
       } finally {
@@ -627,7 +729,10 @@ export default {
 
       if (!result.isConfirmed) return;
       await axios.delete(`/api/inventory/items/${item.id}`);
-      this.loadItems(this.pagination.current_page);
+      await Promise.all([
+        this.loadCatalogs(),
+        this.loadItems(this.pagination.current_page),
+      ]);
     },
     async exportCsv() {
       this.exporting = true;
@@ -987,9 +1092,23 @@ export default {
 
 <template>
   <Layout>
-    <div class="d-flex justify-content-between align-items-center mb-3">
-      <h4 class="mb-0 inventory-page-title">Inventario · Bienes</h4>
-      <div class="d-flex gap-2">
+    <section class="inventory-page-hero">
+      <div class="inventory-page-heading">
+        <span class="inventory-page-eyebrow">Inventario institucional</span>
+        <h4 class="inventory-page-title">Bienes y ubicaciones</h4>
+        <p>Consulta el inventario por dependencia, responsable y condición operativa.</p>
+      </div>
+      <div class="inventory-page-summary">
+        <div class="inventory-page-metric">
+          <i class="mdi mdi-package-variant-closed"></i>
+          <span><strong>{{ pagination.total }}</strong> bienes encontrados</span>
+        </div>
+        <div v-if="selectedDependency" class="inventory-page-metric inventory-page-metric--location">
+          <i class="mdi mdi-map-marker-outline"></i>
+          <span>{{ selectedDependency.code }} - {{ selectedDependency.name }}</span>
+        </div>
+      </div>
+      <div class="inventory-page-actions">
         <BButton
           v-if="canExport"
           variant="outline-secondary"
@@ -1000,128 +1119,252 @@ export default {
         </BButton>
         <BButton variant="primary" @click="openCreate">Nuevo bien</BButton>
       </div>
-    </div>
+    </section>
 
     <BAlert v-if="error" variant="danger" show class="mb-3">{{ error }}</BAlert>
     <BAlert v-if="success" variant="success" show class="mb-3">{{ success }}</BAlert>
 
-    <div class="inventory-filters row g-2 align-items-end mb-3">
-      <div class="col-12 col-md-6 col-xl-3 inventory-filter-field">
-        <label class="form-label inventory-filter-label mb-1">Búsqueda</label>
-        <BFormInput
-          v-model="search"
-          class="inventory-filter-control inventory-filter-search"
-          placeholder="Código, nombre o serie"
-          @keyup.enter="loadItems(1)"
-        />
+    <section class="inventory-filter-panel">
+      <div class="inventory-filter-panel__head">
+        <div>
+          <span class="inventory-page-eyebrow">Filtros</span>
+          <h5>Localiza bienes con precisión</h5>
+          <p>La dependencia corresponde a la ubicación actual registrada para el bien.</p>
+        </div>
+        <span class="inventory-filter-count" :class="{ 'is-active': activeFiltersCount > 0 }">
+          {{ activeFiltersCount }} filtros activos
+        </span>
       </div>
-      <div class="col-12 col-md-6 col-xl-2 inventory-filter-field">
-        <label class="form-label inventory-filter-label mb-1">Tipo</label>
-        <Multiselect
-          v-model="filters.item_type"
-          class="inventory-filter-control inventory-filter-select"
-          :options="itemTypeOptions"
-          :searchable="false"
-          :close-on-select="true"
-          :append-to-body="true"
-        />
-      </div>
-      <div class="col-12 col-md-6 col-xl-2 inventory-filter-field">
-        <label class="form-label inventory-filter-label mb-1">Estado</label>
-        <Multiselect
-          v-model="filters.status"
-          class="inventory-filter-control inventory-filter-select"
-          :options="statusOptions"
-          :searchable="false"
-          :close-on-select="true"
-          :append-to-body="true"
-        />
-      </div>
-      <div class="col-12 col-md-6 col-xl-2 inventory-filter-field">
-        <label class="form-label inventory-filter-label mb-1">Condición</label>
-        <Multiselect
-          v-model="filters.condition"
-          class="inventory-filter-control inventory-filter-select"
-          :options="conditionOptions"
-          :searchable="false"
-          :close-on-select="true"
-          :append-to-body="true"
-        />
-      </div>
-      <div class="col-6 col-md-4 col-xl-1 inventory-filter-field inventory-filter-field--checkbox">
-        <label class="form-label inventory-filter-label mb-1">Stock</label>
-        <div class="inventory-low-stock">
-          <BFormCheckbox v-model="filters.low_stock">Stock bajo</BFormCheckbox>
+
+      <div class="inventory-filters row g-3 align-items-end">
+        <div class="col-12 col-lg-4 inventory-filter-field">
+          <label class="form-label inventory-filter-label mb-1">Búsqueda</label>
+          <BFormInput
+            v-model="search"
+            class="inventory-filter-control inventory-filter-search"
+            placeholder="Código, nombre, marca, modelo o serie"
+            @keyup.enter="loadItems(1)"
+          />
+        </div>
+        <div class="col-12 col-lg-5 inventory-filter-field inventory-filter-field--location">
+          <div class="inventory-dependency-filter-head">
+            <label class="form-label inventory-filter-label mb-0">
+              <i class="mdi mdi-map-marker-outline"></i> Dependencia / ubicación
+            </label>
+            <button
+              type="button"
+              class="inventory-occupied-toggle"
+              :class="{ 'is-active': showOccupiedDependenciesOnly }"
+              :aria-pressed="showOccupiedDependenciesOnly"
+              @click="showOccupiedDependenciesOnly = !showOccupiedDependenciesOnly"
+            >
+              <i class="mdi mdi-package-variant-closed-check"></i>
+              Solo con bienes
+              <span>{{ occupiedDependenciesCount }}</span>
+            </button>
+          </div>
+          <Multiselect
+            v-model="filters.dependency_id"
+            class="inventory-filter-control inventory-filter-select"
+            :options="dependencyFilterOptions"
+            :searchable="true"
+            :close-on-select="true"
+            :append-to-body="true"
+            placeholder="Buscar por código, nombre o uso"
+          >
+            <template #singlelabel="{ value }">
+              <div class="multiselect-single-label">
+                <span class="multiselect-single-label-text">{{ value.shortLabel || value.label }}</span>
+                <span v-if="value.itemsCount !== null" class="inventory-dependency-count inventory-dependency-count--selected">
+                  <i class="mdi mdi-package-variant-closed"></i>{{ value.itemsCount }}
+                </span>
+              </div>
+            </template>
+            <template #option="{ option }">
+              <div class="inventory-dependency-option">
+                <span class="inventory-dependency-option__content">
+                  <span class="inventory-dependency-option__main">{{ option.shortLabel || option.label }}</span>
+                  <span v-if="option.usage" class="inventory-dependency-option__usage">Uso: {{ option.usage }}</span>
+                </span>
+                <span v-if="option.itemsCount !== null" class="inventory-dependency-count">
+                  <i class="mdi mdi-package-variant-closed"></i>{{ option.itemsCount }}
+                </span>
+              </div>
+            </template>
+          </Multiselect>
+          <small class="inventory-dependency-filter-summary">
+            {{ occupiedDependenciesCount }} de {{ catalogs.dependencies.length }} dependencias contienen
+            {{ dependencyItemsLabel(locatedInventoryItemsCount) }}.
+          </small>
+        </div>
+        <div class="col-12 col-md-6 col-lg-3 inventory-filter-field">
+          <label class="form-label inventory-filter-label mb-1">Categoría</label>
+          <Multiselect
+            v-model="filters.category_id"
+            class="inventory-filter-control inventory-filter-select"
+            :options="categoryFilterOptions"
+            :searchable="true"
+            :close-on-select="true"
+            :append-to-body="true"
+          />
+        </div>
+        <div class="col-12 col-md-6 col-xl-3 inventory-filter-field">
+          <label class="form-label inventory-filter-label mb-1">Responsable</label>
+          <Multiselect
+            v-model="filters.responsible_user_id"
+            class="inventory-filter-control inventory-filter-select"
+            :options="responsibleFilterOptions"
+            :searchable="true"
+            :close-on-select="true"
+            :append-to-body="true"
+          />
+        </div>
+        <div class="col-12 col-md-4 col-xl-2 inventory-filter-field">
+          <label class="form-label inventory-filter-label mb-1">Tipo</label>
+          <Multiselect
+            v-model="filters.item_type"
+            class="inventory-filter-control inventory-filter-select"
+            :options="itemTypeOptions"
+            :searchable="false"
+            :close-on-select="true"
+            :append-to-body="true"
+          />
+        </div>
+        <div class="col-12 col-md-4 col-xl-2 inventory-filter-field">
+          <label class="form-label inventory-filter-label mb-1">Estado</label>
+          <Multiselect
+            v-model="filters.status"
+            class="inventory-filter-control inventory-filter-select"
+            :options="statusOptions"
+            :searchable="false"
+            :close-on-select="true"
+            :append-to-body="true"
+          />
+        </div>
+        <div class="col-12 col-md-4 col-xl-2 inventory-filter-field">
+          <label class="form-label inventory-filter-label mb-1">Condición</label>
+          <Multiselect
+            v-model="filters.condition"
+            class="inventory-filter-control inventory-filter-select"
+            :options="conditionOptions"
+            :searchable="false"
+            :close-on-select="true"
+            :append-to-body="true"
+          />
+        </div>
+        <div class="col-6 col-md-4 col-xl-1 inventory-filter-field inventory-filter-field--checkbox">
+          <label class="form-label inventory-filter-label mb-1">Stock</label>
+          <div class="inventory-low-stock">
+            <BFormCheckbox v-model="filters.low_stock">Bajo</BFormCheckbox>
+          </div>
+        </div>
+        <div class="col-12 col-md-8 col-xl-2 inventory-filter-action">
+          <div class="inventory-filter-buttons">
+            <BButton variant="primary" class="inventory-search-button" :disabled="loading" @click="loadItems(1)">
+              <i class="mdi mdi-filter-outline"></i> Aplicar
+            </BButton>
+            <BButton variant="outline-secondary" class="inventory-search-button" :disabled="loading || !activeFiltersCount" @click="resetFilters">
+              Limpiar
+            </BButton>
+          </div>
         </div>
       </div>
-      <div class="col-6 col-md-4 col-xl-2 inventory-filter-action">
-        <BButton
-          variant="secondary"
-          class="inventory-search-button w-100"
-          @click="loadItems(1)"
-        >
-          Buscar
-        </BButton>
+
+      <div v-if="activeFilterLabels.length" class="inventory-filter-chips">
+        <span v-for="label in activeFilterLabels" :key="label">{{ label }}</span>
       </div>
-    </div>
+
+      <div v-if="selectedDependency" class="inventory-selected-location">
+        <i class="mdi mdi-office-building-marker-outline"></i>
+        <div>
+          <span>Mostrando bienes ubicados en</span>
+          <strong>{{ selectedDependency.code }} - {{ selectedDependency.name }}</strong>
+          <small>{{ dependencyLocationDetail() }}</small>
+        </div>
+        <span class="inventory-selected-location__count">
+          <i class="mdi mdi-package-variant-closed"></i>
+          {{ dependencyItemsLabel(selectedDependency.inventory_items_count) }}
+        </span>
+      </div>
+    </section>
 
     <div class="inventory-table-card">
+      <div class="inventory-results-head">
+        <div>
+          <span>Resultados</span>
+          <strong>{{ pagination.total }} bienes</strong>
+        </div>
+        <div class="inventory-results-meta">
+          <span><i class="mdi mdi-map-marker-multiple-outline"></i> {{ occupiedDependenciesCount }} ubicaciones con bienes</span>
+          <small>Página {{ pagination.current_page }} de {{ pagination.last_page }}</small>
+        </div>
+      </div>
       <div class="inventory-table-scroll">
         <BTable
           class="inventory-items-table"
           :items="items"
           :busy="loading"
           :fields="itemFields"
+          show-empty
+          empty-text="No se encontraron bienes para los filtros seleccionados."
         >
           <template #table-busy>
             <LoadingState message="Cargando inventario..." compact />
           </template>
-          <template #cell(code)="{ item }">
-            <span class="inventory-code-pill">{{ item.code || "-" }}</span>
+          <template #cell(summary)="{ item }">
+            <div class="inventory-item-summary">
+              <span class="inventory-code-pill"><i class="mdi mdi-barcode-scan"></i>{{ item.code || "-" }}</span>
+              <div class="inventory-name-cell">
+                <strong>{{ item.name || "-" }}</strong>
+                <small v-if="itemTechnicalDetail(item)">{{ itemTechnicalDetail(item) }}</small>
+              </div>
+            </div>
           </template>
-          <template #cell(name)="{ item }">
-            <span class="inventory-name-cell">{{ item.name || "-" }}</span>
+          <template #cell(classification)="{ item }">
+            <div class="inventory-classification-cell">
+              <strong>{{ item.category?.name || "Sin categoría" }}</strong>
+              <small v-if="item.subcategory?.name">{{ item.subcategory.name }}</small>
+              <span
+                class="inventory-chip"
+                :class="`inventory-chip--type-${typeClass(item.item_type)}`"
+              >
+                {{ typeLabel(item.item_type) }}
+              </span>
+            </div>
           </template>
-          <template #cell(category)="{ item }">
-            <span class="inventory-text-cell">{{ item.category?.name || "-" }}</span>
+          <template #cell(location)="{ item }">
+            <div class="inventory-location-stack">
+              <div v-if="item.dependency" class="inventory-location-cell">
+                <i class="mdi mdi-map-marker-outline"></i>
+                <span>{{ item.dependency.code }} - {{ item.dependency.name }}</span>
+                <small>{{ dependencyLocationDetail(item.dependency) }}</small>
+              </div>
+              <span v-else class="inventory-location-cell inventory-location-cell--empty">
+                <i class="mdi mdi-map-marker-off-outline"></i> Sin dependencia
+              </span>
+              <span class="inventory-responsible-row" :class="{ 'is-empty': !item.responsible_user }">
+                <i class="mdi mdi-account-outline"></i>
+                {{ item.responsible_user?.name || "Sin responsable" }}
+              </span>
+            </div>
           </template>
-          <template #cell(dependency)="{ item }">
-            <span class="inventory-text-cell">
-              {{
-                item.dependency
-                  ? `${item.dependency.code} - ${item.dependency.name}`
-                  : "-"
-              }}
-            </span>
-          </template>
-          <template #cell(responsible)="{ item }">
-            <span class="inventory-text-cell">
-              {{ item.responsible_user?.name || "-" }}
-            </span>
-          </template>
-          <template #cell(item_type)="{ item }">
-            <span
-              class="inventory-chip"
-              :class="`inventory-chip--type-${typeClass(item.item_type)}`"
-            >
-              {{ typeLabel(item.item_type) }}
-            </span>
-          </template>
-          <template #cell(status)="{ item }">
-            <span
-              class="inventory-chip"
-              :class="`inventory-chip--status-${statusClass(item.status)}`"
-            >
-              {{ item.status || "-" }}
-            </span>
-          </template>
-          <template #cell(condition)="{ item }">
-            <span
-              class="inventory-chip"
-              :class="`inventory-chip--condition-${conditionClass(item.condition)}`"
-            >
-              {{ item.condition || "-" }}
-            </span>
+          <template #cell(operational)="{ item }">
+            <div class="inventory-operational-cell">
+              <span class="inventory-operational-label">Estado</span>
+              <span
+                class="inventory-chip"
+                :class="`inventory-chip--status-${statusClass(item.status)}`"
+              >
+                {{ item.status || "-" }}
+              </span>
+              <span class="inventory-operational-label">Condición</span>
+              <span
+                class="inventory-chip"
+                :class="`inventory-chip--condition-${conditionClass(item.condition)}`"
+              >
+                {{ item.condition || "-" }}
+              </span>
+            </div>
           </template>
           <template #cell(stock)="{ item }">
             <span
@@ -1134,16 +1377,21 @@ export default {
           <template #cell(actions)="{ item }">
             <div class="inventory-actions">
               <router-link
-                class="btn btn-sm btn-outline-secondary"
+                class="btn inventory-action-button inventory-action-button--view"
                 :to="`/inventory/items/${item.id}`"
+                title="Ver detalle"
+                :aria-label="`Ver ${item.name || item.code}`"
               >
-                Ver
+                <i class="mdi mdi-eye-outline"></i>
+                <span class="visually-hidden">Ver detalle</span>
               </router-link>
-              <BButton size="sm" variant="warning" @click="openEdit(item)">
-                Editar
+              <BButton class="inventory-action-button inventory-action-button--edit" title="Editar bien" :aria-label="`Editar ${item.name || item.code}`" @click="openEdit(item)">
+                <i class="mdi mdi-pencil-outline"></i>
+                <span class="visually-hidden">Editar</span>
               </BButton>
-              <BButton size="sm" variant="danger" @click="remove(item)">
-                Eliminar
+              <BButton class="inventory-action-button inventory-action-button--delete" title="Eliminar bien" :aria-label="`Eliminar ${item.name || item.code}`" @click="remove(item)">
+                <i class="mdi mdi-delete-outline"></i>
+                <span class="visually-hidden">Eliminar</span>
               </BButton>
             </div>
           </template>
@@ -1290,15 +1538,23 @@ export default {
                 <span class="multiselect-single-label-text">
                   {{ value.shortLabel || value.label }}
                 </span>
+                <span v-if="value.itemsCount !== null" class="inventory-dependency-count inventory-dependency-count--selected">
+                  <i class="mdi mdi-package-variant-closed"></i>{{ value.itemsCount }}
+                </span>
               </div>
             </template>
             <template #option="{ option }">
               <div class="inventory-dependency-option">
-                <span class="inventory-dependency-option__main">
-                  {{ option.shortLabel || option.label }}
+                <span class="inventory-dependency-option__content">
+                  <span class="inventory-dependency-option__main">
+                    {{ option.shortLabel || option.label }}
+                  </span>
+                  <span v-if="option.usage" class="inventory-dependency-option__usage">
+                    Uso: {{ option.usage }}
+                  </span>
                 </span>
-                <span v-if="option.usage" class="inventory-dependency-option__usage">
-                  Uso: {{ option.usage }}
+                <span v-if="option.itemsCount !== null" class="inventory-dependency-count">
+                  <i class="mdi mdi-package-variant-closed"></i>{{ option.itemsCount }}
                 </span>
               </div>
             </template>
@@ -1517,9 +1773,88 @@ export default {
 
 <style scoped>
 .inventory-page-title {
+  margin: 3px 0 0;
+  color: #273247;
   font-size: 1.35rem;
-  font-weight: 650;
+  font-weight: 700;
   line-height: 1.2;
+}
+
+.inventory-page-hero {
+  display: grid;
+  grid-template-columns: minmax(260px, 1fr) auto auto;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 1rem;
+  padding: 1.15rem 1.25rem;
+  border: 1px solid #dfe8fb;
+  border-radius: 1rem;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.96), rgba(241, 246, 255, 0.9));
+  box-shadow: 0 1rem 2.8rem rgba(49, 82, 201, 0.07);
+}
+
+.inventory-page-eyebrow {
+  display: block;
+  color: #62708d;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+
+.inventory-page-heading p,
+.inventory-filter-panel__head p {
+  margin: 0.4rem 0 0;
+  color: #71809b;
+  font-size: 0.84rem;
+  line-height: 1.45;
+}
+
+.inventory-page-summary {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.45rem;
+}
+
+.inventory-page-metric {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  min-height: 2.35rem;
+  padding: 0.45rem 0.7rem;
+  border: 1px solid #dbe7ff;
+  border-radius: 0.75rem;
+  color: #53607a;
+  background: #fff;
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+.inventory-page-metric i {
+  color: #526ad7;
+  font-size: 1rem;
+}
+
+.inventory-page-metric--location {
+  max-width: 20rem;
+  color: #3152c9;
+  background: #eef4ff;
+}
+
+.inventory-page-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+
+.inventory-page-actions :deep(.btn) {
+  min-height: 2.35rem;
+  border-radius: 0.75rem;
+  font-size: 0.82rem;
+  font-weight: 650;
 }
 
 .inventory-template-panel {
@@ -1603,6 +1938,52 @@ export default {
   z-index: 20;
 }
 
+.inventory-filter-panel {
+  position: relative;
+  z-index: 20;
+  margin-bottom: 1rem;
+  padding: 1rem 1.1rem;
+  border: 1px solid #dfe8fb;
+  border-radius: 1rem;
+  background: rgba(255, 255, 255, 0.78);
+  box-shadow: 0 1.1rem 2.8rem rgba(37, 99, 235, 0.06);
+}
+
+.inventory-filter-panel__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 0.9rem;
+}
+
+.inventory-filter-panel__head h5 {
+  margin: 0.2rem 0 0;
+  color: #303a4d;
+  font-size: 1rem;
+  font-weight: 700;
+}
+
+.inventory-filter-count {
+  display: inline-flex;
+  align-items: center;
+  min-height: 1.9rem;
+  padding: 0.3rem 0.65rem;
+  border: 1px solid #dbe3ed;
+  border-radius: 999px;
+  color: #64748b;
+  background: #f8fafc;
+  font-size: 0.73rem;
+  font-weight: 650;
+  white-space: nowrap;
+}
+
+.inventory-filter-count.is-active {
+  color: #3152c9;
+  border-color: #c7d7fe;
+  background: #eef4ff;
+}
+
 .inventory-filter-field {
   display: flex;
   flex-direction: column;
@@ -1618,6 +1999,65 @@ export default {
   line-height: 1;
   letter-spacing: 0;
   text-transform: uppercase;
+}
+
+.inventory-filter-field--location .inventory-filter-label {
+  color: #3152c9;
+}
+
+.inventory-filter-field--location .inventory-filter-label i {
+  margin-right: 0.18rem;
+  font-size: 0.9rem;
+  vertical-align: -1px;
+}
+
+.inventory-dependency-filter-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem;
+}
+
+.inventory-occupied-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.28rem;
+  min-height: 1.55rem;
+  padding: 0.18rem 0.42rem;
+  border: 1px solid #d7e1f2;
+  border-radius: 999px;
+  color: #64748b;
+  background: #f8fafc;
+  font-size: 0.65rem;
+  font-weight: 650;
+  line-height: 1;
+  transition: border-color 0.18s ease, color 0.18s ease, background-color 0.18s ease;
+}
+
+.inventory-occupied-toggle:hover,
+.inventory-occupied-toggle.is-active {
+  color: #3152c9;
+  border-color: #aebffd;
+  background: #eef4ff;
+}
+
+.inventory-occupied-toggle span {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.2rem;
+  height: 1.2rem;
+  padding: 0 0.25rem;
+  border-radius: 999px;
+  color: #ffffff;
+  background: #526ad7;
+  font-size: 0.62rem;
+}
+
+.inventory-dependency-filter-summary {
+  color: #7b8498;
+  font-size: 0.66rem;
+  line-height: 1.25;
 }
 
 .inventory-filter-control,
@@ -1675,6 +2115,91 @@ export default {
   align-items: end;
 }
 
+.inventory-filter-buttons {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.45rem;
+  width: 100%;
+}
+
+.inventory-filter-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-top: 0.85rem;
+}
+
+.inventory-filter-chips span {
+  display: inline-flex;
+  align-items: center;
+  min-height: 1.75rem;
+  padding: 0.28rem 0.62rem;
+  border: 1px solid #d7e1f2;
+  border-radius: 999px;
+  color: #53607a;
+  background: #f8fafc;
+  font-size: 0.72rem;
+  font-weight: 600;
+}
+
+.inventory-selected-location {
+  display: grid;
+  grid-template-columns: 2.35rem minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.7rem;
+  margin-top: 0.85rem;
+  padding: 0.7rem 0.8rem;
+  border: 1px solid #c7d7fe;
+  border-radius: 0.8rem;
+  color: #3152c9;
+  background: #f3f7ff;
+}
+
+.inventory-selected-location > i {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.35rem;
+  height: 2.35rem;
+  border-radius: 0.7rem;
+  background: #e3ebff;
+  font-size: 1.15rem;
+}
+
+.inventory-selected-location div {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.inventory-selected-location span,
+.inventory-selected-location small {
+  color: #6c7891;
+  font-size: 0.72rem;
+}
+
+.inventory-selected-location strong {
+  overflow: hidden;
+  color: #303a4d;
+  font-size: 0.84rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.inventory-selected-location .inventory-selected-location__count {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.38rem 0.62rem;
+  border: 1px solid #c7d7fe;
+  border-radius: 999px;
+  color: #3152c9;
+  background: #ffffff;
+  font-size: 0.7rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
 .inventory-table-card {
   max-width: 100%;
   padding: 0.55rem 0.75rem 0.2rem;
@@ -1682,6 +2207,44 @@ export default {
   border-radius: 1rem;
   background: rgba(255, 255, 255, 0.48);
   box-shadow: 0 1.25rem 3rem rgba(37, 99, 235, 0.06);
+}
+
+.inventory-results-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.45rem 0.25rem 0.8rem;
+}
+
+.inventory-results-head div {
+  display: flex;
+  align-items: baseline;
+  gap: 0.42rem;
+}
+
+.inventory-results-head span,
+.inventory-results-head small {
+  color: #7b8498;
+  font-size: 0.74rem;
+}
+
+.inventory-results-head strong {
+  color: #303a4d;
+  font-size: 0.9rem;
+}
+
+.inventory-results-head .inventory-results-meta {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.8rem;
+}
+
+.inventory-results-meta span {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
 }
 
 .inventory-table-scroll {
@@ -1720,27 +2283,157 @@ export default {
 }
 
 .inventory-code-pill {
-  min-width: 3.85rem;
+  gap: 0.35rem;
+  width: fit-content;
+  min-width: 0;
+  max-width: 100%;
   color: #1d4ed8;
   background: #eff6ff;
   border-color: #bfdbfe;
+  white-space: nowrap;
 }
 
-.inventory-name-cell,
-.inventory-text-cell {
+.inventory-item-summary,
+.inventory-classification-cell,
+.inventory-location-stack {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.42rem;
+  min-width: 0;
+  text-align: left;
+}
+
+.inventory-name-cell {
   display: block;
   max-width: 100%;
   color: #4b5563;
   font-size: 0.82rem;
   font-weight: 500;
   line-height: 1.22;
-  text-align: center;
+  text-align: left;
   overflow-wrap: anywhere;
 }
 
-.inventory-name-cell {
+.inventory-name-cell strong {
+  display: block;
   color: #374151;
+  font-size: 0.86rem;
+  font-weight: 700;
+}
+
+.inventory-name-cell small {
+  display: block;
+}
+
+.inventory-name-cell small {
+  margin-top: 0.2rem;
+  color: #7b8498;
+  font-size: 0.7rem;
+  font-weight: 500;
+  line-height: 1.25;
+}
+
+.inventory-classification-cell strong {
+  color: #3f4a5e;
+  font-size: 0.8rem;
+  font-weight: 650;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+
+.inventory-classification-cell small {
+  color: #7b8498;
+  font-size: 0.69rem;
+}
+
+.inventory-classification-cell .inventory-chip {
+  margin-top: 0.05rem;
+}
+
+.inventory-location-cell {
+  display: grid;
+  grid-template-columns: 1rem minmax(0, 1fr);
+  gap: 0.12rem 0.3rem;
+  align-items: start;
+  color: #475569;
+  font-size: 0.78rem;
   font-weight: 600;
+  line-height: 1.25;
+  text-align: left;
+}
+
+.inventory-location-cell i {
+  grid-row: 1 / 3;
+  color: #526ad7;
+  font-size: 0.95rem;
+}
+
+.inventory-location-cell span,
+.inventory-location-cell small {
+  overflow-wrap: anywhere;
+}
+
+.inventory-location-cell small {
+  color: #7b8498;
+  font-size: 0.68rem;
+  font-weight: 500;
+}
+
+.inventory-location-cell--empty {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 0.3rem;
+  color: #94a3b8;
+  font-weight: 500;
+  text-align: left;
+}
+
+.inventory-location-cell--empty i {
+  color: #94a3b8;
+}
+
+.inventory-responsible-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.28rem;
+  max-width: 100%;
+  padding-top: 0.38rem;
+  border-top: 1px dashed #dbe4f0;
+  color: #526078;
+  font-size: 0.7rem;
+  font-weight: 550;
+  line-height: 1.2;
+}
+
+.inventory-responsible-row i {
+  color: #526ad7;
+  font-size: 0.88rem;
+}
+
+.inventory-responsible-row.is-empty {
+  color: #94a3b8;
+}
+
+.inventory-operational-cell {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 0.38rem 0.48rem;
+  min-width: 0;
+}
+
+.inventory-operational-label {
+  color: #8a94a7;
+  font-size: 0.62rem;
+  font-weight: 650;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.inventory-operational-cell .inventory-chip {
+  justify-self: start;
 }
 
 .inventory-chip--type-asset {
@@ -1823,39 +2516,51 @@ export default {
   align-items: center;
   justify-content: center;
   width: 100%;
-  gap: 0.4rem;
-  flex-wrap: wrap;
+  gap: 0.32rem;
+  flex-wrap: nowrap;
 }
 
-.inventory-actions .btn,
-.inventory-actions :deep(.btn) {
-  border-radius: 999px;
-  padding: 0.33rem 0.56rem;
-  font-size: 0.76rem;
-  font-weight: 650;
+.inventory-actions .inventory-action-button,
+.inventory-actions :deep(.inventory-action-button) {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 2.05rem;
+  width: 2.05rem;
+  height: 2.05rem;
+  padding: 0;
+  border-width: 1px;
+  border-radius: 0.65rem;
+  background: #ffffff;
+  font-size: 1rem;
   line-height: 1;
-  white-space: nowrap;
+  box-shadow: 0 0.2rem 0.7rem rgba(15, 23, 42, 0.05);
 }
 
-.inventory-actions .btn-outline-secondary {
-  color: #667085;
-  border-color: #8b95aa;
+.inventory-actions .inventory-action-button--view {
+  color: #526078;
+  border-color: #cbd5e1;
 }
 
-.inventory-actions :deep(.btn-warning) {
-  color: #ffffff;
-  background-color: #f6b540;
-  border-color: #f6b540;
+.inventory-actions :deep(.inventory-action-button--edit) {
+  color: #b45309;
+  border-color: #f6c55a;
 }
 
-.inventory-actions :deep(.btn-danger) {
-  background-color: #ff6b6b;
-  border-color: #ff6b6b;
+.inventory-actions :deep(.inventory-action-button--delete) {
+  color: #dc2626;
+  border-color: #fecaca;
+}
+
+.inventory-actions .inventory-action-button:hover,
+.inventory-actions :deep(.inventory-action-button:hover) {
+  transform: translateY(-1px);
+  box-shadow: 0 0.35rem 0.9rem rgba(15, 23, 42, 0.1);
 }
 
 :deep(.inventory-items-table) {
   width: 100%;
-  min-width: 1080px;
+  min-width: 920px;
   margin-bottom: 0;
   table-layout: fixed;
 }
@@ -1866,16 +2571,16 @@ export default {
   font-size: 0.7rem;
   font-weight: 650;
   line-height: 1.15;
-  text-align: center !important;
+  text-align: left !important;
   vertical-align: middle;
   letter-spacing: 0;
-  background: transparent;
+  background: #f8fbff;
   border-bottom: 1px solid #dfe8f7;
   white-space: normal;
 }
 
 :deep(.inventory-items-table tbody td) {
-  padding: 0.74rem 0.45rem;
+  padding: 0.82rem 0.62rem;
   color: #4b5563;
   font-size: 0.82rem;
   font-weight: 500;
@@ -1885,48 +2590,46 @@ export default {
   overflow-wrap: anywhere;
 }
 
+:deep(.inventory-items-table tbody tr) {
+  transition: background-color 0.16s ease;
+}
+
+:deep(.inventory-items-table tbody tr:nth-child(even)) {
+  background: rgba(248, 251, 255, 0.72);
+}
+
+:deep(.inventory-items-table tbody tr:hover) {
+  background: #f1f6ff;
+}
+
 :deep(.inventory-items-table tbody tr:last-child td) {
   border-bottom: 0;
 }
 
-:deep(.inventory-col-code) {
-  width: 7%;
+:deep(.inventory-col-summary) {
+  width: 25%;
 }
 
-:deep(.inventory-col-name) {
-  width: 12%;
+:deep(.inventory-col-classification) {
+  width: 15%;
 }
 
-:deep(.inventory-col-category) {
-  width: 9%;
+:deep(.inventory-col-location) {
+  width: 27%;
 }
 
-:deep(.inventory-col-dependency) {
-  width: 12%;
-}
-
-:deep(.inventory-col-responsible) {
-  width: 11%;
-}
-
-:deep(.inventory-col-type) {
-  width: 8%;
-}
-
-:deep(.inventory-col-status) {
-  width: 10%;
-}
-
-:deep(.inventory-col-condition) {
-  width: 9%;
+:deep(.inventory-col-operational) {
+  width: 17%;
 }
 
 :deep(.inventory-col-stock) {
   width: 7%;
+  text-align: center !important;
 }
 
 :deep(.inventory-col-actions) {
-  width: 16%;
+  width: 9%;
+  text-align: center !important;
 }
 
 :deep(.inventory-filter-select.multiselect) {
@@ -1962,6 +2665,18 @@ export default {
   font-weight: 500;
 }
 
+:deep(.inventory-filter-select .multiselect-single-label) {
+  justify-content: space-between;
+  gap: 0.55rem;
+}
+
+:deep(.inventory-filter-select .multiselect-single-label-text) {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 :deep(.inventory-filter-select .multiselect-clear) {
   margin-right: 1.6rem;
 }
@@ -1974,7 +2689,7 @@ export default {
   top: calc(100% + 0.35rem);
   z-index: 9000;
   width: 100%;
-  max-height: 11rem;
+  max-height: 18rem;
   padding: 0.3rem;
   border: 1px solid #dbe7ff;
   border-radius: 0.8rem;
@@ -2043,10 +2758,20 @@ export default {
 
 .inventory-dependency-option {
   display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.65rem;
+  width: 100%;
+  min-width: 0;
+  line-height: 1.15;
+}
+
+.inventory-dependency-option__content {
+  display: flex;
+  flex: 1 1 auto;
   flex-direction: column;
   gap: 0.12rem;
   min-width: 0;
-  line-height: 1.15;
 }
 
 .inventory-dependency-option__main,
@@ -2063,6 +2788,35 @@ export default {
   font-size: 0.72rem;
   font-weight: 500;
   opacity: 0.78;
+}
+
+.inventory-dependency-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  gap: 0.25rem;
+  min-width: 2.25rem;
+  min-height: 1.55rem;
+  padding: 0.18rem 0.42rem;
+  border: 1px solid #c7d7fe;
+  border-radius: 999px;
+  color: #3152c9;
+  background: #eef4ff;
+  font-size: 0.68rem;
+  font-weight: 750;
+  line-height: 1;
+}
+
+.inventory-dependency-count--selected {
+  margin-right: 0.15rem;
+}
+
+:deep(.multiselect-option.is-selected) .inventory-dependency-count,
+:global(.multiselect-option.is-selected) .inventory-dependency-count {
+  color: #ffffff;
+  border-color: rgba(255, 255, 255, 0.5);
+  background: rgba(255, 255, 255, 0.16);
 }
 
 .inventory-photo-actions {
@@ -2241,12 +2995,68 @@ export default {
 }
 
 @media (max-width: 1399.98px) {
+  .inventory-page-hero {
+    grid-template-columns: minmax(260px, 1fr) auto;
+  }
+
+  .inventory-page-actions {
+    grid-column: 1 / -1;
+  }
+
   .inventory-low-stock {
     justify-content: flex-start;
   }
 }
 
 @media (max-width: 767.98px) {
+  .inventory-page-hero {
+    grid-template-columns: 1fr;
+    align-items: stretch;
+    padding: 1rem;
+  }
+
+  .inventory-page-summary,
+  .inventory-page-actions {
+    grid-column: auto;
+    justify-content: flex-start;
+  }
+
+  .inventory-page-actions :deep(.btn) {
+    flex: 1 1 9rem;
+  }
+
+  .inventory-filter-panel {
+    padding: 0.9rem;
+  }
+
+  .inventory-filter-panel__head {
+    flex-direction: column;
+  }
+
+  .inventory-dependency-filter-head {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .inventory-selected-location {
+    grid-template-columns: 2.35rem minmax(0, 1fr);
+  }
+
+  .inventory-selected-location .inventory-selected-location__count {
+    grid-column: 1 / -1;
+    justify-self: start;
+  }
+
+  .inventory-results-head,
+  .inventory-results-head .inventory-results-meta {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .inventory-filter-buttons {
+    grid-template-columns: 1fr;
+  }
+
   .inventory-template-result {
     grid-template-columns: 1fr;
   }

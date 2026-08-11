@@ -5,6 +5,7 @@ namespace App\Services\Library;
 use App\Models\AcademicYear;
 use App\Models\CourseSection;
 use App\Models\Library\BibliotecaEjemplar;
+use App\Models\Library\BibliotecaLectorTemporal;
 use App\Models\Library\BibliotecaPrestamo;
 use App\Models\Library\BibliotecaReserva;
 use App\Models\Staff;
@@ -41,6 +42,7 @@ class BibliotecaLoanService
                 'user_id' => $payload['user_id'] ?? null,
                 'student_profile_id' => $payload['student_profile_id'] ?? null,
                 'staff_id' => $payload['staff_id'] ?? null,
+                'biblioteca_lector_temporal_id' => $payload['biblioteca_lector_temporal_id'] ?? null,
                 'course_section_id' => $payload['course_section_id'] ?? null,
                 'academic_year_id' => $payload['academic_year_id'] ?? $this->resolveAcademicYearId($payload),
                 'biblioteca_obra_id' => $ejemplar->biblioteca_obra_id,
@@ -100,6 +102,7 @@ class BibliotecaLoanService
                 'ejemplar',
                 'student',
                 'staff',
+                'temporaryBorrower',
                 'courseSection',
                 'deliveredBy:id,name',
                 'receivedBy:id,name',
@@ -170,6 +173,7 @@ class BibliotecaLoanService
             'ejemplar',
             'student',
             'staff',
+            'temporaryBorrower',
             'courseSection',
             'deliveredBy:id,name',
             'receivedBy:id,name',
@@ -202,7 +206,7 @@ class BibliotecaLoanService
             $this->refreshLoanStatus($loan);
             $this->alertService->refreshOperationalAlerts($actor);
 
-            return $loan->fresh(['obra', 'ejemplar', 'student', 'staff', 'courseSection']);
+            return $loan->fresh(['obra', 'ejemplar', 'student', 'staff', 'temporaryBorrower', 'courseSection']);
         });
     }
 
@@ -252,7 +256,7 @@ class BibliotecaLoanService
             $this->alertService->markResolved(BibliotecaPrestamo::class, $loan->id);
             $this->alertService->refreshOperationalAlerts($actor);
 
-            return $loan->fresh(['obra', 'ejemplar', 'student', 'staff', 'courseSection', 'deliveredBy:id,name', 'receivedBy:id,name']);
+            return $loan->fresh(['obra', 'ejemplar', 'student', 'staff', 'temporaryBorrower', 'courseSection', 'deliveredBy:id,name', 'receivedBy:id,name']);
         });
     }
 
@@ -320,9 +324,11 @@ class BibliotecaLoanService
 
     private function assertEjemplarAvailableForLoan(BibliotecaEjemplar $ejemplar, array $payload): void
     {
-        if (! $ejemplar->is_active || ! in_array($ejemplar->availability_status, ['disponible', 'reservado'], true)) {
+        if (! $ejemplar->is_active || ! $ejemplar->is_loanable || ! in_array($ejemplar->availability_status, ['disponible', 'reservado'], true)) {
             throw ValidationException::withMessages([
-                'biblioteca_ejemplar_id' => 'El ejemplar seleccionado no está disponible para préstamo.',
+                'biblioteca_ejemplar_id' => $ejemplar->is_loanable
+                    ? 'El ejemplar seleccionado no está disponible para préstamo.'
+                    : 'El ejemplar está marcado como no prestable.',
             ]);
         }
 
@@ -347,6 +353,8 @@ class BibliotecaLoanService
             $query->where('student_profile_id', $payload['student_profile_id']);
         } elseif (! empty($payload['staff_id'])) {
             $query->where('staff_id', $payload['staff_id']);
+        } elseif (! empty($payload['biblioteca_lector_temporal_id'])) {
+            $query->where('biblioteca_lector_temporal_id', $payload['biblioteca_lector_temporal_id']);
         } elseif (! empty($payload['course_section_id']) && $payload['borrower_type'] === 'course') {
             $query->where('course_section_id', $payload['course_section_id']);
         } elseif (! empty($payload['user_id'])) {
@@ -373,6 +381,7 @@ class BibliotecaLoanService
                 $payload['student_profile_id'] ?? null,
                 $payload['user_id'] ?? null
             ),
+            'temporary' => $this->temporaryBorrower($payload['biblioteca_lector_temporal_id'] ?? null),
             default => throw ValidationException::withMessages([
                 'borrower_type' => 'Tipo de usuario no soportado.',
             ]),
@@ -434,6 +443,29 @@ class BibliotecaLoanService
             'rut' => null,
             'course' => $course->display_name,
             'estate' => 'course',
+            'level' => null,
+            'guardian_name' => null,
+            'guardian_rut' => null,
+            'guardian_email' => null,
+            'guardian_relationship' => null,
+        ];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function temporaryBorrower(?int $readerId): array
+    {
+        $reader = BibliotecaLectorTemporal::query()
+            ->where('active', true)
+            ->findOrFail($readerId);
+
+        return [
+            'name' => $reader->full_name,
+            'rut' => $reader->rut,
+            'course' => $reader->course_name,
+            'estate' => $reader->person_category,
+            'pickup_type' => 'other',
             'level' => null,
             'guardian_name' => null,
             'guardian_rut' => null,
@@ -532,7 +564,7 @@ class BibliotecaLoanService
         }
 
         return [
-            'type' => $payload['pickup_person_type'] ?? ($borrower['estate'] === 'student' ? 'student' : $borrower['estate']),
+            'type' => $payload['pickup_person_type'] ?? $borrower['pickup_type'] ?? ($borrower['estate'] === 'student' ? 'student' : $borrower['estate']),
             'name' => $payload['pickup_person_name'] ?? $borrower['name'],
             'rut' => $payload['pickup_person_rut'] ?? $borrower['rut'],
             'email' => $payload['pickup_person_email'] ?? null,

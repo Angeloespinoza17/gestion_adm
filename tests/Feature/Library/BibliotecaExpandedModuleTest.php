@@ -8,6 +8,7 @@ use App\Models\EducationLevel;
 use App\Models\Library\BibliotecaCategoria;
 use App\Models\Library\BibliotecaEjemplar;
 use App\Models\Library\BibliotecaEspacio;
+use App\Models\Library\BibliotecaLectorTemporal;
 use App\Models\Library\BibliotecaObra;
 use App\Models\Library\BibliotecaPase;
 use App\Models\Library\BibliotecaPrestamo;
@@ -320,6 +321,72 @@ class BibliotecaExpandedModuleTest extends TestCase
             ->assertJsonPath('data.pickup_person_type', 'guardian');
     }
 
+    public function test_it_creates_a_temporary_borrower_and_registers_the_loan(): void
+    {
+        $copy = $this->createAvailableCopy();
+
+        $readerResponse = $this->postJson('/api/biblioteca/lectores-temporales', [
+            'full_name' => 'Antigua Estudiante',
+            'rut' => '12.345.678-5',
+            'person_category' => 'exalumno',
+            'course_name' => '8º básico A 2018',
+            'notes' => 'Registro temporal para préstamo de biblioteca.',
+        ]);
+
+        $readerResponse
+            ->assertCreated()
+            ->assertJsonPath('data.person_category', 'exalumno')
+            ->assertJsonPath('data.rut', '12345678-5');
+
+        $reader = BibliotecaLectorTemporal::query()->firstOrFail();
+
+        $this->postJson('/api/biblioteca/prestamos', [
+            'borrower_type' => 'temporary',
+            'biblioteca_lector_temporal_id' => $reader->id,
+            'biblioteca_ejemplar_id' => $copy->id,
+            'borrowed_at' => '2026-07-27',
+            'due_at' => '2026-08-03',
+        ])
+            ->assertCreated()
+            ->assertJsonPath('data.borrower_name_snapshot', 'Antigua Estudiante')
+            ->assertJsonPath('data.borrower_estate', 'exalumno')
+            ->assertJsonPath('data.temporary_borrower.id', $reader->id);
+
+        $this->assertDatabaseHas('biblioteca_prestamos', [
+            'borrower_type' => 'temporary',
+            'biblioteca_lector_temporal_id' => $reader->id,
+            'borrower_name_snapshot' => 'Antigua Estudiante',
+        ]);
+
+        $this->getJson('/api/biblioteca/catalogs')
+            ->assertOk()
+            ->assertJsonPath('temporary_borrowers.0.id', $reader->id);
+    }
+
+    public function test_it_rejects_a_loan_for_a_non_loanable_legacy_copy(): void
+    {
+        $copy = $this->createAvailableCopy();
+        $copy->forceFill([
+            'is_loanable' => false,
+            'loan_restriction' => 'no_prestable',
+        ])->save();
+        $reader = BibliotecaLectorTemporal::query()->create([
+            'full_name' => 'Lector visitante',
+            'person_category' => 'visitante',
+            'active' => true,
+        ]);
+
+        $this->postJson('/api/biblioteca/prestamos', [
+            'borrower_type' => 'temporary',
+            'biblioteca_lector_temporal_id' => $reader->id,
+            'biblioteca_ejemplar_id' => $copy->id,
+            'borrowed_at' => '2026-07-27',
+            'due_at' => '2026-08-03',
+        ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('biblioteca_ejemplar_id');
+    }
+
     public function test_textbook_order_reports_shortage_and_generates_student_roster(): void
     {
         [$year, $level, $course, $student] = $this->academicContext('4° básico');
@@ -463,9 +530,10 @@ class BibliotecaExpandedModuleTest extends TestCase
             'is_active' => true,
             'is_closed' => false,
         ]);
-        $level = EducationLevel::query()->create([
+        $level = EducationLevel::query()->firstOrCreate([
             'name' => $levelName,
-            'order' => 1,
+        ], [
+            'order' => ((int) EducationLevel::query()->max('order')) + 1,
             'type' => str_contains(mb_strtolower($levelName), 'medio')
                 ? 'media'
                 : (str_starts_with($levelName, 'NT') ? 'parvularia' : 'basica'),

@@ -20,6 +20,12 @@ const emptyForm = () => ({
   photo_reference: "",
 });
 
+const emptyCloseForm = () => ({
+  work_order_id: null,
+  resolution_notes: "",
+  closure_document: null,
+});
+
 export default {
   components: { Layout, Multiselect },
   data() {
@@ -27,14 +33,17 @@ export default {
       debugModals: false,
       loading: false,
       saving: false,
+      closing: false,
       search: "",
       statusFilter: "",
       priorityFilter: "",
       assigneeFilter: "",
+      queueFilter: "all",
       sortMode: "created",
       showModalCrearOT: false,
       showModalDetalleOT: false,
       showModalTomarFoto: false,
+      showModalCerrarOT: false,
       dependencySearch: "",
       selectedPhoto: null,
       activeWorkOrder: null,
@@ -62,10 +71,12 @@ export default {
           total: 0,
           open: 0,
           critical: 0,
+          pending_closure: 0,
           finished: 0,
         },
       },
       form: emptyForm(),
+      closeForm: emptyCloseForm(),
       error: null,
       success: null,
     };
@@ -98,6 +109,13 @@ export default {
           tone: "red",
         },
         {
+          label: "Por cerrar",
+          value: this.catalogs.summary.pending_closure,
+          detail: "Sin nota de cierre",
+          icon: "mdi-progress-clock",
+          tone: "amber",
+        },
+        {
           label: "Terminadas",
           value: this.catalogs.summary.finished,
           detail: "Trabajo cerrado",
@@ -107,7 +125,21 @@ export default {
       ];
     },
     activeFiltersCount() {
-      return [this.search, this.statusFilter, this.priorityFilter, this.assigneeFilter].filter(Boolean).length;
+      return [
+        this.search,
+        this.statusFilter,
+        this.priorityFilter,
+        this.assigneeFilter,
+        this.queueFilter !== "all" ? this.queueFilter : "",
+      ].filter(Boolean).length;
+    },
+    queueTabs() {
+      return [
+        { value: "all", label: "Todas", count: this.catalogs.summary.total },
+        { value: "active", label: "Activas", count: this.catalogs.summary.open },
+        { value: "pending_closure", label: "Pendientes de cierre", count: this.catalogs.summary.pending_closure },
+        { value: "completed", label: "Terminadas", count: this.catalogs.summary.finished },
+      ];
     },
     assigneeOptions() {
       const catalog = this.catalogs.maintenance_assignees || [];
@@ -141,6 +173,16 @@ export default {
       }
 
       return areas.filter((area) => Number(area.parent_dependency_id) === Number(this.form.maintenance_dependency_id));
+    },
+    selectedDependencyUsage() {
+      if (!this.form.maintenance_dependency_id) return "Sin uso registrado";
+
+      const dependency = (this.catalogs.dependencies || []).find(
+        (item) => Number(item.id) === Number(this.form.maintenance_dependency_id)
+      );
+      const usage = String(dependency?.usage || this.form.location_usage || "").trim();
+
+      return usage || "Sin uso registrado";
     },
   },
   mounted() {
@@ -201,6 +243,7 @@ export default {
             priority: this.priorityFilter,
             assignee: this.assigneeFilter,
             sort: this.sortMode,
+            queue: this.queueFilter === "all" ? "" : this.queueFilter,
           },
         });
 
@@ -298,6 +341,7 @@ export default {
         assigned_to: assigned,
         reported_at: this.formatInputDate(workOrder.reported_at),
         due_date: this.formatInputDate(workOrder.due_date),
+        description: this.workOrderDescription(workOrder),
       };
 
       this.dependencySearch = workOrder.dependency ? this.dependencyLabel(workOrder.dependency) : "";
@@ -325,6 +369,86 @@ export default {
         this.error = this.formatError(error);
       }
     },
+    selectQueue(queue) {
+      this.queueFilter = queue;
+      this.statusFilter = "";
+      this.loadWorkOrders();
+    },
+    canRequestClosure(workOrder) {
+      return !["Pendiente de cierre", "Terminado", "Anulado"].includes(workOrder?.status);
+    },
+    hasClosureNote(workOrder) {
+      return String(workOrder?.resolution_notes || "").trim() !== "";
+    },
+    canCloseWorkOrder(workOrder) {
+      return workOrder?.status === "Terminado" && !this.hasClosureNote(workOrder);
+    },
+    async requestWorkOrderClosure(workOrder) {
+      if (!confirm(`¿Enviar la OT #${workOrder.id} a la cola de cierre?`)) return;
+
+      this.loading = true;
+      this.error = null;
+      this.success = null;
+
+      try {
+        const response = await axios.post(`/api/maintenance/work-orders/${workOrder.id}/request-closure`);
+        this.success = response.data.message;
+        this.showModalDetalleOT = false;
+        await this.loadCatalogs();
+        await this.loadWorkOrders(this.pagination.current_page);
+      } catch (error) {
+        this.error = this.formatError(error);
+      } finally {
+        this.loading = false;
+      }
+    },
+    openCloseModal(workOrder) {
+      this.error = null;
+      this.success = null;
+      this.closeForm = {
+        ...emptyCloseForm(),
+        work_order_id: workOrder.id,
+        resolution_notes: workOrder.resolution_notes || "",
+      };
+      this.activeWorkOrder = workOrder;
+      this.showModalDetalleOT = false;
+      this.showModalCerrarOT = true;
+    },
+    handleClosureDocumentSelection(event) {
+      this.closeForm.closure_document = event.target?.files?.[0] || null;
+    },
+    async closeWorkOrder() {
+      if (!this.closeForm.work_order_id) return;
+
+      this.closing = true;
+      this.error = null;
+      this.success = null;
+
+      try {
+        const payload = new FormData();
+        payload.append("resolution_notes", this.closeForm.resolution_notes);
+
+        if (this.closeForm.closure_document) {
+          payload.append("closure_document", this.closeForm.closure_document);
+        }
+
+        const response = await axios.post(
+          `/api/maintenance/work-orders/${this.closeForm.work_order_id}/close`,
+          payload
+        );
+
+        this.success = response.data.message;
+        this.activeWorkOrder = response.data.data;
+        this.showModalCerrarOT = false;
+        this.closeForm = emptyCloseForm();
+        await this.loadCatalogs();
+        await this.loadWorkOrders(this.pagination.current_page);
+      } catch (error) {
+        this.error = this.formatError(error);
+      } finally {
+        this.closing = false;
+      }
+    },
     resetForm() {
       this.form = emptyForm();
       this.dependencySearch = "";
@@ -340,6 +464,20 @@ export default {
       if (parts.length !== 3) return String(value);
 
       return `${parts[2]}-${parts[1]}-${parts[0]}`;
+    },
+    formatDisplayDateTime(value) {
+      if (!value) return "-";
+
+      const date = new Date(value);
+      if (Number.isNaN(date.getTime())) return String(value);
+
+      return date.toLocaleString("es-CL", {
+        day: "2-digit",
+        month: "2-digit",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+      });
     },
     dependencyLabel(dependency) {
       if (!dependency) return "Sin dependencia";
@@ -532,6 +670,7 @@ export default {
       this.statusFilter = "";
       this.priorityFilter = "";
       this.assigneeFilter = "";
+      this.queueFilter = "all";
       this.loadWorkOrders();
     },
     parseAssignees(value) {
@@ -545,9 +684,22 @@ export default {
     workOrderAssigneeList(workOrder) {
       return this.parseAssignees(workOrder?.assigned_to);
     },
+    workOrderDescription(workOrder) {
+      const description = String(workOrder?.description || "").trim();
+      const usage = this.workOrderUsage(workOrder);
+
+      if (usage && description.localeCompare(usage, "es", { sensitivity: "base" }) === 0) {
+        return "";
+      }
+
+      return description;
+    },
+    workOrderUsage(workOrder) {
+      return String(workOrder?.dependency?.usage || workOrder?.location_usage || "").trim();
+    },
     workOrderLocation(workOrder) {
       if (workOrder.dependency) {
-        return `${workOrder.dependency.code} · ${workOrder.dependency.name}`;
+        return this.dependencyLabel(workOrder.dependency);
       }
 
       const location = [
@@ -555,8 +707,10 @@ export default {
         workOrder.location_distribution,
         workOrder.location_sector,
         workOrder.location_name,
-        workOrder.location_usage,
       ].filter(Boolean);
+      const usage = String(workOrder.location_usage || "").trim();
+
+      if (usage) location.push(`Uso: ${usage}`);
 
       return location.length ? location.join(" · ") : "Sin dependencia";
     },
@@ -686,6 +840,21 @@ export default {
           </div>
         </div>
 
+        <div class="work-order-queue-tabs" role="tablist" aria-label="Colas de órdenes de trabajo">
+          <button
+            v-for="tab in queueTabs"
+            :key="tab.value"
+            type="button"
+            role="tab"
+            :aria-selected="queueFilter === tab.value"
+            :class="{ 'is-active': queueFilter === tab.value }"
+            @click="selectQueue(tab.value)"
+          >
+            <span>{{ tab.label }}</span>
+            <strong>{{ tab.count }}</strong>
+          </button>
+        </div>
+
         <div class="work-order-filters">
           <label class="work-order-filter-field work-order-filter-field--search">
             <span>Búsqueda</span>
@@ -700,7 +869,7 @@ export default {
           </label>
           <label class="work-order-filter-field">
             <span>Estado</span>
-            <select v-model="statusFilter">
+            <select v-model="statusFilter" @change="queueFilter = 'all'">
               <option value="">Todos</option>
               <option v-for="status in catalogs.statuses" :key="status" :value="status">{{ status }}</option>
             </select>
@@ -732,7 +901,6 @@ export default {
               <col class="work-order-col-date" />
               <col class="work-order-col-order" />
               <col class="work-order-col-location" />
-              <col class="work-order-col-focus" />
               <col class="work-order-col-assignee" />
               <col class="work-order-col-priority" />
               <col class="work-order-col-status" />
@@ -744,7 +912,6 @@ export default {
                 <th class="work-order-col-date">Agregado</th>
                 <th class="work-order-col-order">OT</th>
                 <th class="work-order-col-location">Dependencia</th>
-                <th class="work-order-col-focus">Foco de trabajo</th>
                 <th class="work-order-col-assignee">Asignado</th>
                 <th class="work-order-col-priority">Prioridad</th>
                 <th class="work-order-col-status">Estado</th>
@@ -754,12 +921,12 @@ export default {
             </thead>
             <tbody>
               <tr v-if="loading">
-                <td colspan="9">
+                <td colspan="8">
                   <div class="work-order-empty-state">Cargando órdenes...</div>
                 </td>
               </tr>
               <tr v-else-if="workOrders.length === 0">
-                <td colspan="9">
+                <td colspan="8">
                   <div class="work-order-empty-state">No hay órdenes de trabajo registradas.</div>
                 </td>
               </tr>
@@ -767,29 +934,18 @@ export default {
                 <td class="work-order-date-cell">{{ formatDisplayDate(workOrder.created_at) }}</td>
                 <td>
                   <div class="work-order-title">#{{ workOrder.id }}</div>
-                  <div class="work-order-description">{{ workOrder.description }}</div>
+                  <div v-if="workOrderDescription(workOrder)" class="work-order-description">
+                    {{ workOrderDescription(workOrder) }}
+                  </div>
                 </td>
                 <td>
                   <div class="work-order-location">{{ workOrderLocation(workOrder) }}</div>
                 </td>
                 <td>
-                  <div class="work-order-focus-list">
-                    <span
-                      v-for="focus in workOrderFocusItems(workOrder)"
-                      :key="`${workOrder.id}-${focus.label}-${focus.value}`"
-                      class="work-order-focus-chip"
-                      :class="`work-order-focus-chip--${focus.tone}`"
-                    >
-                      <small>{{ focus.label }}</small>
-                      {{ focus.value }}
-                    </span>
-                  </div>
-                </td>
-                <td>
                   <div class="work-order-assignee">{{ workOrder.assigned_to || "-" }}</div>
                 </td>
                 <td><span class="work-order-pill" :class="priorityClass(workOrder.priority)">{{ workOrder.priority }}</span></td>
-                <td><span class="work-order-pill" :class="statusClass(workOrder.status)">{{ workOrder.status }}</span></td>
+                <td class="work-order-status-cell"><span class="work-order-pill" :class="statusClass(workOrder.status)">{{ workOrder.status }}</span></td>
                 <td class="work-order-date-cell work-order-due-cell">{{ formatDisplayDate(workOrder.due_date) }}</td>
                 <td class="work-order-actions-cell">
                   <div class="work-order-actions">
@@ -798,6 +954,24 @@ export default {
                     </button>
                     <button class="work-order-icon-button work-order-icon-button--edit" type="button" title="Editar" @click="editWorkOrder(workOrder)">
                       <i class="mdi mdi-pencil-outline"></i>
+                    </button>
+                    <button
+                      v-if="canRequestClosure(workOrder)"
+                      class="work-order-icon-button work-order-icon-button--request-close"
+                      type="button"
+                      title="Enviar a cierre"
+                      @click="requestWorkOrderClosure(workOrder)"
+                    >
+                      <i class="mdi mdi-progress-clock"></i>
+                    </button>
+                    <button
+                      v-if="canCloseWorkOrder(workOrder)"
+                      class="work-order-icon-button work-order-icon-button--close"
+                      type="button"
+                      title="Cerrar OT"
+                      @click="openCloseModal(workOrder)"
+                    >
+                      <i class="mdi mdi-check-circle-outline"></i>
                     </button>
                     <button class="work-order-icon-button work-order-icon-button--danger" type="button" title="Eliminar" @click="deleteWorkOrder(workOrder)">
                       <i class="mdi mdi-trash-can-outline"></i>
@@ -871,6 +1045,16 @@ export default {
                 <datalist id="dependency-options">
                   <option v-for="dependency in catalogs.dependencies" :key="dependency.id" :value="dependencyLabel(dependency)" />
                 </datalist>
+              </label>
+
+              <label class="work-order-form-field">
+                <span>Uso</span>
+                <input
+                  :value="selectedDependencyUsage"
+                  type="text"
+                  class="work-order-form-control"
+                  readonly
+                />
               </label>
 
               <label class="work-order-form-field">
@@ -1055,7 +1239,7 @@ export default {
                   </span>
                 </div>
               </div>
-              <p>{{ activeWorkOrder.description }}</p>
+              <p v-if="workOrderDescription(activeWorkOrder)">{{ workOrderDescription(activeWorkOrder) }}</p>
             </div>
 
             <div class="work-order-detail-facts">
@@ -1087,6 +1271,10 @@ export default {
               <div class="work-order-detail-field">
                 <span>Dependencia</span>
                 <strong>{{ workOrderLocation(activeWorkOrder) }}</strong>
+              </div>
+              <div class="work-order-detail-field">
+                <span>Uso</span>
+                <strong>{{ workOrderUsage(activeWorkOrder) || "Sin uso registrado" }}</strong>
               </div>
               <div class="work-order-detail-field">
                 <span>Elemento</span>
@@ -1153,11 +1341,38 @@ export default {
             <div class="work-order-detail-notes">
               <div>
                 <span>Trabajo solicitado</span>
-                <p>{{ activeWorkOrder.description }}</p>
+                <p>{{ workOrderDescription(activeWorkOrder) || "Sin trabajo solicitado registrado." }}</p>
               </div>
               <div>
                 <span>Notas de cierre / resolución</span>
                 <p>{{ activeWorkOrder.resolution_notes || "Sin notas de cierre registradas." }}</p>
+              </div>
+              <div>
+                <span>Registro de cierre</span>
+                <template v-if="activeWorkOrder.closed_at">
+                  <p>
+                    {{ formatDisplayDateTime(activeWorkOrder.closed_at) }} ·
+                    {{ activeWorkOrder.closed_by_user?.name || "Usuario no identificado" }}
+                  </p>
+                  <a
+                    v-if="activeWorkOrder.closure_document_url"
+                    class="work-order-document-link"
+                    :href="resolvePhotoUrl(activeWorkOrder.closure_document_url)"
+                    target="_blank"
+                    rel="noopener"
+                  >
+                    <i class="mdi mdi-file-document-outline"></i>
+                    {{ activeWorkOrder.closure_document_original_name || "Ver acta o evidencia" }}
+                  </a>
+                  <p v-else class="work-order-muted-copy">Cierre registrado sin acta adjunta.</p>
+                </template>
+                <p v-else-if="canCloseWorkOrder(activeWorkOrder)">
+                  Espera nota de cierre y, si corresponde, acta o evidencia.
+                </p>
+                <p v-else-if="activeWorkOrder.status === 'Terminado'">
+                  Cierre registrado sin datos de auditoría.
+                </p>
+                <p v-else>Aún no se ha iniciado el cierre.</p>
               </div>
             </div>
           </section>
@@ -1232,11 +1447,116 @@ export default {
             <i class="mdi mdi-pencil-outline"></i>
             Editar
           </button>
+          <button
+            v-if="canRequestClosure(activeWorkOrder)"
+            class="work-order-secondary-button work-order-request-close-button"
+            type="button"
+            @click="requestWorkOrderClosure(activeWorkOrder)"
+          >
+            <i class="mdi mdi-progress-clock"></i>
+            Enviar a cierre
+          </button>
+          <button
+            v-if="canCloseWorkOrder(activeWorkOrder)"
+            class="work-order-primary-button work-order-close-button"
+            type="button"
+            @click="openCloseModal(activeWorkOrder)"
+          >
+            <i class="mdi mdi-check-circle-outline"></i>
+            Cerrar OT
+          </button>
         </div>
       </div>
       <div v-else class="work-order-detail-empty work-order-detail-empty--modal">
         Selecciona una OT para ver el detalle.
       </div>
+    </BModal>
+
+    <BModal
+      v-model="showModalCerrarOT"
+      title="Cerrar orden de trabajo"
+      title-class="work-order-modal-title"
+      header-class="work-order-modal-header"
+      body-class="work-order-modal-body p-0"
+      modal-class="work-order-modal work-order-close-modal"
+      size="lg"
+      scrollable
+      hide-footer
+      centered
+      teleport-to="body"
+      lazy
+      no-fade
+    >
+      <form class="work-order-form" @submit.prevent="closeWorkOrder">
+        <div class="work-order-modal-scroll">
+          <BAlert v-if="error" show variant="danger" class="mb-3">{{ error }}</BAlert>
+
+          <div v-if="activeWorkOrder" class="work-order-close-summary">
+            <div>
+              <span>Orden de trabajo</span>
+              <strong>OT #{{ activeWorkOrder.id }}</strong>
+            </div>
+            <div>
+              <span>Dependencia</span>
+              <strong>{{ workOrderLocation(activeWorkOrder) }}</strong>
+            </div>
+          </div>
+
+          <section class="work-order-form-section">
+            <div class="work-order-form-section-head">
+              <i class="mdi mdi-check-circle-outline"></i>
+              <div>
+                <h6>Antecedentes del cierre</h6>
+                <span>La nota es obligatoria; el acta o evidencia es opcional.</span>
+              </div>
+            </div>
+
+            <div class="work-order-form-grid">
+              <label class="work-order-form-field work-order-form-field--wide">
+                <span>Nota de cierre</span>
+                <textarea
+                  v-model="closeForm.resolution_notes"
+                  class="work-order-form-control"
+                  rows="5"
+                  maxlength="10000"
+                  placeholder="Describe el trabajo realizado, resultado y observaciones de cierre..."
+                  required
+                ></textarea>
+              </label>
+
+              <div class="work-order-photo-field">
+                <span>Acta o evidencia</span>
+                <div class="work-order-photo-actions">
+                  <label class="work-order-secondary-button mb-0">
+                    <i class="mdi mdi-paperclip"></i>
+                    Adjuntar archivo
+                    <input
+                      type="file"
+                      class="d-none"
+                      accept=".pdf,.jpg,.jpeg,.png,.webp,application/pdf,image/jpeg,image/png,image/webp"
+                      @change="handleClosureDocumentSelection"
+                    />
+                  </label>
+                  <span class="work-order-photo-name">
+                    {{ closeForm.closure_document ? closeForm.closure_document.name : "Sin archivo seleccionado" }}
+                  </span>
+                </div>
+                <small>Formatos permitidos: PDF, JPG, PNG o WebP. Máximo 10 MB.</small>
+              </div>
+            </div>
+          </section>
+        </div>
+
+        <div class="work-order-modal-footer">
+          <button class="work-order-secondary-button" type="button" :disabled="closing" @click="showModalCerrarOT = false">
+            Cancelar
+          </button>
+          <button class="work-order-primary-button work-order-close-button" type="submit" :disabled="closing">
+            <i class="mdi mdi-check-circle-outline"></i>
+            {{ closing ? "Cerrando..." : "Confirmar cierre" }}
+          </button>
+        </div>
+      </form>
     </BModal>
 
     <BModal
@@ -1383,7 +1703,7 @@ export default {
 
 .work-order-summary-grid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 14px;
   margin-bottom: 20px;
 }
@@ -1452,6 +1772,11 @@ export default {
   background: #fef2f2;
 }
 
+.work-order-summary-card--amber .work-order-summary-icon {
+  color: #b45309;
+  background: #fffbeb;
+}
+
 .work-order-summary-card--slate .work-order-summary-icon {
   color: #475569;
   background: #f8fafc;
@@ -1490,6 +1815,53 @@ export default {
   color: #3152c9;
   background: #eef4ff;
   border-color: #c7d7fe;
+}
+
+.work-order-queue-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 16px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid #e2eaf8;
+}
+
+.work-order-queue-tabs button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 38px;
+  padding: 0 12px;
+  border: 1px solid #d5deed;
+  border-radius: 999px;
+  background: #fff;
+  color: #647089;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.work-order-queue-tabs button strong {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 24px;
+  min-height: 24px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: #f1f5f9;
+  color: #475569;
+  font-size: 11px;
+}
+
+.work-order-queue-tabs button.is-active {
+  border-color: #5b74df;
+  background: #eef4ff;
+  color: #3152c9;
+}
+
+.work-order-queue-tabs button.is-active strong {
+  background: #5b74df;
+  color: #fff;
 }
 
 .work-order-filters {
@@ -1560,7 +1932,7 @@ textarea.work-order-form-control {
 
 .work-order-table {
   width: 100%;
-  min-width: 1520px;
+  min-width: 1430px;
   table-layout: fixed;
   border-collapse: separate;
   border-spacing: 0;
@@ -1591,7 +1963,7 @@ textarea.work-order-form-control {
 }
 
 .work-order-col-due {
-  width: 136px;
+  width: 150px;
 }
 
 .work-order-col-order {
@@ -1602,17 +1974,17 @@ textarea.work-order-form-control {
   width: 210px;
 }
 
-.work-order-col-focus {
-  width: 250px;
-}
-
 .work-order-col-assignee {
   width: 150px;
 }
 
-.work-order-col-priority,
-.work-order-col-status {
+.work-order-col-priority {
   width: 120px;
+  text-align: center;
+}
+
+.work-order-col-status {
+  width: 195px;
   text-align: center;
 }
 
@@ -1621,7 +1993,7 @@ textarea.work-order-form-control {
 }
 
 .work-order-col-actions {
-  width: 176px;
+  width: 232px;
   text-align: center;
 }
 
@@ -1634,6 +2006,15 @@ textarea.work-order-form-control {
 .work-order-due-cell {
   overflow: hidden;
   text-overflow: clip;
+}
+
+.work-order-table td.work-order-status-cell {
+  padding-right: 20px;
+  text-align: center;
+}
+
+.work-order-table td.work-order-due-cell {
+  padding-left: 20px;
 }
 
 .work-order-actions-cell {
@@ -1656,12 +2037,6 @@ textarea.work-order-form-control {
   color: #68728b;
   font-size: 13px;
   line-height: 1.35;
-}
-
-.work-order-focus-list {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
 }
 
 .work-order-focus-chip {
@@ -1742,6 +2117,12 @@ textarea.work-order-form-control {
   border-color: #fcd34d;
 }
 
+.work-order-pill--closing {
+  color: #92400e;
+  background: #fff7ed;
+  border-color: #fdba74;
+}
+
 .work-order-pill--low {
   color: #0369a1;
   background: #f0f9ff;
@@ -1768,8 +2149,8 @@ textarea.work-order-form-control {
 
 .work-order-actions {
   justify-content: center;
-  gap: 10px;
-  min-width: 146px;
+  gap: 8px;
+  min-width: 210px;
 }
 
 .work-order-actions .cnsc-action-btn + .cnsc-action-btn {
@@ -1794,6 +2175,18 @@ textarea.work-order-form-control {
   color: #b45309;
   background: #fffbeb;
   border-color: #fcd34d;
+}
+
+.work-order-icon-button--request-close {
+  color: #9a6700;
+  background: #fffdf2;
+  border-color: #f6d365;
+}
+
+.work-order-icon-button--close {
+  color: #047857;
+  background: #ecfdf5;
+  border-color: #86efac;
 }
 
 .work-order-icon-button--danger {
@@ -2057,6 +2450,22 @@ textarea.work-order-form-control {
   white-space: pre-wrap;
 }
 
+.work-order-document-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 10px;
+  color: #3152c9;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.work-order-muted-copy {
+  margin-top: 8px !important;
+  color: #7a849a !important;
+  font-size: 12px !important;
+}
+
 .work-order-detail-photo {
   display: grid;
   gap: 12px;
@@ -2224,6 +2633,54 @@ textarea.work-order-form-control {
   font-weight: 400;
 }
 
+.work-order-close-summary {
+  display: grid;
+  grid-template-columns: 150px minmax(0, 1fr);
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.work-order-close-summary > div {
+  min-width: 0;
+  padding: 14px;
+  border: 1px solid #dce7f7;
+  border-radius: 8px;
+  background: #fff;
+}
+
+.work-order-close-summary span,
+.work-order-close-summary strong {
+  display: block;
+}
+
+.work-order-close-summary span {
+  margin-bottom: 5px;
+  color: #778199;
+  font-size: 12px;
+}
+
+.work-order-close-summary strong {
+  color: #303848;
+  font-size: 14px;
+  overflow-wrap: anywhere;
+}
+
+.work-order-close-button {
+  background: #047857;
+  border-color: #047857;
+}
+
+.work-order-close-button:hover {
+  background: #036b4e;
+  border-color: #036b4e;
+}
+
+.work-order-request-close-button {
+  color: #92400e;
+  border-color: #f6d365;
+  background: #fffdf2;
+}
+
 .work-order-modal-footer {
   display: flex;
   justify-content: flex-end;
@@ -2304,6 +2761,10 @@ textarea.work-order-form-control {
   .work-order-detail-notes,
   .work-order-form-grid--two,
   .work-order-form-grid--three {
+    grid-template-columns: 1fr;
+  }
+
+  .work-order-close-summary {
     grid-template-columns: 1fr;
   }
 

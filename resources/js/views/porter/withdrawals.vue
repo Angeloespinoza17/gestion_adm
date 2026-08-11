@@ -3,6 +3,8 @@ import axios from "axios";
 import Swal from "sweetalert2";
 import Layout from "../../layouts/main.vue";
 import LoadingState from "../../components/ui/loading-state.vue";
+import PorterActionDeck from "../../components/porter/action-deck.vue";
+import PorterModuleHeader from "../../components/porter/module-header.vue";
 import PorterStatusBadge from "../../components/porter/status-badge.vue";
 
 const emptyForm = () => ({
@@ -20,13 +22,14 @@ const emptyForm = () => ({
 });
 
 export default {
-  components: { Layout, LoadingState, PorterStatusBadge },
+  components: { Layout, LoadingState, PorterActionDeck, PorterModuleHeader, PorterStatusBadge },
   data() {
     return {
       loadingCatalogs: false,
       saving: false,
       loadingList: false,
       loadingStudent: false,
+      showWithdrawalModal: false,
       error: null,
       catalogs: {
         withdrawal_relationships: [],
@@ -106,6 +109,7 @@ export default {
       async handler(id) {
         if (id && Number(id) !== Number(this.form.student_profile_id)) {
           await this.loadStudentById(id);
+          this.showWithdrawalModal = true;
         }
       },
     },
@@ -115,9 +119,43 @@ export default {
     await this.loadWithdrawals();
     if (this.$route.query.student_id) {
       await this.loadStudentById(this.$route.query.student_id);
+      this.showWithdrawalModal = true;
     }
   },
   methods: {
+    openWithdrawalModal() {
+      this.error = null;
+      this.showWithdrawalModal = true;
+    },
+    async requestCloseWithdrawalModal() {
+      if (this.saving) return;
+
+      const hasProgress = Boolean(
+        this.form.student_profile_id ||
+        this.form.person_name ||
+        this.form.person_rut ||
+        this.form.person_phone ||
+        this.form.observations ||
+        this.form.attachment
+      );
+
+      if (hasProgress) {
+        const { isConfirmed } = await Swal.fire({
+          title: "¿Cerrar el formulario?",
+          text: "Los datos ingresados para este retiro se descartarán.",
+          icon: "warning",
+          showCancelButton: true,
+          confirmButtonText: "Sí, descartar",
+          cancelButtonText: "Continuar registrando",
+          reverseButtons: true,
+        });
+
+        if (!isConfirmed) return;
+      }
+
+      this.showWithdrawalModal = false;
+      this.resetFormAfterSubmit();
+    },
     async loadCatalogs() {
       this.loadingCatalogs = true;
       try {
@@ -354,6 +392,7 @@ export default {
         });
 
         this.resetFormAfterSubmit();
+        this.showWithdrawalModal = false;
         await this.loadWithdrawals(1);
       } catch (error) {
         const duplicateHandled = await this.handleDuplicateWithdrawal(error);
@@ -490,19 +529,54 @@ export default {
 
 <template>
   <Layout>
-    <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
-      <div>
-        <h4 class="mb-0">Registro de retiros</h4>
-        <div class="text-muted">Control de retiros de estudiantes durante la jornada.</div>
-      </div>
-      <router-link to="/porter/students" class="btn btn-outline-primary">
-        <i class="bx bx-search-alt me-1"></i>
-        Buscar estudiante
-      </router-link>
-    </div>
+    <section class="withdrawals-page porter-view">
+      <PorterModuleHeader
+        title="Registro de retiros"
+        subtitle="Controla la salida de estudiantes, valida autorizaciones y conserva la trazabilidad de cada retiro."
+        eyebrow="Salida segura de estudiantes"
+        icon="bx bx-log-out-circle"
+      >
+        <template #actions>
+          <BButton variant="primary" @click="openWithdrawalModal">
+            <i class="bx bx-plus-circle me-1"></i>Nuevo retiro
+          </BButton>
+          <router-link to="/porter/students" class="btn btn-outline-primary">
+            <i class="bx bx-search-alt me-1"></i>Buscar estudiante
+          </router-link>
+        </template>
+      </PorterModuleHeader>
+
+      <PorterActionDeck compact :featured-routes="['/porter/students', '/porter/dashboard']" />
 
     <BAlert v-if="error" variant="danger" show class="mb-3">{{ error }}</BAlert>
 
+    <BModal
+      v-model="showWithdrawalModal"
+      title="Registrar retiro"
+      size="xl"
+      hide-header
+      hide-footer
+      scrollable
+      no-close-on-backdrop
+      no-close-on-esc
+      body-class="p-0"
+      modal-class="withdrawal-form-modal"
+    >
+      <div class="withdrawal-modal-shell">
+        <div class="withdrawal-modal-intro">
+          <span class="withdrawal-modal-intro__icon"><i class="bx bx-log-out-circle"></i></span>
+          <div>
+            <div class="withdrawal-modal-intro__eyebrow">Registro seguro</div>
+            <h4>Nuevo retiro de estudiante</h4>
+            <p>Selecciona la estudiante, valida a la persona autorizada y confirma la salida.</p>
+          </div>
+          <button type="button" class="withdrawal-modal-close" aria-label="Cerrar formulario" @click="requestCloseWithdrawalModal">
+            <i class="bx bx-x"></i>
+          </button>
+        </div>
+
+        <div class="withdrawal-modal-body">
+          <BAlert v-if="error" variant="danger" show class="mb-3">{{ error }}</BAlert>
     <div class="row g-3 align-items-start">
       <div class="col-xxl-8">
         <BCard class="withdrawal-card">
@@ -648,7 +722,10 @@ export default {
             <BFormTextarea v-model="form.override_reason" rows="2" />
           </div>
 
-          <div class="d-flex justify-content-end mt-4">
+          <div class="modal-form-actions mt-4">
+            <BButton variant="outline-secondary" :disabled="saving" @click="requestCloseWithdrawalModal">
+              Cancelar
+            </BButton>
             <BButton variant="primary" :disabled="saving" @click="submit">
               <span v-if="saving">Guardando...</span>
               <span v-else><i class="bx bx-check-circle me-1"></i>Registrar retiro</span>
@@ -733,19 +810,30 @@ export default {
         </BCard>
       </div>
     </div>
-
-    <BCard class="withdrawal-history-card mt-3">
-      <div class="d-flex justify-content-between align-items-start mb-3 flex-wrap gap-2">
-        <div>
-          <h5 class="mb-1">Historial de retiros</h5>
-          <div class="text-muted small">{{ pagination.total }} registro(s)</div>
         </div>
-        <div class="history-filters">
+      </div>
+    </BModal>
+
+    <BCard class="withdrawal-history-card">
+      <div class="withdrawal-history-heading">
+        <div class="withdrawal-history-title">
+          <span class="withdrawal-history-icon"><i class="bx bx-list-ul"></i></span>
+          <div>
+            <div class="withdrawal-history-eyebrow">Control de salidas</div>
+            <h5 class="mb-1">Retiros registrados</h5>
+            <div class="text-muted small">{{ pagination.total }} registro(s) encontrados</div>
+          </div>
+        </div>
+        <BButton variant="primary" @click="openWithdrawalModal">
+          <i class="bx bx-plus-circle me-1"></i>Registrar retiro
+        </BButton>
+      </div>
+
+      <div class="history-filters">
           <BFormInput v-model="listFilters.search" placeholder="Estudiante o persona" @keyup.enter="loadWithdrawals(1)" />
           <BFormSelect v-model="listFilters.status" :options="statusOptions" />
           <BFormSelect v-model="listFilters.reason" :options="[{ value: null, text: 'Todos los motivos' }].concat(reasonOptions)" />
-          <BButton variant="outline-primary" @click="loadWithdrawals(1)">Filtrar</BButton>
-        </div>
+          <BButton variant="outline-primary" @click="loadWithdrawals(1)"><i class="bx bx-filter-alt me-1"></i>Filtrar</BButton>
       </div>
 
       <BTable
@@ -814,10 +902,163 @@ export default {
         />
       </div>
     </BCard>
+    </section>
   </Layout>
 </template>
 
 <style scoped>
+:global(.withdrawal-form-modal .modal-dialog) {
+  max-width: min(94vw, 92rem);
+}
+
+:global(.withdrawal-form-modal .modal-content) {
+  border: 0;
+  border-radius: 1rem;
+  box-shadow: 0 1.5rem 4rem rgba(18, 36, 67, 0.26);
+  overflow: hidden;
+}
+
+:global(.withdrawal-form-modal .modal-body) {
+  background: #f5f8fd;
+}
+
+.withdrawal-modal-shell {
+  min-height: 20rem;
+}
+
+.withdrawal-modal-intro {
+  align-items: center;
+  background:
+    radial-gradient(circle at 88% 0, rgba(255, 255, 255, 0.17), transparent 32%),
+    linear-gradient(125deg, #182f57 0%, #315f9f 100%);
+  color: #fff;
+  display: flex;
+  gap: 1rem;
+  min-height: 7.5rem;
+  padding: 1.25rem 1.4rem;
+  position: relative;
+}
+
+.withdrawal-modal-intro::after {
+  background-image: radial-gradient(rgba(255, 255, 255, 0.18) 0.7px, transparent 0.7px);
+  background-size: 13px 13px;
+  content: "";
+  inset: 0 0 0 55%;
+  opacity: 0.34;
+  pointer-events: none;
+  position: absolute;
+}
+
+.withdrawal-modal-intro__icon {
+  align-items: center;
+  background: rgba(255, 255, 255, 0.13);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 0.8rem;
+  display: inline-flex;
+  flex: 0 0 auto;
+  font-size: 1.65rem;
+  height: 3.5rem;
+  justify-content: center;
+  width: 3.5rem;
+}
+
+.withdrawal-modal-intro__eyebrow {
+  color: #7ce7bb;
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  margin-bottom: 0.25rem;
+  text-transform: uppercase;
+}
+
+.withdrawal-modal-intro h4 {
+  color: #fff;
+  font-weight: 750;
+  letter-spacing: -0.02em;
+  margin: 0;
+}
+
+.withdrawal-modal-intro p {
+  color: rgba(255, 255, 255, 0.7);
+  margin: 0.35rem 0 0;
+}
+
+.withdrawal-modal-close {
+  align-items: center;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 0.65rem;
+  color: #fff;
+  display: inline-flex;
+  font-size: 1.35rem;
+  height: 2.55rem;
+  justify-content: center;
+  margin-left: auto;
+  position: relative;
+  transition: background-color 0.16s ease, transform 0.16s ease;
+  width: 2.55rem;
+  z-index: 1;
+}
+
+.withdrawal-modal-close:hover,
+.withdrawal-modal-close:focus-visible {
+  background: rgba(255, 255, 255, 0.2);
+  outline: none;
+  transform: scale(1.03);
+}
+
+.withdrawal-modal-body {
+  padding: 1rem;
+}
+
+.modal-form-actions {
+  align-items: center;
+  border-top: 1px solid var(--bs-border-color);
+  display: flex;
+  gap: 0.65rem;
+  justify-content: flex-end;
+  padding-top: 1rem;
+}
+
+.withdrawal-history-heading {
+  align-items: center;
+  border-bottom: 1px solid var(--bs-border-color);
+  display: flex;
+  gap: 1rem;
+  justify-content: space-between;
+  margin: -0.15rem -0.15rem 1rem;
+  padding: 0.15rem 0.15rem 1rem;
+}
+
+.withdrawal-history-title {
+  align-items: center;
+  display: flex;
+  gap: 0.8rem;
+  min-width: 0;
+}
+
+.withdrawal-history-icon {
+  align-items: center;
+  background: rgba(var(--bs-primary-rgb), 0.1);
+  border: 1px solid rgba(var(--bs-primary-rgb), 0.12);
+  border-radius: 0.72rem;
+  color: var(--bs-primary);
+  display: inline-flex;
+  flex: 0 0 auto;
+  font-size: 1.3rem;
+  height: 3rem;
+  justify-content: center;
+  width: 3rem;
+}
+
+.withdrawal-history-eyebrow {
+  color: var(--bs-primary);
+  font-size: 0.67rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
 .withdrawal-card,
 .withdrawal-context-card,
 .withdrawal-history-card {
@@ -1137,9 +1378,14 @@ export default {
 }
 
 .history-filters {
+  background: rgba(var(--bs-primary-rgb), 0.035);
+  border: 1px solid rgba(var(--bs-primary-rgb), 0.08);
+  border-radius: 0.7rem;
   display: grid;
   gap: 0.5rem;
   grid-template-columns: minmax(14rem, 1.5fr) minmax(10rem, 1fr) minmax(11rem, 1fr) auto;
+  margin-bottom: 1rem;
+  padding: 0.75rem;
 }
 
 .min-w-0 {
@@ -1148,6 +1394,15 @@ export default {
 
 :deep(.withdrawal-history-table th) {
   white-space: nowrap;
+}
+
+:deep(.withdrawal-history-table tbody tr) {
+  transition: background-color 0.15s ease;
+}
+
+:global([data-bs-theme="dark"] .withdrawal-form-modal .modal-body),
+:global(body[data-layout-mode="dark"] .withdrawal-form-modal .modal-body) {
+  background: #1c283d;
 }
 
 @media (max-width: 1199.98px) {
@@ -1174,6 +1429,11 @@ export default {
   .context-header-badge {
     max-width: 100%;
   }
+
+  .withdrawal-history-heading {
+    align-items: flex-start;
+    flex-direction: column;
+  }
 }
 
 @media (max-width: 575.98px) {
@@ -1189,6 +1449,33 @@ export default {
 
   .student-search-row .btn {
     width: 100%;
+  }
+
+  .withdrawal-modal-intro {
+    align-items: flex-start;
+    padding: 1rem;
+  }
+
+  .withdrawal-modal-intro__icon {
+    display: none;
+  }
+
+  .withdrawal-modal-intro p {
+    font-size: 0.78rem;
+  }
+
+  .withdrawal-modal-body {
+    padding: 0.75rem;
+  }
+
+  .modal-form-actions,
+  .modal-form-actions .btn,
+  .withdrawal-history-heading > .btn {
+    width: 100%;
+  }
+
+  .modal-form-actions {
+    flex-direction: column-reverse;
   }
 }
 </style>

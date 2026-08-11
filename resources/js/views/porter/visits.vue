@@ -3,6 +3,9 @@ import axios from "axios";
 import Swal from "sweetalert2";
 import Layout from "../../layouts/main.vue";
 import LoadingState from "../../components/ui/loading-state.vue";
+import PorterActionDeck from "../../components/porter/action-deck.vue";
+import PorterModuleHeader from "../../components/porter/module-header.vue";
+import PorterRecordModal from "../../components/porter/record-modal.vue";
 import PorterStatusBadge from "../../components/porter/status-badge.vue";
 
 const emptyForm = () => ({
@@ -24,11 +27,12 @@ const emptyFilters = () => ({
 });
 
 export default {
-  components: { Layout, LoadingState, PorterStatusBadge },
+  components: { Layout, LoadingState, PorterActionDeck, PorterModuleHeader, PorterRecordModal, PorterStatusBadge },
   data() {
     return {
       saving: false,
       loadingList: false,
+      showCreateModal: false,
       error: null,
       catalogs: { staff: [], departments: [], visit_statuses: [] },
       form: emptyForm(),
@@ -74,6 +78,27 @@ export default {
     await this.loadItems();
   },
   methods: {
+    openCreateModal() {
+      this.error = null;
+      this.showCreateModal = true;
+    },
+    async requestCloseCreateModal() {
+      if (this.saving) return;
+      if (JSON.stringify(this.form) !== JSON.stringify(emptyForm())) {
+        const { isConfirmed } = await Swal.fire({
+          icon: "warning",
+          title: "¿Cerrar el formulario?",
+          text: "Los datos ingresados para esta visita se descartarán.",
+          showCancelButton: true,
+          confirmButtonText: "Sí, descartar",
+          cancelButtonText: "Continuar registrando",
+          reverseButtons: true,
+        });
+        if (!isConfirmed) return;
+      }
+      this.showCreateModal = false;
+      this.clearForm();
+    },
     async loadCatalogs() {
       try {
         const response = await axios.get("/api/porter/catalogs");
@@ -107,6 +132,7 @@ export default {
           timer: 1800,
           showConfirmButton: false,
         });
+        this.showCreateModal = false;
       } catch (error) {
         await this.showRequestError(error, "No se pudo registrar la visita");
       } finally {
@@ -279,19 +305,23 @@ export default {
 
 <template>
   <Layout>
-    <div class="visits-page">
-      <div class="visits-heading">
-        <div>
-          <h4 class="mb-0">Control de visitas</h4>
-          <p class="mb-0 text-muted">Ingreso, salida y trazabilidad operativa de visitas en portería.</p>
-        </div>
-        <div class="heading-actions">
-          <router-link class="btn btn-outline-primary" to="/porter/dashboard">Panel portería</router-link>
+    <div class="visits-page porter-view">
+      <PorterModuleHeader
+        title="Control de visitas"
+        subtitle="Ingreso, permanencia y salida de visitas con trazabilidad operativa."
+        eyebrow="Accesos de visitantes"
+        icon="bx bx-id-card"
+      >
+        <template #actions>
+          <BButton variant="outline-primary" @click="openCreateModal"><i class="bx bx-plus-circle me-1"></i>Nueva visita</BButton>
           <BButton variant="primary" :disabled="loadingList" @click="loadItems(pagination.current_page || 1)">
-            {{ loadingList ? "Actualizando..." : "Actualizar" }}
+            <i class="bx bx-refresh me-1" :class="{ 'bx-spin': loadingList }"></i>
+            {{ loadingList ? "Actualizando" : "Actualizar" }}
           </BButton>
-        </div>
-      </div>
+        </template>
+      </PorterModuleHeader>
+
+      <PorterActionDeck compact :featured-routes="['/porter/providers', '/porter/daily-log']" />
 
       <BAlert v-if="error" variant="danger" show class="mb-3">{{ error }}</BAlert>
 
@@ -313,8 +343,14 @@ export default {
         </div>
       </div>
 
-      <div class="row g-3 align-items-start">
-        <div class="col-xxl-8">
+      <PorterRecordModal
+        v-model="showCreateModal"
+        title="Registrar ingreso de visita"
+        subtitle="Identifica a la visita, su destino y el motivo de ingreso al establecimiento."
+        eyebrow="Acceso de visitantes"
+        icon="bx bx-id-card"
+        @request-close="requestCloseCreateModal"
+      >
           <BCard class="visit-panel visit-form-panel">
             <div class="panel-title-row">
               <div>
@@ -358,16 +394,15 @@ export default {
                 <BFormTextarea v-model="form.observations" rows="3" placeholder="Credencial, patente, autorización u observación relevante" />
               </div>
               <div class="col-12 form-actions">
-                <BButton variant="outline-secondary" :disabled="saving" @click="clearForm">Limpiar</BButton>
+                <BButton variant="outline-secondary" :disabled="saving" @click="requestCloseCreateModal">Cancelar</BButton>
                 <BButton variant="primary" :disabled="saving" @click="submit">
                   {{ saving ? "Guardando..." : "Registrar ingreso" }}
                 </BButton>
               </div>
             </div>
           </BCard>
-        </div>
+      </PorterRecordModal>
 
-        <div class="col-xxl-4">
           <BCard class="visit-panel active-panel">
             <div class="panel-title-row">
               <div>
@@ -394,8 +429,6 @@ export default {
               </button>
             </div>
           </BCard>
-        </div>
-      </div>
 
       <BCard class="visit-panel visit-history-panel">
         <div class="panel-title-row history-title">
@@ -403,6 +436,7 @@ export default {
             <h5 class="mb-1">Historial de visitas</h5>
             <p class="mb-0 text-muted">Busca registros por nombre, RUT, motivo, destino o rango de fechas.</p>
           </div>
+          <BButton variant="primary" @click="openCreateModal"><i class="bx bx-plus-circle me-1"></i>Nueva visita</BButton>
         </div>
 
         <div class="history-filters">

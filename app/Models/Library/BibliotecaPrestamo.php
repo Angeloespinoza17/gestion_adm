@@ -22,6 +22,7 @@ class BibliotecaPrestamo extends Model
         'teacher',
         'guardian',
         'course',
+        'temporary',
     ];
 
     public const STATUS_OPTIONS = [
@@ -43,6 +44,7 @@ class BibliotecaPrestamo extends Model
         'user_id',
         'student_profile_id',
         'staff_id',
+        'biblioteca_lector_temporal_id',
         'course_section_id',
         'academic_year_id',
         'biblioteca_obra_id',
@@ -103,6 +105,11 @@ class BibliotecaPrestamo extends Model
     public function staff(): BelongsTo
     {
         return $this->belongsTo(Staff::class);
+    }
+
+    public function temporaryBorrower(): BelongsTo
+    {
+        return $this->belongsTo(BibliotecaLectorTemporal::class, 'biblioteca_lector_temporal_id');
     }
 
     public function courseSection(): BelongsTo

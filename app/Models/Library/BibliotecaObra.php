@@ -76,6 +76,8 @@ class BibliotecaObra extends Model
         'open_library_edition_key',
         'open_library_cover_id',
         'source_metadata',
+        'source_system',
+        'source_id',
         'created_by',
         'updated_by',
     ];

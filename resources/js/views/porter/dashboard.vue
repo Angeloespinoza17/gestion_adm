@@ -2,10 +2,12 @@
 import axios from "axios";
 import Layout from "../../layouts/main.vue";
 import LoadingState from "../../components/ui/loading-state.vue";
+import PorterActionDeck from "../../components/porter/action-deck.vue";
+import PorterModuleHeader from "../../components/porter/module-header.vue";
 import PorterStatusBadge from "../../components/porter/status-badge.vue";
 
 export default {
-  components: { Layout, LoadingState, PorterStatusBadge },
+  components: { Layout, LoadingState, PorterActionDeck, PorterModuleHeader, PorterStatusBadge },
   data() {
     return {
       loading: false,
@@ -27,18 +29,6 @@ export default {
     this.loadDashboard();
   },
   computed: {
-    quickActions() {
-      return [
-        { label: "Buscar estudiante", to: "/porter/students", icon: "bx bx-search-alt", primary: true },
-        { label: "Registrar retiro", to: "/porter/withdrawals", icon: "bx bx-log-out-circle", primary: true },
-        { label: "Recepción", to: "/porter/received-items", icon: "bx bx-package" },
-        { label: "Mercadería", to: "/porter/goods", icon: "bx bx-cube" },
-        { label: "Visitas", to: "/porter/visits", icon: "bx bx-id-card" },
-        { label: "Proveedores", to: "/porter/providers", icon: "bx bx-briefcase-alt-2" },
-        { label: "Bitácora", to: "/porter/daily-log", icon: "bx bx-notepad" },
-        { label: "Llaves", to: "/porter/keys", icon: "bx bx-key" },
-      ];
-    },
     statCards() {
       const pendingItems = Number(this.stats.pending_items || 0);
       const pendingGoods = Number(this.stats.pending_goods || 0);
@@ -313,35 +303,30 @@ export default {
 
 <template>
   <Layout>
-    <section class="porter-dashboard">
-      <div class="dashboard-heading">
-        <div>
-          <div class="heading-eyebrow"><span class="live-dot"></span> Centro de control</div>
-          <h4 class="mb-1">Portería</h4>
-          <div class="text-muted">Vista operacional en tiempo real para coordinar ingresos, salidas y recepciones.</div>
-          <small v-if="generatedAt" class="last-update">Actualizado {{ formatDateTime(generatedAt) }}</small>
-        </div>
-        <div class="heading-actions">
+    <section class="porter-dashboard porter-view">
+      <PorterModuleHeader
+        title="Centro de control de Portería"
+        subtitle="Vista operacional para coordinar ingresos, salidas, recepciones y alertas del establecimiento."
+        eyebrow="Operación en tiempo real"
+        icon="bx bx-shield-quarter"
+      >
+        <template #meta>
+          <span v-if="generatedAt">Última actualización: {{ formatDateTime(generatedAt) }}</span>
+          <span v-else>Información operativa centralizada</span>
+        </template>
+        <template #actions>
           <BButton v-if="canExport" variant="outline-success" @click="exportSnapshot"><i class="bx bx-download me-1"></i>Exportar resumen</BButton>
           <router-link to="/porter/reports" class="btn btn-outline-primary"><i class="bx bx-bar-chart-alt-2 me-1"></i>Reportes</router-link>
           <BButton variant="primary" :disabled="loading" @click="loadDashboard">
             <i class="bx bx-refresh me-1" :class="{ 'bx-spin': loading }"></i>Actualizar
           </BButton>
-        </div>
-      </div>
+        </template>
+      </PorterModuleHeader>
 
-      <div class="quick-action-grid">
-        <router-link
-          v-for="action in quickActions"
-          :key="action.to"
-          :to="action.to"
-          class="quick-action"
-          :class="{ 'quick-action--primary': action.primary }"
-        >
-          <span class="quick-action-icon"><i :class="action.icon"></i></span>
-          <span>{{ action.label }}</span>
-        </router-link>
-      </div>
+      <PorterActionDeck
+        subtitle="Inicia las tareas más frecuentes de portería sin perder el contexto operativo."
+        :featured-routes="['/porter/students', '/porter/withdrawals']"
+      />
 
       <BAlert v-if="error" variant="danger" show class="mb-3">{{ error }}</BAlert>
 
@@ -654,46 +639,6 @@ export default {
   gap: 0.5rem;
 }
 
-.quick-action-grid {
-  display: grid;
-  gap: 0.5rem;
-  grid-template-columns: repeat(auto-fit, minmax(9.5rem, 1fr));
-}
-
-.quick-action {
-  align-items: center;
-  background: var(--bs-body-bg);
-  border: 1px solid var(--bs-border-color);
-  border-radius: 0.5rem;
-  color: var(--bs-body-color);
-  display: flex;
-  font-weight: 600;
-  gap: 0.5rem;
-  min-height: 2.75rem;
-  padding: 0.5rem 0.75rem;
-  text-decoration: none;
-  transition: border-color 0.15s ease, box-shadow 0.15s ease, color 0.15s ease;
-}
-
-.quick-action:hover,
-.quick-action:focus {
-  border-color: var(--bs-primary);
-  box-shadow: 0 0.35rem 1rem rgba(var(--bs-primary-rgb), 0.08);
-  color: var(--bs-primary);
-}
-
-.quick-action--primary {
-  background: var(--bs-primary);
-  border-color: var(--bs-primary);
-  color: #fff;
-}
-
-.quick-action--primary:hover,
-.quick-action--primary:focus {
-  color: #fff;
-}
-
-.quick-action-icon,
 .stat-card-icon,
 .queue-icon,
 .alert-icon {
@@ -701,10 +646,6 @@ export default {
   display: inline-flex;
   flex: 0 0 auto;
   justify-content: center;
-}
-
-.quick-action-icon {
-  font-size: 1.1rem;
 }
 
 .stat-grid {
@@ -1095,7 +1036,6 @@ export default {
 }
 
 @media (max-width: 575.98px) {
-  .quick-action-grid,
   .stat-grid {
     grid-template-columns: 1fr;
   }

@@ -50,6 +50,7 @@ export default {
         responsible_staff: [],
         approver_users: [],
         statuses: [],
+        usages: [],
         total: 0,
         active: 0,
       },
@@ -721,8 +722,20 @@ export default {
           <section class="dependency-form__section">
             <div class="dependency-form__section-title"><span>2</span><div><h5>Ubicación y responsable</h5><p>Indica dónde está y quién lo administra.</p></div></div>
             <div class="row g-3">
-              <div class="col-lg-6"><label class="form-label">Ubicación</label><BFormInput v-model="form.location" placeholder="Ej: Edificio administrativo" /></div>
-              <div class="col-lg-3"><label class="form-label">Piso o sector</label><BFormInput v-model="form.floor_sector" placeholder="Ej: Segundo piso" /></div>
+              <div class="col-lg-4"><label class="form-label">Ubicación</label><BFormInput v-model="form.location" placeholder="Ej: Edificio administrativo" /></div>
+              <div class="col-lg-2"><label class="form-label">Piso o sector</label><BFormInput v-model="form.floor_sector" placeholder="Ej: Segundo piso" /></div>
+              <div class="col-lg-3">
+                <label class="form-label">Uso</label>
+                <BFormInput
+                  v-model.trim="form.usage"
+                  list="dependency-usage-suggestions"
+                  placeholder="Ej: 2° básico A"
+                />
+                <datalist id="dependency-usage-suggestions">
+                  <option v-for="usage in catalogs.usages || []" :key="usage" :value="usage"></option>
+                </datalist>
+                <small class="form-hint">Curso, unidad o finalidad habitual del espacio.</small>
+              </div>
               <div class="col-lg-3"><label class="form-label">Responsable</label><Multiselect v-model="form.responsible_staff_id" :options="staffOptions" :searchable="true" placeholder="Sin responsable" /></div>
             </div>
             <details class="dependency-form__advanced">

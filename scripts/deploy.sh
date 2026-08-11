@@ -65,6 +65,7 @@ chmod 755 '${DEPLOY_REMOTE_PATH}' && \
 cd '${DEPLOY_REMOTE_PATH}' && \
 rm -f public/hot && \
 ${DEPLOY_COMPOSER_BIN} install --no-dev --optimize-autoloader && \
+if [ ! -L public/storage ]; then ${DEPLOY_PHP_BIN} artisan storage:link --no-ansi; fi && \
 ${DEPLOY_PHP_BIN} artisan config:clear && \
 ${DEPLOY_PHP_BIN} artisan env --no-ansi | grep -Eq 'environment([[:space:]]+is|:)[[:space:]]*\[?production\]?[[:space:].]*$' && \
 ${DEPLOY_PHP_BIN} artisan migrate:status --no-ansi && \

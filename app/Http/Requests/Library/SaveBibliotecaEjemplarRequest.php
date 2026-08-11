@@ -28,6 +28,8 @@ class SaveBibliotecaEjemplarRequest extends FormRequest
             'physical_location' => ['nullable', 'string', 'max:120'],
             'physical_state' => ['required', Rule::in(BibliotecaEjemplar::STATE_OPTIONS)],
             'availability_status' => ['required', Rule::in(BibliotecaEjemplar::AVAILABILITY_OPTIONS)],
+            'is_loanable' => ['sometimes', 'boolean'],
+            'loan_restriction' => ['nullable', Rule::in(['normal', 'restringido', 'no_prestable'])],
             'registered_by' => ['nullable', 'integer', 'exists:users,id'],
             'observations' => ['nullable', 'string'],
             'photo_urls' => ['nullable', 'array'],

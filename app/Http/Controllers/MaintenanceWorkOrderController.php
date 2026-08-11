@@ -6,12 +6,15 @@ use App\Models\InventoryItem;
 use App\Models\MaintenanceDependency;
 use App\Models\MaintenanceWorkOrder;
 use App\Models\Staff;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Carbon;
-use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 
@@ -24,12 +27,14 @@ class MaintenanceWorkOrderController extends Controller
         $priority = trim((string) $request->query('priority'));
         $assignee = trim((string) $request->query('assignee'));
         $sort = trim((string) $request->query('sort', 'created'));
+        $queue = trim((string) $request->query('queue'));
 
         $workOrders = MaintenanceWorkOrder::query()
             ->with([
                 'dependency:id,code,name,distribution,sector,zone,usage',
                 'technicalArea:id,code,name,parent_dependency_id,distribution,sector,zone,usage',
                 'inventoryItem:id,code,name,dependency_id,status,condition',
+                'closedByUser:id,name',
             ])
             ->when($search !== '', function ($query) use ($search) {
                 $query->where(function ($query) use ($search) {
@@ -49,7 +54,8 @@ class MaintenanceWorkOrderController extends Controller
                                 ->orWhere('name', 'like', "%{$search}%")
                                 ->orWhere('distribution', 'like', "%{$search}%")
                                 ->orWhere('sector', 'like', "%{$search}%")
-                                ->orWhere('zone', 'like', "%{$search}%");
+                                ->orWhere('zone', 'like', "%{$search}%")
+                                ->orWhere('usage', 'like', "%{$search}%");
                         })
                         ->orWhereHas('technicalArea', function ($query) use ($search) {
                             $query
@@ -66,6 +72,9 @@ class MaintenanceWorkOrderController extends Controller
                         });
                 });
             })
+            ->when($queue === 'active', fn ($query) => $query->whereNotIn('status', ['Terminado', 'Anulado']))
+            ->when($queue === 'pending_closure', fn ($query) => $query->pendingClosure())
+            ->when($queue === 'completed', fn ($query) => $query->closedWithNote())
             ->when($status !== '', fn ($query) => $query->where('status', $status))
             ->when($priority !== '', fn ($query) => $query->where('priority', $priority))
             ->when($assignee !== '', fn ($query) => $this->whereAssignedTo($query, $assignee))
@@ -73,7 +82,7 @@ class MaintenanceWorkOrderController extends Controller
                 $query
                     ->orderByRaw("FIELD(priority, 'Crítico', 'Alta', 'Media', 'Baja')")
                     ->orderByRaw("FIELD(status, 'Sin comenzar', 'En proceso', 'En espera', 'Pausado', 'Terminado', 'Anulado')")
-                    ->orderByRaw("CASE WHEN due_date IS NULL THEN 1 ELSE 0 END")
+                    ->orderByRaw('CASE WHEN due_date IS NULL THEN 1 ELSE 0 END')
                     ->orderBy('due_date')
                     ->orderByDesc('created_at');
             }, fn ($query) => $query->orderByDesc('created_at'))
@@ -85,6 +94,14 @@ class MaintenanceWorkOrderController extends Controller
     public function store(Request $request): JsonResponse
     {
         $payload = $this->validated($request);
+
+        if ($payload['status'] === 'Terminado' && ! empty($payload['resolution_notes'])) {
+            $payload['closed_at'] = now();
+            $payload['closed_by_user_id'] = $request->user()?->id;
+        } elseif ($payload['status'] === 'Terminado') {
+            $payload['closed_at'] = null;
+            $payload['closed_by_user_id'] = null;
+        }
 
         if ($request->hasFile('photo')) {
             $payload['photo_reference'] = $this->storePhoto($request->file('photo'));
@@ -98,6 +115,7 @@ class MaintenanceWorkOrderController extends Controller
                 'dependency:id,code,name,distribution,sector,zone,usage',
                 'technicalArea:id,code,name,parent_dependency_id,distribution,sector,zone,usage',
                 'inventoryItem:id,code,name,dependency_id,status,condition',
+                'closedByUser:id,name',
             ]),
         ], 201);
     }
@@ -109,6 +127,7 @@ class MaintenanceWorkOrderController extends Controller
                 'dependency:id,code,name,distribution,sector,zone,usage',
                 'technicalArea:id,code,name,parent_dependency_id,distribution,sector,zone,usage',
                 'inventoryItem:id,code,name,dependency_id,status,condition',
+                'closedByUser:id,name',
             ]),
         ]);
     }
@@ -116,6 +135,17 @@ class MaintenanceWorkOrderController extends Controller
     public function update(Request $request, MaintenanceWorkOrder $maintenanceWorkOrder): JsonResponse
     {
         $payload = $this->validated($request);
+
+        if ($payload['status'] === 'Terminado' && ! empty($payload['resolution_notes'])) {
+            $payload['closed_at'] = $maintenanceWorkOrder->closed_at ?: now();
+            $payload['closed_by_user_id'] = $maintenanceWorkOrder->closed_by_user_id ?: $request->user()?->id;
+        } elseif ($payload['status'] === 'Terminado') {
+            $payload['closed_at'] = null;
+            $payload['closed_by_user_id'] = null;
+        } elseif ($maintenanceWorkOrder->status === 'Terminado') {
+            $payload['closed_at'] = null;
+            $payload['closed_by_user_id'] = null;
+        }
 
         if ($request->hasFile('photo')) {
             $payload['photo_reference'] = $this->storePhoto($request->file('photo'), $maintenanceWorkOrder->photo_reference);
@@ -129,12 +159,94 @@ class MaintenanceWorkOrderController extends Controller
                 'dependency:id,code,name,distribution,sector,zone,usage',
                 'technicalArea:id,code,name,parent_dependency_id,distribution,sector,zone,usage',
                 'inventoryItem:id,code,name,dependency_id,status,condition',
+                'closedByUser:id,name',
+            ]),
+        ]);
+    }
+
+    public function requestClosure(Request $request, MaintenanceWorkOrder $maintenanceWorkOrder): JsonResponse
+    {
+        if (in_array($maintenanceWorkOrder->status, ['Terminado', 'Anulado'], true)) {
+            throw ValidationException::withMessages([
+                'status' => 'Una OT terminada o anulada no puede enviarse a cierre.',
+            ]);
+        }
+
+        $payload = ['status' => 'Terminado'];
+
+        if ($maintenanceWorkOrder->hasClosureNote()) {
+            $payload['closed_at'] = $maintenanceWorkOrder->closed_at ?: now();
+            $payload['closed_by_user_id'] = $maintenanceWorkOrder->closed_by_user_id ?: $request->user()?->id;
+        } else {
+            $payload['closed_at'] = null;
+            $payload['closed_by_user_id'] = null;
+        }
+
+        $maintenanceWorkOrder->update($payload);
+
+        return response()->json([
+            'message' => "La OT #{$maintenanceWorkOrder->id} quedó pendiente de cierre.",
+            'data' => $maintenanceWorkOrder->load([
+                'dependency:id,code,name,distribution,sector,zone,usage',
+                'technicalArea:id,code,name,parent_dependency_id,distribution,sector,zone,usage',
+                'inventoryItem:id,code,name,dependency_id,status,condition',
+                'closedByUser:id,name',
+            ]),
+        ]);
+    }
+
+    public function close(Request $request, MaintenanceWorkOrder $maintenanceWorkOrder): JsonResponse
+    {
+        if ($maintenanceWorkOrder->status !== 'Terminado' || $maintenanceWorkOrder->hasClosureNote()) {
+            throw ValidationException::withMessages([
+                'status' => 'La OT debe estar terminada y sin nota para registrar su cierre.',
+            ]);
+        }
+
+        $validated = $request->validate([
+            'resolution_notes' => ['required', 'string', 'max:10000'],
+            'closure_document' => ['nullable', 'file', 'mimes:pdf,jpg,jpeg,png,webp', 'max:10240'],
+        ]);
+
+        $payload = [
+            'status' => 'Terminado',
+            'resolution_notes' => trim($validated['resolution_notes']),
+            'closed_at' => now(),
+            'closed_by_user_id' => $request->user()?->id,
+        ];
+
+        if ($request->hasFile('closure_document')) {
+            $document = $request->file('closure_document');
+            $payload['closure_document_reference'] = $this->storeClosureDocument(
+                $document,
+                $maintenanceWorkOrder->closure_document_reference
+            );
+            $payload['closure_document_original_name'] = Str::limit($document->getClientOriginalName(), 255, '');
+        }
+
+        $maintenanceWorkOrder->update($payload);
+
+        return response()->json([
+            'message' => "La OT #{$maintenanceWorkOrder->id} fue cerrada correctamente.",
+            'data' => $maintenanceWorkOrder->load([
+                'dependency:id,code,name,distribution,sector,zone,usage',
+                'technicalArea:id,code,name,parent_dependency_id,distribution,sector,zone,usage',
+                'inventoryItem:id,code,name,dependency_id,status,condition',
+                'closedByUser:id,name',
             ]),
         ]);
     }
 
     public function destroy(MaintenanceWorkOrder $maintenanceWorkOrder): JsonResponse
     {
+        if (MaintenanceWorkOrder::isManagedPhotoReference($maintenanceWorkOrder->photo_reference)) {
+            Storage::disk('public')->delete($maintenanceWorkOrder->photo_reference);
+        }
+
+        if (MaintenanceWorkOrder::isManagedClosureDocumentReference($maintenanceWorkOrder->closure_document_reference)) {
+            Storage::disk('public')->delete($maintenanceWorkOrder->closure_document_reference);
+        }
+
         $maintenanceWorkOrder->delete();
 
         return response()->json([
@@ -190,7 +302,8 @@ class MaintenanceWorkOrderController extends Controller
                 'total' => MaintenanceWorkOrder::count(),
                 'open' => MaintenanceWorkOrder::whereNotIn('status', ['Terminado', 'Anulado'])->count(),
                 'critical' => MaintenanceWorkOrder::where('priority', 'Crítico')->count(),
-                'finished' => MaintenanceWorkOrder::where('status', 'Terminado')->count(),
+                'pending_closure' => MaintenanceWorkOrder::pendingClosure()->count(),
+                'finished' => MaintenanceWorkOrder::closedWithNote()->count(),
             ],
         ]);
     }
@@ -200,7 +313,7 @@ class MaintenanceWorkOrderController extends Controller
         $from = trim((string) $request->query('from'));
         $to = trim((string) $request->query('to'));
         $assigneeFilter = trim((string) $request->query('assignee'));
-        $dependencyId = $request->query('dependency_id');
+        $dependencyId = $request->integer('dependency_id');
         $priority = trim((string) $request->query('priority'));
         $status = trim((string) $request->query('status'));
 
@@ -211,7 +324,7 @@ class MaintenanceWorkOrderController extends Controller
         $workOrders = MaintenanceWorkOrder::query()
             ->when($from !== '', fn ($query) => $query->whereDate('reported_at', '>=', $from))
             ->when($to !== '', fn ($query) => $query->whereDate('reported_at', '<=', $to))
-            ->when($dependencyId, fn ($query) => $query->where('maintenance_dependency_id', $dependencyId))
+            ->when($dependencyId > 0, fn (Builder $query) => $this->whereLocatedInDependency($query, $dependencyId))
             ->when($priority !== '', fn ($query) => $query->where('priority', $priority))
             ->when($status !== '', fn ($query) => $query->where('status', $status))
             ->get(['id', 'assigned_to', 'status', 'priority', 'due_date', 'reported_at']);
@@ -222,7 +335,7 @@ class MaintenanceWorkOrderController extends Controller
         foreach ($assigneeCatalog as $assignee) {
             $name = $assignee['value'] ?? $assignee['full_name'] ?? null;
 
-            if (!$name) {
+            if (! $name) {
                 continue;
             }
 
@@ -263,12 +376,12 @@ class MaintenanceWorkOrderController extends Controller
 
         foreach ($workOrders as $workOrder) {
             $assignees = $this->parseAssignees($workOrder->assigned_to);
-            if (!$assignees && $shouldShowUnassigned) {
+            if (! $assignees && $shouldShowUnassigned) {
                 $assignees = ['Sin asignar'];
             }
 
             foreach ($assignees as $assignee) {
-                if (!isset($rows[$assignee])) {
+                if (! isset($rows[$assignee])) {
                     continue;
                 }
 
@@ -281,11 +394,11 @@ class MaintenanceWorkOrderController extends Controller
                     $rows[$assignee]['pending']++;
                 }
 
-                if (!$isClosed && $workOrder->priority === 'Crítico') {
+                if (! $isClosed && $workOrder->priority === 'Crítico') {
                     $rows[$assignee]['critical']++;
                 }
 
-                if (!$isClosed && $workOrder->due_date) {
+                if (! $isClosed && $workOrder->due_date) {
                     $due = $workOrder->due_date instanceof Carbon
                         ? $workOrder->due_date->startOfDay()
                         : Carbon::parse((string) $workOrder->due_date)->startOfDay();
@@ -318,7 +431,7 @@ class MaintenanceWorkOrderController extends Controller
         $assignee = trim((string) $request->query('assignee'));
         $from = trim((string) $request->query('from'));
         $to = trim((string) $request->query('to'));
-        $dependencyId = $request->query('dependency_id');
+        $dependencyId = $request->integer('dependency_id');
         $priority = trim((string) $request->query('priority'));
         $status = trim((string) $request->query('status'));
         $allowedAssignees = $this->assignees();
@@ -326,7 +439,7 @@ class MaintenanceWorkOrderController extends Controller
         // No se deben incluir OTs terminadas/anuladas en el PDF del trabajador.
         $closedStatuses = ['Terminado', 'Anulado'];
 
-        if ($assignee !== '' && $assignee !== 'Sin asignar' && !in_array($assignee, $allowedAssignees, true)) {
+        if ($assignee !== '' && $assignee !== 'Sin asignar' && ! in_array($assignee, $allowedAssignees, true)) {
             return response()->json([
                 'data' => [],
             ]);
@@ -340,7 +453,7 @@ class MaintenanceWorkOrderController extends Controller
             ])
             ->when($from !== '', fn ($query) => $query->whereDate('reported_at', '>=', $from))
             ->when($to !== '', fn ($query) => $query->whereDate('reported_at', '<=', $to))
-            ->when($dependencyId, fn ($query) => $query->where('maintenance_dependency_id', $dependencyId))
+            ->when($dependencyId > 0, fn (Builder $query) => $this->whereLocatedInDependency($query, $dependencyId))
             ->when($priority !== '', fn ($query) => $query->where('priority', $priority))
             ->when($status !== '', fn ($query) => $query->where('status', $status))
             ->whereNotIn('status', $closedStatuses);
@@ -357,9 +470,9 @@ class MaintenanceWorkOrderController extends Controller
 
         // Reporte imprimible: por defecto mostrar pendientes primero.
         $workOrders = $query
-            ->orderByRaw("CASE WHEN status IN ('" . implode("','", $closedStatuses) . "') THEN 1 ELSE 0 END")
-            ->orderByRaw("FIELD(priority, 'Crítico', 'Alta', 'Media', 'Baja')")
-            ->orderByRaw("CASE WHEN due_date IS NULL THEN 1 ELSE 0 END")
+            ->orderByRaw("CASE WHEN status IN ('".implode("','", $closedStatuses)."') THEN 1 ELSE 0 END")
+            ->orderByRaw("CASE priority WHEN 'Crítico' THEN 1 WHEN 'Alta' THEN 2 WHEN 'Media' THEN 3 WHEN 'Baja' THEN 4 ELSE 5 END")
+            ->orderByRaw('CASE WHEN due_date IS NULL THEN 1 ELSE 0 END')
             ->orderBy('due_date')
             ->orderByDesc('created_at')
             ->get();
@@ -431,7 +544,7 @@ class MaintenanceWorkOrderController extends Controller
             'description' => ['required', 'string'],
             'resolution_notes' => ['nullable', 'string'],
             'photo_reference' => ['nullable', 'string'],
-            'photo' => ['nullable', 'file', 'image', 'max:5120'],
+            'photo' => ['nullable', 'file', 'image', 'mimes:jpg,jpeg,png,gif,bmp,webp', 'max:5120'],
         ]);
 
         $assignedTo = Arr::wrap($validated['assigned_to'] ?? null);
@@ -449,15 +562,21 @@ class MaintenanceWorkOrderController extends Controller
         $validated['dependency_component'] = $validated['dependency_component'] !== ''
             ? $validated['dependency_component']
             : null;
+        $validated['resolution_notes'] = isset($validated['resolution_notes'])
+            ? trim((string) $validated['resolution_notes'])
+            : null;
+        $validated['resolution_notes'] = $validated['resolution_notes'] !== ''
+            ? $validated['resolution_notes']
+            : null;
 
-        if (!empty($validated['technical_area_id'])) {
+        if (! empty($validated['technical_area_id'])) {
             $technicalArea = MaintenanceDependency::query()
                 ->technicalAssets()
                 ->whereKey($validated['technical_area_id'])
                 ->first(['id', 'parent_dependency_id']);
 
             if ($technicalArea?->parent_dependency_id) {
-                if (!empty($validated['maintenance_dependency_id'])
+                if (! empty($validated['maintenance_dependency_id'])
                     && (int) $technicalArea->parent_dependency_id !== (int) $validated['maintenance_dependency_id']) {
                     throw ValidationException::withMessages([
                         'technical_area_id' => 'El área técnica seleccionada no pertenece a la dependencia indicada.',
@@ -470,13 +589,13 @@ class MaintenanceWorkOrderController extends Controller
             }
         }
 
-        if (!empty($validated['inventory_item_id']) && empty($validated['maintenance_dependency_id'])) {
+        if (! empty($validated['inventory_item_id']) && empty($validated['maintenance_dependency_id'])) {
             $validated['maintenance_dependency_id'] = InventoryItem::query()
                 ->whereKey($validated['inventory_item_id'])
                 ->value('dependency_id');
         }
 
-        if (!empty($validated['inventory_item_id']) && !empty($validated['maintenance_dependency_id'])) {
+        if (! empty($validated['inventory_item_id']) && ! empty($validated['maintenance_dependency_id'])) {
             $inventoryDependencyId = InventoryItem::query()
                 ->whereKey($validated['inventory_item_id'])
                 ->value('dependency_id');
@@ -493,15 +612,135 @@ class MaintenanceWorkOrderController extends Controller
         return $validated;
     }
 
-    private function storePhoto($file, ?string $previous = null): string
+    private function storePhoto(UploadedFile $file, ?string $previous = null): string
     {
-        $path = $file->store('maintenance/work-orders', 'public');
+        if (! function_exists('imagecreatefromstring') || ! function_exists('imagejpeg')) {
+            throw ValidationException::withMessages([
+                'photo' => 'El servidor no dispone del procesador de imágenes requerido.',
+            ]);
+        }
 
-        if ($previous) {
+        $contents = $file->get();
+        $source = @imagecreatefromstring($contents);
+
+        if (! $source instanceof \GdImage) {
+            throw ValidationException::withMessages([
+                'photo' => 'La foto no se pudo procesar. Usa una imagen JPG, PNG, GIF, BMP o WebP válida.',
+            ]);
+        }
+
+        $source = $this->applyPhotoOrientation($source, $file);
+        $sourceWidth = imagesx($source);
+        $sourceHeight = imagesy($source);
+        $maxDimension = 2400;
+        $scale = min(1, $maxDimension / max($sourceWidth, $sourceHeight));
+        $targetWidth = max(1, (int) round($sourceWidth * $scale));
+        $targetHeight = max(1, (int) round($sourceHeight * $scale));
+        $canvas = imagecreatetruecolor($targetWidth, $targetHeight);
+
+        if (! $canvas instanceof \GdImage) {
+            imagedestroy($source);
+
+            throw ValidationException::withMessages([
+                'photo' => 'No se pudo preparar la foto para su almacenamiento.',
+            ]);
+        }
+
+        try {
+            $white = imagecolorallocate($canvas, 255, 255, 255);
+            imagefill($canvas, 0, 0, $white);
+            imagecopyresampled(
+                $canvas,
+                $source,
+                0,
+                0,
+                0,
+                0,
+                $targetWidth,
+                $targetHeight,
+                $sourceWidth,
+                $sourceHeight
+            );
+
+            ob_start();
+            $encoded = imagejpeg($canvas, null, 88);
+            $jpeg = ob_get_clean();
+        } finally {
+            imagedestroy($canvas);
+            imagedestroy($source);
+        }
+
+        if (! $encoded || ! is_string($jpeg) || $jpeg === '') {
+            throw ValidationException::withMessages([
+                'photo' => 'No se pudo convertir la foto a un formato compatible.',
+            ]);
+        }
+
+        $path = 'maintenance/work-orders/'.Str::uuid().'.jpg';
+
+        if (! Storage::disk('public')->put($path, $jpeg, ['visibility' => 'public'])) {
+            throw ValidationException::withMessages([
+                'photo' => 'No se pudo guardar la foto. Intenta nuevamente.',
+            ]);
+        }
+
+        if (MaintenanceWorkOrder::isManagedPhotoReference($previous)) {
             Storage::disk('public')->delete($previous);
         }
 
         return $path;
+    }
+
+    private function storeClosureDocument(UploadedFile $file, ?string $previous = null): string
+    {
+        $extension = strtolower($file->getClientOriginalExtension());
+        $path = $file->storeAs(
+            'maintenance/work-orders/closures',
+            Str::uuid().'.'.$extension,
+            'public'
+        );
+
+        if (! is_string($path) || $path === '') {
+            throw ValidationException::withMessages([
+                'closure_document' => 'No se pudo guardar el acta o evidencia de cierre.',
+            ]);
+        }
+
+        if (MaintenanceWorkOrder::isManagedClosureDocumentReference($previous)) {
+            Storage::disk('public')->delete($previous);
+        }
+
+        return $path;
+    }
+
+    private function applyPhotoOrientation(\GdImage $image, UploadedFile $file): \GdImage
+    {
+        if (! function_exists('exif_read_data') || $file->getMimeType() !== 'image/jpeg') {
+            return $image;
+        }
+
+        $exif = @exif_read_data($file->getRealPath());
+        $orientation = (int) ($exif['Orientation'] ?? 1);
+        $angle = match ($orientation) {
+            3 => 180,
+            6 => -90,
+            8 => 90,
+            default => 0,
+        };
+
+        if ($angle === 0) {
+            return $image;
+        }
+
+        $rotated = imagerotate($image, $angle, 0);
+
+        if (! $rotated instanceof \GdImage) {
+            return $image;
+        }
+
+        imagedestroy($image);
+
+        return $rotated;
     }
 
     private function requesters(): array
@@ -610,7 +849,7 @@ class MaintenanceWorkOrderController extends Controller
                 'label' => trim(sprintf(
                     '%s%s',
                     $staff->full_name,
-                    $staff->maintenance_role_label ? ' · ' . $staff->maintenance_role_label : ''
+                    $staff->maintenance_role_label ? ' · '.$staff->maintenance_role_label : ''
                 )),
                 'value' => $staff->full_name,
             ])
@@ -629,6 +868,23 @@ class MaintenanceWorkOrderController extends Controller
         });
     }
 
+    private function whereLocatedInDependency(Builder $query, int $dependencyId): Builder
+    {
+        return $query->where(function (Builder $query) use ($dependencyId) {
+            $query
+                // Si la OT está asociada a un bien, prevalece su ubicación actual.
+                ->whereHas('inventoryItem', function (Builder $inventoryItems) use ($dependencyId) {
+                    $inventoryItems->where('dependency_id', $dependencyId);
+                })
+                // Las OT generales conservan como ubicación la dependencia de la orden.
+                ->orWhere(function (Builder $workOrders) use ($dependencyId) {
+                    $workOrders
+                        ->whereDoesntHave('inventoryItem')
+                        ->where('maintenance_dependency_id', $dependencyId);
+                });
+        });
+    }
+
     private function distinct(string $column): array
     {
         return MaintenanceWorkOrder::query()
@@ -643,7 +899,7 @@ class MaintenanceWorkOrderController extends Controller
 
     private function parseAssignees(?string $value): array
     {
-        if (!$value) {
+        if (! $value) {
             return [];
         }
 
@@ -665,7 +921,7 @@ class MaintenanceWorkOrderController extends Controller
             return $this->sanitizeForJson($value->jsonSerialize());
         }
 
-        if ($value instanceof \Illuminate\Support\Collection) {
+        if ($value instanceof Collection) {
             return $value->map(fn ($item) => $this->sanitizeForJson($item))->all();
         }
 
@@ -679,6 +935,7 @@ class MaintenanceWorkOrderController extends Controller
             }
 
             $clean = @iconv('UTF-8', 'UTF-8//IGNORE', $value);
+
             return $clean === false ? '' : $clean;
         }
 

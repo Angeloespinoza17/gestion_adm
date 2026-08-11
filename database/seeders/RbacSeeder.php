@@ -138,6 +138,8 @@ class RbacSeeder extends Seeder
             ['slug' => 'ver_psicologia', 'name' => 'Ver Psicología'],
             ['slug' => 'ver_convivencia', 'name' => 'Ver Convivencia Escolar'],
             ['slug' => 'ver_prevencion_riesgos', 'name' => 'Ver Prevención de Riesgos'],
+            ['slug' => 'gestionar_prevencion_riesgos', 'name' => 'Gestionar Prevención de Riesgos'],
+            ['slug' => 'exportar_prevencion_riesgos', 'name' => 'Exportar Prevención de Riesgos'],
             ['slug' => 'ver_documentos_prevencion_difundibles', 'name' => 'Ver Documentos Difundibles de Prevención'],
 
             // Mantención
@@ -298,6 +300,16 @@ class RbacSeeder extends Seeder
             ['slug' => 'psychology', 'name' => 'Psicología', 'frontend_route' => '/psychology', 'icon' => 'bx-brain', 'sort' => 60],
             ['slug' => 'convivencia', 'name' => 'Convivencia Escolar', 'frontend_route' => '/convivencia', 'icon' => 'bx-happy', 'sort' => 70],
             ['slug' => 'risk_prevention', 'name' => 'Prevención de Riesgos', 'frontend_route' => '/risk-prevention', 'icon' => 'bx-shield-quarter', 'sort' => 80],
+            ['slug' => 'risk_prevention_dashboard', 'name' => 'Dashboard', 'frontend_route' => '/risk-prevention', 'icon' => null, 'sort' => 1, 'parent' => 'risk_prevention'],
+            ['slug' => 'risk_prevention_extinguishers', 'name' => 'Extintores', 'frontend_route' => '/risk-prevention/extinguishers', 'icon' => null, 'sort' => 2, 'parent' => 'risk_prevention'],
+            ['slug' => 'risk_prevention_accidents', 'name' => 'Accidentes', 'frontend_route' => '/risk-prevention/accidents', 'icon' => null, 'sort' => 3, 'parent' => 'risk_prevention'],
+            ['slug' => 'risk_prevention_emergencies', 'name' => 'Emergencias y planes', 'frontend_route' => '/risk-prevention/emergencies', 'icon' => null, 'sort' => 4, 'parent' => 'risk_prevention'],
+            ['slug' => 'risk_prevention_epp', 'name' => 'EPP y seguridad', 'frontend_route' => '/risk-prevention/epp', 'icon' => null, 'sort' => 5, 'parent' => 'risk_prevention'],
+            ['slug' => 'risk_prevention_trainings', 'name' => 'Capacitaciones', 'frontend_route' => '/risk-prevention/trainings', 'icon' => null, 'sort' => 6, 'parent' => 'risk_prevention'],
+            ['slug' => 'risk_prevention_personnel', 'name' => 'Gestión del personal', 'frontend_route' => '/risk-prevention/personnel', 'icon' => null, 'sort' => 7, 'parent' => 'risk_prevention'],
+            ['slug' => 'risk_prevention_documents', 'name' => 'Gestión documental empresa', 'frontend_route' => '/risk-prevention/documents', 'icon' => null, 'sort' => 8, 'parent' => 'risk_prevention'],
+            ['slug' => 'risk_prevention_staff_documents', 'name' => 'Gestión documental', 'frontend_route' => '/risk-prevention/document-management', 'icon' => null, 'sort' => 9, 'parent' => 'risk_prevention'],
+            ['slug' => 'risk_prevention_reports', 'name' => 'Reportes', 'frontend_route' => '/risk-prevention/reports', 'icon' => null, 'sort' => 10, 'parent' => 'risk_prevention'],
 
             // Mantención (padre + submódulos)
             ['slug' => 'maintenance', 'name' => 'Mantención', 'frontend_route' => null, 'icon' => 'bx-wrench', 'sort' => 90],
@@ -1010,10 +1022,12 @@ class RbacSeeder extends Seeder
             'tasks_backlog',
         ]));
 
-        // Prevención de Riesgos (lectura + reportes)
+        // Prevención de Riesgos (gestión completa del módulo)
         $rolesBySlug['prevencion_riesgos']->permissions()->sync($this->ids($permissionsBySlug, [
             'ver_dashboard',
             'ver_prevencion_riesgos',
+            'gestionar_prevencion_riesgos',
+            'exportar_prevencion_riesgos',
             'ver_mantencion',
             'ver_reportes_mantencion',
             'ver_reportes',
@@ -1032,6 +1046,16 @@ class RbacSeeder extends Seeder
         $rolesBySlug['prevencion_riesgos']->modules()->sync($this->ids($modulesBySlug, [
             'dashboard',
             'risk_prevention',
+            'risk_prevention_dashboard',
+            'risk_prevention_extinguishers',
+            'risk_prevention_accidents',
+            'risk_prevention_emergencies',
+            'risk_prevention_epp',
+            'risk_prevention_trainings',
+            'risk_prevention_personnel',
+            'risk_prevention_documents',
+            'risk_prevention_staff_documents',
+            'risk_prevention_reports',
             'spaces',
             'spaces_approvers',
             'spaces_reservations',
