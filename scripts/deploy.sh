@@ -56,6 +56,8 @@ rsync -az --delete --chmod='Du=rwx,Dgo=rx' \
   --exclude='node_modules' \
   --exclude='vendor' \
   --exclude='storage' \
+  --exclude='output' \
+  --exclude='outputs' \
   --exclude='public/hot' \
   "${ROOT_DIR}/" "${REMOTE}:${DEPLOY_REMOTE_PATH}/"
 

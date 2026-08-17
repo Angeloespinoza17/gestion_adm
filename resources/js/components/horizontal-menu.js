@@ -6,6 +6,23 @@ export const menuItems = [
         link: '/inicio'
     },
     {
+        id: 'libro-digital',
+        label: 'Libro Digital',
+        icon: 'bx-book-content',
+        subItems: [
+            { id: 'libro-digital-journey', label: 'Mi jornada', link: '/libro-digital', parentId: 'libro-digital' },
+            { id: 'libro-digital-books', label: 'Libros y cursos', link: '/libro-digital/books', parentId: 'libro-digital' },
+            { id: 'libro-digital-subjects', label: 'Asignaturas', link: '/libro-digital/subjects', parentId: 'libro-digital' },
+            { id: 'libro-digital-objectives', label: 'Objetivos curriculares', link: '/libro-digital/objectives', parentId: 'libro-digital' },
+            { id: 'libro-digital-control', label: 'Firmas y cierres', link: '/libro-digital/control', parentId: 'libro-digital' },
+            { id: 'libro-digital-statistics', label: 'Estadísticas', link: '/libro-digital/statistics', parentId: 'libro-digital' },
+            { id: 'libro-digital-reports', label: 'Reportes e informes', link: '/libro-digital/reports', parentId: 'libro-digital' },
+            { id: 'libro-digital-ede', label: 'Fiscalización EDE', link: '/libro-digital/ede', parentId: 'libro-digital' },
+            { id: 'libro-digital-audit', label: 'Auditoría', link: '/libro-digital/audit', parentId: 'libro-digital' },
+            { id: 'libro-digital-configuration', label: 'Configuración', link: '/libro-digital/configuration', parentId: 'libro-digital' },
+        ],
+    },
+    {
         id: 900,
         label: 'Mantención',
         icon: 'bx-wrench',
@@ -208,6 +225,20 @@ export const menuItems = [
         ]
     },
     {
+        id: 9080,
+        label: 'Inspectoría',
+        icon: 'bx-shield-quarter',
+        subItems: [
+            { id: 9081, label: 'Atención rápida', link: '/inspectoria/atenciones', parentId: 9080 },
+            { id: 9082, label: 'Cursos e inspectoras', link: '/inspectoria/asignaciones', parentId: 9080 },
+            { id: 9083, label: 'Pases prioritarios', link: '/inspectoria/pases', parentId: 9080 },
+            { id: 9084, label: 'Alumnas y fichas', link: '/inspectoria/alumnas', parentId: 9080 },
+            { id: 9087, label: 'Restricciones de retiro', link: '/inspectoria/restricciones', parentId: 9080 },
+            { id: 9086, label: 'Retiros de alumnas', link: '/inspectoria/retiros', parentId: 9080 },
+            { id: 9085, label: 'Bitácora diaria', link: '/inspectoria/bitacora', parentId: 9080 }
+        ]
+    },
+    {
         id: 910,
         label: 'Funcionarios',
         icon: 'bx-id-card',
@@ -273,6 +304,19 @@ export const menuItems = [
                 link: '/staff/permissions/watchers-summary',
                 parentId: 9150
             }
+        ]
+    },
+    {
+        id: 9155,
+        label: 'Gestión Operativa',
+        icon: 'bx-briefcase-alt-2',
+        subItems: [
+            { id: 91551, label: 'Mis traslados', link: '/operational/transfers', parentId: 9155 },
+            { id: 91552, label: 'Bandeja de visación', link: '/operational/transfers/review', parentId: 9155 },
+            { id: 91553, label: 'Gestión de traslados', link: '/operational/transfers/management', parentId: 9155 },
+            { id: 91554, label: 'Reportes', link: '/operational/transfers/reports', parentId: 9155 },
+            { id: 91555, label: 'Ausencias y saldos', link: '/human-resources/absences', parentId: 9155 },
+            { id: 91556, label: 'Selección y banco de talento', link: '/human-resources/recruitment', parentId: 9155 }
         ]
     },
     {

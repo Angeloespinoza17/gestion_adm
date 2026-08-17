@@ -27,6 +27,7 @@ class BibliotecaPase extends Model
         'valid_from',
         'valid_until',
         'status',
+        'superseded_by_inspectoria_pass_id',
         'regulation_version',
         'reason',
         'signature_data',

@@ -26,6 +26,7 @@ class RbacSeeder extends Seeder
         $this->seedModules();
         $this->seedRolesAndAssignments();
         $this->seedSuperAdminUser();
+        app(LibroDigitalSeeder::class)->seedRbacAndNavigation();
     }
 
     /**
@@ -65,9 +66,11 @@ class RbacSeeder extends Seeder
         $cargos = [
             ['name' => 'Psicólogo/a', 'slug' => 'psicologo', 'description' => 'Equipo de psicología.'],
             ['name' => 'Coordinador Académico', 'slug' => 'coordinador_academico', 'description' => 'Coordinación académica.'],
+            ['name' => 'Subdirector/a', 'slug' => 'subdirector', 'description' => 'Subdirección y visación de solicitudes institucionales.'],
             ['name' => 'Enfermero/a', 'slug' => 'enfermeria', 'description' => 'Enfermería escolar.'],
             ['name' => 'Prevencionista de Riesgos', 'slug' => 'prevencion_riesgos', 'description' => 'Prevención de riesgos.'],
-            ['name' => 'Inspector/a', 'slug' => 'inspectoria', 'description' => 'Inspectoría.'],
+            ['name' => 'Inspector/a', 'slug' => 'inspectoria', 'description' => 'Atención operativa de los cursos asignados.'],
+            ['name' => 'Coordinador/a de Inspectoría', 'slug' => 'coordinador_inspectoria', 'description' => 'Coordinación general de Inspectoría y asignación de cursos.'],
             ['name' => 'Portero/a', 'slug' => 'porteria', 'description' => 'Portería y control de accesos.'],
             ['name' => 'Encargado/a de Mantención', 'slug' => 'encargado_mantencion', 'description' => 'Mantención e infraestructura.'],
             ['name' => 'Auxiliar de Mantención', 'slug' => 'auxiliar_mantenimiento', 'description' => 'Apoyo operativo en mantención e infraestructura.'],
@@ -132,6 +135,17 @@ class RbacSeeder extends Seeder
             ['slug' => 'gestionar_llaves_porteria', 'name' => 'Gestionar Llaves en Portería'],
             ['slug' => 'ver_historial_porteria', 'name' => 'Ver Historial de Portería'],
             ['slug' => 'exportar_reportes_porteria', 'name' => 'Exportar Reportes de Portería'],
+
+            // Inspectoría
+            ['slug' => 'ver_modulo_inspectoria', 'name' => 'Ver Módulo de Inspectoría'],
+            ['slug' => 'registrar_atenciones_inspectoria', 'name' => 'Registrar Atenciones de Inspectoría'],
+            ['slug' => 'asignar_cursos_inspectoria', 'name' => 'Asignar Cursos a Inspectoras'],
+            ['slug' => 'gestionar_pases_inspectoria', 'name' => 'Gestionar Pases Prioritarios de Inspectoría'],
+            ['slug' => 'ver_fichas_inspectoria', 'name' => 'Ver Fichas de Alumnas en Inspectoría'],
+            ['slug' => 'ver_retiros_inspectoria', 'name' => 'Ver Retiros de Alumnas en Inspectoría'],
+            ['slug' => 'social_work.referrals.submit', 'name' => 'Enviar Derivaciones a Trabajo Social'],
+            ['slug' => 'social_work.pickup_restrictions.manage', 'name' => 'Gestionar Restricciones de Retiro en Trabajo Social'],
+            ['slug' => 'registrar_bitacora_inspectoria', 'name' => 'Registrar Bitácora Diaria de Inspectoría'],
 
             // Módulos específicos
             ['slug' => 'ver_salud', 'name' => 'Ver Enfermería / Salud'],
@@ -199,10 +213,17 @@ class RbacSeeder extends Seeder
             ['slug' => 'validar_documentos_permisos_personal', 'name' => 'Validar Documentos de Permisos'],
             ['slug' => 'gestionar_reemplazos_permisos_personal', 'name' => 'Gestionar Reemplazos de Permisos'],
             ['slug' => 'ver_reportes_permisos_personal', 'name' => 'Ver Reportes de Permisos'],
+            ['slug' => 'ver_traslados_operativos', 'name' => 'Ver Traslados Operativos'],
+            ['slug' => 'solicitar_traslados_operativos', 'name' => 'Solicitar Traslados Operativos'],
+            ['slug' => 'visar_traslados_operativos', 'name' => 'Visar Traslados Operativos'],
+            ['slug' => 'gestionar_traslados_operativos', 'name' => 'Gestionar Traslados Operativos'],
+            ['slug' => 'administrar_proveedores_traslados', 'name' => 'Administrar Proveedores de Traslados'],
+            ['slug' => 'exportar_traslados_operativos', 'name' => 'Exportar Traslados Operativos'],
+            ['slug' => 'importar_traslados_operativos', 'name' => 'Importar Traslados Operativos Históricos'],
             ['slug' => 'ver_tareas', 'name' => 'Ver Backlog de Tareas'],
             ['slug' => 'gestionar_tareas', 'name' => 'Gestionar Tareas Propias'],
-            ['slug' => 'ver_tareas_equipo', 'name' => 'Ver Backlogs de Equipo'],
             ['slug' => 'administrar_asignadores_tareas', 'name' => 'Administrar Asignadores de Tareas'],
+            ['slug' => 'ver_reportes_tareas', 'name' => 'Ver Reportes Globales de Tareas'],
             ['slug' => 'ver_contratos', 'name' => 'Ver Contratos'],
             ['slug' => 'gestionar_contratos', 'name' => 'Gestionar Contratos'],
             ['slug' => 'eliminar_contratos', 'name' => 'Eliminar Contratos'],
@@ -258,6 +279,13 @@ class RbacSeeder extends Seeder
             ['slug' => 'students_reports', 'name' => 'Reportes', 'frontend_route' => '/students/reports', 'icon' => null, 'sort' => 7, 'parent' => 'students'],
             ['slug' => 'students_attendance_statistics', 'name' => 'Estadísticas de asistencia', 'frontend_route' => '/students/attendance-statistics', 'icon' => null, 'sort' => 8, 'parent' => 'students'],
             ['slug' => 'schedule', 'name' => 'Horarios docentes', 'frontend_route' => null, 'icon' => 'bx-calendar-event', 'sort' => 23],
+            ['slug' => 'inspectoria', 'name' => 'Inspectoría', 'frontend_route' => null, 'icon' => 'bx-shield-quarter', 'sort' => 24],
+            ['slug' => 'inspectoria_atenciones', 'name' => 'Atención rápida', 'frontend_route' => '/inspectoria/atenciones', 'icon' => null, 'sort' => 1, 'parent' => 'inspectoria'],
+            ['slug' => 'inspectoria_asignaciones', 'name' => 'Cursos e inspectoras', 'frontend_route' => '/inspectoria/asignaciones', 'icon' => null, 'sort' => 2, 'parent' => 'inspectoria'],
+            ['slug' => 'inspectoria_pases', 'name' => 'Pases prioritarios', 'frontend_route' => '/inspectoria/pases', 'icon' => null, 'sort' => 3, 'parent' => 'inspectoria'],
+            ['slug' => 'inspectoria_alumnas', 'name' => 'Alumnas y fichas', 'frontend_route' => '/inspectoria/alumnas', 'icon' => null, 'sort' => 4, 'parent' => 'inspectoria'],
+            ['slug' => 'inspectoria_retiros', 'name' => 'Retiros de alumnas', 'frontend_route' => '/inspectoria/retiros', 'icon' => null, 'sort' => 6, 'parent' => 'inspectoria'],
+            ['slug' => 'inspectoria_bitacora', 'name' => 'Bitácora diaria', 'frontend_route' => '/inspectoria/bitacora', 'icon' => null, 'sort' => 7, 'parent' => 'inspectoria'],
             ['slug' => 'schedule_teacher', 'name' => 'Horario docente', 'frontend_route' => '/schedule/teacher', 'icon' => null, 'sort' => 1, 'parent' => 'schedule'],
             ['slug' => 'schedule_course', 'name' => 'Horario por curso', 'frontend_route' => '/schedule/course', 'icon' => null, 'sort' => 2, 'parent' => 'schedule'],
             ['slug' => 'schedule_config', 'name' => 'Configuración horaria', 'frontend_route' => '/schedule/config', 'icon' => null, 'sort' => 3, 'parent' => 'schedule'],
@@ -287,9 +315,16 @@ class RbacSeeder extends Seeder
             ['slug' => 'staff_permissions_reports', 'name' => 'Reportes de permisos', 'frontend_route' => '/staff/permissions/reports', 'icon' => null, 'sort' => 4, 'parent' => 'staff_permissions'],
             ['slug' => 'staff_permissions_types', 'name' => 'Tipos de permiso', 'frontend_route' => '/staff/permissions/types', 'icon' => null, 'sort' => 5, 'parent' => 'staff_permissions'],
             ['slug' => 'staff_permissions_watchers', 'name' => 'Quién debe enterarse', 'frontend_route' => '/staff/permissions/watchers', 'icon' => null, 'sort' => 6, 'parent' => 'staff_permissions'],
+            ['slug' => 'operational_management', 'name' => 'Gestión Operativa', 'frontend_route' => null, 'icon' => 'bx-briefcase-alt-2', 'sort' => 44],
+            ['slug' => 'operational_transfers_requests', 'name' => 'Mis solicitudes', 'frontend_route' => '/operational/transfers', 'icon' => null, 'sort' => 1, 'parent' => 'operational_management'],
+            ['slug' => 'operational_transfers_review', 'name' => 'Bandeja de visación', 'frontend_route' => '/operational/transfers/review', 'icon' => null, 'sort' => 2, 'parent' => 'operational_management'],
+            ['slug' => 'operational_transfers_management', 'name' => 'Gestión de traslados', 'frontend_route' => '/operational/transfers/management', 'icon' => null, 'sort' => 3, 'parent' => 'operational_management'],
+            ['slug' => 'operational_transfers_reports', 'name' => 'Reportes de traslados', 'frontend_route' => '/operational/transfers/reports', 'icon' => null, 'sort' => 4, 'parent' => 'operational_management'],
             ['slug' => 'tasks', 'name' => 'Tareas', 'frontend_route' => null, 'icon' => 'bx-list-check', 'sort' => 43],
             ['slug' => 'tasks_backlog', 'name' => 'Mi backlog', 'frontend_route' => '/tasks/backlog', 'icon' => null, 'sort' => 1, 'parent' => 'tasks'],
             ['slug' => 'tasks_assigners', 'name' => 'Asignadores de tareas', 'frontend_route' => '/tasks/assigners', 'icon' => null, 'sort' => 2, 'parent' => 'tasks'],
+            ['slug' => 'tasks_all', 'name' => 'Todas las tareas', 'frontend_route' => '/tasks/all', 'icon' => null, 'sort' => 3, 'parent' => 'tasks'],
+            ['slug' => 'tasks_reports', 'name' => 'Reportes de tareas', 'frontend_route' => '/tasks/reports', 'icon' => null, 'sort' => 4, 'parent' => 'tasks'],
             ['slug' => 'internal_communications', 'name' => 'Comunicaciones internas', 'frontend_route' => '/comunicaciones', 'icon' => 'bx-message-square-detail', 'sort' => 44],
             ['slug' => 'contracts', 'name' => 'Contratos', 'frontend_route' => null, 'icon' => 'bx-file', 'sort' => 45],
             ['slug' => 'contracts_list', 'name' => 'Listado de contratos', 'frontend_route' => '/contracts', 'icon' => null, 'sort' => 1, 'parent' => 'contracts'],
@@ -389,10 +424,12 @@ class RbacSeeder extends Seeder
             ['slug' => 'rrhh', 'name' => 'RRHH / Administración', 'description' => 'Gestión administrativa y documental del personal.'],
             ['slug' => 'direccion', 'name' => 'Dirección', 'description' => 'Dirección del establecimiento.'],
             ['slug' => 'coordinador_academico', 'name' => 'Coordinador Académico', 'description' => 'Coordinación académica.'],
+            ['slug' => 'subdirector', 'name' => 'Subdirector/a', 'description' => 'Visación de solicitudes institucionales.'],
             ['slug' => 'psicologo', 'name' => 'Psicólogo/a', 'description' => 'Acceso a módulo Psicología.'],
             ['slug' => 'enfermeria', 'name' => 'Enfermería', 'description' => 'Acceso a módulo Enfermería.'],
             ['slug' => 'prevencion_riesgos', 'name' => 'Prevención de Riesgos', 'description' => 'Riesgos + Mantención (críticas/reportes).'],
-            ['slug' => 'inspectoria', 'name' => 'Inspectoría', 'description' => 'Inspectoría.'],
+            ['slug' => 'inspectoria', 'name' => 'Inspector/a', 'description' => 'Atención operativa limitada a los cursos asignados.'],
+            ['slug' => 'coordinador_inspectoria', 'name' => 'Coordinador/a de Inspectoría', 'description' => 'Coordinación general de Inspectoría y administración de asignaciones.'],
             ['slug' => 'porteria', 'name' => 'Portería', 'description' => 'Operación diaria de portería.'],
             ['slug' => 'encargado_mantencion', 'name' => 'Encargado de Mantención', 'description' => 'Mantención: OT + visitas + exportaciones.'],
             ['slug' => 'encargado_biblioteca', 'name' => 'Encargado de Biblioteca', 'description' => 'Gestión integral del módulo Biblioteca Escolar / CRA.'],
@@ -512,9 +549,15 @@ class RbacSeeder extends Seeder
             'validar_documentos_permisos_personal',
             'gestionar_reemplazos_permisos_personal',
             'ver_reportes_permisos_personal',
+            'ver_traslados_operativos',
+            'solicitar_traslados_operativos',
+            'visar_traslados_operativos',
+            'gestionar_traslados_operativos',
+            'administrar_proveedores_traslados',
+            'exportar_traslados_operativos',
+            'importar_traslados_operativos',
             'ver_tareas',
             'gestionar_tareas',
-            'ver_tareas_equipo',
             'administrar_asignadores_tareas',
             'ver_contratos',
             'gestionar_contratos',
@@ -545,6 +588,12 @@ class RbacSeeder extends Seeder
             'exportar_rondas_seguridad',
             'ver_horarios',
             'ver_reportes_carga_horaria',
+            'ver_modulo_inspectoria',
+            'registrar_atenciones_inspectoria',
+            'gestionar_pases_inspectoria',
+            'ver_fichas_inspectoria',
+            'ver_retiros_inspectoria',
+            'registrar_bitacora_inspectoria',
         ]));
 
         $rolesBySlug['administrador']->modules()->sync($this->ids($modulesBySlug, [
@@ -585,6 +634,11 @@ class RbacSeeder extends Seeder
             'staff_permissions_reports',
             'staff_permissions_types',
             'staff_permissions_watchers',
+            'operational_management',
+            'operational_transfers_requests',
+            'operational_transfers_review',
+            'operational_transfers_management',
+            'operational_transfers_reports',
             'tasks',
             'tasks_backlog',
             'tasks_assigners',
@@ -663,7 +717,6 @@ class RbacSeeder extends Seeder
             'ver_reportes_permisos_personal',
             'ver_tareas',
             'gestionar_tareas',
-            'ver_tareas_equipo',
             'administrar_asignadores_tareas',
             'ver_contratos',
             'ver_mantencion',
@@ -741,6 +794,13 @@ class RbacSeeder extends Seeder
             'schedule_teacher',
             'schedule_course',
             'schedule_conflicts',
+            'inspectoria',
+            'inspectoria_atenciones',
+            'inspectoria_asignaciones',
+            'inspectoria_pases',
+            'inspectoria_alumnas',
+            'inspectoria_retiros',
+            'inspectoria_bitacora',
         ]));
 
         // Coordinación académica
@@ -761,7 +821,6 @@ class RbacSeeder extends Seeder
             'gestionar_reemplazos_permisos_personal',
             'ver_tareas',
             'gestionar_tareas',
-            'ver_tareas_equipo',
             'administrar_asignadores_tareas',
             'ver_dependencias',
             'ver_reservas',
@@ -782,6 +841,8 @@ class RbacSeeder extends Seeder
             'configurar_contratos_docentes',
             'forzar_excepciones_horario',
             'ver_reportes_carga_horaria',
+            'ver_traslados_operativos',
+            'solicitar_traslados_operativos',
         ]));
 
         $rolesBySlug['coordinador_academico']->modules()->sync($this->ids($modulesBySlug, [
@@ -820,6 +881,8 @@ class RbacSeeder extends Seeder
             'schedule_study_plans',
             'schedule_contracts',
             'schedule_conflicts',
+            'operational_management',
+            'operational_transfers_requests',
         ]));
 
         // RRHH / Administración
@@ -855,7 +918,6 @@ class RbacSeeder extends Seeder
             'ver_reportes_permisos_personal',
             'ver_tareas',
             'gestionar_tareas',
-            'ver_tareas_equipo',
             'administrar_asignadores_tareas',
             'ver_rondas_seguridad',
             'gestionar_turnos_nochero',
@@ -1117,6 +1179,13 @@ class RbacSeeder extends Seeder
 
         // Inspectoría
         $rolesBySlug['inspectoria']->permissions()->sync($this->ids($permissionsBySlug, [
+            'ver_modulo_inspectoria',
+            'registrar_atenciones_inspectoria',
+            'gestionar_pases_inspectoria',
+            'ver_fichas_inspectoria',
+            'ver_retiros_inspectoria',
+            'social_work.referrals.submit',
+            'registrar_bitacora_inspectoria',
             'ver_dashboard',
             'ver_estudiantes',
             'ver_ficha_estudiante',
@@ -1150,6 +1219,13 @@ class RbacSeeder extends Seeder
         ]));
 
         $rolesBySlug['inspectoria']->modules()->sync($this->ids($modulesBySlug, [
+            'inspectoria',
+            'inspectoria_atenciones',
+            'inspectoria_asignaciones',
+            'inspectoria_pases',
+            'inspectoria_alumnas',
+            'inspectoria_retiros',
+            'inspectoria_bitacora',
             'dashboard',
             'students',
             'students_directory',
@@ -1181,6 +1257,53 @@ class RbacSeeder extends Seeder
             'schedule_teacher',
             'schedule_course',
             'schedule_conflicts',
+            'social_work',
+            'social_work_referrals',
+        ]));
+
+        // Coordinación de Inspectoría: alcance global y administración de cursos.
+        $rolesBySlug['coordinador_inspectoria']->permissions()->sync($this->ids($permissionsBySlug, [
+            'ver_modulo_inspectoria',
+            'registrar_atenciones_inspectoria',
+            'asignar_cursos_inspectoria',
+            'gestionar_pases_inspectoria',
+            'ver_fichas_inspectoria',
+            'ver_retiros_inspectoria',
+            'social_work.referrals.submit',
+            'registrar_bitacora_inspectoria',
+        ]));
+
+        $rolesBySlug['coordinador_inspectoria']->modules()->sync($this->ids($modulesBySlug, [
+            'inspectoria',
+            'inspectoria_atenciones',
+            'inspectoria_asignaciones',
+            'inspectoria_pases',
+            'inspectoria_alumnas',
+            'inspectoria_retiros',
+            'inspectoria_bitacora',
+            'social_work',
+            'social_work_referrals',
+        ]));
+
+        // Subdirección
+        $rolesBySlug['subdirector']->permissions()->sync($this->ids($permissionsBySlug, [
+            'ver_dashboard',
+            'ver_comunicaciones_internas',
+            'ver_funcionarios',
+            'ver_traslados_operativos',
+            'solicitar_traslados_operativos',
+            'visar_traslados_operativos',
+            'exportar_traslados_operativos',
+        ]));
+
+        $rolesBySlug['subdirector']->modules()->sync($this->ids($modulesBySlug, [
+            'dashboard',
+            'staff',
+            'staff_directory',
+            'internal_communications',
+            'operational_management',
+            'operational_transfers_requests',
+            'operational_transfers_review',
         ]));
 
         // Docente
@@ -1197,6 +1320,8 @@ class RbacSeeder extends Seeder
             'gestionar_tareas',
             'ver_horarios',
             'ver_reportes_carga_horaria',
+            'ver_traslados_operativos',
+            'solicitar_traslados_operativos',
         ]));
 
         $rolesBySlug['docente']->modules()->sync($this->ids($modulesBySlug, [
@@ -1211,6 +1336,8 @@ class RbacSeeder extends Seeder
             'tasks_backlog',
             'schedule',
             'schedule_teacher',
+            'operational_management',
+            'operational_transfers_requests',
         ]));
 
         // Portería

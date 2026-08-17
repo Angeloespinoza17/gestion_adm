@@ -12,9 +12,11 @@ use App\Models\StudentEnrollmentMovement;
 use App\Models\StudentProfile;
 use App\Models\StudentPromotion;
 use App\Models\User;
+use App\Services\Students\StudentDeletionService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
+use Illuminate\Validation\ValidationException;
 use Laravel\Sanctum\Sanctum;
 use Tests\TestCase;
 
@@ -72,6 +74,60 @@ class StudentDeletionTest extends TestCase
 
         $this->assertDatabaseMissing('users', ['id' => $linkedUser->id]);
         $this->assertDatabaseMissing('student_profiles', ['id' => $student->id]);
+    }
+
+    public function test_lcd_official_record_blocks_student_and_linked_account_deletion_atomically(): void
+    {
+        $student = $this->createStudent();
+        $linkedUser = User::factory()->create([
+            'student_id' => $student->id,
+            'user_type' => 'student',
+        ]);
+        $schoolId = DB::table('lcd_schools')->insertGetId([
+            'public_id' => (string) Str::ulid(), 'rbd' => '99999', 'name' => 'Colegio sintético',
+            'timezone' => 'America/Santiago', 'active' => true, 'created_at' => now(), 'updated_at' => now(),
+        ]);
+        $year = AcademicYear::query()->create(['name' => 'Año LCD', 'year' => 2098, 'is_active' => true]);
+        $level = EducationLevel::query()->create(['name' => 'Nivel LCD '.Str::random(4), 'order' => 998, 'type' => 'basica']);
+        $course = CourseSection::query()->create(['academic_year_id' => $year->id, 'education_level_id' => $level->id, 'section_name' => 'Z', 'display_name' => 'Curso LCD Z', 'active' => true]);
+        $enrollment = StudentEnrollment::query()->create([
+            'student_profile_id' => $student->id, 'academic_year_id' => $year->id, 'course_section_id' => $course->id,
+            'enrollment_status' => 'matriculada', 'snapshot_year_name' => $year->name, 'snapshot_level_name' => $level->name,
+            'snapshot_section_name' => 'Z', 'snapshot_course_display_name' => $course->display_name,
+        ]);
+        $profileId = DB::table('lcd_regulatory_profiles')->insertGetId([
+            'public_id' => (string) Str::ulid(), 'code' => 'TEST', 'name' => 'Perfil sintético', 'version' => '1',
+            'effective_from' => '2098-01-01', 'retention_years' => 5, 'active' => true, 'created_at' => now(), 'updated_at' => now(),
+        ]);
+        $bookId = DB::table('lcd_books')->insertGetId([
+            'public_id' => (string) Str::ulid(), 'school_id' => $schoolId, 'academic_year_id' => $year->id,
+            'regulatory_profile_id' => $profileId, 'course_section_id' => $course->id, 'code' => 'BOOK-TEST',
+            'rbd_snapshot' => '99999', 'year_snapshot' => 2098, 'course_label' => 'Curso LCD Z',
+            'status' => 'open', 'created_at' => now(), 'updated_at' => now(),
+        ]);
+        $groupId = DB::table('lcd_teaching_groups')->insertGetId([
+            'public_id' => (string) Str::ulid(), 'school_id' => $schoolId, 'academic_year_id' => $year->id,
+            'book_id' => $bookId, 'course_section_id' => $course->id, 'code' => 'GROUP-TEST', 'name' => 'Grupo sintético',
+            'course_snapshot' => 'Curso LCD Z', 'valid_from' => '2098-03-01', 'status' => 'active',
+            'created_at' => now(), 'updated_at' => now(),
+        ]);
+        DB::table('lcd_enrollment_links')->insert([
+            'public_id' => (string) Str::ulid(), 'school_id' => $schoolId, 'book_id' => $bookId, 'teaching_group_id' => $groupId,
+            'student_profile_id' => $student->id, 'student_enrollment_id' => $enrollment->id, 'course_section_id' => $course->id,
+            'effective_from' => '2098-03-01', 'status' => 'active', 'student_name_snapshot' => 'Estudiante Sintética',
+            'enrollment_status_snapshot' => 'matriculada', 'course_snapshot' => 'Curso LCD Z', 'created_at' => now(), 'updated_at' => now(),
+        ]);
+
+        try {
+            app(StudentDeletionService::class)->deleteStudent($student);
+            $this->fail('La eliminación debía ser bloqueada.');
+        } catch (ValidationException $exception) {
+            $this->assertArrayHasKey('student', $exception->errors());
+        }
+
+        $this->assertDatabaseHas('student_profiles', ['id' => $student->id]);
+        $this->assertDatabaseHas('users', ['id' => $linkedUser->id, 'student_id' => $student->id]);
+        $this->assertDatabaseHas('lcd_enrollment_links', ['student_profile_id' => $student->id]);
     }
 
     public function test_deleting_a_student_user_from_admin_also_removes_the_profile(): void

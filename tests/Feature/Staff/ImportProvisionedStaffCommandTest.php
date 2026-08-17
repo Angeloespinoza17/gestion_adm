@@ -97,13 +97,13 @@ class ImportProvisionedStaffCommandTest extends TestCase
         $this->assertSame('staff', $newUser->user_type);
         $this->assertCount(0, $newStaff->departments);
         $this->assertSame([Role::TEMPORARY_HOME_ONLY_SLUG], $newUser->roles()->pluck('slug')->all());
-        $this->assertSame(['ver_dashboard'], $newUser->permissionSlugs());
+        $this->assertSame(['ver_dashboard', 'ver_tareas', 'gestionar_tareas'], $newUser->permissionSlugs());
         $this->assertTrue(Hash::check('ADMINADMIN', $newUser->password));
 
         Sanctum::actingAs($newUser);
         $this->getJson('/api/me/permissions')
             ->assertOk()
-            ->assertExactJson(['data' => ['ver_dashboard']]);
+            ->assertExactJson(['data' => ['ver_dashboard', 'ver_tareas', 'gestionar_tareas']]);
         $this->getJson('/api/me/modules')
             ->assertOk()
             ->assertJsonCount(1, 'data')

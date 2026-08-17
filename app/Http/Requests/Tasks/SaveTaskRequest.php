@@ -21,6 +21,18 @@ class SaveTaskRequest extends FormRequest
             'priority' => ['required', Rule::in(Task::priorityValues())],
             'status' => ['required', Rule::in(Task::statusValues())],
             'stakeholder' => ['nullable', 'string', 'max:255'],
+            'stakeholder_user_ids' => ['nullable', 'array'],
+            'stakeholder_user_ids.*' => [
+                'integer',
+                'distinct',
+                Rule::exists('users', 'id')->where(function ($query) {
+                    $query
+                        ->where('active', true)
+                        ->where(function ($inner) {
+                            $inner->where('user_type', 'staff')->orWhereNotNull('staff_id');
+                        });
+                }),
+            ],
             'due_date' => ['nullable', 'date'],
             'owner_user_id' => [
                 'required',

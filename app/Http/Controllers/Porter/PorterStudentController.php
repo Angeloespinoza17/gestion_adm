@@ -100,7 +100,15 @@ class PorterStudentController extends Controller
                 ->limit(20),
         ]);
 
-        $payload = $this->studentContextService->porterStudentPayload($studentProfile);
+        $activeYear = $this->studentContextService->activeAcademicYear();
+        $currentEnrollment = $this->studentContextService->currentEnrollment($studentProfile, $activeYear);
+        $assignedInspector = $this->studentContextService->assignedInspector($currentEnrollment);
+        $payload = $this->studentContextService->porterStudentPayload($studentProfile, $currentEnrollment);
+        $payload['assigned_inspector'] = $assignedInspector ? [
+            'id' => $assignedInspector->id,
+            'full_name' => $assignedInspector->full_name,
+            'rut' => $assignedInspector->rut,
+        ] : null;
         $payload['withdrawal_history'] = $studentProfile->porterWithdrawals->map(fn ($withdrawal) => [
             'id' => $withdrawal->id,
             'withdrawn_at' => $withdrawal->withdrawn_at,

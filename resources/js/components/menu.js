@@ -11,6 +11,12 @@ export const menuItems = [
         link: "/inicio"
     },
     {
+        id: 3,
+        label: "Mensajería",
+        icon: "bx-message-rounded-dots",
+        link: "/mensajeria"
+    },
+    {
         id: 6,
         isLayout: true
     },
@@ -320,6 +326,19 @@ export const menuItems = [
         ]
     },
     {
+        id: 9080,
+        label: "Inspectoría",
+        icon: "bx-shield-quarter",
+        subItems: [
+            { id: 9081, label: "Atención rápida", link: "/inspectoria/atenciones", parentId: 9080 },
+            { id: 9082, label: "Cursos e inspectoras", link: "/inspectoria/asignaciones", parentId: 9080 },
+            { id: 9083, label: "Pases prioritarios", link: "/inspectoria/pases", parentId: 9080 },
+            { id: 9084, label: "Alumnas y fichas", link: "/inspectoria/alumnas", parentId: 9080 },
+            { id: 9086, label: "Retiros de alumnas", link: "/inspectoria/retiros", parentId: 9080 },
+            { id: 9085, label: "Bitácora diaria", link: "/inspectoria/bitacora", parentId: 9080 }
+        ]
+    },
+    {
         id: 910,
         label: "Funcionarios",
         icon: "bx-id-card",
@@ -385,6 +404,19 @@ export const menuItems = [
                 link: "/staff/permissions/watchers-summary",
                 parentId: 9150
             }
+        ]
+    },
+    {
+        id: 9155,
+        label: "Gestión Operativa",
+        icon: "bx-briefcase-alt-2",
+        subItems: [
+            { id: 91551, label: "Mis traslados", link: "/operational/transfers", parentId: 9155 },
+            { id: 91552, label: "Bandeja de visación", link: "/operational/transfers/review", parentId: 9155 },
+            { id: 91553, label: "Gestión de traslados", link: "/operational/transfers/management", parentId: 9155 },
+            { id: 91554, label: "Reportes", link: "/operational/transfers/reports", parentId: 9155 },
+            { id: 91555, label: "Ausencias y saldos", link: "/human-resources/absences", parentId: 9155 },
+            { id: 91556, label: "Selección y banco de talento", link: "/human-resources/recruitment", parentId: 9155 }
         ]
     },
     {
@@ -521,6 +553,25 @@ export const menuItems = [
                 link: "/relevant-calendar/institutions",
                 parentId: 925
             }
+        ]
+    },
+    {
+        id: 9260,
+        label: "Trabajo Social",
+        icon: "bx-heart-circle",
+        subItems: [
+            { id: 9261, label: "Panel general", link: "/social-work", parentId: 9260 },
+            { id: 9262, label: "Situación social", link: "/social-work/students", parentId: 9260 },
+            { id: 9263, label: "Casos y atenciones", link: "/social-work/cases", parentId: 9260 },
+            { id: 9264, label: "Alertas", link: "/social-work/alerts", parentId: 9260 },
+            { id: 9265, label: "Derivaciones", link: "/social-work/referrals", parentId: 9260 },
+            { id: 9266, label: "JUNAEB y programas", link: "/social-work/junaeb", parentId: 9260 },
+            { id: 9267, label: "Salud estudiantil", link: "/social-work/health", parentId: 9260 },
+            { id: 92612, label: "Restricciones de retiro", link: "/social-work/pickup-restrictions", parentId: 9260 },
+            { id: 9268, label: "Informes", link: "/social-work/reports", parentId: 9260 },
+            { id: 9269, label: "Calendario", link: "/social-work/calendar", parentId: 9260 },
+            { id: 92610, label: "Plantillas y protocolos", link: "/social-work/settings", parentId: 9260 },
+            { id: 92611, label: "Auditoría", link: "/social-work/audit", parentId: 9260 }
         ]
     },
     {

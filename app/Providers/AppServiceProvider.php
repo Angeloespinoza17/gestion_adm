@@ -2,8 +2,17 @@
 
 namespace App\Providers;
 
+use App\Contracts\LibroDigital\BulkTeacherIdentityVerifier;
+use App\Contracts\LibroDigital\SigeIntegrationGateway;
+use App\Contracts\LibroDigital\TeacherIdentityVerifier;
 use App\Services\Attendance\AttendanceParserRegistry;
 use App\Services\Attendance\LirmiAttendancePdfParser;
+use App\Services\LibroDigital\Identity\DisabledIdentityVerifier;
+use App\Services\LibroDigital\Identity\FakeIdentityVerifier;
+use App\Services\LibroDigital\Identity\MineducBulkIdentityVerifier;
+use App\Services\LibroDigital\Identity\MineducTransactionalIdentityVerifier;
+use App\Services\LibroDigital\Sige\DisabledSigeGateway;
+use App\Services\LibroDigital\Sige\SigeManualReconciliationGateway;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\ServiceProvider;
 use Laravel\Sanctum\Sanctum;
@@ -20,6 +29,24 @@ class AppServiceProvider extends ServiceProvider
         $this->app->singleton(AttendanceParserRegistry::class, fn ($app) => new AttendanceParserRegistry([
             $app->make(LirmiAttendancePdfParser::class),
         ]));
+
+        $this->app->singleton(TeacherIdentityVerifier::class, function ($app): TeacherIdentityVerifier {
+            if ($app->environment('testing')) {
+                return $app->make(FakeIdentityVerifier::class);
+            }
+
+            return match ((string) config('libro_digital.identity_verifier.driver', 'disabled')) {
+                'mineduc_transactional' => $app->make(MineducTransactionalIdentityVerifier::class),
+                default => $app->make(DisabledIdentityVerifier::class),
+            };
+        });
+        $this->app->singleton(BulkTeacherIdentityVerifier::class, MineducBulkIdentityVerifier::class);
+        $this->app->singleton(SigeIntegrationGateway::class, function ($app): SigeIntegrationGateway {
+            return match ((string) config('libro_digital.sige.driver', 'disabled')) {
+                'manual' => $app->make(SigeManualReconciliationGateway::class),
+                default => $app->make(DisabledSigeGateway::class),
+            };
+        });
     }
 
     /**

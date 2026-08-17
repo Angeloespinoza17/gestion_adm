@@ -7,6 +7,7 @@ use App\Models\Library\BibliotecaPase;
 use App\Models\Staff;
 use App\Models\StudentProfile;
 use App\Models\User;
+use App\Services\Passes\StudentPassPriorityService;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -15,6 +16,7 @@ class BibliotecaPassService
 {
     public function __construct(
         private readonly BibliotecaCodeService $codeService,
+        private readonly StudentPassPriorityService $priorityService,
     ) {}
 
     public function create(array $payload, User $actor): BibliotecaPase
@@ -127,6 +129,8 @@ class BibliotecaPassService
     {
         $from = Carbon::parse($validFrom);
         $until = Carbon::parse($validUntil);
+
+        $this->priorityService->assertLibraryPassAllowed($studentId, $from, $until);
 
         $exists = BibliotecaPase::query()
             ->where('student_profile_id', $studentId)

@@ -6,6 +6,7 @@ use App\Models\Remuneration\RemunerationMovement;
 use App\Models\Remuneration\RemunerationPeriod;
 use App\Models\Staff;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 class HrMedicalLeave extends HumanResourcesModel
@@ -40,5 +41,10 @@ class HrMedicalLeave extends HumanResourcesModel
     public function payrollMovement(): BelongsTo
     {
         return $this->belongsTo(RemunerationMovement::class, 'payroll_movement_id');
+    }
+
+    public function absenceLedgerRecord(): HasOne
+    {
+        return $this->hasOne(HrAbsenceRecord::class, 'medical_leave_id')->withTrashed();
     }
 }

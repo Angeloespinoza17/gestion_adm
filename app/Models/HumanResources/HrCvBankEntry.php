@@ -21,4 +21,9 @@ class HrCvBankEntry extends HumanResourcesModel
     {
         return $this->hasMany(HrReplacementPoolEntry::class, 'cv_bank_entry_id');
     }
+
+    public function applications(): HasMany
+    {
+        return $this->hasMany(HrRecruitmentApplication::class, 'cv_bank_entry_id');
+    }
 }

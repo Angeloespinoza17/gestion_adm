@@ -56,6 +56,8 @@ const moduleDescriptionBySlug = {
   tasks: "Agrupa el backlog y la configuración de asignadores de tareas.",
   tasks_backlog: "Permite consultar y gestionar tareas propias o de equipo según permisos.",
   tasks_assigners: "Permite administrar usuarios habilitados para asignar tareas.",
+  tasks_all: "Vista operacional exclusiva para superadmin con todas las tareas institucionales.",
+  tasks_reports: "Entrega una vista institucional consolidada, protegida por un permiso especial.",
 
   contracts: "Agrupa contratos, plantillas, cláusulas y firmantes.",
   contracts_list: "Permite consultar y gestionar contratos generados.",

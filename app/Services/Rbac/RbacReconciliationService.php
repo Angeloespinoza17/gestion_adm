@@ -8,6 +8,7 @@ use App\Models\Role;
 use App\Models\SystemModule;
 use App\Services\Remuneration\RemunerationAccessService;
 use Database\Seeders\AttendancePermissionSeeder;
+use Database\Seeders\LibroDigitalSeeder;
 use Database\Seeders\NavigationModuleBackfillSeeder;
 use Database\Seeders\PermissionBackfillSeeder;
 use Database\Seeders\PermissionGroupSeeder;
@@ -231,6 +232,7 @@ class RbacReconciliationService
         $this->attachAttendancePermissionsToStudentsGroup();
 
         app(RbacSeeder::class)->reconcileRoleAssignmentsAdditively();
+        app(LibroDigitalSeeder::class)->seedRbacAndNavigation();
         $this->grantDashboardBaseline();
         $this->grantInfirmaryProfiles();
         $this->removeInventoryContamination();

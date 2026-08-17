@@ -32,6 +32,11 @@ class StorePorterStudentWithdrawalRequest extends FormRequest
     {
         return [
             'student_profile_id' => ['required', 'integer', 'exists:student_profiles,id'],
+            'inspector_staff_id' => [
+                'required',
+                'integer',
+                Rule::exists('staff', 'id')->where(fn ($query) => $query->where('active', true)),
+            ],
             'person_name' => ['required', 'string', 'max:191'],
             'person_rut' => ['nullable', 'string', 'max:20'],
             'person_relationship' => ['required', Rule::in(array_column(PorterStudentWithdrawal::RELATIONSHIP_OPTIONS, 'value'))],
@@ -42,6 +47,14 @@ class StorePorterStudentWithdrawalRequest extends FormRequest
             'force_duplicate_confirmation' => ['sometimes', 'boolean'],
             'approve_override' => ['sometimes', 'boolean'],
             'override_reason' => ['nullable', 'string'],
+        ];
+    }
+
+    public function messages(): array
+    {
+        return [
+            'inspector_staff_id.required' => 'Debes seleccionar la inspectora responsable del retiro.',
+            'inspector_staff_id.exists' => 'La inspectora seleccionada no está disponible.',
         ];
     }
 }

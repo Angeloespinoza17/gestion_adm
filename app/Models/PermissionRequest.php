@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\HumanResources\HrAbsenceRecord;
 use DateTimeInterface;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -9,6 +10,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class PermissionRequest extends Model
 {
@@ -178,6 +180,11 @@ class PermissionRequest extends Model
     public function watchers(): HasMany
     {
         return $this->hasMany(PermissionRequestWatcher::class)->orderBy('id');
+    }
+
+    public function absenceLedgerRecord(): HasOne
+    {
+        return $this->hasOne(HrAbsenceRecord::class)->withTrashed();
     }
 
     public function isFinalStatus(): bool

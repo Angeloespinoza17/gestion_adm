@@ -5,6 +5,7 @@ const axios = window.axios;
 import { menuItems } from "./menu";
 import { useAuthStore } from "@/state/pinia";
 import LoadingState from "@/components/ui/loading-state.vue";
+import InternalNotifications from "@/components/internal-notifications.vue";
 import avatarPlaceholder from "@/assets/images/users/user-dummy-img.jpg";
 
 const cnscLogo = "/brand/logo-cnsc.png";
@@ -63,6 +64,7 @@ const MENU_ICON_BY_SLUG = {
   spaces: "bx-calendar-event",
   security: "bx-shield-quarter",
   relevant_calendar: "bx-calendar-event",
+  social_work: "bx-heart",
   settings: "bx-cog",
 };
 
@@ -89,6 +91,7 @@ const MENU_ICON_BY_LABEL = {
   "dependencias y reservas": "bx-calendar-event",
   "control de nochero": "bx-shield-quarter",
   "calendario y fechas relevantes": "bx-calendar-event",
+  "trabajo social": "bx-heart",
   configuracion: "bx-cog",
 };
 
@@ -103,6 +106,7 @@ const MENU_ICON_BY_ROUTE = {
   "/remuneraciones": "bx-money",
   "/contabilidad": "bx-wallet-alt",
   "/informatica": "bx-laptop",
+  "/social-work": "bx-heart",
   "/inventory/items": "bx-box",
   "/inventory/management": "bx-box",
 };
@@ -135,6 +139,7 @@ const MENU_LANDING_ROUTE_BY_SLUG = {
   biblioteca: "/biblioteca",
   centro_apuntes: "/centro-apuntes",
   apoyo_profesional: "/apoyo-profesional",
+  social_work: "/social-work",
   pme: "/pme-sep",
   pme_sep: "/pme-sep",
 };
@@ -204,7 +209,7 @@ const normalizeMenuKey = (value) =>
  * Side-nav component
  */
 export default {
-  components: { LoadingState },
+  components: { InternalNotifications, LoadingState },
   emits: ["toggle-menu"],
   data() {
     return {
@@ -786,7 +791,18 @@ export default {
         }, []);
       };
 
-      return buildItems(null);
+      const items = buildItems(null);
+      if (!items.some((item) => item.link === "/mensajeria")) {
+        const homeIndex = items.findIndex((item) => this.isDashboardMenuItem(item));
+        items.splice(homeIndex >= 0 ? homeIndex + 1 : 0, 0, {
+          id: "messaging-for-all-users",
+          label: "Mensajería",
+          slug: "messaging",
+          icon: "bx-message-rounded-dots",
+          link: "/mensajeria",
+        });
+      }
+      return items;
     },
     resolveModuleLandingLink(item) {
       if (item.frontend_route) {
@@ -1481,6 +1497,7 @@ export default {
     </div>
 
     <div class="sidebar-shell__footer">
+      <InternalNotifications sidebar />
       <div class="sidebar-account">
         <router-link to="/account/profile" class="sidebar-account__user" @click="onLeafNavigation">
           <div class="sidebar-account__avatar">

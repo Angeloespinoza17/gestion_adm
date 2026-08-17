@@ -1,6 +1,6 @@
 <script>
-import simplebar from "simplebar-vue";
 import i18n from "../i18n";
+import InternalNotifications from "./internal-notifications.vue";
 import { useLayoutStore } from '@/state/pinia'
 import flagArabic from "@/assets/images/flags/arabic.png";
 import flagChaina from "@/assets/images/flags/chaina.png";
@@ -26,9 +26,7 @@ export default {
       required: true
     }
   },
-  components: {
-    simplebar,
-  },
+  components: { InternalNotifications },
   data() {
     return {
       languages: [
@@ -547,123 +545,7 @@ export default {
           </BButton>
         </div>
 
-        <BDropdown menu-class="dropdown-menu-lg p-0 dropdown-menu-end" toggle-class="header-item noti-icon"
-          variant="black">
-          <template v-slot:button-content>
-            <i class="bx bx-bell bx-tada"></i>
-            <span class="badge bg-danger rounded-pill">{{
-              $t("navbar.dropdown.notification.badge")
-            }}</span>
-          </template>
-
-          <div class="p-3">
-            <BRow class="align-items-center">
-              <BCol>
-                <h6 class="m-0">
-                  {{ $t("navbar.dropdown.notification.text") }}
-                </h6>
-              </BCol>
-              <div class="col-auto">
-                <BLink href="#" class="small">{{
-                  $t("navbar.dropdown.notification.subtext")
-                }}</BLink>
-              </div>
-            </BRow>
-          </div>
-          <simplebar style="max-height: 230px">
-            <BLink href="javascript: void(0);" class="text-reset notification-item">
-              <div class="d-flex">
-                <div class="avatar-xs me-3">
-                  <span class="avatar-title bg-primary rounded-circle font-size-16">
-                    <i class="bx bx-cart"></i>
-                  </span>
-                </div>
-                <div class="flex-grow-1">
-                  <h6 class="mt-0 mb-1">
-                    {{ $t("navbar.dropdown.notification.order.title") }}
-                  </h6>
-                  <div class="font-size-12 text-muted">
-                    <p class="mb-1">
-                      {{ $t("navbar.dropdown.notification.order.text") }}
-                    </p>
-                    <p class="mb-0">
-                      <i class="mdi mdi-clock-outline"></i>
-                      {{ $t("navbar.dropdown.notification.order.time") }}
-                    </p>
-                  </div>
-                </div>
-              </div>
-            </BLink>
-            <BLink href="javascript: void(0);" class="text-reset notification-item">
-              <div class="d-flex">
-                <img src="@/assets/images/users/avatar-3.jpg" class="me-3 rounded-circle avatar-xs" alt="user-pic" />
-                <div class="flex-grow-1">
-                  <h6 class="mt-0 mb-1">
-                    {{ $t("navbar.dropdown.notification.james.title") }}
-                  </h6>
-                  <div class="font-size-12 text-muted">
-                    <p class="mb-1">
-                      {{ $t("navbar.dropdown.notification.james.text") }}
-                    </p>
-                    <p class="mb-0">
-                      <i class="mdi mdi-clock-outline"></i>
-                      {{ $t("navbar.dropdown.notification.james.time") }}
-                    </p>
-                  </div>
-                </div>
-              </div>
-            </BLink>
-            <BLink href="javascript: void(0);" class="text-reset notification-item">
-              <div class="d-flex">
-                <div class="avatar-xs me-3">
-                  <span class="avatar-title bg-success rounded-circle font-size-16">
-                    <i class="bx bx-badge-check"></i>
-                  </span>
-                </div>
-                <div class="flex-grow-1">
-                  <h6 class="mt-0 mb-1">
-                    {{ $t("navbar.dropdown.notification.item.title") }}
-                  </h6>
-                  <div class="font-size-12 text-muted">
-                    <p class="mb-1">
-                      {{ $t("navbar.dropdown.notification.item.text") }}
-                    </p>
-                    <p class="mb-0">
-                      <i class="mdi mdi-clock-outline"></i>
-                      {{ $t("navbar.dropdown.notification.item.time") }}
-                    </p>
-                  </div>
-                </div>
-              </div>
-            </BLink>
-            <BLink href="javascript: void(0);" class="text-reset notification-item">
-              <div class="d-flex">
-                <img src="@/assets/images/users/avatar-4.jpg" class="me-3 rounded-circle avatar-xs" alt="user-pic" />
-                <div class="flex-grow-1">
-                  <h6 class="mt-0 mb-1">
-                    {{ $t("navbar.dropdown.notification.salena.title") }}
-                  </h6>
-                  <div class="font-size-12 text-muted">
-                    <p class="mb-1">
-                      {{ $t("navbar.dropdown.notification.salena.text") }}
-                    </p>
-                    <p class="mb-0">
-                      <i class="mdi mdi-clock-outline"></i>
-                      {{ $t("navbar.dropdown.notification.salena.time") }}
-                    </p>
-                  </div>
-                </div>
-              </div>
-            </BLink>
-          </simplebar>
-          <div class="p-2 border-top d-grid">
-            <BLink class="btn btn-sm btn-link font-size-14 text-center" href="javascript:void(0)">
-              <i class="mdi mdi-arrow-right-circle me-1"></i>
-              <span key="t-view-more">
-                {{ $t("navbar.dropdown.notification.button") }}</span>
-            </BLink>
-          </div>
-        </BDropdown>
+        <InternalNotifications />
 
         <BDropdown right variant="black" toggle-class="header-item">
           <template v-slot:button-content>

@@ -1,11 +1,8 @@
-<template>
-    <router-view />
-</template>
-  
-<script>
-export default {
-    data() {
-
-    },
-};
+<script setup>
+import MessagingMiniChat from "./modules/messaging/components/MessagingMiniChat.vue";
 </script>
+
+<template>
+  <router-view />
+  <MessagingMiniChat />
+</template>

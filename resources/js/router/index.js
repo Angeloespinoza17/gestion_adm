@@ -41,6 +41,23 @@ const scheduleRoute = (path, title, permission = 'ver_horarios') => ({
     component: () => import('../views/schedule/index.vue'),
 })
 
+const libroDigitalRoute = (path, title, permission) => ({
+    path,
+    meta: {
+        authRequired: true,
+        title,
+        permission,
+        permissionsAll: Array.from(new Set(['libro_digital.access', permission])),
+    },
+    component: () => import('../views/libro-digital/index.vue'),
+})
+
+const socialWorkRoute = (path, title, permission = 'social_work.dashboard.view') => ({
+    path,
+    meta: { authRequired: true, title, permission },
+    component: () => import('../views/social-work/index.vue'),
+})
+
 const routes = [
     {
         path: '/',
@@ -66,6 +83,18 @@ const routes = [
         name: 'internal-communications',
         meta: { authRequired: true, title: 'Comunicaciones internas', permission: 'ver_comunicaciones_internas' },
         component: () => import('../views/internal-communications/index.vue'),
+    },
+    {
+        path: '/mensajeria/:conversationId?',
+        name: 'messaging',
+        meta: { authRequired: true, title: 'Mensajería' },
+        component: () => import('../modules/messaging/views/MessagingView.vue'),
+    },
+    {
+        path: '/notificaciones',
+        name: 'notification-history',
+        meta: { authRequired: true, title: 'Mis notificaciones' },
+        component: () => import('../views/notifications/index.vue'),
     },
     {
         path: '/superadmin_:roleSlug',
@@ -370,6 +399,27 @@ const routes = [
     scheduleRoute('/schedule/study-plans', 'Asignaturas y plan de estudio', 'configurar_plan_estudio'),
     scheduleRoute('/schedule/contracts', 'Contratos docentes', 'configurar_contratos_docentes'),
     scheduleRoute('/schedule/conflicts', 'Conflictos de horario'),
+    libroDigitalRoute('/libro-digital', 'Libro Digital · Mi jornada', 'libro_digital.access'),
+    libroDigitalRoute('/libro-digital/books', 'Libro Digital · Libros y cursos', 'libro_digital.books.view'),
+    libroDigitalRoute('/libro-digital/books/:id', 'Libro Digital · Libro por curso', 'libro_digital.books.view'),
+    libroDigitalRoute('/libro-digital/subjects', 'Libro Digital · Asignaturas', 'libro_digital.books.view'),
+    libroDigitalRoute('/libro-digital/objectives', 'Libro Digital · Objetivos curriculares', 'libro_digital.books.view'),
+    libroDigitalRoute('/libro-digital/workspace', 'Libro Digital · Trabajo docente', 'libro_digital.sessions.view'),
+    libroDigitalRoute('/libro-digital/sessions', 'Libro Digital · Sesiones', 'libro_digital.sessions.view'),
+    libroDigitalRoute('/libro-digital/lesson-record', 'Libro Digital · Leccionario', 'libro_digital.sessions.view'),
+    libroDigitalRoute('/libro-digital/curriculum-coverage', 'Libro Digital · Cobertura curricular', 'libro_digital.books.view'),
+    libroDigitalRoute('/libro-digital/attendance', 'Libro Digital · Asistencia', 'libro_digital.sessions.view'),
+    libroDigitalRoute('/libro-digital/assessments', 'Libro Digital · Evaluaciones', 'libro_digital.assessments.manage'),
+    libroDigitalRoute('/libro-digital/pie', 'Libro Digital · PIE', 'libro_digital.pie.view'),
+    libroDigitalRoute('/libro-digital/coexistence', 'Libro Digital · Convivencia', 'libro_digital.coexistence.view'),
+    libroDigitalRoute('/libro-digital/absence-cases', 'Libro Digital · Ausencias prolongadas', 'libro_digital.absence.manage'),
+    libroDigitalRoute('/libro-digital/parvularia', 'Libro Digital · Parvularia', 'libro_digital.parvularia.manage'),
+    libroDigitalRoute('/libro-digital/control', 'Libro Digital · Firmas y cierres', 'libro_digital.closures.manage'),
+    libroDigitalRoute('/libro-digital/statistics', 'Libro Digital · Estadísticas', 'libro_digital.statistics.view'),
+    libroDigitalRoute('/libro-digital/reports', 'Libro Digital · Reportes', 'libro_digital.reports.view'),
+    libroDigitalRoute('/libro-digital/ede', 'Libro Digital · Fiscalización EDE', 'libro_digital.ede.export'),
+    libroDigitalRoute('/libro-digital/audit', 'Libro Digital · Auditoría', 'libro_digital.audit.view'),
+    libroDigitalRoute('/libro-digital/configuration', 'Libro Digital · Configuración', 'libro_digital.configuration.manage'),
     {
         path: '/students/new',
         meta: { authRequired: true, title: 'Nueva estudiante', permission: 'crear_estudiantes' },
@@ -429,6 +479,75 @@ const routes = [
         path: '/porter/reports',
         meta: { authRequired: true, title: 'Reportes de portería', permission: 'ver_porteria' },
         component: () => import('../views/porter/reports.vue'),
+    },
+    {
+        path: '/inspectoria',
+        redirect: '/inspectoria/atenciones',
+        meta: { authRequired: true, title: 'Inspectoría', permission: 'ver_modulo_inspectoria' },
+    },
+    {
+        path: '/inspectoria/atenciones',
+        meta: { authRequired: true, title: 'Atención rápida de Inspectoría', permission: 'ver_modulo_inspectoria' },
+        component: () => import('../views/inspectoria/index.vue'),
+    },
+    {
+        path: '/inspectoria/asignaciones',
+        meta: { authRequired: true, title: 'Cursos e inspectoras', permission: 'ver_modulo_inspectoria' },
+        component: () => import('../views/inspectoria/index.vue'),
+    },
+    {
+        path: '/inspectoria/pases',
+        meta: { authRequired: true, title: 'Pases prioritarios de Inspectoría', permission: 'ver_modulo_inspectoria' },
+        component: () => import('../views/inspectoria/index.vue'),
+    },
+    {
+        path: '/inspectoria/alumnas',
+        meta: { authRequired: true, title: 'Alumnas y fichas de Inspectoría', permission: 'ver_modulo_inspectoria' },
+        component: () => import('../views/inspectoria/index.vue'),
+    },
+    {
+        path: '/inspectoria/restricciones',
+        redirect: '/social-work/pickup-restrictions',
+    },
+    {
+        path: '/inspectoria/retiros',
+        meta: { authRequired: true, title: 'Retiros de alumnas en Inspectoría', permission: 'ver_retiros_inspectoria' },
+        component: () => import('../views/inspectoria/index.vue'),
+    },
+    {
+        path: '/inspectoria/bitacora',
+        meta: { authRequired: true, title: 'Bitácora diaria de Inspectoría', permission: 'ver_modulo_inspectoria' },
+        component: () => import('../views/inspectoria/index.vue'),
+    },
+    {
+        path: '/operational/transfers',
+        meta: { authRequired: true, title: 'Mis solicitudes de traslado', permission: 'ver_traslados_operativos' },
+        component: () => import('../views/operational/transfers/index.vue'),
+    },
+    {
+        path: '/operational/transfers/review',
+        meta: { authRequired: true, title: 'Bandeja de visación de traslados', permission: 'visar_traslados_operativos' },
+        component: () => import('../views/operational/transfers/index.vue'),
+    },
+    {
+        path: '/operational/transfers/management',
+        meta: { authRequired: true, title: 'Gestión administrativa de traslados', permission: 'gestionar_traslados_operativos' },
+        component: () => import('../views/operational/transfers/index.vue'),
+    },
+    {
+        path: '/operational/transfers/reports',
+        meta: { authRequired: true, title: 'Reportes de traslados', permission: 'exportar_traslados_operativos' },
+        component: () => import('../views/operational/transfers/index.vue'),
+    },
+    {
+        path: '/human-resources/absences',
+        meta: { authRequired: true, title: 'Ausencias y saldos', permission: 'rrhh.ausencias.ver' },
+        component: () => import('../views/human-resources/absences.vue'),
+    },
+    {
+        path: '/human-resources/recruitment',
+        meta: { authRequired: true, title: 'Selección y banco de talento', permission: 'rrhh.seleccion.ver' },
+        component: () => import('../views/human-resources/recruitment.vue'),
     },
     {
         path: '/infirmary',
@@ -801,6 +920,16 @@ const routes = [
         path: '/tasks/assigners',
         meta: { authRequired: true, title: 'Asignadores de tareas', permission: 'administrar_asignadores_tareas' },
         component: () => import('../views/tasks/backlog.vue'),
+    },
+    {
+        path: '/tasks/reports',
+        meta: { authRequired: true, title: 'Reportes de tareas', permission: 'ver_reportes_tareas' },
+        component: () => import('../views/tasks/reports.vue'),
+    },
+    {
+        path: '/tasks/all',
+        meta: { authRequired: true, title: 'Todas las tareas', superAdminOnly: true },
+        component: () => import('../views/tasks/reports.vue'),
     },
     {
         path: '/staff/new',
@@ -1447,6 +1576,25 @@ const routes = [
     pmeSepRoute('/pme-sep/metas', 'Metas Estratégicas PME'),
     pmeSepRoute('/pme-sep/monitoreo', 'Monitoreo Reflexivo PME'),
     pmeSepRoute('/pme-sep/reportes', 'Reportes PME / SEP'),
+    socialWorkRoute('/social-work', 'Trabajo Social'),
+    socialWorkRoute('/social-work/students', 'Estudiantes – Situación Social', 'social_work.students.view'),
+    socialWorkRoute('/social-work/students/:studentId', 'Ficha social', 'social_work.student_profile.view'),
+    socialWorkRoute('/social-work/cases', 'Casos psicosociales', 'social_work.cases.view'),
+    socialWorkRoute('/social-work/cases/new', 'Nuevo caso social', 'social_work.cases.create'),
+    socialWorkRoute('/social-work/cases/:caseId', 'Detalle de caso social', 'social_work.cases.view'),
+    socialWorkRoute('/social-work/interviews', 'Entrevistas sociales', 'social_work.interviews.manage'),
+    socialWorkRoute('/social-work/actions', 'Acciones sociales', 'social_work.actions.manage'),
+    socialWorkRoute('/social-work/protocols', 'Protocolos sociales', 'social_work.protocols.manage'),
+    socialWorkRoute('/social-work/protocol-zero', 'Protocolo Cero', 'social_work.protocols.manage'),
+    socialWorkRoute('/social-work/alerts', 'Alertas sociales', 'social_work.alerts.manage'),
+    socialWorkRoute('/social-work/referrals', 'Derivaciones sociales', 'social_work.referrals.submit'),
+    socialWorkRoute('/social-work/junaeb', 'JUNAEB', 'social_work.junaeb.manage'),
+    socialWorkRoute('/social-work/health', 'Apoyos y certificados médicos', 'social_work.medical.manage'),
+    socialWorkRoute('/social-work/pickup-restrictions', 'Restricciones de retiro', 'social_work.pickup_restrictions.manage'),
+    socialWorkRoute('/social-work/reports', 'Informes sociales', 'social_work.reports.create'),
+    socialWorkRoute('/social-work/calendar', 'Calendario social'),
+    socialWorkRoute('/social-work/settings', 'Configuración de Trabajo Social', 'social_work.templates.manage'),
+    socialWorkRoute('/social-work/audit', 'Auditoría de Trabajo Social', 'social_work.audit.view'),
 ]
 
 const router = createRouter({

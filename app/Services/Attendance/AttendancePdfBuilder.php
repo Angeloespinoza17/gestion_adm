@@ -24,12 +24,25 @@ class AttendancePdfBuilder
 
     private string $footerContext = '';
 
+    private string $organizationName = 'CNSC GESTIÓN';
+
+    private string $reportTrace = '';
+
+    private string $sourceLabel = 'registros de asistencia del sistema';
+
+    private string $watermark = '';
+
     public function build(string $title, array $metadata, array $sections, array $dashboard = []): string
     {
         $this->pages = [];
         $this->pageIndex = -1;
         $this->title = $title;
         $this->footerContext = $this->cell($metadata['periodo'] ?? '');
+        $branding = is_array($dashboard['branding'] ?? null) ? $dashboard['branding'] : [];
+        $this->organizationName = $this->cell($branding['organization_name'] ?? 'CNSC GESTIÓN');
+        $this->reportTrace = $this->cell($branding['report_trace'] ?? '');
+        $this->sourceLabel = $this->cell($branding['source_label'] ?? 'registros de asistencia del sistema');
+        $this->watermark = $this->cell($branding['watermark'] ?? '');
         $this->startPage(true);
         $this->renderMetadata($metadata);
 
@@ -44,6 +57,11 @@ class AttendancePdfBuilder
         foreach ($sections as $section) {
             $sectionTitle = (string) ($section['title'] ?? 'Sección');
             if ($sectionTitle === 'Resumen ejecutivo') {
+                continue;
+            }
+            if (($section['layout'] ?? null) === 'curriculum_objectives') {
+                $this->renderCurriculumObjectives($section);
+
                 continue;
             }
             if ($sectionTitle === 'Cursos') {
@@ -67,11 +85,15 @@ class AttendancePdfBuilder
         $this->pages[] = [];
         $this->pageIndex = count($this->pages) - 1;
         $this->fillRect(0, 0, self::PAGE_WIDTH, self::PAGE_HEIGHT, [1, 1, 1]);
+        if ($this->watermark !== '') {
+            // Visible on every page without relying on client-side PDF tooling.
+            $this->text(120, 300, mb_strtoupper($this->watermark), 24, 'F2', [0.90, 0.91, 0.93], 48);
+        }
 
         if ($first) {
             $this->fillRect(0, 522, self::PAGE_WIDTH, 73, [0.12, 0.17, 0.28]);
             $this->fillRect(0, 519, self::PAGE_WIDTH, 3, [0.16, 0.55, 0.40]);
-            $this->text(32, 570, 'CNSC GESTIÓN', 8, 'F2', [0.72, 0.82, 0.94]);
+            $this->text(32, 570, $this->organizationName, 8, 'F2', [0.72, 0.82, 0.94], 72);
             $this->text(32, 541, $this->title, 20, 'F2', [1, 1, 1], 86);
             $this->text(690, 570, 'REPORTE INSTITUCIONAL', 7, 'F2', [0.72, 0.82, 0.94]);
             $this->cursorY = 505;
@@ -81,8 +103,8 @@ class AttendancePdfBuilder
 
         $this->fillRect(0, 554, self::PAGE_WIDTH, 41, [0.12, 0.17, 0.28]);
         $this->fillRect(0, 551, self::PAGE_WIDTH, 3, [0.16, 0.55, 0.40]);
-        $this->text(32, 570, 'CNSC GESTIÓN', 8, 'F2', [0.72, 0.82, 0.94]);
-        $this->text(142, 568, $this->title, 13, 'F2', [1, 1, 1], 72);
+        $this->text(32, 579, $this->organizationName, 7.5, 'F2', [0.72, 0.82, 0.94], 76);
+        $this->text(32, 560, $this->title, 10.5, 'F2', [1, 1, 1], 100);
         $this->cursorY = 532;
     }
 
@@ -95,16 +117,25 @@ class AttendancePdfBuilder
             ['Generado', ($metadata['fecha'] ?? '-').' · '.($metadata['generado por'] ?? '-')],
         ];
         $gap = 8.0;
-        $width = (self::CONTENT_WIDTH - ($gap * 3)) / 4;
+        $availableWidth = self::CONTENT_WIDTH - ($gap * 3);
+        $widths = [
+            $availableWidth * 0.20,
+            $availableWidth * 0.14,
+            $availableWidth * 0.28,
+            $availableWidth * 0.38,
+        ];
         $height = 42.0;
         $bottom = $this->cursorY - $height;
+        $x = self::MARGIN;
 
         foreach ($cards as $index => [$label, $value]) {
-            $x = self::MARGIN + (($width + $gap) * $index);
+            $width = $widths[$index];
             $this->fillRect($x, $bottom, $width, $height, [0.96, 0.97, 0.985], [0.86, 0.89, 0.93]);
             $this->fillRect($x, $bottom, 3, $height, [0.25, 0.32, 0.54]);
-            $this->text($x + 11, $bottom + 27, $label, 6.5, 'F2', [0.43, 0.48, 0.56], 26);
-            $this->text($x + 11, $bottom + 11, $this->cell($value), 8.5, 'F2', [0.16, 0.20, 0.27], 30);
+            $maximumCharacters = max(12, (int) floor(($width - 22) / 4.8));
+            $this->text($x + 11, $bottom + 27, $label, 6.5, 'F2', [0.43, 0.48, 0.56], $maximumCharacters);
+            $this->text($x + 11, $bottom + 11, $this->cell($value), 8.5, 'F2', [0.16, 0.20, 0.27], $maximumCharacters);
+            $x += $width + $gap;
         }
 
         $this->cursorY = $bottom - 12;
@@ -284,6 +315,144 @@ class AttendancePdfBuilder
         $this->cursorY = $bottom - 14;
     }
 
+    /**
+     * Dedicated long-form curriculum layout. Official descriptions and indicators
+     * are wrapped across as many lines/pages as required; no ellipsis is applied.
+     */
+    private function renderCurriculumObjectives(array $section): void
+    {
+        $rows = array_values((array) ($section['rows'] ?? []));
+        if ($rows === []) {
+            $this->renderEmptyState('No se encontraron objetivos para los filtros aplicados.');
+
+            return;
+        }
+
+        $this->sectionHeading((string) ($section['title'] ?? 'Objetivos curriculares'), 'Texto oficial y trazabilidad de fuentes');
+        $currentGroup = null;
+        foreach ($rows as $row) {
+            $row = (array) $row;
+            $group = $this->cell($row['group'] ?? 'Sin clasificación');
+            if ($group !== $currentGroup) {
+                $this->ensureSpace(40);
+                $this->fillRect(self::MARGIN, $this->cursorY - 28, self::CONTENT_WIDTH, 28, [0.91, 0.94, 0.98], [0.80, 0.85, 0.92]);
+                $this->text(self::MARGIN + 12, $this->cursorY - 18, mb_strtoupper($group), 8.5, 'F2', [0.20, 0.27, 0.43]);
+                $this->cursorY -= 39;
+                $currentGroup = $group;
+            }
+
+            $this->renderCurriculumObjective($row);
+        }
+    }
+
+    /** @param array<string, mixed> $row */
+    private function renderCurriculumObjective(array $row): void
+    {
+        $this->ensureSpace(65);
+        $code = $this->cell($row['code'] ?? '-');
+        $badges = implode(' · ', array_filter([
+            $this->cell($row['type'] ?? ''),
+            $this->cell($row['status'] ?? ''),
+            $this->cell($row['catalog'] ?? ''),
+        ]));
+        $this->fillRect(self::MARGIN, $this->cursorY - 29, self::CONTENT_WIDTH, 29, [0.975, 0.98, 0.99], [0.86, 0.89, 0.93]);
+        $this->fillRect(self::MARGIN, $this->cursorY - 29, 4, 29, [0.25, 0.32, 0.54]);
+        $this->text(self::MARGIN + 13, $this->cursorY - 18, $code, 10, 'F2', [0.14, 0.18, 0.24]);
+        $this->text(self::MARGIN + 180, $this->cursorY - 18, $badges, 7, 'F1', [0.40, 0.45, 0.53]);
+        $this->cursorY -= 39;
+
+        $scope = implode(' · ', array_filter([
+            filled($row['axis'] ?? null) ? 'Eje: '.$this->cell($row['axis']) : null,
+            filled($row['unit'] ?? null) ? 'Unidad: '.$this->cell($row['unit']) : null,
+            filled($row['source_page'] ?? null) ? 'Página/localizador: '.$this->cell($row['source_page']) : null,
+        ]));
+        if ($scope !== '') {
+            $this->renderCurriculumText('', $scope, 7, [0.43, 0.48, 0.56]);
+        }
+        $this->renderCurriculumText('DESCRIPCIÓN OFICIAL', $this->cell($row['description'] ?? '-'), 7.7, [0.18, 0.22, 0.29]);
+
+        $indicators = $this->cell($row['indicators'] ?? '');
+        if ($indicators !== '') {
+            $this->renderCurriculumText('INDICADORES', $indicators, 7.2, [0.31, 0.36, 0.44]);
+        }
+
+        $sources = array_values((array) ($row['sources'] ?? []));
+        if ($sources !== []) {
+            $this->renderCurriculumLabel('FUENTES Y TRAZABILIDAD');
+            foreach ($sources as $source) {
+                $this->renderCurriculumText('', '• '.$this->cell($source), 6.8, [0.37, 0.42, 0.50], 143);
+            }
+        }
+
+        $this->ensureSpace(15);
+        $this->line(self::MARGIN, $this->cursorY - 3, self::MARGIN + self::CONTENT_WIDTH, $this->cursorY - 3, [0.88, 0.90, 0.93], 0.5);
+        $this->cursorY -= 15;
+    }
+
+    private function renderCurriculumLabel(string $label): void
+    {
+        $this->ensureSpace(15);
+        $this->text(self::MARGIN + 8, $this->cursorY, $label, 6.3, 'F2', [0.43, 0.48, 0.56]);
+        $this->cursorY -= 11;
+    }
+
+    private function renderCurriculumText(string $label, string $value, float $size, array $color, int $maximumCharacters = 154): void
+    {
+        if ($label !== '') {
+            $this->renderCurriculumLabel($label);
+        }
+        foreach ($this->wrapComplete($value, $maximumCharacters) as $line) {
+            $this->ensureSpace(12);
+            $this->text(self::MARGIN + 8, $this->cursorY, $line, $size, 'F1', $color);
+            $this->cursorY -= 10;
+        }
+        $this->cursorY -= 4;
+    }
+
+    /** @return list<string> */
+    private function wrapComplete(string $value, int $maximumCharacters): array
+    {
+        $value = trim(str_replace(["\r\n", "\r"], "\n", $value));
+        if ($value === '') {
+            return ['-'];
+        }
+
+        $result = [];
+        foreach (explode("\n", $value) as $paragraph) {
+            $paragraph = trim((string) preg_replace('/\s+/u', ' ', $paragraph));
+            if ($paragraph === '') {
+                $result[] = '';
+
+                continue;
+            }
+            $words = preg_split('/\s+/u', $paragraph) ?: [$paragraph];
+            $line = '';
+            foreach ($words as $word) {
+                while (mb_strlen($word) > $maximumCharacters) {
+                    if ($line !== '') {
+                        $result[] = $line;
+                        $line = '';
+                    }
+                    $result[] = mb_substr($word, 0, $maximumCharacters);
+                    $word = mb_substr($word, $maximumCharacters);
+                }
+                $candidate = $line === '' ? $word : $line.' '.$word;
+                if (mb_strlen($candidate) <= $maximumCharacters) {
+                    $line = $candidate;
+
+                    continue;
+                }
+                $result[] = $line;
+                $line = $word;
+            }
+            if ($line !== '') {
+                $result[] = $line;
+            }
+        }
+
+        return $result ?: ['-'];
+    }
+
     private function renderTable(array $section): void
     {
         $title = (string) ($section['title'] ?? 'Detalle');
@@ -408,7 +577,11 @@ class AttendancePdfBuilder
         $total = count($this->pages);
         foreach ($this->pages as $index => &$commands) {
             $commands[] = $this->lineCommand(self::MARGIN, 34, self::MARGIN + self::CONTENT_WIDTH, 34, [0.84, 0.87, 0.91], 0.6);
-            $commands[] = $this->textCommand(self::MARGIN, 18, 'Fuente: registros de asistencia del sistema · '.$this->footerContext, 6.5, 'F1', [0.43, 0.48, 0.56], 125);
+            $footer = 'Fuente: '.$this->sourceLabel.' · '.$this->footerContext;
+            if ($this->reportTrace !== '') {
+                $footer .= ' · '.$this->reportTrace;
+            }
+            $commands[] = $this->textCommand(self::MARGIN, 18, $footer, 6.5, 'F1', [0.43, 0.48, 0.56], 125);
             $commands[] = $this->textCommand(754, 18, 'Página '.($index + 1).' de '.$total, 6.5, 'F2', [0.43, 0.48, 0.56]);
         }
         unset($commands);
@@ -420,15 +593,23 @@ class AttendancePdfBuilder
             1 => '<< /Type /Catalog /Pages 2 0 R >>',
             3 => '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>',
             4 => '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>',
+            5 => '<< /Type /Font /Subtype /Type3 /Name /LCDSymbols /FontBBox [0 -100 650 650] /FontMatrix [0.001 0 0 0.001 0 0] '
+                .'/CharProcs << /epsilonSymbol 6 0 R /notEqual 7 0 R /zeroWidthSpace 8 0 R >> '
+                .'/Encoding << /Type /Encoding /Differences [1 /epsilonSymbol /notEqual /zeroWidthSpace] >> '
+                .'/FirstChar 1 /LastChar 3 /Widths [600 650 0] /Resources << >> /ToUnicode 9 0 R >>',
+            6 => $this->stream("600 0 d0\n60 w 1 J 1 j\n70 430 m 130 560 360 570 500 480 c\n380 505 195 450 130 345 c\n80 265 110 140 220 90 c\n330 35 480 95 535 210 c\nS\n130 345 m 460 345 l S"),
+            7 => $this->stream("650 0 d0\n60 w 1 J 1 j\n50 370 m 600 370 l S\n50 180 m 600 180 l S\n500 560 m 150 20 l S"),
+            8 => $this->stream('0 0 d0'),
+            9 => $this->stream($this->symbolToUnicodeCmap()),
         ];
         $kids = [];
         foreach ($this->pages as $index => $commands) {
-            $pageObject = 5 + ($index * 2);
+            $pageObject = 10 + ($index * 2);
             $contentObject = $pageObject + 1;
             $kids[] = $pageObject.' 0 R';
             $stream = implode("\n", $commands);
-            $objects[$pageObject] = "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 842 595] /Resources << /ProcSet [/PDF /Text] /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents {$contentObject} 0 R >>";
-            $objects[$contentObject] = '<< /Length '.strlen($stream).">>\nstream\n{$stream}\nendstream";
+            $objects[$pageObject] = "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 842 595] /Resources << /ProcSet [/PDF /Text] /Font << /F1 3 0 R /F2 4 0 R /F3 5 0 R >> >> /Contents {$contentObject} 0 R >>";
+            $objects[$contentObject] = $this->stream($stream);
         }
         $objects[2] = '<< /Type /Pages /Kids ['.implode(' ', $kids).'] /Count '.count($this->pages).' >>';
         ksort($objects);
@@ -498,7 +679,8 @@ class AttendancePdfBuilder
             $text = mb_strimwidth($text, 0, $maximumCharacters, '…');
         }
 
-        return $this->fillColor($color).' BT /'.$font.' '.$this->number($size).' Tf '.$this->number($x).' '.$this->number($y).' Td ('.$this->escape($text).') Tj ET';
+        return $this->fillColor($color).' '.$this->strokeColor($color).' BT /'.$font.' '.$this->number($size).' Tf '
+            .$this->number($x).' '.$this->number($y).' Td '.$this->textOperators($text, $font, $size).' ET';
     }
 
     private function fillRect(float $x, float $y, float $width, float $height, array $fill, ?array $stroke = null): void
@@ -564,10 +746,91 @@ class AttendancePdfBuilder
         return trim((string) ($value ?? ''));
     }
 
-    private function escape(string $value): string
+    /**
+     * WinAnsi remains compact for the regular report text. The official corpus
+     * also contains U+03F5, U+2260 and U+200B; those code points are emitted with
+     * a tiny Type3 font and an explicit ToUnicode map so both the visible glyph
+     * and copied/extracted text retain the canonical Unicode value.
+     */
+    private function textOperators(string $value, string $font, float $size): string
     {
-        $encoded = iconv('UTF-8', 'Windows-1252//TRANSLIT//IGNORE', $value) ?: $value;
+        if (class_exists(\Normalizer::class)) {
+            $value = \Normalizer::normalize($value, \Normalizer::FORM_C) ?: $value;
+        }
 
+        $special = [
+            "\u{03F5}" => '01',
+            "\u{2260}" => '02',
+            "\u{200B}" => '03',
+        ];
+        $operators = [];
+        $regular = '';
+        $flush = function () use (&$regular, &$operators, $font, $size): void {
+            if ($regular === '') {
+                return;
+            }
+            $encoded = iconv('UTF-8', 'Windows-1252//IGNORE', $regular);
+            if ($encoded === false) {
+                throw new \RuntimeException('No se pudo codificar el texto PDF en WinAnsi.');
+            }
+            $operators[] = '/'.$font.' '.$this->number($size).' Tf ('.$this->escapePdfLiteral($encoded).') Tj';
+            $regular = '';
+        };
+
+        foreach (preg_split('//u', $value, -1, PREG_SPLIT_NO_EMPTY) ?: [] as $character) {
+            if (isset($special[$character])) {
+                $flush();
+                $operators[] = '/F3 '.$this->number($size).' Tf <'.$special[$character].'> Tj';
+
+                continue;
+            }
+
+            $encoded = iconv('UTF-8', 'Windows-1252//IGNORE', $character);
+            $roundTrip = $encoded === false ? false : iconv('Windows-1252', 'UTF-8//IGNORE', $encoded);
+            if ($roundTrip !== $character) {
+                throw new \RuntimeException(
+                    'El PDF contiene un carácter Unicode sin glifo auditable (U+'
+                    .strtoupper(str_pad(dechex(mb_ord($character)), 4, '0', STR_PAD_LEFT)).'); usa XLSX.',
+                );
+            }
+            $regular .= $character;
+        }
+        $flush();
+
+        return implode(' ', $operators) ?: '/'.$font.' '.$this->number($size).' Tf () Tj';
+    }
+
+    private function escapePdfLiteral(string $encoded): string
+    {
         return str_replace(['\\', '(', ')', "\r", "\n"], ['\\\\', '\\(', '\\)', ' ', ' '], $encoded);
+    }
+
+    private function stream(string $contents): string
+    {
+        return '<< /Length '.strlen($contents).">>\nstream\n{$contents}\nendstream";
+    }
+
+    private function symbolToUnicodeCmap(): string
+    {
+        return <<<'CMAP'
+/CIDInit /ProcSet findresource begin
+12 dict begin
+begincmap
+/CIDSystemInfo << /Registry (Adobe) /Ordering (UCS) /Supplement 0 >> def
+/CMapName /LCDSymbols-UCS def
+/CMapType 2 def
+1 begincodespacerange
+<01> <03>
+endcodespacerange
+3 beginbfchar
+<01> <03F5>
+<02> <2260>
+<03> <200B>
+endbfchar
+endcmap
+CMapName currentdict /CMap defineresource pop
+end
+end
+CMAP;
     }
 }

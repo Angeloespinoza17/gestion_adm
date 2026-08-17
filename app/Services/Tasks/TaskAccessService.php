@@ -6,19 +6,18 @@ use App\Models\Task;
 use App\Models\TaskAssigner;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Relations\Relation;
 
 class TaskAccessService
 {
-    public function canManageBacklogs(User $user): bool
-    {
-        return $user->isSuperAdmin()
-            || $user->hasPermission('ver_tareas_equipo')
-            || $user->hasPermission('administrar_asignadores_tareas');
-    }
-
     public function canManageAssigners(User $user): bool
     {
         return $user->isSuperAdmin() || $user->hasPermission('administrar_asignadores_tareas');
+    }
+
+    public function canViewReports(User $user): bool
+    {
+        return $user->isSuperAdmin() || $user->hasPermission('ver_reportes_tareas');
     }
 
     public function isStaffUser(?User $user): bool
@@ -43,7 +42,7 @@ class TaskAccessService
             return false;
         }
 
-        if ($this->canManageBacklogs($actor)) {
+        if ($actor->isSuperAdmin()) {
             return true;
         }
 
@@ -56,25 +55,15 @@ class TaskAccessService
 
     public function visibleQuery(User $user): Builder
     {
-        if ($this->canManageBacklogs($user)) {
-            return Task::query();
-        }
+        return $this->constrainVisible(Task::query(), $user);
+    }
 
-        return Task::query()->where(function (Builder $query) use ($user) {
-            $query->where('owner_user_id', $user->id);
-
-            $query->orWhere(function (Builder $createdByAssignerQuery) use ($user) {
-                $createdByAssignerQuery
-                    ->where('created_by_user_id', $user->id)
-                    ->whereExists(function ($assignmentQuery) use ($user) {
-                        $assignmentQuery
-                            ->selectRaw('1')
-                            ->from('task_assigners')
-                            ->whereColumn('task_assigners.target_user_id', 'tasks.owner_user_id')
-                            ->where('task_assigners.assigner_user_id', $user->id)
-                            ->where('task_assigners.active', true);
-                    });
-            });
+    public function constrainVisible(Builder|Relation $query, User $user): Builder|Relation
+    {
+        return $query->where(function (Builder $query) use ($user) {
+            $query
+                ->where('owner_user_id', $user->id)
+                ->orWhereHas('stakeholders', fn (Builder $stakeholders) => $stakeholders->whereKey($user->id));
         });
     }
 
@@ -85,16 +74,11 @@ class TaskAccessService
 
     public function canUpdate(User $user, Task $task): bool
     {
-        if ($this->canManageBacklogs($user)) {
-            return true;
-        }
-
         if ((int) $task->owner_user_id === (int) $user->id) {
             return $user->hasPermission('gestionar_tareas') || $user->hasPermission('ver_tareas');
         }
 
-        return (int) $task->created_by_user_id === (int) $user->id
-            && $this->hasActiveAssignment($user, (int) $task->owner_user_id);
+        return false;
     }
 
     public function canDelete(User $user, Task $task): bool

@@ -6,9 +6,31 @@ use App\Models\StudentProfile;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Validation\ValidationException;
 
 class StudentDeletionService
 {
+    /**
+     * Official Libro Digital references are a hard retention boundary. They are
+     * never deleted as part of the legacy student-deletion workflow.
+     *
+     * @var array<int, array{table: string, column: string, label: string}>
+     */
+    private const OFFICIAL_PROTECTED_RELATIONS = [
+        ['table' => 'lcd_enrollment_links', 'column' => 'student_profile_id', 'label' => 'Vinculos de matricula del Libro Digital'],
+        ['table' => 'lcd_roster_snapshot_items', 'column' => 'student_profile_id', 'label' => 'Nominas historicas del Libro Digital'],
+        ['table' => 'lcd_attendance_justifications', 'column' => 'student_profile_id', 'label' => 'Justificaciones de asistencia del Libro Digital'],
+        ['table' => 'lcd_session_attendance', 'column' => 'student_profile_id', 'label' => 'Asistencia por bloque del Libro Digital'],
+        ['table' => 'lcd_student_results', 'column' => 'student_profile_id', 'label' => 'Resultados de evaluacion del Libro Digital'],
+        ['table' => 'lcd_grade_closures', 'column' => 'student_profile_id', 'label' => 'Cierres de calificaciones del Libro Digital'],
+        ['table' => 'lcd_coexistence_entries', 'column' => 'student_profile_id', 'label' => 'Registros de convivencia del Libro Digital'],
+        ['table' => 'lcd_pie_support_records', 'column' => 'student_profile_id', 'label' => 'Registros PIE del Libro Digital'],
+        ['table' => 'lcd_absence_cases', 'column' => 'student_profile_id', 'label' => 'Expedientes de ausencia del Libro Digital'],
+        ['table' => 'lcd_early_withdrawals', 'column' => 'student_profile_id', 'label' => 'Salidas anticipadas del Libro Digital'],
+        ['table' => 'lcd_late_arrivals', 'column' => 'student_profile_id', 'label' => 'Atrasos del Libro Digital'],
+        ['table' => 'lcd_parvularia_evaluations', 'column' => 'student_profile_id', 'label' => 'Evaluaciones de parvularia del Libro Digital'],
+    ];
+
     /**
      * Relations that are deleted by their foreign key when the profile is deleted.
      *
@@ -83,6 +105,7 @@ class StudentDeletionService
             ...self::RESTRICT_RELATIONS,
         ]);
         $willPreserve = $this->relationCounts($student, self::PRESERVED_RELATIONS);
+        $officialRecords = $this->relationCounts($student, self::OFFICIAL_PROTECTED_RELATIONS);
 
         return [
             'student' => [
@@ -97,6 +120,8 @@ class StudentDeletionService
             ],
             'will_delete' => $willDelete,
             'will_preserve' => $willPreserve,
+            'official_records' => $officialRecords,
+            'deletion_blocked' => $officialRecords !== [],
             'delete_total' => collect($willDelete)->sum('count'),
             'preserve_total' => collect($willPreserve)->sum('count'),
         ];
@@ -111,6 +136,9 @@ class StudentDeletionService
 
         return DB::transaction(function () use ($studentId): array {
             $lockedStudent = StudentProfile::query()->lockForUpdate()->findOrFail($studentId);
+            // Se valida la frontera de retención antes de tocar incluso la cuenta
+            // vinculada; el rechazo debe ser completamente atómico y sin efectos.
+            $this->assertNoOfficialRecords($lockedStudent);
             $linkedUser = User::query()
                 ->where('student_id', $studentId)
                 ->lockForUpdate()
@@ -125,6 +153,8 @@ class StudentDeletionService
 
     public function deleteStudentRecord(StudentProfile $student): void
     {
+        $this->assertNoOfficialRecords($student);
+
         foreach (self::RESTRICT_RELATIONS as $relation) {
             if (! $this->relationExists($relation['table'], $relation['column'])) {
                 continue;
@@ -136,6 +166,16 @@ class StudentDeletionService
         }
 
         $student->delete();
+    }
+
+    private function assertNoOfficialRecords(StudentProfile $student): void
+    {
+        $officialRecords = $this->relationCounts($student, self::OFFICIAL_PROTECTED_RELATIONS);
+        if ($officialRecords !== []) {
+            throw ValidationException::withMessages([
+                'student' => 'La estudiante posee registros oficiales en el Libro Digital. Debe conservarse por la politica de retencion aplicable.',
+            ]);
+        }
     }
 
     /**

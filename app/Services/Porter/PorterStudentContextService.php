@@ -3,6 +3,9 @@
 namespace App\Services\Porter;
 
 use App\Models\AcademicYear;
+use App\Models\Inspectoria\InspectoriaCourseAssignment;
+use App\Models\Inspectoria\InspectoriaPickupRestriction;
+use App\Models\Staff;
 use App\Models\StudentEnrollment;
 use App\Models\StudentProfile;
 use App\Support\Rut;
@@ -18,7 +21,7 @@ class PorterStudentContextService
     {
         $year = $academicYear ?: $this->activeAcademicYear();
 
-        if (!$year) {
+        if (! $year) {
             return null;
         }
 
@@ -29,6 +32,25 @@ class PorterStudentContextService
         ]);
 
         return $student->preferredEnrollment($year);
+    }
+
+    public function assignedInspector(?StudentEnrollment $enrollment): ?Staff
+    {
+        if (! $enrollment?->course_section_id || ! $enrollment->academic_year_id) {
+            return null;
+        }
+
+        return InspectoriaCourseAssignment::query()
+            ->with('inspector:id,full_name,rut,cargo_id')
+            ->where('academic_year_id', $enrollment->academic_year_id)
+            ->where('course_section_id', $enrollment->course_section_id)
+            ->where('active', true)
+            ->whereDate('starts_on', '<=', today())
+            ->where(fn ($query) => $query->whereNull('ends_on')->orWhereDate('ends_on', '>=', today()))
+            ->latest('starts_on')
+            ->latest('id')
+            ->first()
+            ?->inspector;
     }
 
     public function authorizedPickupPeople(StudentProfile $student): array
@@ -61,29 +83,10 @@ class PorterStudentContextService
 
         return $people
             ->merge($extras)
-            ->filter(fn ($item) => !empty($item['name']))
-            ->unique(fn ($item) => strtolower(($item['name'] ?? '') . '|' . ($item['rut'] ?? '')))
+            ->filter(fn ($item) => ! empty($item['name']))
+            ->unique(fn ($item) => strtolower(($item['name'] ?? '').'|'.($item['rut'] ?? '')))
             ->values()
             ->all();
-    }
-
-    public function medicalAlerts(StudentProfile $student): array
-    {
-        $alerts = [];
-
-        if ($student->has_chronic_illness && $student->chronic_illness_details) {
-            $alerts[] = 'Enfermedad crónica: ' . $student->chronic_illness_details;
-        }
-
-        if ($student->has_medication_allergies && $student->medication_allergies_details) {
-            $alerts[] = 'Alergias: ' . $student->medication_allergies_details;
-        }
-
-        if ($student->has_physical_restrictions && $student->physical_restrictions_details) {
-            $alerts[] = 'Restricciones físicas: ' . $student->physical_restrictions_details;
-        }
-
-        return $alerts;
     }
 
     public function porterAlerts(StudentProfile $student, ?StudentEnrollment $enrollment): array
@@ -99,12 +102,13 @@ class PorterStudentContextService
             ]);
         }
 
-        foreach ($this->medicalAlerts($student) as $detail) {
+        foreach ($this->activePickupRestrictions($student) as $restriction) {
             $alerts->push([
-                'type' => 'medical',
-                'label' => 'Alerta médica',
-                'detail' => $detail,
-                'priority' => 'medium',
+                'type' => 'pickup_restriction_person',
+                'label' => $restriction['restriction_type_label'],
+                'detail' => $restriction['restricted_person_name'].' · '.$restriction['reason'],
+                'priority' => 'high',
+                'restriction_id' => $restriction['id'],
             ]);
         }
 
@@ -121,7 +125,7 @@ class PorterStudentContextService
             $alerts->push([
                 'type' => 'inactive_enrollment',
                 'label' => 'Matrícula no activa',
-                'detail' => 'El estado actual de matrícula es ' . $enrollment->enrollment_status . '.',
+                'detail' => 'El estado actual de matrícula es '.$enrollment->enrollment_status.'.',
                 'priority' => 'high',
             ]);
         }
@@ -130,7 +134,7 @@ class PorterStudentContextService
             $alerts->push([
                 'type' => 'general_status',
                 'label' => 'Estado general',
-                'detail' => 'La estudiante figura como ' . $student->general_status . '.',
+                'detail' => 'La estudiante figura como '.$student->general_status.'.',
                 'priority' => 'medium',
             ]);
         }
@@ -158,6 +162,52 @@ class PorterStudentContextService
             'authorized' => (bool) $match,
             'source' => $match['source'] ?? null,
             'matched_person' => $match,
+        ];
+    }
+
+    public function activePickupRestrictions(StudentProfile $student): array
+    {
+        return InspectoriaPickupRestriction::query()
+            ->where('student_profile_id', $student->id)
+            ->activeOn()
+            ->latest('starts_on')
+            ->latest('id')
+            ->get()
+            ->map(fn (InspectoriaPickupRestriction $restriction) => [
+                'id' => $restriction->id,
+                'restriction_code' => $restriction->restriction_code,
+                'restricted_person_name' => $restriction->restricted_person_name,
+                'restricted_person_rut' => $restriction->restricted_person_rut,
+                'restricted_person_relationship' => $restriction->restricted_person_relationship,
+                'restriction_type' => $restriction->restriction_type,
+                'restriction_type_label' => $restriction->restriction_type_label,
+                'reason' => $restriction->reason,
+                'legal_reference' => $restriction->legal_reference,
+                'starts_on' => $restriction->starts_on?->format('Y-m-d'),
+                'ends_on' => $restriction->ends_on?->format('Y-m-d'),
+            ])
+            ->all();
+    }
+
+    public function resolvePickupRestriction(StudentProfile $student, array $person): array
+    {
+        $normalizedRut = Rut::normalize((string) ($person['rut'] ?? null));
+        $normalizedName = mb_strtolower(trim((string) ($person['name'] ?? '')));
+
+        $match = collect($this->activePickupRestrictions($student))->first(function (array $restriction) use ($normalizedRut, $normalizedName) {
+            $restrictionRut = Rut::normalize((string) ($restriction['restricted_person_rut'] ?? null));
+            $restrictionName = mb_strtolower(trim((string) ($restriction['restricted_person_name'] ?? '')));
+
+            if ($normalizedRut && $restrictionRut && $normalizedRut === $restrictionRut) {
+                return true;
+            }
+
+            return $normalizedName !== '' && $restrictionName !== '' && $normalizedName === $restrictionName;
+        });
+
+        return [
+            'restricted' => (bool) $match,
+            'matched_restriction' => $match,
         ];
     }
 
@@ -204,17 +254,11 @@ class PorterStudentContextService
                 'enrollment_status' => $currentEnrollment->enrollment_status,
             ] : null,
             'authorized_pickup_people' => $this->authorizedPickupPeople($student),
-            'health_insurance' => $student->health_insurance,
-            'has_chronic_illness' => (bool) $student->has_chronic_illness,
-            'chronic_illness_details' => $student->chronic_illness_details,
-            'has_medication_allergies' => (bool) $student->has_medication_allergies,
-            'medication_allergies_details' => $student->medication_allergies_details,
-            'has_physical_restrictions' => (bool) $student->has_physical_restrictions,
-            'physical_restrictions_details' => $student->physical_restrictions_details,
             'observations' => $student->observations,
             'porter_alert_notes' => $student->porter_alert_notes,
             'pickup_restriction' => (bool) $student->pickup_restriction,
             'pickup_restriction_notes' => $student->pickup_restriction_notes,
+            'pickup_restrictions' => $this->activePickupRestrictions($student),
             'alerts' => $this->porterAlerts($student, $currentEnrollment),
         ];
     }

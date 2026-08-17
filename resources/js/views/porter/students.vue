@@ -68,9 +68,6 @@ export default {
         { key: "actions", label: "Acciones", thClass: "text-end", tdClass: "text-end" },
       ];
     },
-    studentModalTitle() {
-      return this.selectedStudent?.full_name ? `Ficha de ${this.selectedStudent.full_name}` : "Ficha operativa";
-    },
   },
   async mounted() {
     await this.loadCatalogs();
@@ -183,7 +180,7 @@ export default {
     <section class="students-page porter-view">
       <PorterModuleHeader
         title="Consulta de estudiantes"
-        subtitle="Busca rápidamente antecedentes, apoderados, autorizaciones y alertas relevantes para portería."
+        subtitle="Consulta datos de contacto, apoderados, personas autorizadas y alertas operativas de retiro."
         eyebrow="Información para decisiones"
         icon="bx bx-search-alt"
       >
@@ -327,15 +324,134 @@ export default {
       </div>
     </BCard>
 
-    <BModal v-model="showStudentModal" :title="studentModalTitle" size="xl" hide-footer scrollable>
-      <LoadingState v-if="detailLoading" message="Cargando ficha..." compact />
-      <PorterStudentSummaryCard v-else :student="selectedStudent" :framed="false" @register-withdrawal="goToWithdrawal" />
+    <BModal
+      v-model="showStudentModal"
+      title="Ficha operativa de estudiante"
+      size="xl"
+      hide-header
+      hide-footer
+      scrollable
+      body-class="p-0"
+      modal-class="porter-student-file-modal"
+    >
+      <div class="student-file-modal-shell">
+        <header class="student-file-modal-header">
+          <span class="student-file-modal-icon"><i class="bx bx-id-card"></i></span>
+          <div class="min-w-0">
+            <div class="student-file-modal-eyebrow">Ficha operativa de Portería</div>
+            <h4 class="text-truncate">{{ selectedStudent?.full_name || "Estudiante" }}</h4>
+            <p>{{ selectedStudent?.rut || "Sin RUT" }} · {{ selectedStudent?.current_enrollment?.course_name || "Cargando curso..." }}</p>
+          </div>
+          <button type="button" class="student-file-modal-close" aria-label="Cerrar ficha" @click="showStudentModal = false">
+            <i class="bx bx-x"></i>
+          </button>
+        </header>
+        <div class="student-file-privacy-note">
+          <i class="bx bx-shield-quarter"></i>
+          <span>Esta ficha muestra únicamente información necesaria para control de acceso y retiros. No expone antecedentes médicos.</span>
+        </div>
+        <div class="student-file-modal-body">
+          <LoadingState v-if="detailLoading" message="Cargando ficha operativa..." compact />
+          <PorterStudentSummaryCard v-else :student="selectedStudent" :framed="false" @register-withdrawal="goToWithdrawal" />
+        </div>
+      </div>
     </BModal>
     </section>
   </Layout>
 </template>
 
 <style scoped>
+:global(.porter-student-file-modal .modal-dialog) {
+  max-width: min(94vw, 88rem);
+}
+
+:global(.porter-student-file-modal .modal-content) {
+  border: 0;
+  border-radius: 1rem;
+  box-shadow: 0 1.5rem 4rem rgba(18, 36, 67, 0.25);
+  overflow: hidden;
+}
+
+:global(.porter-student-file-modal .modal-body) {
+  background: #f5f8fc;
+}
+
+.student-file-modal-header {
+  align-items: center;
+  background: linear-gradient(125deg, #18334f 0%, #326b91 100%);
+  color: #fff;
+  display: flex;
+  gap: 1rem;
+  padding: 1.35rem 1.5rem;
+}
+
+.student-file-modal-icon {
+  align-items: center;
+  background: rgba(255, 255, 255, 0.13);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 0.85rem;
+  display: inline-flex;
+  flex: 0 0 auto;
+  font-size: 1.65rem;
+  height: 3.6rem;
+  justify-content: center;
+  width: 3.6rem;
+}
+
+.student-file-modal-eyebrow {
+  color: #82e7c1;
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+}
+
+.student-file-modal-header h4 {
+  color: #fff;
+  font-weight: 750;
+  margin: 0.15rem 0;
+}
+
+.student-file-modal-header p {
+  color: rgba(255, 255, 255, 0.72);
+  margin: 0;
+}
+
+.student-file-modal-close {
+  align-items: center;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 0.65rem;
+  color: #fff;
+  display: inline-flex;
+  flex: 0 0 auto;
+  font-size: 1.35rem;
+  height: 2.6rem;
+  justify-content: center;
+  margin-left: auto;
+  width: 2.6rem;
+}
+
+.student-file-privacy-note {
+  align-items: center;
+  background: #e6f5ef;
+  border-bottom: 1px solid #c7e8dc;
+  color: #17614e;
+  display: flex;
+  font-size: 0.85rem;
+  font-weight: 600;
+  gap: 0.55rem;
+  padding: 0.7rem 1.5rem;
+}
+
+.student-file-privacy-note i {
+  font-size: 1.15rem;
+}
+
+.student-file-modal-body {
+  padding: 1.35rem 1.5rem 1.6rem;
+}
+
 .porter-action-btn {
   align-items: center;
   display: inline-flex;

@@ -46,6 +46,18 @@ class MeController extends Controller
             $this->roleModuleSyncService->moduleIdsForUserPermissions($user),
         )));
 
+        if ($user->active && ($user->user_type === 'staff' || $user->staff_id !== null)) {
+            $moduleIds = array_values(array_unique(array_merge(
+                $moduleIds,
+                SystemModule::query()
+                    ->where('active', true)
+                    ->whereIn('slug', ['tasks', 'tasks_backlog'])
+                    ->pluck('id')
+                    ->map(fn ($id) => (int) $id)
+                    ->all(),
+            )));
+        }
+
         $modules = SystemModule::query()
             ->whereIn('id', $moduleIds)
             ->orderByRaw('CASE WHEN parent_id IS NULL THEN 0 ELSE 1 END')

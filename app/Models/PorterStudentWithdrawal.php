@@ -5,7 +5,6 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
-use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\MorphMany;
 use Illuminate\Support\Facades\Storage;
 
@@ -42,6 +41,8 @@ class PorterStudentWithdrawal extends Model
         'student_profile_id',
         'academic_year_id',
         'course_section_id',
+        'inspector_staff_id',
+        'inspector_name_snapshot',
         'registered_by',
         'authorized_by',
         'cancelled_by',
@@ -81,6 +82,7 @@ class PorterStudentWithdrawal extends Model
 
     protected $appends = [
         'attachment_url',
+        'withdrawal_code',
     ];
 
     public function studentProfile(): BelongsTo
@@ -96,6 +98,11 @@ class PorterStudentWithdrawal extends Model
     public function courseSection(): BelongsTo
     {
         return $this->belongsTo(CourseSection::class);
+    }
+
+    public function inspector(): BelongsTo
+    {
+        return $this->belongsTo(Staff::class, 'inspector_staff_id');
     }
 
     public function registeredBy(): BelongsTo
@@ -125,7 +132,7 @@ class PorterStudentWithdrawal extends Model
 
     public function getAttachmentUrlAttribute(): ?string
     {
-        if (!$this->attachment_path) {
+        if (! $this->attachment_path) {
             return null;
         }
 
@@ -133,9 +140,18 @@ class PorterStudentWithdrawal extends Model
         $parts = parse_url((string) $url);
 
         if (is_array($parts) && isset($parts['path'])) {
-            return $parts['path'] . (isset($parts['query']) ? '?' . $parts['query'] : '');
+            return $parts['path'].(isset($parts['query']) ? '?'.$parts['query'] : '');
         }
 
         return $url;
+    }
+
+    public function getWithdrawalCodeAttribute(): string
+    {
+        $year = $this->withdrawn_at?->format('Y')
+            ?: preg_replace('/\D+/', '', (string) $this->academic_year_name_snapshot)
+            ?: now()->format('Y');
+
+        return sprintf('RET-%s-%06d', substr((string) $year, 0, 4), (int) $this->getKey());
     }
 }

@@ -5,6 +5,7 @@ namespace App\Services\Tasks;
 use App\Models\Task;
 use App\Models\User;
 use Carbon\Carbon;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
 
 class TaskStatisticsService
@@ -17,9 +18,14 @@ class TaskStatisticsService
     public function build(Request $request, User $user): array
     {
         $query = $this->accessService->visibleQuery($user);
+        return $this->buildFromQuery($request, $query);
+    }
+
+    public function buildFromQuery(Request $request, Builder $query): array
+    {
         TaskQueryFilters::apply($query, $request);
 
-        $tasks = $query->get();
+        $tasks = $query->with('stakeholders:id,name')->get();
         $today = today();
         $nextWeek = today()->addDays(7);
         $activeTasks = $tasks->whereNotIn('status', [Task::STATUS_COMPLETED, Task::STATUS_CANCELLED]);
@@ -44,8 +50,17 @@ class TaskStatisticsService
             'by_priority' => $this->distribution($tasks, 'priority', Task::PRIORITY_OPTIONS),
             'by_status' => $this->distribution($tasks, 'status', Task::STATUS_OPTIONS),
             'by_stakeholder' => $tasks
-                ->groupBy(fn (Task $task) => $task->stakeholder ?: 'Sin stakeholder')
-                ->map(fn ($group, $label) => ['label' => $label, 'count' => $group->count()])
+                ->flatMap(function (Task $task) {
+                    $labels = $task->stakeholders->pluck('name');
+                    if ($labels->isEmpty() && $task->stakeholder) {
+                        $labels->push($task->stakeholder);
+                    }
+
+                    return $labels->isEmpty() ? ['Sin stakeholders'] : $labels;
+                })
+                ->countBy()
+                ->map(fn ($count, $label) => ['label' => $label, 'count' => $count])
+                ->sortByDesc('count')
                 ->values()
                 ->all(),
             'created_by_third_parties' => $tasks

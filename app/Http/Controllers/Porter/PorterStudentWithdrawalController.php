@@ -8,7 +8,9 @@ use App\Http\Requests\Porter\ResolvePorterStudentWithdrawalRequest;
 use App\Http\Requests\Porter\StorePorterStudentWithdrawalRequest;
 use App\Models\PorterAuthorizationRequest;
 use App\Models\PorterStudentWithdrawal;
+use App\Models\Staff;
 use App\Models\StudentProfile;
+use App\Notifications\StudentWithdrawalCreatedNotification;
 use App\Services\Porter\PorterAccessService;
 use App\Services\Porter\PorterAuditService;
 use App\Services\Porter\PorterStudentContextService;
@@ -17,6 +19,8 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
+use Throwable;
 
 class PorterStudentWithdrawalController extends Controller
 {
@@ -24,8 +28,7 @@ class PorterStudentWithdrawalController extends Controller
         private readonly PorterAccessService $accessService,
         private readonly PorterAuditService $auditService,
         private readonly PorterStudentContextService $studentContextService,
-    ) {
-    }
+    ) {}
 
     public function index(Request $request): JsonResponse
     {
@@ -34,6 +37,7 @@ class PorterStudentWithdrawalController extends Controller
         $query = PorterStudentWithdrawal::query()
             ->with([
                 'studentProfile:id,first_name,last_name,rut',
+                'inspector:id,full_name,rut',
                 'registeredBy:id,name',
                 'authorizedBy:id,name',
             ]);
@@ -80,6 +84,7 @@ class PorterStudentWithdrawalController extends Controller
                 'studentProfile:id,first_name,last_name,rut',
                 'academicYear:id,name,year',
                 'courseSection:id,display_name',
+                'inspector:id,full_name,rut',
                 'registeredBy:id,name,email',
                 'authorizedBy:id,name,email',
                 'cancelledBy:id,name,email',
@@ -100,7 +105,7 @@ class PorterStudentWithdrawalController extends Controller
         $activeYear = $this->studentContextService->activeAcademicYear();
         $currentEnrollment = $this->studentContextService->currentEnrollment($student, $activeYear);
 
-        if (!$activeYear || !$currentEnrollment) {
+        if (! $activeYear || ! $currentEnrollment) {
             return response()->json([
                 'message' => 'La estudiante no tiene matrícula vigente en el año académico activo.',
             ], 422);
@@ -111,6 +116,9 @@ class PorterStudentWithdrawalController extends Controller
                 'message' => 'No se puede registrar retiro para una matrícula no activa.',
             ], 422);
         }
+
+        $assignedInspector = $this->studentContextService->assignedInspector($currentEnrollment);
+        $inspector = $assignedInspector ?: Staff::query()->findOrFail($payload['inspector_staff_id']);
 
         $duplicateExists = PorterStudentWithdrawal::query()
             ->where('student_profile_id', $student->id)
@@ -132,17 +140,23 @@ class PorterStudentWithdrawalController extends Controller
             'name' => $payload['person_name'],
             'rut' => $payload['person_rut'] ?? null,
         ]);
+        $restrictionCheck = $this->studentContextService->resolvePickupRestriction($student, [
+            'name' => $payload['person_name'],
+            'rut' => $payload['person_rut'] ?? null,
+        ]);
 
-        $requiresSpecialAuthorization = $student->pickup_restriction || !$authorizationCheck['authorized'];
+        $requiresSpecialAuthorization = $student->pickup_restriction || $restrictionCheck['restricted'] || ! $authorizationCheck['authorized'];
         $initialStatus = $requiresSpecialAuthorization ? 'observado' : 'registrado';
 
-        $withdrawal = DB::transaction(function () use ($request, $payload, $student, $activeYear, $currentEnrollment, $authorizationCheck, $requiresSpecialAuthorization, $initialStatus, $user) {
+        $withdrawal = DB::transaction(function () use ($request, $payload, $student, $activeYear, $currentEnrollment, $inspector, $authorizationCheck, $restrictionCheck, $requiresSpecialAuthorization, $initialStatus, $user) {
             $attachment = $request->file('attachment');
 
             $withdrawal = PorterStudentWithdrawal::create([
                 'student_profile_id' => $student->id,
                 'academic_year_id' => $activeYear->id,
                 'course_section_id' => $currentEnrollment->course_section_id,
+                'inspector_staff_id' => $inspector->id,
+                'inspector_name_snapshot' => $inspector->full_name,
                 'registered_by' => $user?->id,
                 'authorized_by' => null,
                 'status' => $initialStatus,
@@ -160,12 +174,15 @@ class PorterStudentWithdrawalController extends Controller
                 'person_authorized' => $authorizationCheck['authorized'],
                 'authorization_source' => $authorizationCheck['source'],
                 'requires_special_authorization' => $requiresSpecialAuthorization,
-                'authorization_notes' => $requiresSpecialAuthorization ? ($student->pickup_restriction_notes ?: ($payload['override_reason'] ?? null)) : null,
+                'authorization_notes' => $requiresSpecialAuthorization
+                    ? ($restrictionCheck['matched_restriction']['reason'] ?? $student->pickup_restriction_notes ?? ($payload['override_reason'] ?? null))
+                    : null,
                 'ip_address' => $request->ip(),
                 'user_agent' => $request->userAgent(),
                 'metadata' => [
                     'authorization_match' => $authorizationCheck['matched_person'] ?? null,
                     'pickup_restriction' => (bool) $student->pickup_restriction,
+                    'matched_pickup_restriction' => $restrictionCheck['matched_restriction'] ?? null,
                 ],
             ]);
 
@@ -178,9 +195,11 @@ class PorterStudentWithdrawalController extends Controller
                     'requested_by' => $user?->id,
                     'status' => 'pendiente',
                     'required_permission_slug' => 'autorizar_retiros_porteria',
-                    'reason' => $student->pickup_restriction
+                    'reason' => $restrictionCheck['restricted']
+                        ? (($restrictionCheck['matched_restriction']['restriction_type_label'] ?? 'Restricción de retiro').': '.($restrictionCheck['matched_restriction']['reason'] ?? 'La persona presenta una restricción vigente.'))
+                        : ($student->pickup_restriction
                         ? ($student->pickup_restriction_notes ?: 'La estudiante presenta restricción de retiro.')
-                        : 'La persona que retira no está en la lista autorizada.',
+                        : 'La persona que retira no está en la lista autorizada.'),
                     'requested_at' => now(),
                     'payload' => [
                         'person_name' => $payload['person_name'],
@@ -188,7 +207,7 @@ class PorterStudentWithdrawalController extends Controller
                     ],
                 ]);
 
-                if ($this->accessService->canAuthorizeSpecialWithdrawal($user) && !empty($payload['approve_override']) && !empty($payload['override_reason'])) {
+                if ($this->accessService->canAuthorizeSpecialWithdrawal($user) && ! empty($payload['approve_override']) && ! empty($payload['override_reason'])) {
                     $withdrawal->update([
                         'status' => 'autorizado',
                         'authorized_by' => $user?->id,
@@ -219,10 +238,13 @@ class PorterStudentWithdrawalController extends Controller
             $request,
             [
                 'student_profile_id' => $student->id,
+                'inspector_staff_id' => $inspector->id,
                 'person_name' => $withdrawal->person_name,
                 'requires_special_authorization' => $withdrawal->requires_special_authorization,
             ],
         );
+
+        $this->notifyInspector($withdrawal, $inspector);
 
         return response()->json([
             'message' => $withdrawal->status === 'observado'
@@ -230,6 +252,7 @@ class PorterStudentWithdrawalController extends Controller
                 : 'Retiro registrado correctamente.',
             'data' => $withdrawal->load([
                 'studentProfile:id,first_name,last_name,rut',
+                'inspector:id,full_name,rut',
                 'registeredBy:id,name',
                 'authorizationRequests.requestedBy:id,name',
             ]),
@@ -338,7 +361,7 @@ class PorterStudentWithdrawalController extends Controller
     {
         $path = $attachment->storePubliclyAs(
             sprintf('porter/withdrawals/%d', $withdrawal->id),
-            now()->format('Ymd_His') . '_' . uniqid() . '_' . $attachment->getClientOriginalName(),
+            now()->format('Ymd_His').'_'.uniqid().'_'.$attachment->getClientOriginalName(),
             ['disk' => 'public']
         );
 
@@ -347,5 +370,32 @@ class PorterStudentWithdrawalController extends Controller
             'attachment_original_name' => $attachment->getClientOriginalName(),
             'attachment_mime_type' => $attachment->getClientMimeType(),
         ]);
+    }
+
+    private function notifyInspector(PorterStudentWithdrawal $withdrawal, Staff $inspector): void
+    {
+        $recipient = $inspector->user()
+            ->where('active', true)
+            ->first();
+
+        if (! $recipient) {
+            Log::warning('No se pudo crear la notificación interna del retiro porque la inspectora no tiene una cuenta activa.', [
+                'withdrawal_id' => $withdrawal->id,
+                'inspector_staff_id' => $inspector->id,
+            ]);
+
+            return;
+        }
+
+        try {
+            $recipient->notify(new StudentWithdrawalCreatedNotification($withdrawal));
+        } catch (Throwable $exception) {
+            Log::warning('No se pudo crear la notificación interna del retiro.', [
+                'withdrawal_id' => $withdrawal->id,
+                'inspector_staff_id' => $inspector->id,
+                'recipient_user_id' => $recipient->id,
+                'error' => $exception->getMessage(),
+            ]);
+        }
     }
 }

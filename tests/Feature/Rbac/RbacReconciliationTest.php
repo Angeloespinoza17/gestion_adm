@@ -8,6 +8,7 @@ use App\Models\Role;
 use App\Models\SystemModule;
 use App\Services\Rbac\RbacReconciliationService;
 use App\Services\Rbac\RoleModuleSyncService;
+use Database\Seeders\PermissionGroupSeeder;
 use Database\Seeders\RbacSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -44,14 +45,26 @@ class RbacReconciliationTest extends TestCase
         $service = app(RbacReconciliationService::class);
         $preview = $service->preview();
 
-        $this->assertSame(0, $preview['audit']['critical_issue_count']);
+        $this->assertSame(0, $preview['audit']['critical_issue_count'], json_encode($preview['audit'], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
         $this->assertSame($permissionGroupCountBeforePreview, PermissionGroup::query()->count());
         $this->assertFalse(Permission::query()->where('slug', 'administrar_catalogos_enfermeria')->exists());
 
         $result = $service->apply();
 
         $this->assertSame(0, $result['audit']['critical_issue_count']);
-        $this->assertSame(28, PermissionGroup::query()->where('active', true)->count());
+        $expectedGroupSlugs = collect(PermissionGroupSeeder::definitions())
+            ->pluck('slug')
+            ->push('libro_digital')
+            ->push('inspectoria')
+            ->push('operational_transfers')
+            ->sort()
+            ->values()
+            ->all();
+
+        $this->assertSame(
+            $expectedGroupSlugs,
+            PermissionGroup::query()->where('active', true)->pluck('slug')->sort()->values()->all(),
+        );
         $this->assertTrue(Permission::query()->where('slug', 'administrar_catalogos_enfermeria')->where('active', true)->exists());
 
         $nurse = Role::query()->where('slug', 'enfermeria')->firstOrFail();

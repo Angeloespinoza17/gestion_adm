@@ -6,9 +6,11 @@ import LoadingState from "../../components/ui/loading-state.vue";
 import PorterActionDeck from "../../components/porter/action-deck.vue";
 import PorterModuleHeader from "../../components/porter/module-header.vue";
 import PorterStatusBadge from "../../components/porter/status-badge.vue";
+import { downloadWithdrawalReceipt } from "../../utils/withdrawal-pdf";
 
 const emptyForm = () => ({
   student_profile_id: null,
+  inspector_staff_id: null,
   person_name: "",
   person_rut: "",
   person_relationship: "apoderado",
@@ -29,18 +31,25 @@ export default {
       saving: false,
       loadingList: false,
       loadingStudent: false,
+      searchingStudents: false,
       showWithdrawalModal: false,
       error: null,
       catalogs: {
         withdrawal_relationships: [],
         withdrawal_reasons: [],
         withdrawal_statuses: [],
+        inspectors: [],
         capabilities: {},
       },
       form: emptyForm(),
       studentSearch: "",
       studentOptions: [],
+      showStudentSuggestions: false,
+      activeStudentSuggestionIndex: -1,
+      studentSearchTimer: null,
+      studentSearchRequestId: 0,
       selectedStudent: null,
+      selectedAuthorizedPersonKey: null,
       withdrawals: [],
       listFilters: {
         search: "",
@@ -71,21 +80,38 @@ export default {
         }))
       );
     },
-    studentSelectOptions() {
-      const options = [...(this.studentOptions || [])];
-      if (this.selectedStudent && !options.some((item) => Number(item.id) === Number(this.selectedStudent.id))) {
-        options.unshift(this.selectedStudent);
+    inspectorOptions() {
+      const inspectors = [...(this.catalogs.inspectors || [])];
+      const assigned = this.selectedStudent?.assigned_inspector;
+
+      if (assigned && !inspectors.some((inspector) => Number(inspector.id) === Number(assigned.id))) {
+        inspectors.push(assigned);
       }
 
-      return [{ value: null, text: "Seleccionar..." }].concat(
-        options.map((item) => ({
-          value: item.id,
-          text: `${item.full_name} - ${item.current_enrollment?.course_name || "Sin curso"}`,
-        }))
+      return [
+        { value: null, text: "Selecciona una inspectora" },
+        ...inspectors
+          .sort((left, right) => String(left.full_name).localeCompare(String(right.full_name), "es"))
+          .map((inspector) => ({
+            value: inspector.id,
+            text: `${inspector.full_name} · ${inspector.rut || "Sin RUT"}`,
+          })),
+      ];
+    },
+    responsibleInspector() {
+      return (
+        this.selectedStudent?.assigned_inspector ||
+        (this.catalogs.inspectors || []).find(
+          (inspector) => Number(inspector.id) === Number(this.form.inspector_staff_id)
+        ) ||
+        null
       );
     },
     authorizedPeople() {
       return this.selectedStudent?.authorized_pickup_people || [];
+    },
+    pickupRestrictions() {
+      return this.selectedStudent?.pickup_restrictions || [];
     },
     studentAlerts() {
       return this.selectedStudent?.alerts || [];
@@ -121,6 +147,9 @@ export default {
       await this.loadStudentById(this.$route.query.student_id);
       this.showWithdrawalModal = true;
     }
+  },
+  beforeUnmount() {
+    if (this.studentSearchTimer) clearTimeout(this.studentSearchTimer);
   },
   methods: {
     openWithdrawalModal() {
@@ -165,20 +194,94 @@ export default {
         this.loadingCatalogs = false;
       }
     },
-    async searchStudents() {
-      if (!this.studentSearch.trim()) {
-        this.studentOptions = this.selectedStudent ? [this.selectedStudent] : [];
+    studentOptionText(student) {
+      if (!student) return "";
+      return `${student.full_name} · ${student.rut || "Sin RUT"} · ${student.current_enrollment?.course_name || "Sin curso"}`;
+    },
+    studentInitials(student) {
+      return String(student?.full_name || "A")
+        .split(/\s+/)
+        .slice(0, 2)
+        .map((part) => part[0])
+        .join("")
+        .toUpperCase();
+    },
+    onStudentSearchInput() {
+      if (this.selectedStudent && this.studentSearch !== this.studentOptionText(this.selectedStudent)) {
+        this.clearSelectedStudent(true);
+      }
+
+      if (this.studentSearchTimer) clearTimeout(this.studentSearchTimer);
+      this.activeStudentSuggestionIndex = -1;
+
+      if (this.studentSearch.trim().length < 2) {
+        this.studentSearchRequestId += 1;
+        this.searchingStudents = false;
+        this.studentOptions = [];
+        this.showStudentSuggestions = false;
         return;
       }
 
-      const response = await axios.get("/api/porter/students", {
-        params: {
-          search: this.studentSearch,
-          per_page: 8,
-        },
-      });
+      this.showStudentSuggestions = true;
+      this.studentSearchTimer = setTimeout(() => this.searchStudents(), 180);
+    },
+    async searchStudents() {
+      const query = this.studentSearch.trim();
+      if (query.length < 2) return;
+      const requestId = ++this.studentSearchRequestId;
 
-      this.studentOptions = response.data.data || [];
+      this.searchingStudents = true;
+      this.showStudentSuggestions = true;
+      try {
+        const response = await axios.get("/api/porter/students", {
+          params: { search: query, per_page: 10 },
+        });
+
+        if (requestId !== this.studentSearchRequestId || query !== this.studentSearch.trim()) return;
+        this.studentOptions = response.data.data || [];
+        this.activeStudentSuggestionIndex = this.studentOptions.length === 1 ? 0 : -1;
+      } catch (error) {
+        if (requestId === this.studentSearchRequestId) {
+          this.error = this.formatError(error);
+          this.studentOptions = [];
+        }
+      } finally {
+        if (requestId === this.studentSearchRequestId) this.searchingStudents = false;
+      }
+    },
+    openStudentSuggestions() {
+      if (this.studentSearch.trim().length >= 2) {
+        this.showStudentSuggestions = true;
+        if (!this.studentOptions.length && !this.searchingStudents) this.searchStudents();
+      }
+    },
+    closeStudentSuggestions() {
+      setTimeout(() => {
+        this.showStudentSuggestions = false;
+        this.activeStudentSuggestionIndex = -1;
+      }, 140);
+    },
+    moveStudentSuggestion(step) {
+      if (!this.studentOptions.length) return;
+      this.showStudentSuggestions = true;
+      const lastIndex = this.studentOptions.length - 1;
+      if (this.activeStudentSuggestionIndex < 0) {
+        this.activeStudentSuggestionIndex = step > 0 ? 0 : lastIndex;
+      } else {
+        this.activeStudentSuggestionIndex = (this.activeStudentSuggestionIndex + step + this.studentOptions.length) % this.studentOptions.length;
+      }
+    },
+    selectActiveStudentSuggestion() {
+      const student = this.studentOptions[this.activeStudentSuggestionIndex];
+      if (student) this.chooseStudentSuggestion(student);
+      else this.searchStudents();
+    },
+    async chooseStudentSuggestion(student) {
+      this.studentSearchRequestId += 1;
+      this.searchingStudents = false;
+      this.showStudentSuggestions = false;
+      this.activeStudentSuggestionIndex = -1;
+      await this.loadStudentById(student.id);
     },
     async loadStudentById(id) {
       if (!id) return;
@@ -197,25 +300,27 @@ export default {
       if (!student) return;
       this.selectedStudent = student;
       this.form.student_profile_id = student.id;
-      this.studentSearch = student.full_name || "";
+      this.form.inspector_staff_id = student.assigned_inspector?.id || null;
+      this.studentSearch = this.studentOptionText(student);
       this.studentOptions = [
         student,
         ...(this.studentOptions || []).filter((item) => Number(item.id) !== Number(student.id)),
       ];
+      this.selectedAuthorizedPersonKey = null;
     },
-    async selectStudent(id) {
-      if (!id) {
-        this.clearSelectedStudent();
-        return;
-      }
-
-      await this.loadStudentById(id);
-    },
-    clearSelectedStudent() {
+    clearSelectedStudent(preserveSearch = false) {
+      const currentSearch = this.studentSearch;
+      if (this.studentSearchTimer) clearTimeout(this.studentSearchTimer);
+      this.studentSearchRequestId += 1;
+      this.searchingStudents = false;
       this.selectedStudent = null;
       this.form.student_profile_id = null;
-      this.studentSearch = "";
+      this.form.inspector_staff_id = null;
+      this.studentSearch = preserveSearch ? currentSearch : "";
       this.studentOptions = [];
+      this.showStudentSuggestions = false;
+      this.activeStudentSuggestionIndex = -1;
+      this.selectedAuthorizedPersonKey = null;
 
       if (this.$route.query.student_id) {
         const query = { ...this.$route.query };
@@ -228,6 +333,26 @@ export default {
       this.form.person_rut = person.rut || "";
       this.form.person_phone = person.phone || "";
       this.form.person_relationship = this.relationshipValue(person.relationship, person.source);
+      this.selectedAuthorizedPersonKey = this.authorizedPersonKey(person);
+    },
+    authorizedPersonKey(person) {
+      return `${String(person?.source || "lista")}:${this.normalizePersonValue(person?.rut || person?.name)}`;
+    },
+    normalizePersonValue(value) {
+      return String(value || "")
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .replace(/[^0-9a-z]/gi, "")
+        .toLowerCase();
+    },
+    personIsRestricted(person) {
+      const personRut = this.normalizePersonValue(person?.rut);
+      const personName = this.normalizePersonValue(person?.name);
+      return this.pickupRestrictions.some((restriction) => {
+        const restrictionRut = this.normalizePersonValue(restriction.restricted_person_rut);
+        const restrictionName = this.normalizePersonValue(restriction.restricted_person_name);
+        return Boolean((personRut && restrictionRut && personRut === restrictionRut) || (personName && restrictionName && personName === restrictionName));
+      });
     },
     relationshipValue(relationship, source = null) {
       const normalized = String(relationship || source || "")
@@ -258,6 +383,10 @@ export default {
 
       if (!this.form.student_profile_id) {
         issues.push("Selecciona una estudiante.");
+      }
+
+      if (!this.form.inspector_staff_id) {
+        issues.push("Selecciona la inspectora responsable del retiro.");
       }
 
       if (!this.form.person_name.trim()) {
@@ -293,12 +422,14 @@ export default {
     async confirmWithdrawalSubmit() {
       const studentName = this.selectedStudent?.full_name || "Sin estudiante";
       const personName = this.form.person_name || "Sin persona";
+      const inspectorName = this.responsibleInspector?.full_name || "Sin inspectora";
 
       const { isConfirmed } = await Swal.fire({
         title: "Registrar retiro",
         html: `
           <div class="text-start">
             <div><strong>Estudiante:</strong> ${this.escapeHtml(studentName)}</div>
+            <div><strong>Inspectora responsable:</strong> ${this.escapeHtml(inspectorName)}</div>
             <div><strong>Retira:</strong> ${this.escapeHtml(personName)}</div>
             <div><strong>Motivo:</strong> ${this.escapeHtml(this.reasonLabel(this.form.reason))}</div>
           </div>
@@ -383,17 +514,22 @@ export default {
           headers: { "Content-Type": "multipart/form-data" },
         });
 
-        await Swal.fire({
-          title: "Retiro registrado",
-          text: response.data.message,
-          icon: "success",
-          timer: 1800,
-          showConfirmButton: false,
-        });
-
+        const withdrawal = response.data.data;
         this.resetFormAfterSubmit();
         this.showWithdrawalModal = false;
         await this.loadWithdrawals(1);
+
+        const result = await Swal.fire({
+          title: "Retiro registrado",
+          text: `${response.data.message} Puedes imprimir de inmediato el acta para la firma del apoderado.`,
+          icon: "success",
+          showCancelButton: true,
+          confirmButtonText: "Descargar acta PDF",
+          cancelButtonText: "Cerrar",
+          reverseButtons: true,
+        });
+
+        if (result.isConfirmed) this.downloadWithdrawalPdf(withdrawal);
       } catch (error) {
         const duplicateHandled = await this.handleDuplicateWithdrawal(error);
         if (!duplicateHandled) {
@@ -470,6 +606,13 @@ export default {
 
       await axios.post(`/api/porter/withdrawals/${item.id}/annul`, { reason });
       await this.loadWithdrawals(this.pagination.current_page || 1);
+    },
+    downloadWithdrawalPdf(item) {
+      downloadWithdrawalReceipt(item, {
+        reasonLabel: (value) => this.reasonLabel(value),
+        relationshipLabel: (value) => this.relationshipLabel(value),
+        statusLabel: (value) => this.statusLabel(value),
+      });
     },
     optionLabel(value, options) {
       return (options || []).find((item) => item.value === value)?.label || this.humanize(value);
@@ -620,32 +763,123 @@ export default {
               <span>Selecciona una estudiante para habilitar el registro.</span>
             </div>
 
-            <div class="row g-2 align-items-end student-search-row">
-              <div class="col-lg-7">
-                <label class="form-label">Buscar estudiante</label>
-                <div class="d-flex gap-2">
-                  <BFormInput v-model="studentSearch" placeholder="Nombre o RUT" @keyup.enter="searchStudents" />
-                  <BButton variant="outline-primary" :disabled="loadingStudent" @click="searchStudents">
-                    <span v-if="loadingStudent">...</span>
-                    <span v-else><i class="bx bx-search me-1"></i>Buscar</span>
+            <div class="student-search-row">
+              <label class="form-label" for="withdrawal-student-search">Buscar y seleccionar estudiante</label>
+              <div class="student-autocomplete">
+                <div class="student-autocomplete-control">
+                  <i class="bx bx-search"></i>
+                  <BFormInput
+                    id="withdrawal-student-search"
+                    v-model="studentSearch"
+                    role="combobox"
+                    autocomplete="off"
+                    aria-autocomplete="list"
+                    aria-controls="withdrawal-student-suggestions"
+                    :aria-expanded="showStudentSuggestions"
+                    placeholder="Escribe nombre, apellido o RUT..."
+                    @input="onStudentSearchInput"
+                    @focus="openStudentSuggestions"
+                    @blur="closeStudentSuggestions"
+                    @keydown.down.prevent="moveStudentSuggestion(1)"
+                    @keydown.up.prevent="moveStudentSuggestion(-1)"
+                    @keydown.enter.prevent="selectActiveStudentSuggestion"
+                    @keydown.esc="showStudentSuggestions = false"
+                  />
+                  <span v-if="searchingStudents" class="student-autocomplete-spinner" aria-label="Buscando"></span>
+                  <BButton variant="primary" :disabled="searchingStudents || studentSearch.trim().length < 2" @mousedown.prevent @click="searchStudents">
+                    <i class="bx bx-search me-1"></i>{{ searchingStudents ? "Buscando" : "Buscar" }}
                   </BButton>
                 </div>
+
+                <div
+                  v-if="showStudentSuggestions"
+                  id="withdrawal-student-suggestions"
+                  class="student-suggestion-menu"
+                  role="listbox"
+                  aria-label="Resultados de estudiantes"
+                >
+                  <div v-if="searchingStudents" class="student-suggestion-state">
+                    <span class="student-autocomplete-spinner"></span>Buscando estudiantes...
+                  </div>
+                  <template v-else>
+                    <button
+                      v-for="(student, index) in studentOptions"
+                      :key="student.id"
+                      type="button"
+                      role="option"
+                      class="student-suggestion-item"
+                      :class="{ active: activeStudentSuggestionIndex === index }"
+                      :aria-selected="activeStudentSuggestionIndex === index"
+                      @mouseenter="activeStudentSuggestionIndex = index"
+                      @mousedown.prevent="chooseStudentSuggestion(student)"
+                    >
+                      <span class="student-suggestion-avatar">{{ studentInitials(student) }}</span>
+                      <span class="student-suggestion-person">
+                        <strong>{{ student.full_name }}</strong>
+                        <small>{{ student.rut || "Sin RUT" }}</small>
+                      </span>
+                      <span class="student-suggestion-course"><i class="bx bx-group"></i>{{ student.current_enrollment?.course_name || "Sin curso vigente" }}</span>
+                    </button>
+                  </template>
+                  <div v-if="!searchingStudents && !studentOptions.length" class="student-suggestion-state">
+                    <i class="bx bx-user-x"></i>No se encontraron estudiantes para “{{ studentSearch }}”.
+                  </div>
+                </div>
               </div>
-              <div class="col-lg-5">
-                <label class="form-label">Seleccionar resultado</label>
-                <BFormSelect
-                  :options="studentSelectOptions"
-                  :model-value="form.student_profile_id"
-                  :disabled="loadingStudent"
-                  @update:model-value="selectStudent"
-                />
-              </div>
+              <div class="student-search-help"><i class="bx bx-bolt-circle"></i>Las sugerencias aparecen desde 2 caracteres. Puedes seleccionar con las flechas y Enter.</div>
             </div>
+          </div>
+
+          <div v-if="selectedStudent" class="inspector-responsibility mt-3">
+            <div v-if="selectedStudent.assigned_inspector" class="inspector-responsibility__assigned">
+              <span class="inspector-responsibility__icon"><i class="bx bx-shield-quarter"></i></span>
+              <div>
+                <small>Inspectora responsable del curso</small>
+                <strong>{{ selectedStudent.assigned_inspector.full_name }}</strong>
+                <span>{{ selectedStudent.assigned_inspector.rut || "Sin RUT" }} · Asignación vigente precargada</span>
+              </div>
+              <BBadge variant="success">Asignada</BBadge>
+            </div>
+            <div v-else class="inspector-responsibility__manual">
+              <div class="inspector-responsibility__notice">
+                <i class="bx bx-info-circle"></i>
+                <span>El curso no tiene una inspectora vigente asignada. Debes seleccionar una para registrar el retiro.</span>
+              </div>
+              <label class="form-label" for="withdrawal-inspector">Inspectora responsable *</label>
+              <BFormSelect
+                id="withdrawal-inspector"
+                v-model="form.inspector_staff_id"
+                :options="inspectorOptions"
+                required
+              />
+              <small v-if="!catalogs.inspectors?.length" class="text-danger d-block mt-1">
+                No hay inspectoras activas disponibles. Registra una en el módulo de Inspectoría antes de continuar.
+              </small>
+            </div>
+          </div>
+
+          <div v-if="selectedStudent && (pickupRestrictions.length || selectedStudent.pickup_restriction)" class="pickup-restriction-alert mt-3" role="alert" aria-live="assertive">
+            <div class="pickup-restriction-alert__title">
+              <i class="bx bxs-error-alt"></i>
+              <div><strong>Alerta de restricción de retiro</strong><span>Verifica la identidad antes de continuar.</span></div>
+            </div>
+            <div v-if="pickupRestrictions.length" class="pickup-restriction-list">
+              <article v-for="restriction in pickupRestrictions" :key="restriction.id">
+                <div>
+                  <span>{{ restriction.restriction_type_label }}</span>
+                  <strong>{{ restriction.restricted_person_name }}</strong>
+                  <small>{{ restriction.restricted_person_relationship || "Relación no informada" }}<template v-if="restriction.restricted_person_rut"> · {{ restriction.restricted_person_rut }}</template></small>
+                </div>
+                <p>{{ restriction.reason }}</p>
+                <em>Vigente {{ restriction.ends_on ? `hasta ${restriction.ends_on}` : "sin fecha de término" }}<template v-if="restriction.legal_reference"> · {{ restriction.legal_reference }}</template></em>
+              </article>
+            </div>
+            <p v-else class="pickup-restriction-legacy">{{ selectedStudent.pickup_restriction_notes || "La estudiante requiere validación especial para cualquier retiro." }}</p>
           </div>
 
           <div v-if="authorizedPeople.length" class="authorized-picker mt-3">
             <div class="d-flex justify-content-between align-items-center gap-2 flex-wrap mb-2">
-              <h6 class="mb-0">Autorizados para retiro</h6>
+              <div><h6 class="mb-0">Autorizados para retiro</h6><small>Haz clic para completar automáticamente los datos del retirante.</small></div>
               <BBadge variant="secondary">{{ authorizedPeople.length }}</BBadge>
             </div>
             <div class="authorized-picker-grid">
@@ -654,11 +888,15 @@ export default {
                 :key="`${person.name}-${index}`"
                 type="button"
                 class="authorized-person-button"
+                :class="{ selected: selectedAuthorizedPersonKey === authorizedPersonKey(person), restricted: personIsRestricted(person) }"
+                :title="personIsRestricted(person) ? 'Esta persona tiene una restricción de retiro vigente' : 'Usar datos como persona que retira'"
                 @click="applyAuthorizedPerson(person)"
               >
                 <span class="authorized-source">{{ sourceLabel(person.source) }}</span>
                 <span class="authorized-person-name">{{ person.name }}</span>
                 <span class="authorized-person-meta">{{ person.relationship || "Sin relación" }} · {{ person.phone || "Sin teléfono" }}</span>
+                <span v-if="personIsRestricted(person)" class="authorized-person-warning"><i class="bx bxs-error"></i> Restricción vigente</span>
+                <span v-else class="authorized-person-use"><i :class="selectedAuthorizedPersonKey === authorizedPersonKey(person) ? 'bx bx-check-circle' : 'bx bx-pointer'"></i>{{ selectedAuthorizedPersonKey === authorizedPersonKey(person) ? "Datos cargados" : "Usar como retirante" }}</span>
               </button>
             </div>
           </div>
@@ -769,6 +1007,13 @@ export default {
                   />
                 </div>
               </div>
+              <div class="context-meta-item context-meta-item--inspector">
+                <span>Inspectora responsable</span>
+                <strong>{{ responsibleInspector?.full_name || "Pendiente de selección" }}</strong>
+                <small v-if="responsibleInspector" class="text-muted">
+                  {{ selectedStudent.assigned_inspector ? "Asignada al curso" : "Seleccionada manualmente" }}
+                </small>
+              </div>
             </div>
 
             <div v-if="studentAlerts.length" class="mt-3">
@@ -874,6 +1119,16 @@ export default {
         <template #cell(actions)="{ item }">
           <div class="d-flex gap-2 justify-content-end">
             <BButton
+              size="sm"
+              variant="outline-primary"
+              class="withdrawal-table-action"
+              title="Descargar acta PDF"
+              :aria-label="`Descargar acta PDF de ${item.student_full_name_snapshot}`"
+              @click="downloadWithdrawalPdf(item)"
+            >
+              <i class="bx bxs-file-pdf"></i>
+            </BButton>
+            <BButton
               v-if="catalogs.capabilities?.can_authorize_special_withdrawal && ['observado', 'rechazado'].includes(item.status)"
               size="sm"
               variant="outline-primary"
@@ -907,6 +1162,19 @@ export default {
 </template>
 
 <style scoped>
+.withdrawal-table-action {
+  align-items: center;
+  display: inline-flex;
+  height: 2.4rem;
+  justify-content: center;
+  padding: 0;
+  width: 2.4rem;
+}
+
+.withdrawal-table-action i {
+  font-size: 1.15rem;
+}
+
 :global(.withdrawal-form-modal .modal-dialog) {
   max-width: min(94vw, 92rem);
 }
@@ -1165,6 +1433,177 @@ export default {
   white-space: nowrap;
 }
 
+.student-autocomplete {
+  position: relative;
+  z-index: 8;
+}
+
+.student-autocomplete-control {
+  align-items: stretch;
+  display: flex;
+  position: relative;
+}
+
+.student-autocomplete-control > i {
+  color: #71829b;
+  font-size: 1.2rem;
+  left: 1rem;
+  pointer-events: none;
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 2;
+}
+
+.student-autocomplete-control .form-control {
+  border-radius: 0.75rem 0 0 0.75rem;
+  font-size: 0.95rem;
+  min-height: 3.15rem;
+  padding-left: 2.75rem;
+}
+
+.student-autocomplete-control .btn {
+  border-radius: 0 0.75rem 0.75rem 0;
+  min-width: 7.4rem;
+}
+
+.student-autocomplete-spinner {
+  animation: student-search-spin 0.7s linear infinite;
+  border: 2px solid rgba(var(--bs-primary-rgb), 0.2);
+  border-radius: 50%;
+  border-top-color: var(--bs-primary);
+  display: inline-block;
+  flex: 0 0 auto;
+  height: 1rem;
+  width: 1rem;
+}
+
+.student-autocomplete-control > .student-autocomplete-spinner {
+  position: absolute;
+  right: 8.15rem;
+  top: calc(50% - 0.5rem);
+  z-index: 3;
+}
+
+@keyframes student-search-spin {
+  to { transform: rotate(360deg); }
+}
+
+.student-suggestion-menu {
+  background: var(--bs-body-bg);
+  border: 1px solid #ccd8e7;
+  border-radius: 0.8rem;
+  box-shadow: 0 1rem 2.5rem rgba(25, 45, 74, 0.18);
+  left: 0;
+  margin-top: 0.4rem;
+  max-height: 22rem;
+  overflow-y: auto;
+  padding: 0.35rem;
+  position: absolute;
+  right: 0;
+  top: 100%;
+  z-index: 30;
+}
+
+.student-suggestion-item {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: 0.65rem;
+  color: var(--bs-body-color);
+  display: grid;
+  gap: 0.7rem;
+  grid-template-columns: 2.5rem minmax(0, 1fr) auto;
+  padding: 0.65rem 0.75rem;
+  text-align: left;
+  transition: background-color 0.12s ease, color 0.12s ease;
+  width: 100%;
+}
+
+.student-suggestion-item + .student-suggestion-item {
+  border-top: 1px solid rgba(128, 145, 166, 0.14);
+}
+
+.student-suggestion-item:hover,
+.student-suggestion-item.active {
+  background: rgba(var(--bs-primary-rgb), 0.09);
+  color: var(--bs-primary);
+  outline: 0;
+}
+
+.student-suggestion-avatar {
+  align-items: center;
+  background: linear-gradient(135deg, #294f7d, #437ab2);
+  border-radius: 0.65rem;
+  color: #fff;
+  display: inline-flex;
+  font-size: 0.72rem;
+  font-weight: 800;
+  height: 2.5rem;
+  justify-content: center;
+  width: 2.5rem;
+}
+
+.student-suggestion-person {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.student-suggestion-person strong {
+  color: var(--bs-heading-color);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.student-suggestion-person small {
+  color: var(--bs-secondary-color);
+  font-size: 0.72rem;
+}
+
+.student-suggestion-course {
+  align-items: center;
+  background: #edf3f8;
+  border: 1px solid #dce6ee;
+  border-radius: 99px;
+  color: #3f6179;
+  display: inline-flex;
+  font-size: 0.72rem;
+  font-weight: 750;
+  gap: 0.3rem;
+  max-width: 13rem;
+  overflow: hidden;
+  padding: 0.32rem 0.58rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.student-suggestion-state {
+  align-items: center;
+  color: var(--bs-secondary-color);
+  display: flex;
+  gap: 0.55rem;
+  justify-content: center;
+  min-height: 4.25rem;
+  padding: 0.75rem;
+  text-align: center;
+}
+
+.student-search-help {
+  align-items: center;
+  color: var(--bs-secondary-color);
+  display: flex;
+  font-size: 0.72rem;
+  gap: 0.35rem;
+  margin-top: 0.45rem;
+}
+
+.student-search-help i {
+  color: var(--bs-primary);
+  font-size: 1rem;
+}
+
 .authorized-picker {
   background: rgba(var(--bs-info-rgb), 0.035);
   padding: 0.75rem;
@@ -1175,6 +1614,32 @@ export default {
   gap: 0.5rem;
   grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr));
 }
+
+.pickup-restriction-alert {
+  background: linear-gradient(135deg, rgba(220, 53, 69, 0.1), rgba(255, 193, 7, 0.08));
+  border: 1px solid rgba(220, 53, 69, 0.38);
+  border-radius: 0.75rem;
+  color: var(--bs-body-color);
+  padding: 0.85rem;
+}
+
+.pickup-restriction-alert__title {
+  align-items: center;
+  color: var(--bs-danger);
+  display: flex;
+  gap: 0.65rem;
+}
+
+.pickup-restriction-alert__title > i { font-size: 1.65rem; }
+.pickup-restriction-alert__title div { display: flex; flex-direction: column; }
+.pickup-restriction-alert__title span { color: var(--bs-body-color); font-size: 0.75rem; }
+.pickup-restriction-list { display: grid; gap: 0.55rem; margin-top: 0.75rem; }
+.pickup-restriction-list article { background: var(--bs-body-bg); border: 1px solid rgba(220, 53, 69, 0.18); border-radius: 0.55rem; padding: 0.65rem 0.75rem; }
+.pickup-restriction-list article div { display: flex; flex-direction: column; }
+.pickup-restriction-list article span { color: var(--bs-danger); font-size: 0.68rem; font-weight: 800; text-transform: uppercase; }
+.pickup-restriction-list article p { font-size: 0.8rem; margin: 0.45rem 0 0; }
+.pickup-restriction-list article em { color: var(--bs-secondary-color); display: block; font-size: 0.7rem; font-style: normal; margin-top: 0.4rem; }
+.pickup-restriction-legacy { margin: 0.7rem 0 0; }
 
 .authorized-person-button {
   background: var(--bs-body-bg);
@@ -1197,6 +1662,17 @@ export default {
   outline: 0;
 }
 
+.authorized-person-button.selected {
+  background: rgba(var(--bs-success-rgb), 0.06);
+  border-color: var(--bs-success);
+  box-shadow: 0 0 0 0.16rem rgba(var(--bs-success-rgb), 0.1);
+}
+
+.authorized-person-button.restricted {
+  background: rgba(var(--bs-danger-rgb), 0.04);
+  border-color: rgba(var(--bs-danger-rgb), 0.55);
+}
+
 .authorized-source {
   color: var(--bs-secondary-color);
   font-size: 0.72rem;
@@ -1216,6 +1692,20 @@ export default {
   line-height: 1.35;
   margin-top: 0.15rem;
 }
+
+.authorized-person-use,
+.authorized-person-warning {
+  align-items: center;
+  display: inline-flex;
+  font-size: 0.72rem;
+  font-weight: 750;
+  gap: 0.3rem;
+  margin-top: 0.55rem;
+}
+
+.authorized-person-use { color: var(--bs-primary); }
+.authorized-person-button.selected .authorized-person-use { color: var(--bs-success); }
+.authorized-person-warning { color: var(--bs-danger); }
 
 .file-picker {
   align-items: stretch;
@@ -1268,6 +1758,55 @@ export default {
   letter-spacing: 0;
   margin-bottom: 0.75rem;
   text-transform: uppercase;
+}
+
+.inspector-responsibility {
+  border: 1px solid rgba(var(--bs-primary-rgb), 0.18);
+  border-radius: 0.75rem;
+  padding: 0.9rem;
+}
+
+.inspector-responsibility__assigned {
+  align-items: center;
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+}
+
+.inspector-responsibility__assigned small,
+.inspector-responsibility__assigned span {
+  color: var(--bs-secondary-color);
+  display: block;
+}
+
+.inspector-responsibility__assigned strong {
+  display: block;
+  font-size: 1rem;
+}
+
+.inspector-responsibility__icon {
+  align-items: center;
+  background: rgba(var(--bs-success-rgb), 0.12);
+  border-radius: 50%;
+  color: var(--bs-success);
+  display: inline-flex;
+  font-size: 1.3rem;
+  height: 2.75rem;
+  justify-content: center;
+  width: 2.75rem;
+}
+
+.inspector-responsibility__notice {
+  align-items: flex-start;
+  color: var(--bs-secondary-color);
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.inspector-responsibility__notice i {
+  color: var(--bs-warning);
+  font-size: 1.15rem;
 }
 
 .withdrawal-options {
@@ -1336,6 +1875,10 @@ export default {
   grid-column: 1 / -1;
   justify-content: space-between;
   min-height: auto;
+}
+
+.context-meta-item--inspector {
+  grid-column: 1 / -1;
 }
 
 .context-badge-wrap {
@@ -1443,12 +1986,38 @@ export default {
     padding: 1rem;
   }
 
-  .student-search-row .d-flex {
-    flex-direction: column;
+  .student-autocomplete-control {
+    display: grid;
+    grid-template-columns: 1fr;
   }
 
-  .student-search-row .btn {
+  .student-autocomplete-control .form-control {
+    border-radius: 0.75rem 0.75rem 0 0;
+  }
+
+  .student-autocomplete-control .btn {
+    border-radius: 0 0 0.75rem 0.75rem;
+    min-height: 2.75rem;
     width: 100%;
+  }
+
+  .student-autocomplete-control > i {
+    top: 1.58rem;
+  }
+
+  .student-autocomplete-control > .student-autocomplete-spinner {
+    right: 0.9rem;
+    top: 1.08rem;
+  }
+
+  .student-suggestion-item {
+    grid-template-columns: 2.5rem minmax(0, 1fr);
+  }
+
+  .student-suggestion-course {
+    grid-column: 2;
+    justify-self: start;
+    max-width: 100%;
   }
 
   .withdrawal-modal-intro {

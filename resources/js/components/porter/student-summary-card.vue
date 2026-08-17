@@ -39,25 +39,6 @@ export default {
           this.student?.guardian_backup_email
       );
     },
-    healthRows() {
-      if (!this.student) return [];
-
-      return [
-        { label: "Previsión", value: this.student.health_insurance },
-        {
-          label: "Enfermedad crónica",
-          value: this.student.has_chronic_illness ? this.student.chronic_illness_details || "Sí" : "No",
-        },
-        {
-          label: "Alergias a medicamentos",
-          value: this.student.has_medication_allergies ? this.student.medication_allergies_details || "Sí" : "No",
-        },
-        {
-          label: "Restricciones físicas",
-          value: this.student.has_physical_restrictions ? this.student.physical_restrictions_details || "Sí" : "No",
-        },
-      ];
-    },
   },
   methods: {
     alertVariant(priority) {
@@ -234,31 +215,40 @@ export default {
       </div>
     </div>
 
-    <div class="row g-3 mt-1">
-      <div class="col-lg-6">
-        <h6 class="mb-2">Salud</h6>
-        <div class="student-detail-box">
-          <div v-for="row in healthRows" :key="row.label" class="mb-2">
-            <div class="text-muted small">{{ row.label }}</div>
-            <div class="fw-semibold">{{ valueOrDash(row.value) }}</div>
+    <div class="mt-4">
+      <div class="d-flex align-items-center gap-2 mb-2">
+        <h6 class="mb-0">Control operativo del retiro</h6>
+        <BBadge variant="light">Uso exclusivo de Portería</BBadge>
+      </div>
+      <div class="row g-3">
+        <div class="col-lg-4">
+          <div class="student-detail-box student-detail-box--operational">
+            <span class="student-detail-icon" :class="student.pickup_restriction ? 'is-danger' : 'is-success'">
+              <i :class="student.pickup_restriction ? 'bx bx-error-circle' : 'bx bx-check-shield'"></i>
+            </span>
+            <div>
+              <div class="text-muted small">Restricción de retiro</div>
+              <div class="fw-semibold">{{ student.pickup_restriction ? "Requiere validación especial" : "Sin restricción registrada" }}</div>
+              <div v-if="student.pickup_restriction_notes" class="small mt-1">{{ student.pickup_restriction_notes }}</div>
+            </div>
           </div>
         </div>
-      </div>
-      <div class="col-lg-6">
-        <h6 class="mb-2">Observaciones</h6>
-        <div class="student-detail-box">
-          <div class="mb-2">
-            <div class="text-muted small">Restricción de retiro</div>
-            <div class="fw-semibold">{{ student.pickup_restriction ? "Sí" : "No" }}</div>
-            <div v-if="student.pickup_restriction_notes" class="small">{{ student.pickup_restriction_notes }}</div>
+        <div class="col-lg-4">
+          <div class="student-detail-box student-detail-box--operational">
+            <span class="student-detail-icon"><i class="bx bx-message-square-detail"></i></span>
+            <div>
+              <div class="text-muted small">Nota de Portería</div>
+              <div class="fw-semibold">{{ valueOrDash(student.porter_alert_notes) }}</div>
+            </div>
           </div>
-          <div class="mb-2">
-            <div class="text-muted small">Nota de portería</div>
-            <div>{{ valueOrDash(student.porter_alert_notes) }}</div>
-          </div>
-          <div>
-            <div class="text-muted small">Observaciones generales</div>
-            <div>{{ valueOrDash(student.observations) }}</div>
+        </div>
+        <div class="col-lg-4">
+          <div class="student-detail-box student-detail-box--operational">
+            <span class="student-detail-icon"><i class="bx bx-note"></i></span>
+            <div>
+              <div class="text-muted small">Observación general</div>
+              <div class="fw-semibold">{{ valueOrDash(student.observations) }}</div>
+            </div>
           </div>
         </div>
       </div>
@@ -301,10 +291,41 @@ export default {
 
 <style scoped>
 .student-detail-box {
-  border: 1px solid var(--bs-border-color);
-  border-radius: 0.5rem;
+  background: #fff;
+  border: 1px solid #dce6ef;
+  border-radius: 0.75rem;
+  box-shadow: 0 0.25rem 0.8rem rgba(31, 56, 83, 0.04);
   height: 100%;
   padding: 0.875rem;
+}
+
+.student-detail-box--operational {
+  align-items: flex-start;
+  display: flex;
+  gap: 0.75rem;
+}
+
+.student-detail-icon {
+  align-items: center;
+  background: #eaf1fb;
+  border-radius: 0.65rem;
+  color: #315f9f;
+  display: inline-flex;
+  flex: 0 0 auto;
+  font-size: 1.15rem;
+  height: 2.4rem;
+  justify-content: center;
+  width: 2.4rem;
+}
+
+.student-detail-icon.is-danger {
+  background: #fdebec;
+  color: #c23a45;
+}
+
+.student-detail-icon.is-success {
+  background: #e3f6ed;
+  color: #157652;
 }
 
 .student-detail-table th {

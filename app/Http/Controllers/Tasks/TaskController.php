@@ -39,7 +39,7 @@ class TaskController extends Controller
             ->get(['id', 'name', 'email', 'user_type', 'staff_id']);
 
         $assignableUserIds = collect([(int) $user->id]);
-        if ($this->accessService->canManageBacklogs($user)) {
+        if ($user->isSuperAdmin()) {
             $assignableUserIds = $staffUsers->pluck('id');
         } else {
             $assignedTargets = TaskAssigner::query()
@@ -61,8 +61,10 @@ class TaskController extends Controller
                 'staff_id' => $user->staff_id,
             ],
             'capabilities' => [
-                'can_manage_backlogs' => $this->accessService->canManageBacklogs($user),
+                'can_assign_all' => $user->isSuperAdmin(),
                 'can_manage_assigners' => $this->accessService->canManageAssigners($user),
+                'can_view_reports' => $this->accessService->canViewReports($user),
+                'is_super_admin' => $user->isSuperAdmin(),
             ],
         ]);
     }
@@ -77,8 +79,13 @@ class TaskController extends Controller
                 'owner.staff:id,full_name,cargo_id',
                 'owner.staff.cargo:id,name',
                 'creator:id,name,email,user_type,staff_id',
+                'stakeholders:id,name,email,user_type,staff_id',
+                'stakeholders.staff:id,full_name,cargo_id',
+                'stakeholders.staff.cargo:id,name',
+                'subtasks' => fn ($query) => $this->accessService->constrainVisible($query, $request->user()),
                 'subtasks.owner:id,name,email,user_type,staff_id',
                 'subtasks.creator:id,name,email,user_type,staff_id',
+                'subtasks.stakeholders:id,name,email,user_type,staff_id',
             ]);
 
         TaskQueryFilters::apply($query, $request);
@@ -112,12 +119,12 @@ class TaskController extends Controller
         ]);
     }
 
-    public function show(Task $task): JsonResponse
+    public function show(Request $request, Task $task): JsonResponse
     {
         $this->authorize('view', $task);
 
         return response()->json([
-            'data' => $this->taskService->loadTask($task),
+            'data' => $this->taskService->loadTask($task, $request->user()),
         ]);
     }
 
@@ -140,6 +147,9 @@ class TaskController extends Controller
         $payload = $request->validated();
         $payload['parent_task_id'] = $task->id;
         $payload['owner_user_id'] = $task->owner_user_id;
+        if (!array_key_exists('stakeholder_user_ids', $payload)) {
+            $payload['stakeholder_user_ids'] = $task->stakeholders()->pluck('users.id')->all();
+        }
 
         $subtask = $this->taskService->create($payload, $request->user());
 

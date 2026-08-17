@@ -73,7 +73,20 @@ use App\Http\Controllers\Informatica\ItEquipmentAttachmentController;
 use App\Http\Controllers\Informatica\ItEquipmentController;
 use App\Http\Controllers\Informatica\ItEquipmentLoanController;
 use App\Http\Controllers\Informatica\ItEquipmentMaintenanceController;
+use App\Http\Controllers\Inspectoria\InspectoriaAttentionController;
+use App\Http\Controllers\Inspectoria\InspectoriaCatalogController;
+use App\Http\Controllers\Inspectoria\InspectoriaCourseAssignmentController;
+use App\Http\Controllers\Inspectoria\InspectoriaDailyLogController;
+use App\Http\Controllers\Inspectoria\InspectoriaPassController;
+use App\Http\Controllers\Inspectoria\InspectoriaStudentController;
+use App\Http\Controllers\Inspectoria\InspectoriaWithdrawalController;
 use App\Http\Controllers\InternalCommunications\InternalAnnouncementController;
+use App\Http\Controllers\Api\Messaging\ConversationController as MessagingConversationController;
+use App\Http\Controllers\Api\Messaging\MessageController as MessagingMessageController;
+use App\Http\Controllers\Api\Messaging\MessagingController;
+use App\Http\Controllers\Api\Messaging\ReceiptController as MessagingReceiptController;
+use App\Http\Controllers\Api\Messaging\UploadController as MessagingUploadController;
+use App\Http\Controllers\InternalNotificationController;
 use App\Http\Controllers\Inventory\InventoryCategoryController;
 use App\Http\Controllers\Inventory\InventoryItemController;
 use App\Http\Controllers\Inventory\InventoryItemDocumentController;
@@ -106,6 +119,15 @@ use App\Http\Controllers\MaintenanceVisitController;
 use App\Http\Controllers\MaintenanceWorkOrderController;
 use App\Http\Controllers\MeController;
 use App\Http\Controllers\NewsPostController;
+use App\Http\Controllers\HumanResources\HrAbsenceController;
+use App\Http\Controllers\HumanResources\HrImportController;
+use App\Http\Controllers\HumanResources\HrRecruitmentController;
+use App\Http\Controllers\Operational\OperationalTransferController;
+use App\Http\Controllers\Operational\OperationalTransferDocumentController;
+use App\Http\Controllers\Operational\OperationalTransferImportController;
+use App\Http\Controllers\Operational\OperationalTransferProviderController;
+use App\Http\Controllers\Operational\OperationalTransferQuoteController;
+use App\Http\Controllers\Operational\OperationalTransferReportController;
 use App\Http\Controllers\OrganigramController;
 use App\Http\Controllers\PermissionController;
 use App\Http\Controllers\Pme\PmeActionController;
@@ -192,6 +214,7 @@ use App\Http\Controllers\Students\StudentReportController;
 use App\Http\Controllers\SystemModuleController;
 use App\Http\Controllers\Tasks\TaskAssignerController;
 use App\Http\Controllers\Tasks\TaskController;
+use App\Http\Controllers\Tasks\TaskReportController;
 use App\Http\Controllers\UserController;
 use App\Http\Middleware\NoStoreSensitiveResponse;
 use Illuminate\Http\Request;
@@ -212,6 +235,10 @@ Route::middleware('auth:sanctum')->get('/user', function (Request $request) {
     return $request->user();
 });
 
+require __DIR__.'/social_work.php';
+
+require __DIR__.'/libro_digital.php';
+
 Route::post('/login', [APIController::class, 'login']);
 Route::post('/forget-password', [APIController::class, 'forget_pass']);
 Route::post('/reset-password', [APIController::class, 'reset_pass']);
@@ -221,6 +248,10 @@ Route::prefix('convivencia/public')->middleware('convivencia.installed')->group(
 });
 
 Route::middleware('auth:sanctum')->group(function () {
+    Route::get('/internal-notifications', [InternalNotificationController::class, 'index']);
+    Route::put('/internal-notifications/read-all', [InternalNotificationController::class, 'markAllAsRead']);
+    Route::put('/internal-notifications/{notification}/read', [InternalNotificationController::class, 'markAsRead']);
+
     Route::get('/me/modules', [MeController::class, 'modules']);
     Route::get('/me/permissions', [MeController::class, 'permissions']);
     Route::get('/me/profile', [ProfileController::class, 'show']);
@@ -241,6 +272,50 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/{internalAnnouncement}', [InternalAnnouncementController::class, 'show'])->middleware('permission:ver_comunicaciones_internas');
         Route::put('/{internalAnnouncement}', [InternalAnnouncementController::class, 'update'])->middleware('permission:gestionar_comunicaciones_internas');
         Route::delete('/{internalAnnouncement}', [InternalAnnouncementController::class, 'destroy'])->middleware('permission:gestionar_comunicaciones_internas');
+    });
+
+    Route::prefix('messaging')->middleware('throttle:messaging')->group(function () {
+        Route::get('/summary', [MessagingController::class, 'summary']);
+        Route::get('/config', [MessagingController::class, 'config']);
+        Route::get('/users/search', [MessagingController::class, 'users'])->middleware('throttle:messaging-search');
+        Route::get('/search', [MessagingController::class, 'search'])->middleware('throttle:messaging-search');
+
+        Route::get('/conversations', [MessagingConversationController::class, 'index']);
+        Route::post('/conversations/direct', [MessagingConversationController::class, 'direct'])->middleware('throttle:messaging-conversation-create');
+        Route::post('/conversations/group', [MessagingConversationController::class, 'group'])->middleware('throttle:messaging-conversation-create');
+        Route::post('/conversations/announcement', [MessagingConversationController::class, 'announcement'])->middleware('throttle:messaging-announcement');
+        Route::get('/conversations/{conversation}', [MessagingConversationController::class, 'show']);
+        Route::patch('/conversations/{conversation}', [MessagingConversationController::class, 'update']);
+        Route::match(['post', 'delete'], '/conversations/{conversation}/{preference}', [MessagingConversationController::class, 'preference'])->whereIn('preference', ['archive', 'pin', 'mute']);
+        Route::post('/conversations/{conversation}/lock', [MessagingConversationController::class, 'lock']);
+        Route::delete('/conversations/{conversation}/lock', [MessagingConversationController::class, 'lock']);
+        Route::get('/conversations/{conversation}/participants', [MessagingConversationController::class, 'participants']);
+        Route::post('/conversations/{conversation}/participants', [MessagingConversationController::class, 'addParticipant']);
+        Route::delete('/conversations/{conversation}/participants/{user}', [MessagingConversationController::class, 'removeParticipant']);
+        Route::patch('/conversations/{conversation}/participants/{user}', [MessagingConversationController::class, 'updateParticipant']);
+        Route::post('/conversations/{conversation}/transfer-ownership', [MessagingConversationController::class, 'transferOwnership']);
+        Route::post('/conversations/{conversation}/leave', [MessagingConversationController::class, 'leave']);
+
+        Route::get('/conversations/{conversation}/messages', [MessagingMessageController::class, 'index']);
+        Route::post('/conversations/{conversation}/messages', [MessagingMessageController::class, 'store'])->middleware('throttle:messaging-send');
+        Route::get('/messages/{message}', [MessagingMessageController::class, 'show']);
+        Route::patch('/messages/{message}', [MessagingMessageController::class, 'update']);
+        Route::delete('/messages/{message}', [MessagingMessageController::class, 'destroy']);
+        Route::post('/messages/{message}/supersede', [MessagingMessageController::class, 'supersede']);
+        Route::post('/messages/{message}/reactions', [MessagingMessageController::class, 'react'])->middleware('throttle:messaging-send');
+        Route::delete('/messages/{message}/reactions/{reaction}', [MessagingMessageController::class, 'unreact']);
+
+        Route::post('/receipts/delivered', [MessagingReceiptController::class, 'delivered']);
+        Route::post('/conversations/{conversation}/read', [MessagingReceiptController::class, 'read']);
+        Route::post('/messages/{message}/acknowledge', [MessagingReceiptController::class, 'acknowledge'])->middleware('throttle:messaging-acknowledge');
+        Route::get('/messages/{message}/receipts', [MessagingReceiptController::class, 'index']);
+        Route::post('/messages/{message}/reminders', [MessagingReceiptController::class, 'remind'])->middleware('throttle:messaging-reminder');
+        Route::post('/messages/{message}/waivers', [MessagingReceiptController::class, 'waive']);
+        Route::get('/messages/{message}/receipt-export', [MessagingReceiptController::class, 'export']);
+
+        Route::post('/uploads', [MessagingUploadController::class, 'store'])->middleware('throttle:messaging-upload');
+        Route::delete('/uploads/{upload}', [MessagingUploadController::class, 'destroy']);
+        Route::get('/attachments/{attachment}', [MessagingUploadController::class, 'download']);
     });
 
     // Administración (RBAC)
@@ -457,6 +532,12 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::prefix('tasks')->group(function () {
         Route::get('/catalogs', [TaskController::class, 'catalogs'])->middleware('permission:ver_tareas');
         Route::get('/stats', [TaskController::class, 'stats'])->middleware('permission:ver_tareas');
+        Route::get('/reports/catalogs', [TaskReportController::class, 'catalogs'])->middleware('permission:ver_reportes_tareas');
+        Route::get('/reports/stats', [TaskReportController::class, 'stats'])->middleware('permission:ver_reportes_tareas');
+        Route::get('/reports', [TaskReportController::class, 'index'])->middleware('permission:ver_reportes_tareas');
+        Route::get('/all/catalogs', [TaskReportController::class, 'catalogs'])->middleware('superadmin');
+        Route::get('/all/stats', [TaskReportController::class, 'stats'])->middleware('superadmin');
+        Route::get('/all', [TaskReportController::class, 'index'])->middleware('superadmin');
         Route::get('/assigners/can-assign', [TaskAssignerController::class, 'canAssign'])->middleware('permission:ver_tareas');
         Route::get('/assigners', [TaskAssignerController::class, 'index'])->middleware('permission:administrar_asignadores_tareas');
         Route::post('/assigners', [TaskAssignerController::class, 'store'])->middleware('permission:administrar_asignadores_tareas');
@@ -906,6 +987,102 @@ Route::middleware('auth:sanctum')->group(function () {
 
         Route::get('/reportes', BibliotecaReportController::class)->middleware('permission:ver_estadisticas_biblioteca');
     });
+
+    Route::prefix('inspectoria')->middleware('permission:ver_modulo_inspectoria')->group(function () {
+        Route::get('/catalogs', InspectoriaCatalogController::class);
+
+        Route::get('/attentions', [InspectoriaAttentionController::class, 'index']);
+        Route::post('/attentions', [InspectoriaAttentionController::class, 'store'])->middleware('permission:registrar_atenciones_inspectoria');
+
+        Route::get('/course-assignments', [InspectoriaCourseAssignmentController::class, 'index']);
+        Route::post('/course-assignments', [InspectoriaCourseAssignmentController::class, 'store'])->middleware('permission:asignar_cursos_inspectoria');
+        Route::put('/course-assignments/{assignment}', [InspectoriaCourseAssignmentController::class, 'update'])->middleware('permission:asignar_cursos_inspectoria');
+        Route::delete('/course-assignments/{assignment}', [InspectoriaCourseAssignmentController::class, 'destroy'])->middleware('permission:asignar_cursos_inspectoria');
+
+        Route::get('/passes', [InspectoriaPassController::class, 'index']);
+        Route::post('/passes', [InspectoriaPassController::class, 'store'])->middleware('permission:gestionar_pases_inspectoria');
+        Route::put('/passes/{pass}', [InspectoriaPassController::class, 'update'])->middleware('permission:gestionar_pases_inspectoria');
+        Route::post('/passes/{pass}/{status}', [InspectoriaPassController::class, 'transition'])->middleware('permission:gestionar_pases_inspectoria');
+
+        Route::get('/students', [InspectoriaStudentController::class, 'index'])->middleware('permission:ver_fichas_inspectoria');
+        Route::get('/students/{student}', [InspectoriaStudentController::class, 'show'])->middleware('permission:ver_fichas_inspectoria');
+
+
+        Route::get('/withdrawals', [InspectoriaWithdrawalController::class, 'index'])->middleware('permission:ver_retiros_inspectoria');
+        Route::get('/withdrawals/{withdrawal}', [InspectoriaWithdrawalController::class, 'show'])->middleware('permission:ver_retiros_inspectoria');
+
+        Route::get('/daily-log', [InspectoriaDailyLogController::class, 'index']);
+        Route::post('/daily-log', [InspectoriaDailyLogController::class, 'store'])->middleware('permission:registrar_bitacora_inspectoria');
+        Route::put('/daily-log/{dailyLog}', [InspectoriaDailyLogController::class, 'update'])->middleware('permission:registrar_bitacora_inspectoria');
+    });
+
+    Route::prefix('operational/transfers')->group(function () {
+        Route::get('/catalogs', [OperationalTransferController::class, 'catalogs']);
+        Route::get('/calendar', [OperationalTransferController::class, 'calendar']);
+        Route::get('/reports', OperationalTransferReportController::class);
+        Route::post('/imports/preview', [OperationalTransferImportController::class, 'preview']);
+        Route::post('/imports/commit', [OperationalTransferImportController::class, 'commit']);
+
+        Route::get('/providers', [OperationalTransferProviderController::class, 'index']);
+        Route::post('/providers', [OperationalTransferProviderController::class, 'store']);
+        Route::put('/providers/{provider}', [OperationalTransferProviderController::class, 'update']);
+        Route::delete('/providers/{provider}', [OperationalTransferProviderController::class, 'destroy']);
+
+        Route::get('/', [OperationalTransferController::class, 'index']);
+        Route::post('/', [OperationalTransferController::class, 'store']);
+        Route::get('/{transfer}', [OperationalTransferController::class, 'show']);
+        Route::put('/{transfer}', [OperationalTransferController::class, 'update']);
+        Route::post('/{transfer}/submit', [OperationalTransferController::class, 'submit']);
+        Route::post('/{transfer}/visor/approve', [OperationalTransferController::class, 'visorApprove']);
+        Route::post('/{transfer}/visor/observe', [OperationalTransferController::class, 'visorObserve']);
+        Route::post('/{transfer}/visor/reject', [OperationalTransferController::class, 'visorReject']);
+        Route::post('/{transfer}/administration/approve', [OperationalTransferController::class, 'administrationApprove']);
+        Route::post('/{transfer}/administration/observe', [OperationalTransferController::class, 'administrationObserve']);
+        Route::post('/{transfer}/administration/reject', [OperationalTransferController::class, 'administrationReject']);
+        Route::put('/{transfer}/operation', [OperationalTransferController::class, 'updateOperation']);
+        Route::post('/{transfer}/confirm', [OperationalTransferController::class, 'confirm']);
+        Route::post('/{transfer}/execute', [OperationalTransferController::class, 'execute']);
+        Route::post('/{transfer}/cancel', [OperationalTransferController::class, 'cancel']);
+        Route::get('/{transfer}/pdf', [OperationalTransferController::class, 'pdf']);
+
+        Route::post('/{transfer}/quotes', [OperationalTransferQuoteController::class, 'store']);
+        Route::post('/{transfer}/quotes/{quote}/select', [OperationalTransferQuoteController::class, 'select']);
+        Route::delete('/{transfer}/quotes/{quote}', [OperationalTransferQuoteController::class, 'destroy']);
+        Route::post('/{transfer}/documents', [OperationalTransferDocumentController::class, 'store']);
+        Route::get('/documents/{document}/download', [OperationalTransferDocumentController::class, 'download']);
+        Route::delete('/documents/{document}', [OperationalTransferDocumentController::class, 'destroy']);
+    });
+
+    Route::prefix('human-resources')
+        ->middleware(NoStoreSensitiveResponse::class)
+        ->group(function () {
+            Route::get('/absences/export', [HrAbsenceController::class, 'export']);
+            Route::get('/absences/calendar', [HrAbsenceController::class, 'calendar']);
+            Route::get('/absences', [HrAbsenceController::class, 'index']);
+            Route::post('/absences', [HrAbsenceController::class, 'store']);
+            Route::put('/absences/{absence}', [HrAbsenceController::class, 'update']);
+            Route::delete('/absences/{absence}', [HrAbsenceController::class, 'destroy']);
+            Route::put('/absence-balances/{staff}', [HrAbsenceController::class, 'updateBalance']);
+
+            Route::get('/recruitment', [HrRecruitmentController::class, 'index']);
+            Route::post('/recruitment/candidates', [HrRecruitmentController::class, 'storeCandidate']);
+            Route::put('/recruitment/candidates/{candidate}', [HrRecruitmentController::class, 'updateCandidate']);
+            Route::post('/recruitment/candidates/{candidate}/cv', [HrRecruitmentController::class, 'uploadCv']);
+            Route::get('/recruitment/candidates/{candidate}/cv', [HrRecruitmentController::class, 'downloadCv']);
+            Route::post('/recruitment/vacancies', [HrRecruitmentController::class, 'storeVacancy']);
+            Route::put('/recruitment/vacancies/{vacancy}', [HrRecruitmentController::class, 'updateVacancy']);
+            Route::post('/recruitment/applications', [HrRecruitmentController::class, 'storeApplication']);
+            Route::put('/recruitment/applications/{application}', [HrRecruitmentController::class, 'updateApplication']);
+            Route::post('/recruitment/interviews', [HrRecruitmentController::class, 'storeInterview']);
+            Route::put('/recruitment/interviews/{interview}', [HrRecruitmentController::class, 'updateInterview']);
+            Route::post('/recruitment/interviews/{interview}/report', [HrRecruitmentController::class, 'uploadReport']);
+            Route::get('/recruitment/interviews/{interview}/report', [HrRecruitmentController::class, 'downloadReport']);
+            Route::post('/recruitment/job-profiles', [HrRecruitmentController::class, 'storeJobProfile']);
+            Route::put('/recruitment/job-profiles/{profile}', [HrRecruitmentController::class, 'updateJobProfile']);
+
+            Route::post('/imports/{kind}/preview', [HrImportController::class, 'preview']);
+            Route::post('/imports/{kind}/commit', [HrImportController::class, 'commit']);
+        });
 
     Route::prefix('informatica')->group(function () {
         Route::get('/catalogs', InformaticaCatalogController::class)->middleware('permission:informatica.ver');

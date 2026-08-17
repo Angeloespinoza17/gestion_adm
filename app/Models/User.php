@@ -230,6 +230,11 @@ class User extends Authenticatable
             ->values()
             ->all();
 
+        if ($this->user_type === 'staff' || $this->staff_id !== null) {
+            $permissions[] = 'ver_tareas';
+            $permissions[] = 'gestionar_tareas';
+        }
+
         if (
             ($this->user_type === 'staff' || $this->staff_id !== null)
             && ! $this->hasTemporaryHomeOnlyAccess()

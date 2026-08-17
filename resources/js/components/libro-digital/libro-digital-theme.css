@@ -1,0 +1,356 @@
+.lcd-shell {
+  --lcd-brand-950: #10233f;
+  --lcd-brand-900: #163153;
+  --lcd-brand-800: #1c416c;
+  --lcd-brand-700: #245486;
+  --lcd-brand-600: #2e699c;
+  --lcd-brand-500: #3e7daf;
+  --lcd-brand-100: #dceaf5;
+  --lcd-brand-50: #f1f7fb;
+  --lcd-gold-600: #9a6f2a;
+  --lcd-gold-500: #b9893f;
+  --lcd-gold-100: #f3e6cf;
+  --lcd-success: #24735a;
+  --lcd-warning: #a56819;
+  --lcd-danger: #b43e4d;
+  --lcd-info: #27718a;
+  --lcd-ink: #17263d;
+  --lcd-ink-soft: #33445b;
+  --lcd-muted: #627187;
+  --lcd-subtle: #8794a6;
+  --lcd-canvas: #f4f7fa;
+  --lcd-surface: #ffffff;
+  --lcd-surface-raised: #ffffff;
+  --lcd-surface-muted: #f7f9fb;
+  --lcd-border: #dbe3eb;
+  --lcd-border-strong: #c7d2de;
+  --lcd-focus: rgba(46, 105, 156, 0.32);
+  --lcd-shadow-sm: 0 2px 8px rgba(20, 39, 65, 0.055);
+  --lcd-shadow-md: 0 12px 30px rgba(20, 39, 65, 0.09);
+  --lcd-shadow-lg: 0 24px 54px rgba(17, 35, 62, 0.14);
+  --lcd-radius-sm: 8px;
+  --lcd-radius-md: 12px;
+  --lcd-radius-lg: 16px;
+  --lcd-radius-xl: 22px;
+  --lcd-transition: 160ms ease;
+  --ld-color-ink: var(--lcd-ink);
+  --ld-color-muted: var(--lcd-muted);
+  --ld-color-line: var(--lcd-border);
+  --ld-color-primary: var(--lcd-brand-700);
+  --ld-color-primary-soft: var(--lcd-brand-50);
+  --ld-color-surface: var(--lcd-surface-raised);
+  --ld-color-success: var(--lcd-success);
+  --ld-color-warning: var(--lcd-warning);
+  --ld-color-danger: var(--lcd-danger);
+  --ld-color-info: var(--lcd-info);
+  color: var(--lcd-ink-soft);
+  color-scheme: light;
+  isolation: isolate;
+}
+
+.lcd-shell ::selection {
+  background: var(--lcd-brand-100);
+  color: var(--lcd-brand-950);
+}
+
+.lcd-shell :where(button, a, input, select, textarea, [tabindex]):focus-visible {
+  outline: 3px solid var(--lcd-focus);
+  outline-offset: 2px;
+}
+
+.lcd-shell .btn {
+  min-height: 40px;
+  border-radius: var(--lcd-radius-sm);
+  font-size: 0.82rem;
+  font-weight: 700;
+  letter-spacing: 0.005em;
+  transition: border-color var(--lcd-transition), background-color var(--lcd-transition), color var(--lcd-transition), box-shadow var(--lcd-transition), transform var(--lcd-transition);
+}
+
+.lcd-shell .btn-sm {
+  min-height: 35px;
+  padding: 0.38rem 0.68rem;
+  font-size: 0.76rem;
+}
+
+.lcd-shell .btn:not(:disabled):active {
+  transform: translateY(1px);
+}
+
+.lcd-shell .btn-primary {
+  border-color: var(--lcd-brand-700);
+  background: var(--lcd-brand-700);
+  box-shadow: 0 4px 12px rgba(36, 84, 134, 0.18);
+}
+
+.lcd-shell .btn-primary:hover,
+.lcd-shell .btn-primary:focus-visible {
+  border-color: var(--lcd-brand-800);
+  background: var(--lcd-brand-800);
+}
+
+.lcd-shell .btn-outline-primary {
+  border-color: rgba(36, 84, 134, 0.42);
+  color: var(--lcd-brand-700);
+}
+
+.lcd-shell .btn-outline-primary:hover {
+  border-color: var(--lcd-brand-700);
+  background: var(--lcd-brand-700);
+  color: #fff;
+}
+
+.lcd-shell .btn-outline-secondary {
+  border-color: var(--lcd-border-strong);
+  background: var(--lcd-surface);
+  color: var(--lcd-ink-soft);
+}
+
+.lcd-shell .btn-outline-secondary:hover {
+  border-color: var(--lcd-brand-600);
+  background: var(--lcd-brand-50);
+  color: var(--lcd-brand-800);
+}
+
+.lcd-shell :where(.form-control, .form-select, .input-group-text) {
+  min-height: 40px;
+  border-color: var(--lcd-border-strong);
+  background-color: var(--lcd-surface);
+  color: var(--lcd-ink);
+  font-size: 0.82rem;
+}
+
+.lcd-shell :where(.form-control, .form-select) {
+  border-radius: var(--lcd-radius-sm);
+}
+
+.lcd-shell :where(.form-control, .form-select):focus {
+  border-color: var(--lcd-brand-500);
+  box-shadow: 0 0 0 0.2rem var(--lcd-focus);
+}
+
+.lcd-shell :where(.form-control, .form-select):disabled {
+  border-color: var(--lcd-border);
+  background-color: var(--lcd-surface-muted);
+  color: var(--lcd-subtle);
+  opacity: 1;
+}
+
+.lcd-shell :where(.form-control, .form-select)::placeholder {
+  color: var(--lcd-subtle);
+}
+
+.lcd-shell .card,
+.lcd-shell .lcd-panel {
+  border-color: var(--lcd-border) !important;
+  border-radius: var(--lcd-radius-md);
+  background: var(--lcd-surface-raised);
+  box-shadow: var(--lcd-shadow-sm);
+}
+
+.lcd-shell .card-header {
+  border-color: var(--lcd-border);
+  background: var(--lcd-surface-raised);
+}
+
+.lcd-shell .lcd-section-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.lcd-shell .lcd-section-heading > div:first-child {
+  min-width: 0;
+}
+
+.lcd-shell .lcd-section-heading > div:first-child > span,
+.lcd-shell .lcd-eyebrow {
+  display: block;
+  margin-bottom: 0.28rem;
+  color: var(--lcd-brand-600);
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0.11em;
+  line-height: 1.3;
+  text-transform: uppercase;
+}
+
+.lcd-shell .lcd-section-heading h2 {
+  margin: 0;
+  color: var(--lcd-ink);
+  font-size: clamp(1.15rem, 1.5vw, 1.45rem);
+  font-weight: 750;
+  letter-spacing: -0.025em;
+}
+
+.lcd-shell .lcd-section-heading p {
+  max-width: 760px;
+  margin: 0.3rem 0 0;
+  color: var(--lcd-muted);
+  font-size: 0.82rem;
+  line-height: 1.55;
+}
+
+.lcd-shell .lcd-surface {
+  border: 1px solid var(--lcd-border);
+  border-radius: var(--lcd-radius-md);
+  background: var(--lcd-surface-raised);
+  box-shadow: var(--lcd-shadow-sm);
+}
+
+.lcd-shell .lcd-icon-button {
+  display: inline-grid;
+  place-items: center;
+  width: 36px;
+  min-width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 1px solid var(--lcd-border);
+  border-radius: var(--lcd-radius-sm);
+  background: var(--lcd-surface);
+  color: var(--lcd-brand-700);
+  transition: border-color var(--lcd-transition), background-color var(--lcd-transition), color var(--lcd-transition), transform var(--lcd-transition);
+}
+
+.lcd-shell .lcd-icon-button:hover {
+  border-color: var(--lcd-brand-500);
+  background: var(--lcd-brand-50);
+  color: var(--lcd-brand-900);
+}
+
+.lcd-shell .table {
+  --bs-table-bg: transparent;
+  --bs-table-color: var(--lcd-ink-soft);
+  --bs-table-border-color: var(--lcd-border);
+  margin-bottom: 0;
+  font-size: 0.8rem;
+}
+
+.lcd-shell .table > thead > tr > th {
+  padding: 0.7rem 0.75rem;
+  border-bottom-width: 1px;
+  background: var(--lcd-surface-muted);
+  color: var(--lcd-muted);
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0.045em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.lcd-shell .table > tbody > tr > td {
+  padding: 0.72rem 0.75rem;
+  vertical-align: middle;
+}
+
+.lcd-shell .table-hover > tbody > tr:hover > * {
+  --bs-table-hover-bg: var(--lcd-brand-50);
+  --bs-table-hover-color: var(--lcd-ink);
+}
+
+.lcd-shell .alert {
+  border-radius: var(--lcd-radius-md);
+  border-width: 1px;
+}
+
+.swal2-popup.lcd-help-dialog {
+  border: 1px solid var(--bs-border-color, #dbe3eb);
+  border-radius: 18px;
+  box-shadow: 0 24px 58px rgba(17, 35, 62, 0.18);
+}
+
+.lcd-help-dialog .swal2-title {
+  color: var(--bs-heading-color, #17263d);
+  font-size: 1.25rem;
+}
+
+.lcd-help-dialog .swal2-html-container {
+  color: var(--bs-secondary-color, #627187);
+  font-size: 0.84rem;
+}
+
+.lcd-help-dialog .swal2-html-container dt {
+  color: var(--bs-heading-color, #17263d);
+  font-weight: 750;
+}
+
+.lcd-help-dialog .swal2-html-container dd {
+  margin-bottom: 0.65rem;
+}
+
+.lcd-help-dialog .lcd-help-dialog__confirm {
+  min-height: 40px;
+  border-radius: 8px;
+  background: #245486;
+  font-size: 0.82rem;
+  font-weight: 750;
+}
+
+[data-bs-theme="dark"] .lcd-shell {
+  --lcd-brand-950: #e9f3fb;
+  --lcd-brand-900: #d5e8f7;
+  --lcd-brand-800: #b6d5eb;
+  --lcd-brand-700: #88bbdc;
+  --lcd-brand-600: #65a3cd;
+  --lcd-brand-500: #5592bc;
+  --lcd-brand-100: #294964;
+  --lcd-brand-50: #1d3448;
+  --lcd-gold-600: #e2bd79;
+  --lcd-gold-500: #d7ad63;
+  --lcd-gold-100: #4b3d29;
+  --lcd-success: #69c4a2;
+  --lcd-warning: #e6b565;
+  --lcd-danger: #ef8b96;
+  --lcd-info: #76bfd4;
+  --lcd-ink: #edf3f8;
+  --lcd-ink-soft: #d1dbe5;
+  --lcd-muted: #a7b4c3;
+  --lcd-subtle: #8594a6;
+  --lcd-canvas: #151d29;
+  --lcd-surface: #1d2735;
+  --lcd-surface-raised: #222d3c;
+  --lcd-surface-muted: #192331;
+  --lcd-border: #344254;
+  --lcd-border-strong: #435268;
+  --lcd-focus: rgba(101, 163, 205, 0.38);
+  --lcd-shadow-sm: 0 2px 10px rgba(0, 0, 0, 0.18);
+  --lcd-shadow-md: 0 14px 34px rgba(0, 0, 0, 0.24);
+  --lcd-shadow-lg: 0 26px 58px rgba(0, 0, 0, 0.3);
+  color-scheme: dark;
+}
+
+[data-bs-theme="dark"] .lcd-shell .btn-outline-secondary {
+  border-color: var(--lcd-border-strong);
+  background: var(--lcd-surface);
+  color: var(--lcd-ink-soft);
+}
+
+[data-bs-theme="dark"] .lcd-shell .btn-outline-secondary:hover {
+  border-color: var(--lcd-brand-500);
+  background: var(--lcd-brand-50);
+  color: var(--lcd-brand-900);
+}
+
+@media (max-width: 767.98px) {
+  .lcd-shell .lcd-section-heading {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .lcd-shell .lcd-section-heading > .btn {
+    align-self: flex-start;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lcd-shell *,
+  .lcd-shell *::before,
+  .lcd-shell *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}

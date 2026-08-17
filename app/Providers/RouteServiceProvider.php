@@ -65,5 +65,18 @@ class RouteServiceProvider extends ServiceProvider
 
             return Limit::perMinute(60)->by('ip:'.$request->ip());
         });
+
+        $messagingKey = fn (Request $request): string => $request->user('sanctum')
+            ? 'user:'.$request->user('sanctum')->getAuthIdentifier()
+            : 'ip:'.$request->ip();
+
+        RateLimiter::for('messaging', fn (Request $request) => Limit::perMinute(240)->by($messagingKey($request)));
+        RateLimiter::for('messaging-search', fn (Request $request) => Limit::perMinute(30)->by($messagingKey($request)));
+        RateLimiter::for('messaging-conversation-create', fn (Request $request) => Limit::perMinute(20)->by($messagingKey($request)));
+        RateLimiter::for('messaging-announcement', fn (Request $request) => Limit::perMinute(5)->by($messagingKey($request)));
+        RateLimiter::for('messaging-send', fn (Request $request) => Limit::perMinute(60)->by($messagingKey($request)));
+        RateLimiter::for('messaging-acknowledge', fn (Request $request) => Limit::perMinute(20)->by($messagingKey($request)));
+        RateLimiter::for('messaging-reminder', fn (Request $request) => Limit::perMinute(10)->by($messagingKey($request)));
+        RateLimiter::for('messaging-upload', fn (Request $request) => Limit::perMinute(30)->by($messagingKey($request)));
     }
 }

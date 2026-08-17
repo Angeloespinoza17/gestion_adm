@@ -34,6 +34,8 @@ class TaskService
                 'completed_at' => $status === Task::STATUS_COMPLETED ? now() : null,
             ]);
 
+            $task->stakeholders()->sync($this->stakeholderIds($payload, (int) $owner->id));
+
             $this->log($task, $actor, 'created', null, $task->only($this->loggedFields()));
             $this->refreshParentAfterSubtaskChange($task, $actor);
 
@@ -49,8 +51,11 @@ class TaskService
             }
 
             $owner = User::query()->findOrFail((int) $payload['owner_user_id']);
-            if ((int) $owner->id !== (int) $task->owner_user_id && !$this->accessService->canManageBacklogs($actor)) {
-                throw new AuthorizationException('Solo jefatura/admin puede cambiar el funcionario responsable.');
+            if (
+                (int) $owner->id !== (int) $task->owner_user_id
+                && !$this->accessService->canCreateForOwner($actor, $owner)
+            ) {
+                throw new AuthorizationException('No tienes autorización para reasignar la tarea a este funcionario.');
             }
 
             if (!$this->accessService->isStaffUser($owner)) {
@@ -77,6 +82,9 @@ class TaskService
             }
 
             $task->update($attributes);
+            if (array_key_exists('stakeholder_user_ids', $payload)) {
+                $task->stakeholders()->sync($this->stakeholderIds($payload, (int) $owner->id));
+            }
             $task->refresh();
 
             $new = $task->only($this->loggedFields());
@@ -143,18 +151,28 @@ class TaskService
         });
     }
 
-    public function loadTask(Task $task): Task
+    public function loadTask(Task $task, ?User $viewer = null): Task
     {
-        return $task->load([
+        $relations = [
             'owner:id,name,email,user_type,staff_id',
             'owner.staff:id,full_name,cargo_id',
             'owner.staff.cargo:id,name',
             'creator:id,name,email,user_type,staff_id',
+            'stakeholders:id,name,email,user_type,staff_id',
+            'stakeholders.staff:id,full_name,cargo_id',
+            'stakeholders.staff.cargo:id,name',
             'parent:id,title,status,owner_user_id',
             'subtasks.owner:id,name,email,user_type,staff_id',
             'subtasks.creator:id,name,email,user_type,staff_id',
+            'subtasks.stakeholders:id,name,email,user_type,staff_id',
             'activityLogs.user:id,name,email',
-        ]);
+        ];
+
+        if ($viewer) {
+            $relations['subtasks'] = fn ($query) => $this->accessService->constrainVisible($query, $viewer);
+        }
+
+        return $task->load($relations);
     }
 
     private function taskAttributes(array $payload): array
@@ -170,6 +188,16 @@ class TaskService
             'auto_complete_parent_on_subtasks_done' => (bool) ($payload['auto_complete_parent_on_subtasks_done'] ?? false),
             'sort_order' => (int) ($payload['sort_order'] ?? 0),
         ];
+    }
+
+    private function stakeholderIds(array $payload, int $ownerUserId): array
+    {
+        return collect($payload['stakeholder_user_ids'] ?? [])
+            ->map(fn ($id) => (int) $id)
+            ->reject(fn (int $id) => $id === $ownerUserId)
+            ->unique()
+            ->values()
+            ->all();
     }
 
     private function assertValidParent(?int $parentTaskId, ?Task $task, int $ownerUserId, User $actor): void

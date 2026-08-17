@@ -55,6 +55,7 @@ class CompleteSoftwareSeeder extends Seeder
             PermissionBackfillSeeder::class,
             PermissionGroupSeeder::class,
             AttendancePermissionSeeder::class,
+            SocialWorkSeeder::class,
             NavigationModuleBackfillSeeder::class,
             RoleModulePermissionSyncSeeder::class,
             RoleSuperAdminUserSeeder::class,

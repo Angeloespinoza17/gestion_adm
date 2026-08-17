@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Inspectoria\InspectoriaPickupRestriction;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -203,6 +204,63 @@ class StudentProfile extends Model
     public function porterWithdrawals(): HasMany
     {
         return $this->hasMany(PorterStudentWithdrawal::class)->orderByDesc('withdrawn_at')->orderByDesc('id');
+    }
+
+    public function pickupRestrictions(): HasMany
+    {
+        return $this->hasMany(InspectoriaPickupRestriction::class, 'student_profile_id')
+            ->orderByDesc('active')
+            ->orderByDesc('starts_on');
+    }
+
+    public function socialWorkCases(): HasMany
+    {
+        return $this->hasMany(\App\Models\SocialWork\SocialCase::class, 'primary_student_id')->latest('opened_on');
+    }
+
+    public function socialPrograms(): HasMany
+    {
+        return $this->hasMany(\App\Models\SocialWork\StudentProgram::class, 'student_profile_id');
+    }
+
+    public function junaebBenefits(): HasMany
+    {
+        return $this->hasMany(\App\Models\SocialWork\JunaebBenefit::class, 'student_profile_id');
+    }
+
+    public function transportPasses(): HasMany
+    {
+        return $this->hasMany(\App\Models\SocialWork\TransportPass::class, 'student_profile_id');
+    }
+
+    public function medicalServices(): HasMany
+    {
+        return $this->hasMany(\App\Models\SocialWork\MedicalService::class, 'student_profile_id');
+    }
+
+    public function supportDevices(): HasMany
+    {
+        return $this->hasMany(\App\Models\SocialWork\SupportDevice::class, 'student_profile_id');
+    }
+
+    public function medicalCertificates(): HasMany
+    {
+        return $this->hasMany(\App\Models\SocialWork\MedicalCertificate::class, 'student_profile_id');
+    }
+
+    public function sepClassifications(): HasMany
+    {
+        return $this->hasMany(\App\Models\Pme\PmeStudentSepClassification::class, 'student_profile_id');
+    }
+
+    public function protectionMeasures(): HasMany
+    {
+        return $this->hasMany(\App\Models\SocialWork\ProtectionMeasure::class, 'student_profile_id');
+    }
+
+    public function socialAlerts(): HasMany
+    {
+        return $this->hasMany(\App\Models\SocialWork\Alert::class, 'student_profile_id')->latest('alerted_at');
     }
 
     public function porterReceivedItems(): HasMany

@@ -7,15 +7,9 @@ use App\Models\ApoyoProfesional\ApoyoDerivacion;
 use App\Models\ApoyoProfesional\ApoyoEntrevista;
 use App\Models\ApoyoProfesional\ApoyoPlan;
 use App\Models\ApoyoProfesional\ApoyoSeguimiento;
-use App\Models\Infirmary\InfirmaryAccident;
-use App\Models\Infirmary\InfirmaryAttention;
-use App\Models\Infirmary\InfirmaryMedication;
-use App\Models\Infirmary\InfirmaryMedicationAdministration;
-use App\Models\Infirmary\InfirmaryMedicationAuthorization;
-use App\Models\Infirmary\InfirmaryMedicationMovement;
-use App\Models\It\ItEquipment;
-use App\Models\It\ItEquipmentLoan;
-use App\Models\It\ItEquipmentMaintenanceReport;
+use App\Models\Attendance\AttendanceGoal;
+use App\Models\Attendance\AttendanceIntervention;
+use App\Models\CalendarEvent;
 use App\Models\CentroApuntes\CentroApuntesAsignatura;
 use App\Models\CentroApuntes\CentroApuntesMaquina;
 use App\Models\CentroApuntes\CentroApuntesSolicitud;
@@ -31,9 +25,15 @@ use App\Models\Convivencia\ConvivenciaMeasure;
 use App\Models\Convivencia\ConvivenciaPlan as ConvivenciaPlanModel;
 use App\Models\Convivencia\ConvivenciaProtocol;
 use App\Models\Convivencia\ConvivenciaSociogram;
-use App\Models\Attendance\AttendanceGoal;
-use App\Models\Attendance\AttendanceIntervention;
-use App\Models\CalendarEvent;
+use App\Models\Infirmary\InfirmaryAccident;
+use App\Models\Infirmary\InfirmaryAttention;
+use App\Models\Infirmary\InfirmaryMedication;
+use App\Models\Infirmary\InfirmaryMedicationAdministration;
+use App\Models\Infirmary\InfirmaryMedicationAuthorization;
+use App\Models\Infirmary\InfirmaryMedicationMovement;
+use App\Models\It\ItEquipment;
+use App\Models\It\ItEquipmentLoan;
+use App\Models\It\ItEquipmentMaintenanceReport;
 use App\Models\Library\BibliotecaEjemplar;
 use App\Models\Library\BibliotecaEspacio;
 use App\Models\Library\BibliotecaObra;
@@ -41,6 +41,13 @@ use App\Models\Library\BibliotecaPlanLector;
 use App\Models\Library\BibliotecaPrestamo;
 use App\Models\Library\BibliotecaReserva;
 use App\Models\Library\BibliotecaUsoEspacio;
+use App\Models\LibroDigital\Book as LibroDigitalBook;
+use App\Models\LibroDigital\ClassSession as LibroDigitalClassSession;
+use App\Models\Operational\OperationalTransferRequest;
+use App\Models\Messaging\Conversation as MessagingConversation;
+use App\Models\Messaging\Message as MessagingMessage;
+use App\Models\Messaging\MessageAttachment as MessagingMessageAttachment;
+use App\Models\PermissionRequest;
 use App\Models\Pme\PmeAction;
 use App\Models\Pme\PmeActivity;
 use App\Models\Pme\PmeAlert;
@@ -58,7 +65,6 @@ use App\Models\Pme\PmeSepIncome;
 use App\Models\Pme\PmeStrategicGoalMeasurement;
 use App\Models\Pme\PmeStrategy;
 use App\Models\Pme\PmeStudentSepClassification;
-use App\Models\PermissionRequest;
 use App\Models\RiskPrevention\RiskPreventionAccident;
 use App\Models\RiskPrevention\RiskPreventionDocument;
 use App\Models\RiskPrevention\RiskPreventionEmergencyDrill;
@@ -67,20 +73,24 @@ use App\Models\RiskPrevention\RiskPreventionEppDelivery;
 use App\Models\RiskPrevention\RiskPreventionEppItem;
 use App\Models\RiskPrevention\RiskPreventionFireExtinguisher;
 use App\Models\RiskPrevention\RiskPreventionTraining;
+use App\Models\Schedule\ScheduleSubject;
 use App\Models\Security\SecurityIncident;
 use App\Models\Security\SecurityShift;
+use App\Models\SocialWork\SocialCase;
 use App\Models\Task;
-use App\Policies\CalendarEventPolicy;
-use App\Policies\BibliotecaCatalogPolicy;
-use App\Policies\BibliotecaLoanPolicy;
-use App\Policies\BibliotecaPlanPolicy;
-use App\Policies\BibliotecaReservationPolicy;
-use App\Policies\BibliotecaSpacePolicy;
 use App\Policies\ApoyoAtencionPolicy;
 use App\Policies\ApoyoDerivacionPolicy;
 use App\Policies\ApoyoEntrevistaPolicy;
 use App\Policies\ApoyoPlanPolicy;
 use App\Policies\ApoyoSeguimientoPolicy;
+use App\Policies\AttendanceGoalPolicy;
+use App\Policies\AttendanceInterventionPolicy;
+use App\Policies\BibliotecaCatalogPolicy;
+use App\Policies\BibliotecaLoanPolicy;
+use App\Policies\BibliotecaPlanPolicy;
+use App\Policies\BibliotecaReservationPolicy;
+use App\Policies\BibliotecaSpacePolicy;
+use App\Policies\CalendarEventPolicy;
 use App\Policies\CentroApuntesAsignaturaPolicy;
 use App\Policies\CentroApuntesMaquinaPolicy;
 use App\Policies\CentroApuntesSolicitudPolicy;
@@ -93,8 +103,6 @@ use App\Policies\ConvivenciaMeasurePolicy;
 use App\Policies\ConvivenciaPlanPolicy;
 use App\Policies\ConvivenciaProtocolPolicy;
 use App\Policies\ConvivenciaSociogramPolicy;
-use App\Policies\AttendanceGoalPolicy;
-use App\Policies\AttendanceInterventionPolicy;
 use App\Policies\InfirmaryAccidentPolicy;
 use App\Policies\InfirmaryAttentionPolicy;
 use App\Policies\InfirmaryMedicationAuthorizationPolicy;
@@ -102,6 +110,13 @@ use App\Policies\InfirmaryMedicationPolicy;
 use App\Policies\ItEquipmentLoanPolicy;
 use App\Policies\ItEquipmentMaintenancePolicy;
 use App\Policies\ItEquipmentPolicy;
+use App\Policies\LibroDigital\BookPolicy as LibroDigitalBookPolicy;
+use App\Policies\LibroDigital\ClassSessionPolicy as LibroDigitalClassSessionPolicy;
+use App\Policies\LibroDigital\SubjectPolicy as LibroDigitalSubjectPolicy;
+use App\Policies\OperationalTransferRequestPolicy;
+use App\Policies\ConversationPolicy as MessagingConversationPolicy;
+use App\Policies\MessagePolicy as MessagingMessagePolicy;
+use App\Policies\MessageAttachmentPolicy as MessagingMessageAttachmentPolicy;
 use App\Policies\PanolEntregaPolicy;
 use App\Policies\PanolInsumoPolicy;
 use App\Policies\PanolMovimientoPolicy;
@@ -110,9 +125,9 @@ use App\Policies\PmePolicy;
 use App\Policies\RiskPreventionPolicy;
 use App\Policies\SecurityIncidentPolicy;
 use App\Policies\SecurityShiftPolicy;
+use App\Policies\SocialWork\SocialCasePolicy;
 use App\Policies\TaskPolicy;
 use Illuminate\Foundation\Support\Providers\AuthServiceProvider as ServiceProvider;
-use Illuminate\Support\Facades\Gate;
 
 class AuthServiceProvider extends ServiceProvider
 {
@@ -122,6 +137,13 @@ class AuthServiceProvider extends ServiceProvider
      * @var array<class-string, class-string>
      */
     protected $policies = [
+        SocialCase::class => SocialCasePolicy::class,
+        MessagingConversation::class => MessagingConversationPolicy::class,
+        MessagingMessage::class => MessagingMessagePolicy::class,
+        MessagingMessageAttachment::class => MessagingMessageAttachmentPolicy::class,
+        LibroDigitalBook::class => LibroDigitalBookPolicy::class,
+        LibroDigitalClassSession::class => LibroDigitalClassSessionPolicy::class,
+        ScheduleSubject::class => LibroDigitalSubjectPolicy::class,
         AttendanceGoal::class => AttendanceGoalPolicy::class,
         AttendanceIntervention::class => AttendanceInterventionPolicy::class,
         CalendarEvent::class => CalendarEventPolicy::class,
@@ -173,6 +195,7 @@ class AuthServiceProvider extends ServiceProvider
         PanolInsumo::class => PanolInsumoPolicy::class,
         PanolMovimiento::class => PanolMovimientoPolicy::class,
         PanolEntrega::class => PanolEntregaPolicy::class,
+        OperationalTransferRequest::class => OperationalTransferRequestPolicy::class,
         PmePlan::class => PmePolicy::class,
         PmeCycle::class => PmePolicy::class,
         PmeDimension::class => PmePolicy::class,
