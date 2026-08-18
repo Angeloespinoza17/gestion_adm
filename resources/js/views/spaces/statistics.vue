@@ -292,7 +292,7 @@ export default {
       this.error = null;
 
       try {
-        const pdfMake = getPdfMake();
+        const pdfMake = await getPdfMake();
         const summaryRows = this.summaryCards.map((item) => [item.title, item.value, item.help]);
         const timeRows = (this.stats.time_series || []).map((item) => [
           item.label,

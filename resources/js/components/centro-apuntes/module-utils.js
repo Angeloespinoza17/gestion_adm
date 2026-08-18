@@ -352,8 +352,8 @@ export function downloadExcelWorkbook(fileName, sections, options = {}) {
   URL.revokeObjectURL(url);
 }
 
-export function downloadPdfReport(fileName, title, subtitle, sections, options = {}) {
-  const pdfMake = getPdfMake();
+export async function downloadPdfReport(fileName, title, subtitle, sections, options = {}) {
+  const pdfMake = await getPdfMake();
   const content = [{ text: title, style: "title" }];
   const generatedAt = options.generatedAt || new Date().toLocaleString("es-CL");
 

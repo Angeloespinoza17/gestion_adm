@@ -24,7 +24,7 @@ const tableRow = (label, value) => [
   { text: valueOrDash(value), style: "fieldValue" },
 ];
 
-export function downloadWithdrawalReceipt(item, labels = {}) {
+export async function downloadWithdrawalReceipt(item, labels = {}) {
   if (!item) return;
 
   const code = item.withdrawal_code || fallbackCode(item);
@@ -173,5 +173,5 @@ export function downloadWithdrawalReceipt(item, labels = {}) {
     },
   };
 
-  getPdfMake().createPdf(documentDefinition).download(`acta-retiro-${code}.pdf`);
+  (await getPdfMake()).createPdf(documentDefinition).download(`acta-retiro-${code}.pdf`);
 }

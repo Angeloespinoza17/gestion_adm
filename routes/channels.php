@@ -1,5 +1,6 @@
 <?php
 
+use App\Models\Messaging\Conversation;
 use Illuminate\Support\Facades\Broadcast;
 
 /*
@@ -19,8 +20,8 @@ Broadcast::channel('App.Models.User.{id}', function ($user, $id) {
 
 Broadcast::channel('messaging.user.{id}', fn ($user, $id) => $user->active && (int) $user->id === (int) $id);
 Broadcast::channel('messaging.conversation.{publicId}', function ($user, string $publicId) {
-    return $user->active && \App\Models\Messaging\Conversation::query()
+    return $user->active && Conversation::query()
         ->where('public_id', $publicId)
-        ->whereHas('participants', fn ($query) => $query->where('user_id', $user->id))
+        ->whereHas('participants', fn ($query) => $query->where('user_id', $user->id)->whereNull('left_at'))
         ->exists();
 });

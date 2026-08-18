@@ -22,6 +22,7 @@ use App\Models\StudentProfile;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
 use Laravel\Sanctum\Sanctum;
 use Tests\TestCase;
 
@@ -45,7 +46,10 @@ class InspectoriaModuleTest extends TestCase
             'active' => true,
         ]);
         $this->user = User::factory()->create(['active' => true, 'staff_id' => $this->inspector->id]);
-        $role = Role::query()->create(['name' => 'Super administrador', 'slug' => 'super_admin', 'active' => true]);
+        $role = Role::query()->firstOrCreate(
+            ['slug' => 'super_admin'],
+            ['name' => 'Super administrador', 'active' => true],
+        );
         $this->user->roles()->attach($role);
         Sanctum::actingAs($this->user);
     }
@@ -148,7 +152,7 @@ class InspectoriaModuleTest extends TestCase
             ]);
     }
 
-    public function test_course_assignment_tracks_location_and_prevents_overlapping_responsibility(): void
+    public function test_course_assignment_prevents_duplicates_for_the_same_inspector_but_allows_shared_courses(): void
     {
         [$year, $course] = $this->academicContext();
 
@@ -171,7 +175,100 @@ class InspectoriaModuleTest extends TestCase
             ->assertUnprocessable()
             ->assertJsonValidationErrors('course_section_id');
 
-        $this->assertSame(1, InspectoriaCourseAssignment::query()->count());
+        $otherInspector = Staff::query()->create([
+            'full_name' => 'Segunda inspectora',
+            'rut' => '16.666.666-6',
+            'status' => 'activo',
+            'active' => true,
+        ]);
+
+        $this->postJson('/api/inspectoria/course-assignments', [
+            ...$payload,
+            'inspector_staff_id' => $otherInspector->id,
+        ])->assertCreated();
+
+        $this->assertSame(2, InspectoriaCourseAssignment::query()->count());
+    }
+
+    public function test_bulk_assignment_skips_courses_with_current_assignments_and_creates_the_available_ones(): void
+    {
+        [$year, $course] = $this->academicContext();
+        $level = EducationLevel::query()->findOrFail($course->education_level_id);
+        $secondCourse = CourseSection::query()->create([
+            'academic_year_id' => $year->id,
+            'education_level_id' => $level->id,
+            'section_name' => 'B',
+            'display_name' => '2° medio B',
+            'active' => true,
+        ]);
+
+        $payload = [
+            'academic_year_id' => $year->id,
+            'course_section_ids' => [$course->id, $secondCourse->id],
+            'inspector_staff_id' => $this->inspector->id,
+            'physical_location' => 'Pabellón norte',
+            'starts_on' => '2026-03-01',
+            'ends_on' => null,
+            'active' => true,
+            'notes' => 'Cobertura masiva de cursos.',
+        ];
+
+        $this->postJson('/api/inspectoria/course-assignments/bulk', $payload)
+            ->assertCreated()
+            ->assertJsonPath('created_count', 2)
+            ->assertJsonCount(2, 'data');
+
+        $this->assertDatabaseHas('inspectoria_course_assignments', [
+            'course_section_id' => $course->id,
+            'inspector_staff_id' => $this->inspector->id,
+            'physical_location' => 'Pabellón norte',
+        ]);
+        $this->assertDatabaseHas('inspectoria_course_assignments', [
+            'course_section_id' => $secondCourse->id,
+            'inspector_staff_id' => $this->inspector->id,
+        ]);
+
+        $this->postJson('/api/inspectoria/course-assignments/bulk', $payload)
+            ->assertOk()
+            ->assertJsonPath('created_count', 0)
+            ->assertJsonPath('skipped_count', 2)
+            ->assertJsonCount(2, 'skipped_courses');
+
+        $this->assertSame(2, InspectoriaCourseAssignment::query()->count());
+
+        $otherInspector = Staff::query()->create([
+            'full_name' => 'Inspectora con cobertura compartida',
+            'rut' => '17.777.777-7',
+            'status' => 'activo',
+            'active' => true,
+        ]);
+
+        $this->postJson('/api/inspectoria/course-assignments/bulk', [
+            ...$payload,
+            'inspector_staff_id' => $otherInspector->id,
+        ])->assertCreated()
+            ->assertJsonPath('created_count', 2)
+            ->assertJsonPath('skipped_count', 0);
+
+        $this->assertSame(4, InspectoriaCourseAssignment::query()->count());
+
+        $thirdCourse = CourseSection::query()->create([
+            'academic_year_id' => $year->id,
+            'education_level_id' => $level->id,
+            'section_name' => 'C',
+            'display_name' => '2° medio C',
+            'active' => true,
+        ]);
+
+        $this->postJson('/api/inspectoria/course-assignments/bulk', [
+            ...$payload,
+            'course_section_ids' => [$course->id, $thirdCourse->id],
+        ])->assertCreated()
+            ->assertJsonPath('created_count', 1)
+            ->assertJsonPath('skipped_count', 1)
+            ->assertJsonPath('skipped_courses.0.course_section_id', $course->id);
+
+        $this->assertSame(5, InspectoriaCourseAssignment::query()->count());
     }
 
     public function test_inspectoria_pass_supersedes_library_and_blocks_new_lower_priority_passes(): void
@@ -277,6 +374,117 @@ class InspectoriaModuleTest extends TestCase
             ->assertOk()->assertJsonPath('data.active', false);
     }
 
+    public function test_staff_lateness_can_be_linked_to_multiple_courses_and_is_aggregated_in_statistics(): void
+    {
+        [$year, $course] = $this->academicContext();
+        $level = EducationLevel::query()->findOrFail($course->education_level_id);
+        $secondCourse = CourseSection::query()->create([
+            'academic_year_id' => $year->id,
+            'education_level_id' => $level->id,
+            'section_name' => 'B',
+            'display_name' => '2° medio B',
+            'active' => true,
+        ]);
+        $lateStaff = Staff::query()->create([
+            'full_name' => 'Docente con atraso',
+            'rut' => '14.444.444-4',
+            'status' => 'activo',
+            'active' => true,
+        ]);
+
+        $response = $this->postJson('/api/inspectoria/daily-log', [
+            'happened_at' => '2026-08-10 08:20:00',
+            'category' => 'asistencia',
+            'is_staff_lateness' => true,
+            'late_staff_id' => $lateStaff->id,
+            'associated_course_ids' => [$course->id, $secondCourse->id],
+            'lateness_minutes' => 15,
+            'priority' => 'media',
+            'status' => 'registrado',
+            'title' => 'Atraso de docente',
+            'detail' => 'La funcionaria ingresa después del inicio de la primera hora.',
+            'requires_follow_up' => false,
+        ])->assertCreated()
+            ->assertJsonPath('data.is_staff_lateness', true)
+            ->assertJsonPath('data.late_staff.id', $lateStaff->id)
+            ->assertJsonPath('data.lateness_minutes', 15)
+            ->assertJsonCount(2, 'data.associated_courses');
+
+        $dailyLogId = $response->json('data.id');
+        $this->assertDatabaseHas('inspectoria_daily_logs', [
+            'id' => $dailyLogId,
+            'student_profile_id' => null,
+            'course_section_id' => null,
+            'late_staff_id' => $lateStaff->id,
+            'late_staff_name_snapshot' => 'Docente con atraso',
+            'is_staff_lateness' => true,
+            'lateness_minutes' => 15,
+        ]);
+        $this->assertDatabaseCount('inspectoria_daily_log_courses', 2);
+
+        $this->getJson('/api/inspectoria/statistics/staff-lateness?date_from=2026-08-01&date_to=2026-08-31')
+            ->assertOk()
+            ->assertJsonPath('summary.events_total', 1)
+            ->assertJsonPath('summary.minutes_total', 15)
+            ->assertJsonPath('summary.staff_total', 1)
+            ->assertJsonPath('summary.courses_total', 2)
+            ->assertJsonCount(2, 'course_totals')
+            ->assertJsonCount(2, 'staff_course_rows')
+            ->assertJsonFragment(['staff_name' => 'Docente con atraso', 'course_name' => $course->display_name, 'total' => 1, 'minutes_total' => 15])
+            ->assertJsonFragment(['staff_name' => 'Docente con atraso', 'course_name' => $secondCourse->display_name, 'total' => 1, 'minutes_total' => 15]);
+
+        $this->getJson("/api/inspectoria/statistics/staff-lateness?date_from=2026-08-01&date_to=2026-08-31&course_section_id={$course->id}")
+            ->assertOk()
+            ->assertJsonPath('summary.events_total', 1)
+            ->assertJsonPath('summary.courses_total', 1);
+    }
+
+    public function test_staff_lateness_requires_an_active_staff_member(): void
+    {
+        $this->postJson('/api/inspectoria/daily-log', [
+            'happened_at' => '2026-08-10 08:20:00',
+            'category' => 'asistencia',
+            'is_staff_lateness' => true,
+            'late_staff_id' => null,
+            'associated_course_ids' => [],
+            'lateness_minutes' => 10,
+            'priority' => 'media',
+            'status' => 'registrado',
+            'title' => 'Atraso de funcionario',
+            'detail' => 'Ingreso posterior al inicio de la jornada.',
+            'requires_follow_up' => false,
+        ])->assertUnprocessable()->assertJsonValidationErrors('late_staff_id');
+    }
+
+    public function test_staff_lateness_requires_one_of_the_available_durations(): void
+    {
+        $lateStaff = Staff::query()->create([
+            'full_name' => 'Funcionario puntualidad',
+            'rut' => '15.555.555-5',
+            'status' => 'activo',
+            'active' => true,
+        ]);
+
+        $payload = [
+            'happened_at' => '2026-08-10 08:20:00',
+            'category' => 'asistencia',
+            'is_staff_lateness' => true,
+            'late_staff_id' => $lateStaff->id,
+            'associated_course_ids' => [],
+            'priority' => 'media',
+            'status' => 'registrado',
+            'title' => 'Atraso de funcionario',
+            'detail' => 'Ingreso posterior al inicio de la jornada.',
+            'requires_follow_up' => false,
+        ];
+
+        $this->postJson('/api/inspectoria/daily-log', $payload)
+            ->assertUnprocessable()->assertJsonValidationErrors('lateness_minutes');
+
+        $this->postJson('/api/inspectoria/daily-log', [...$payload, 'lateness_minutes' => 25])
+            ->assertUnprocessable()->assertJsonValidationErrors('lateness_minutes');
+    }
+
     public function test_inspectoria_roles_have_the_expected_permissions_and_modules(): void
     {
         $inspector = Role::query()->where('slug', 'inspectoria')->firstOrFail();
@@ -289,6 +497,7 @@ class InspectoriaModuleTest extends TestCase
             'ver_fichas_inspectoria' => true,
             'ver_retiros_inspectoria' => true,
             'registrar_bitacora_inspectoria' => true,
+            'ver_estadisticas_inspectoria' => true,
         ]);
         $operationalPermissions = array_values(array_diff(
             $inspectoriaPermissions,
@@ -302,6 +511,7 @@ class InspectoriaModuleTest extends TestCase
             'inspectoria_alumnas',
             'inspectoria_retiros',
             'inspectoria_bitacora',
+            'inspectoria_estadisticas',
         ];
 
         $this->assertSame('Inspector/a', $inspector->name);
@@ -320,6 +530,10 @@ class InspectoriaModuleTest extends TestCase
         $this->assertFalse($coordinator->permissions()->where('permissions.slug', 'social_work.pickup_restrictions.manage')->exists());
         $this->assertEmpty(array_diff($moduleSlugs, $inspector->modules()->pluck('system_modules.slug')->all()));
         $this->assertEmpty(array_diff($moduleSlugs, $coordinator->modules()->pluck('system_modules.slug')->all()));
+        $this->assertDatabaseHas('permission_group_permission', [
+            'permission_group_id' => DB::table('permission_groups')->where('slug', 'inspectoria')->value('id'),
+            'permission_id' => Permission::query()->where('slug', 'ver_estadisticas_inspectoria')->value('id'),
+        ]);
     }
 
     public function test_inspector_is_restricted_to_students_and_records_from_assigned_courses(): void

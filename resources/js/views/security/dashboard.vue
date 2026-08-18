@@ -63,7 +63,7 @@ export default {
     async exportPdf() {
       this.exporting = true;
       try {
-        const pdfMake = getPdfMake();
+        const pdfMake = await getPdfMake();
         const totals = this.data.totals || {};
         const docDefinition = {
           pageOrientation: "portrait",

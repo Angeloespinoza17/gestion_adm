@@ -1,10 +1,7 @@
 <script>
 import axios from "axios";
 import Layout from "../../layouts/main.vue";
-import pdfMake from "pdfmake/build/pdfmake";
-import pdfFonts from "pdfmake/build/vfs_fonts";
-
-pdfMake.vfs = pdfFonts?.pdfMake?.vfs || pdfFonts;
+import { getPdfMake } from "../../utils/pdfmake";
 
 const pad = (value) => String(value).padStart(2, "0");
 const localYMD = (date = new Date()) => `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
@@ -572,6 +569,7 @@ export default {
       this.error = null;
 
       try {
+        const pdfMake = await getPdfMake();
         const plans = await this.fetchExportPlans();
         const title = this.viewMode === "calendar"
           ? `Plan anual - calendario ${this.calendarTitle}`

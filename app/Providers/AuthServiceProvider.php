@@ -43,10 +43,10 @@ use App\Models\Library\BibliotecaReserva;
 use App\Models\Library\BibliotecaUsoEspacio;
 use App\Models\LibroDigital\Book as LibroDigitalBook;
 use App\Models\LibroDigital\ClassSession as LibroDigitalClassSession;
-use App\Models\Operational\OperationalTransferRequest;
 use App\Models\Messaging\Conversation as MessagingConversation;
 use App\Models\Messaging\Message as MessagingMessage;
 use App\Models\Messaging\MessageAttachment as MessagingMessageAttachment;
+use App\Models\Operational\OperationalTransferRequest;
 use App\Models\PermissionRequest;
 use App\Models\Pme\PmeAction;
 use App\Models\Pme\PmeActivity;
@@ -65,6 +65,9 @@ use App\Models\Pme\PmeSepIncome;
 use App\Models\Pme\PmeStrategicGoalMeasurement;
 use App\Models\Pme\PmeStrategy;
 use App\Models\Pme\PmeStudentSepClassification;
+use App\Models\Psychology\PsychologyCase;
+use App\Models\Psychology\PsychologyDocument;
+use App\Models\Psychology\PsychologyReferral;
 use App\Models\RiskPrevention\RiskPreventionAccident;
 use App\Models\RiskPrevention\RiskPreventionDocument;
 use App\Models\RiskPrevention\RiskPreventionEmergencyDrill;
@@ -94,6 +97,7 @@ use App\Policies\CalendarEventPolicy;
 use App\Policies\CentroApuntesAsignaturaPolicy;
 use App\Policies\CentroApuntesMaquinaPolicy;
 use App\Policies\CentroApuntesSolicitudPolicy;
+use App\Policies\ConversationPolicy as MessagingConversationPolicy;
 use App\Policies\ConvivenciaCasePolicy;
 use App\Policies\ConvivenciaComplaintPolicy;
 use App\Policies\ConvivenciaDailyLogPolicy;
@@ -113,15 +117,17 @@ use App\Policies\ItEquipmentPolicy;
 use App\Policies\LibroDigital\BookPolicy as LibroDigitalBookPolicy;
 use App\Policies\LibroDigital\ClassSessionPolicy as LibroDigitalClassSessionPolicy;
 use App\Policies\LibroDigital\SubjectPolicy as LibroDigitalSubjectPolicy;
-use App\Policies\OperationalTransferRequestPolicy;
-use App\Policies\ConversationPolicy as MessagingConversationPolicy;
-use App\Policies\MessagePolicy as MessagingMessagePolicy;
 use App\Policies\MessageAttachmentPolicy as MessagingMessageAttachmentPolicy;
+use App\Policies\MessagePolicy as MessagingMessagePolicy;
+use App\Policies\OperationalTransferRequestPolicy;
 use App\Policies\PanolEntregaPolicy;
 use App\Policies\PanolInsumoPolicy;
 use App\Policies\PanolMovimientoPolicy;
 use App\Policies\PermissionRequestPolicy;
 use App\Policies\PmePolicy;
+use App\Policies\PsychologyCasePolicy;
+use App\Policies\PsychologyDocumentPolicy;
+use App\Policies\PsychologyReferralPolicy;
 use App\Policies\RiskPreventionPolicy;
 use App\Policies\SecurityIncidentPolicy;
 use App\Policies\SecurityShiftPolicy;
@@ -137,6 +143,9 @@ class AuthServiceProvider extends ServiceProvider
      * @var array<class-string, class-string>
      */
     protected $policies = [
+        PsychologyReferral::class => PsychologyReferralPolicy::class,
+        PsychologyCase::class => PsychologyCasePolicy::class,
+        PsychologyDocument::class => PsychologyDocumentPolicy::class,
         SocialCase::class => SocialCasePolicy::class,
         MessagingConversation::class => MessagingConversationPolicy::class,
         MessagingMessage::class => MessagingMessagePolicy::class,

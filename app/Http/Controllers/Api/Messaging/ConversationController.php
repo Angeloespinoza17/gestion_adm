@@ -8,13 +8,14 @@ use App\Models\Messaging\Conversation;
 use App\Models\User;
 use App\Services\Messaging\AuditService;
 use App\Services\Messaging\ConversationService;
+use App\Services\Messaging\MessagingBroadcaster;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
 class ConversationController extends Controller
 {
-    public function __construct(private ConversationService $service, private AuditService $audit) {}
+    public function __construct(private ConversationService $service, private AuditService $audit, private MessagingBroadcaster $broadcaster) {}
 
     public function index(Request $request): JsonResponse
     {
@@ -67,6 +68,7 @@ class ConversationController extends Controller
         abort_if($conversation->type === 'direct', 409, 'Una conversación directa no puede modificarse.');
         $data = $request->validate(['title' => ['sometimes', 'string', 'max:255'], 'description' => ['nullable', 'string', 'max:2000'], 'only_admins_can_write' => ['sometimes', 'boolean']]);
         $conversation->update($data);
+        $this->broadcaster->conversationChanged($conversation, 'conversation_updated', ['actor_id' => $request->user()->id]);
 
         return response()->json(['data' => $this->present($conversation->fresh('participants.user:id,name,profile_photo_path'), $request->user(), true)]);
     }
@@ -75,9 +77,10 @@ class ConversationController extends Controller
     {
         $this->authorize('view', $conversation);
         abort_unless(in_array($preference, ['archive', 'pin', 'mute'], true), 404);
-        $participant = $conversation->participants()->where('user_id', $request->user()->id)->firstOrFail();
+        $participant = $conversation->participants()->where('user_id', $request->user()->id)->whereNull('left_at')->firstOrFail();
         $column = ['archive' => 'archived_at', 'pin' => 'pinned_at', 'mute' => 'muted_until'][$preference];
         $participant->update([$column => $request->isMethod('delete') ? null : ($preference === 'mute' ? now()->addDays(min($request->integer('days', 1), 365)) : now())]);
+        $this->broadcaster->conversationChanged($conversation, 'preference_updated', ['actor_id' => $request->user()->id, 'preference' => $preference], [$request->user()->id]);
 
         return response()->json(['message' => 'Preferencia actualizada.']);
     }
@@ -88,6 +91,7 @@ class ConversationController extends Controller
         $locked = ! $request->isMethod('delete');
         $conversation->update(['is_locked' => $locked]);
         $this->audit->record($locked ? 'conversation_locked' : 'conversation_unlocked', $request->user()->id, $conversation->id);
+        $this->broadcaster->conversationChanged($conversation, $locked ? 'conversation_locked' : 'conversation_unlocked', ['actor_id' => $request->user()->id, 'is_locked' => $locked]);
 
         return response()->json(['data' => ['is_locked' => $locked]]);
     }
@@ -108,6 +112,7 @@ class ConversationController extends Controller
             $conversation->participants()->updateOrCreate(['user_id' => $user->id], ['role' => 'member', 'can_write' => true, 'joined_at' => now(), 'left_at' => null]);
             $this->audit->record('participant_added', $request->user()->id, $conversation->id, null, $user->id);
         }
+        $this->broadcaster->conversationChanged($conversation, 'participants_updated', ['actor_id' => $request->user()->id]);
 
         return $this->participants($request, $conversation);
     }
@@ -118,8 +123,10 @@ class ConversationController extends Controller
         abort_if($conversation->type === 'direct', 409);
         $participant = $conversation->participants()->where('user_id', $user->id)->whereNull('left_at')->firstOrFail();
         abort_if($participant->role === 'owner', 409, 'Transfiere la propiedad antes de retirar al propietario.');
+        $recipientIds = $conversation->activeParticipants()->pluck('user_id')->push($user->id)->unique()->map(fn ($id) => (int) $id)->all();
         $participant->update(['left_at' => now()]);
         $this->audit->record('participant_removed', $request->user()->id, $conversation->id, null, $user->id);
+        $this->broadcaster->conversationChanged($conversation, 'participant_removed', ['actor_id' => $request->user()->id, 'removed_user_id' => $user->id], $recipientIds);
 
         return response()->json(['message' => 'Participante retirado.']);
     }
@@ -131,6 +138,7 @@ class ConversationController extends Controller
         $participant = $conversation->participants()->where('user_id', $user->id)->whereNull('left_at')->firstOrFail();
         abort_if($participant->role === 'owner', 409, 'La propiedad se modifica mediante transferencia.');
         $participant->update($data);
+        $this->broadcaster->conversationChanged($conversation, 'participants_updated', ['actor_id' => $request->user()->id, 'updated_user_id' => $user->id]);
 
         return response()->json(['message' => 'Participante actualizado.']);
     }
@@ -145,6 +153,7 @@ class ConversationController extends Controller
             $owner->update(['role' => 'admin']);
             $next->update(['role' => 'owner']);
         });
+        $this->broadcaster->conversationChanged($conversation, 'ownership_transferred', ['actor_id' => $request->user()->id, 'owner_user_id' => $next->user_id]);
 
         return response()->json(['message' => 'Propiedad transferida.']);
     }
@@ -154,8 +163,10 @@ class ConversationController extends Controller
         abort_if($conversation->type === 'direct', 409, 'No puedes abandonar una conversación directa.');
         $participant = $conversation->participants()->where('user_id', $request->user()->id)->whereNull('left_at')->firstOrFail();
         abort_if($participant->role === 'owner', 409, 'Transfiere la propiedad antes de abandonar el grupo.');
+        $recipientIds = $conversation->activeParticipants()->pluck('user_id')->push($request->user()->id)->unique()->map(fn ($id) => (int) $id)->all();
         $participant->update(['left_at' => now()]);
         $this->audit->record('participant_removed', $request->user()->id, $conversation->id, null, $request->user()->id, ['left_voluntarily' => true]);
+        $this->broadcaster->conversationChanged($conversation, 'participant_removed', ['actor_id' => $request->user()->id, 'removed_user_id' => $request->user()->id], $recipientIds);
 
         return response()->json(['message' => 'Abandonaste la conversación.']);
     }

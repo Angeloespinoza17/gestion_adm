@@ -154,8 +154,8 @@ export default {
       ];
       this.downloadBlob(lines.join("\n"), "application/vnd.ms-excel", "reporte_permisos.xls");
     },
-    exportPdf() {
-      const pdfMake = getPdfMake();
+    async exportPdf() {
+      const pdfMake = await getPdfMake();
       pdfMake
         .createPdf({
           pageOrientation: "landscape",

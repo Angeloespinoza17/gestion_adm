@@ -5,10 +5,9 @@
  */
 
 import './bootstrap';
-import { createApp } from 'vue';
+import { createApp, defineAsyncComponent } from 'vue';
 import routes from './router/index'
 import App from '../js/App.vue'
-import VueApexCharts from "vue3-apexcharts";
 import helper from "./mixins/layouts.mixin";
 import { vMaska } from "maska";
 import { installTableActionNormalizer } from "./utils/table-actions";
@@ -29,14 +28,15 @@ import "@vueform/multiselect/themes/default.css"
  */
 
 const app = createApp({});
+const AsyncApexChart = defineAsyncComponent(() => import("vue3-apexcharts").then((module) => module.default));
 
 app.component("example-component", App);
+app.component("apexchart", AsyncApexChart);
 app.use(routes);
 app.use(App);
 app.use(i18n);
 app.directive("maska", vMaska)
 app.mixin(helper);
-app.use(VueApexCharts);
 app.use(BootstrapVueNext);
 installTableActionNormalizer(routes);
 

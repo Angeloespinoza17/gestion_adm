@@ -378,6 +378,23 @@ class PermissionGroupSeeder extends Seeder
                 ],
             ],
             [
+                'slug' => 'inspectoria',
+                'module_slug' => 'inspectoria',
+                'name' => 'Inspectoría',
+                'description' => 'Atenciones, cursos, pases, fichas, bitácora y estadísticas operativas de Inspectoría.',
+                'sort_order' => 195,
+                'permissions' => [
+                    'ver_modulo_inspectoria',
+                    'registrar_atenciones_inspectoria',
+                    'asignar_cursos_inspectoria',
+                    'gestionar_pases_inspectoria',
+                    'ver_fichas_inspectoria',
+                    'ver_retiros_inspectoria',
+                    'registrar_bitacora_inspectoria',
+                    'ver_estadisticas_inspectoria',
+                ],
+            ],
+            [
                 'slug' => 'pme_sep',
                 'module_slug' => 'pme_sep',
                 'name' => 'PME / SEP',

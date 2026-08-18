@@ -262,7 +262,7 @@ export const buildCurriculumVisualizationPdfDefinition = ({
 export const exportCurriculumVisualizationPdf = async (options) => {
     const image = await composeCurriculumVisualizationImage(options);
     const { getPdfMake } = await import("./pdfmake");
-    const pdfMake = getPdfMake();
+    const pdfMake = await getPdfMake();
     const filename = String(options?.filename || "mapa-curricular.pdf").replace(
         /\.png$/i,
         ".pdf"

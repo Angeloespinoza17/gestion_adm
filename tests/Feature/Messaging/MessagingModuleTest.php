@@ -2,12 +2,15 @@
 
 namespace Tests\Feature\Messaging;
 
+use App\Events\Messaging\ConversationChanged;
+use App\Events\Messaging\MessageCreated;
 use App\Models\Messaging\Message;
 use App\Models\Messaging\MessageRecipient;
 use App\Models\Messaging\MessagingAuditEvent;
 use App\Models\User;
 use App\Notifications\Messaging\NewMessageNotification;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Event;
 use Laravel\Sanctum\Sanctum;
 use Tests\TestCase;
 
@@ -130,7 +133,7 @@ class MessagingModuleTest extends TestCase
         $this->travelBack();
     }
 
-    public function test_sender_receives_acknowledgement_changes_through_incremental_polling(): void
+    public function test_sender_can_recover_acknowledgement_changes_with_the_incremental_endpoint(): void
     {
         [$sender, $recipient] = User::factory()->count(2)->create(['active' => true]);
         Sanctum::actingAs($sender);
@@ -178,5 +181,70 @@ class MessagingModuleTest extends TestCase
     public function test_unauthenticated_user_cannot_access_messaging(): void
     {
         $this->getJson('/api/messaging/summary')->assertUnauthorized();
+    }
+
+    public function test_departed_participant_can_no_longer_view_conversation_or_messages(): void
+    {
+        [$owner, $member, $departed] = User::factory()->count(3)->create(['active' => true]);
+        Sanctum::actingAs($owner);
+        $conversation = $this->postJson('/api/messaging/conversations/group', [
+            'title' => 'Canal privado',
+            'user_ids' => [$member->id, $departed->id],
+        ])->assertCreated()->json('data.public_id');
+        $message = $this->postJson("/api/messaging/conversations/{$conversation}/messages", [
+            'body' => 'Información reservada',
+        ])->assertCreated()->json('data.public_id');
+        $this->deleteJson("/api/messaging/conversations/{$conversation}/participants/{$departed->id}")->assertOk();
+
+        Sanctum::actingAs($departed);
+        $this->getJson("/api/messaging/conversations/{$conversation}")->assertNotFound();
+        $this->getJson("/api/messaging/conversations/{$conversation}/messages")->assertNotFound();
+        $this->getJson("/api/messaging/messages/{$message}")->assertNotFound();
+        $this->assertEmpty($this->getJson('/api/messaging/conversations')->assertOk()->json('data'));
+    }
+
+    public function test_message_history_uses_a_non_overlapping_cursor_and_reports_when_more_exists(): void
+    {
+        [$sender, $recipient] = User::factory()->count(2)->create(['active' => true]);
+        Sanctum::actingAs($sender);
+        $conversation = $this->postJson('/api/messaging/conversations/direct', ['user_id' => $recipient->id])->json('data.public_id');
+        foreach (range(1, 45) as $number) {
+            $this->postJson("/api/messaging/conversations/{$conversation}/messages", ['body' => "Mensaje {$number}"])->assertCreated();
+        }
+
+        $first = $this->getJson("/api/messaging/conversations/{$conversation}/messages?limit=20")->assertOk();
+        $second = $this->getJson("/api/messaging/conversations/{$conversation}/messages?".http_build_query([
+            'limit' => 20,
+            'before' => $first->json('before'),
+        ]))->assertOk();
+        $third = $this->getJson("/api/messaging/conversations/{$conversation}/messages?".http_build_query([
+            'limit' => 20,
+            'before' => $second->json('before'),
+        ]))->assertOk();
+
+        $ids = collect($first->json('data'))->merge($second->json('data'))->merge($third->json('data'))->pluck('public_id');
+        $this->assertTrue($first->json('has_more'));
+        $this->assertTrue($second->json('has_more'));
+        $this->assertFalse($third->json('has_more'));
+        $this->assertCount(45, $ids);
+        $this->assertCount(45, $ids->unique());
+    }
+
+    public function test_creating_a_message_dispatches_small_realtime_events(): void
+    {
+        [$sender, $recipient] = User::factory()->count(2)->create(['active' => true]);
+        Sanctum::actingAs($sender);
+        $conversation = $this->postJson('/api/messaging/conversations/direct', ['user_id' => $recipient->id])->json('data.public_id');
+        Event::fake([MessageCreated::class, ConversationChanged::class]);
+
+        $message = $this->postJson("/api/messaging/conversations/{$conversation}/messages", [
+            'body' => 'Mensaje en tiempo real',
+        ])->assertCreated()->json('data.public_id');
+
+        Event::assertDispatched(MessageCreated::class, fn (MessageCreated $event) => $event->conversationId === $conversation
+            && $event->message['public_id'] === $message
+            && ! array_key_exists('recipients', $event->message));
+        Event::assertDispatched(ConversationChanged::class, fn (ConversationChanged $event) => $event->change['action'] === 'message_created'
+            && $event->change['conversation_id'] === $conversation);
     }
 }

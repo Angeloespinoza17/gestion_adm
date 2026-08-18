@@ -571,7 +571,7 @@ export default {
     },
     async exportShiftPdf() {
       if (!this.selectedShift || !this.canExport) return;
-      const pdfMake = getPdfMake();
+      const pdfMake = await getPdfMake();
       const rounds = this.selectedShift.rounds || [];
       const body = [];
 

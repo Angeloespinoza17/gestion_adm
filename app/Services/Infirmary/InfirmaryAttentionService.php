@@ -351,7 +351,7 @@ class InfirmaryAttentionService
     private function loadAttention(InfirmaryAttention $attention): InfirmaryAttention
     {
         return $attention->fresh([
-            'student:id,first_name,last_name,registered_name,rut,birthdate,guardian_name,guardian_phone,guardian_email,guardian_backup_name,guardian_backup_phone,guardian_backup_email,health_insurance,has_chronic_illness,chronic_illness_details,has_medication_allergies,medication_allergies_details,has_physical_restrictions,physical_restrictions_details',
+            'student:id,first_name,last_name,registered_name,rut,birthdate,guardian_name,guardian_relationship,guardian_role,guardian_phone,guardian_email,guardian_backup_name,guardian_backup_relationship,guardian_backup_role,guardian_backup_phone,guardian_backup_email,health_insurance,has_chronic_illness,chronic_illness_details,has_medication_allergies,medication_allergies_details,has_physical_restrictions,physical_restrictions_details',
             'staff:id,full_name,rut,birth_date,cargo_id,institutional_email,personal_email,phone,status,active',
             'staff.cargo:id,name,slug',
             'academicYear:id,name,year',

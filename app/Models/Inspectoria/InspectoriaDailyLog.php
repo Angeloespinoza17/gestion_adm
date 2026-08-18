@@ -8,6 +8,7 @@ use App\Models\StudentProfile;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 
 class InspectoriaDailyLog extends Model
 {
@@ -27,12 +28,15 @@ class InspectoriaDailyLog extends Model
 
     protected $fillable = [
         'student_profile_id', 'course_section_id', 'inspector_staff_id', 'registered_by_user_id',
-        'happened_at', 'category', 'priority', 'status', 'title', 'detail',
+        'happened_at', 'category', 'is_staff_lateness', 'late_staff_id', 'late_staff_name_snapshot', 'lateness_minutes',
+        'priority', 'status', 'title', 'detail',
         'requires_follow_up', 'follow_up_note', 'created_by', 'updated_by',
     ];
 
     protected $casts = [
         'happened_at' => 'datetime:Y-m-d H:i:s',
+        'is_staff_lateness' => 'boolean',
+        'lateness_minutes' => 'integer',
         'requires_follow_up' => 'boolean',
     ];
 
@@ -49,6 +53,21 @@ class InspectoriaDailyLog extends Model
     public function inspector(): BelongsTo
     {
         return $this->belongsTo(Staff::class, 'inspector_staff_id');
+    }
+
+    public function lateStaff(): BelongsTo
+    {
+        return $this->belongsTo(Staff::class, 'late_staff_id');
+    }
+
+    public function associatedCourses(): BelongsToMany
+    {
+        return $this->belongsToMany(
+            CourseSection::class,
+            'inspectoria_daily_log_courses',
+            'daily_log_id',
+            'course_section_id',
+        )->withTimestamps();
     }
 
     public function registeredBy(): BelongsTo

@@ -522,8 +522,8 @@ function buildAnalyticsPdfDefinition(title, subtitle, sections, context) {
   };
 }
 
-export function downloadPdfReport(fileName, title, subtitle, sections, context = {}) {
-  const pdfMake = getPdfMake();
+export async function downloadPdfReport(fileName, title, subtitle, sections, context = {}) {
+  const pdfMake = await getPdfMake();
   if (context.variant === "analytics") {
     pdfMake
       .createPdf(buildAnalyticsPdfDefinition(title, subtitle, sections, context))

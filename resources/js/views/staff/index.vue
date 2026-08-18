@@ -661,8 +661,8 @@ export default {
       link.remove();
       URL.revokeObjectURL(url);
     },
-    downloadPdf(rows, selectedColumns) {
-      const pdfMake = getPdfMake();
+    async downloadPdf(rows, selectedColumns) {
+      const pdfMake = await getPdfMake();
       const headers = selectedColumns.map((column) => column.label);
       const tableBody = [
         headers.map((header) => ({

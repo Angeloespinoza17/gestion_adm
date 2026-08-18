@@ -10,7 +10,7 @@ use Illuminate\Support\Str;
 
 class ConversationService
 {
-    public function __construct(private AuditService $audit) {}
+    public function __construct(private AuditService $audit, private MessagingBroadcaster $broadcaster) {}
 
     public function direct(User $actor, User $other): Conversation
     {
@@ -25,6 +25,7 @@ class ConversationService
                 $conversation->participants()->updateOrCreate(['user_id' => $actor->id], ['role' => 'member', 'can_write' => true, 'joined_at' => now(), 'left_at' => null]);
                 $conversation->participants()->updateOrCreate(['user_id' => $other->id], ['role' => 'member', 'can_write' => true, 'joined_at' => now(), 'left_at' => null]);
                 $this->audit->record('conversation_created', $actor->id, $conversation->id);
+                DB::afterCommit(fn () => $this->broadcaster->conversationChanged($conversation, 'conversation_created', ['actor_id' => $actor->id]));
 
                 return $conversation;
             });
@@ -44,6 +45,7 @@ class ConversationService
             }
             abort_if($users->count() < 2, 422, 'La conversación requiere al menos dos participantes activos.');
             $this->audit->record('conversation_created', $actor->id, $conversation->id, null, null, ['type' => $type]);
+            DB::afterCommit(fn () => $this->broadcaster->conversationChanged($conversation, 'conversation_created', ['actor_id' => $actor->id]));
 
             return $conversation;
         });

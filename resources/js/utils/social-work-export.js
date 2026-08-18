@@ -3,9 +3,15 @@ import { getPdfMake } from './pdfmake'
 const text = (value) => value == null || value === '' ? '—' : String(value).replaceAll('_', ' ')
 const date = (value) => value ? new Intl.DateTimeFormat('es-CL', { dateStyle: 'medium' }).format(new Date(value)) : '—'
 const studentName = (student) => student?.registered_name_resolved || student?.registered_name || [student?.first_name, student?.last_name].filter(Boolean).join(' ')
+const interventionPeople = (item) => {
+  const people = (item.participants || []).filter(person => person && typeof person === 'object')
+  const participants = people.filter(person => (person.role || 'participant') === 'participant').map(person => person.name).filter(Boolean)
+  const supports = people.filter(person => person.role === 'support').map(person => person.name).filter(Boolean)
+  return [participants.length ? `Participan: ${participants.join(', ')}` : '', supports.length ? `Apoyan: ${supports.join(', ')}` : ''].filter(Boolean).join('\n') || '—'
+}
 
-export function downloadSocialCaseMaster(caseData) {
-  const interventions = (caseData.interventions || []).map(item => [date(item.activity_date), text(item.kind), text(item.objective), text(item.result || item.description), text(item.next_action)])
+export async function downloadSocialCaseMaster(caseData) {
+  const interventions = (caseData.interventions || []).map(item => [date(item.activity_date), text(item.kind), interventionPeople(item), text(item.objective), text(item.result || item.description), text(item.next_action)])
   const statuses = (caseData.status_history || []).map(item => [date(item.changed_at), text(item.from_status), text(item.to_status), text(item.reason)])
   const alerts = (caseData.alerts || []).map(item => [date(item.alerted_at), text(item.severity), text(item.type), text(item.reason), text(item.status)])
   const code = text(caseData.code)
@@ -41,7 +47,7 @@ export function downloadSocialCaseMaster(caseData) {
       { text: '02  TRAZABILIDAD DE ESTADOS', style: 'sectionTitle' },
       { table: { headerRows: 1, widths: [68, 70, 70, '*'], body: [['Fecha', 'Estado anterior', 'Nuevo estado', 'Motivo'], ...(statuses.length ? statuses : [['—', '—', text(caseData.status), 'Sin cambios de estado registrados']])] }, layout: 'lightHorizontalLines', margin: [0, 0, 0, 15] },
       { text: '03  INTERVENCIONES Y ATENCIONES', style: 'sectionTitle' },
-      { table: { headerRows: 1, widths: [55, 62, 96, '*', 82], body: [['Fecha', 'Tipo', 'Objetivo', 'Resultado / resumen', 'Próxima acción'], ...(interventions.length ? interventions : [['—', '—', '—', 'Sin intervenciones registradas', '—']])] }, layout: 'lightHorizontalLines', margin: [0, 0, 0, 15] },
+      { table: { headerRows: 1, widths: [48, 52, 92, 82, '*', 68], body: [['Fecha', 'Tipo', 'Participantes / apoyos', 'Objetivo', 'Resultado / resumen', 'Próxima acción'], ...(interventions.length ? interventions : [['—', '—', '—', '—', 'Sin intervenciones registradas', '—']])] }, layout: 'lightHorizontalLines', margin: [0, 0, 0, 15] },
       { text: '04  ALERTAS VINCULADAS', style: 'sectionTitle' },
       { table: { headerRows: 1, widths: [55, 52, 75, '*', 58], body: [['Fecha', 'Severidad', 'Tipo', 'Motivo', 'Estado'], ...(alerts.length ? alerts : [['—', '—', '—', 'Sin alertas vinculadas', '—']])] }, layout: 'lightHorizontalLines', margin: [0, 0, 0, 15] },
       { text: '05  CIERRE PROFESIONAL', style: 'sectionTitle' },
@@ -60,8 +66,8 @@ export function downloadSocialCaseMaster(caseData) {
       notice: { fontSize: 7, italics: true, color: '#647184', alignment: 'center' },
     },
     defaultStyle: { fontSize: 7.7, lineHeight: 1.22, color: '#354256' },
-  }
-  getPdfMake().createPdf(definition).download(`ficha-social-${caseData.code}.pdf`)
+  };
+  (await getPdfMake()).createPdf(definition).download(`ficha-social-${caseData.code}.pdf`)
 }
 
 export function downloadSocialCsv(rows, name = 'trabajo-social') {
@@ -72,7 +78,7 @@ export function downloadSocialCsv(rows, name = 'trabajo-social') {
   const link = document.createElement('a'); link.href = url; link.download = `${name}-${new Date().toISOString().slice(0, 10)}.csv`; link.click(); URL.revokeObjectURL(url)
 }
 
-export function downloadJunaebDeliveryAct(delivery) {
+export async function downloadJunaebDeliveryAct(delivery) {
   const benefit = delivery.benefit || {}
   const student = benefit.student || {}
   const items = (delivery.items || []).map(item => [text(item.name), text(item.quantity), text(item.unit || 'unidad')])
@@ -109,6 +115,6 @@ export function downloadJunaebDeliveryAct(delivery) {
       notice: { fontSize: 7.5, italics: true, color: '#68778a' },
     },
     defaultStyle: { fontSize: 9, lineHeight: 1.25 },
-  }
-  getPdfMake().createPdf(definition).download(`acta-entrega-${delivery.folio || delivery.id}.pdf`)
+  };
+  (await getPdfMake()).createPdf(definition).download(`acta-entrega-${delivery.folio || delivery.id}.pdf`)
 }

@@ -3,14 +3,11 @@ import axios from "axios";
 import Layout from "../../layouts/main.vue";
 import LoadingState from "../../components/ui/loading-state.vue";
 import Multiselect from "@vueform/multiselect";
-import FullCalendar from "@fullcalendar/vue3";
-import dayGridPlugin from "@fullcalendar/daygrid";
-import timeGridPlugin from "@fullcalendar/timegrid";
-import interactionPlugin from "@fullcalendar/interaction";
-import bootstrap5Plugin from "@fullcalendar/bootstrap5";
-import esLocale from "@fullcalendar/core/locales/es";
+import { defineAsyncComponent } from "vue";
 import { VueDraggableNext } from "vue-draggable-next";
 import Swal from "sweetalert2";
+
+const TaskCalendar = defineAsyncComponent(() => import("./components/TaskCalendar.vue"));
 
 const emptyFilters = () => ({
   search: "",
@@ -54,7 +51,7 @@ export default {
     Layout,
     LoadingState,
     Multiselect,
-    FullCalendar,
+    TaskCalendar,
     draggable: VueDraggableNext,
   },
   data() {
@@ -85,24 +82,6 @@ export default {
       subtaskSaving: false,
       kanbanColumns: {},
       calendarOptions: {
-        plugins: [dayGridPlugin, timeGridPlugin, interactionPlugin, bootstrap5Plugin],
-        locales: [esLocale],
-        locale: "es",
-        themeSystem: "bootstrap5",
-        initialView: "dayGridMonth",
-        firstDay: 1,
-        height: "auto",
-        headerToolbar: {
-          left: "prev,next today",
-          center: "title",
-          right: "dayGridMonth,timeGridWeek,timeGridDay",
-        },
-        buttonText: {
-          today: "Hoy",
-          month: "Mes",
-          week: "Semana",
-          day: "Día",
-        },
         eventClick: null,
         events: [],
       },
@@ -941,7 +920,7 @@ export default {
 
     <BCard v-if="!isAssignerPage && !loading && viewMode === 'calendar'" no-body>
       <BCardBody>
-        <FullCalendar :options="calendarOptions" />
+        <TaskCalendar :options="calendarOptions" />
         <hr />
         <h6>Tareas sin fecha de corte</h6>
         <div v-if="!undatedTasks.length" class="text-muted">No hay tareas sin fecha de corte.</div>

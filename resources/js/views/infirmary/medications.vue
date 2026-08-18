@@ -412,7 +412,7 @@ export default {
         const detail = await this.fetchAuthorization(authorization);
         if (!detail) return;
 
-        const pdfMake = getPdfMake();
+        const pdfMake = await getPdfMake();
         const student = this.studentName(detail.student);
         const medication = this.medicationName(detail.medication);
         const fileName = `ficha_suministro_${String(detail.id).padStart(5, "0")}_${this.pdfFileSegment(student)}.pdf`;

@@ -531,6 +531,20 @@ export const menuItems = [
         ]
     },
     {
+        id: 9270,
+        label: "Psicología Escolar",
+        icon: "bx-bulb",
+        subItems: [
+            { id: 9271, label: "Dashboard", link: "/psychology", parentId: 9270 },
+            { id: 9272, label: "Derivaciones", link: "/psychology/referrals", parentId: 9270 },
+            { id: 9273, label: "Casos", link: "/psychology/cases", parentId: 9270 },
+            { id: 9274, label: "Agenda", link: "/psychology/calendar", parentId: 9270 },
+            { id: 9275, label: "Tareas", link: "/psychology/tasks", parentId: 9270 },
+            { id: 9276, label: "Alertas", link: "/psychology/alerts", parentId: 9270 },
+            { id: 9277, label: "Reportes", link: "/psychology/reports", parentId: 9270 }
+        ]
+    },
+    {
         id: 925,
         label: "Calendario y Fechas Relevantes",
         icon: "bx-calendar-event",

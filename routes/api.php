@@ -5,6 +5,11 @@ use App\Http\Controllers\Accounting\AccountingSubsidyController;
 use App\Http\Controllers\Admin\BackupController;
 use App\Http\Controllers\Admin\RoleImpersonationController;
 use App\Http\Controllers\Admin\SuperAdminDashboardController;
+use App\Http\Controllers\Api\Messaging\ConversationController as MessagingConversationController;
+use App\Http\Controllers\Api\Messaging\MessageController as MessagingMessageController;
+use App\Http\Controllers\Api\Messaging\MessagingController;
+use App\Http\Controllers\Api\Messaging\ReceiptController as MessagingReceiptController;
+use App\Http\Controllers\Api\Messaging\UploadController as MessagingUploadController;
 use App\Http\Controllers\APIController;
 use App\Http\Controllers\ApoyoProfesional\ApoyoProfesionalAttentionController;
 use App\Http\Controllers\ApoyoProfesional\ApoyoProfesionalCatalogController;
@@ -54,6 +59,9 @@ use App\Http\Controllers\Convivencia\ConvivenciaReportController;
 use App\Http\Controllers\Convivencia\ConvivenciaSociogramController;
 use App\Http\Controllers\DeployController;
 use App\Http\Controllers\HomeDashboardController;
+use App\Http\Controllers\HumanResources\HrAbsenceController;
+use App\Http\Controllers\HumanResources\HrImportController;
+use App\Http\Controllers\HumanResources\HrRecruitmentController;
 use App\Http\Controllers\Infirmary\InfirmaryAccidentController;
 use App\Http\Controllers\Infirmary\InfirmaryAttentionCategoryController;
 use App\Http\Controllers\Infirmary\InfirmaryAttentionController;
@@ -77,15 +85,11 @@ use App\Http\Controllers\Inspectoria\InspectoriaAttentionController;
 use App\Http\Controllers\Inspectoria\InspectoriaCatalogController;
 use App\Http\Controllers\Inspectoria\InspectoriaCourseAssignmentController;
 use App\Http\Controllers\Inspectoria\InspectoriaDailyLogController;
+use App\Http\Controllers\Inspectoria\InspectoriaStatisticsController;
 use App\Http\Controllers\Inspectoria\InspectoriaPassController;
 use App\Http\Controllers\Inspectoria\InspectoriaStudentController;
 use App\Http\Controllers\Inspectoria\InspectoriaWithdrawalController;
 use App\Http\Controllers\InternalCommunications\InternalAnnouncementController;
-use App\Http\Controllers\Api\Messaging\ConversationController as MessagingConversationController;
-use App\Http\Controllers\Api\Messaging\MessageController as MessagingMessageController;
-use App\Http\Controllers\Api\Messaging\MessagingController;
-use App\Http\Controllers\Api\Messaging\ReceiptController as MessagingReceiptController;
-use App\Http\Controllers\Api\Messaging\UploadController as MessagingUploadController;
 use App\Http\Controllers\InternalNotificationController;
 use App\Http\Controllers\Inventory\InventoryCategoryController;
 use App\Http\Controllers\Inventory\InventoryItemController;
@@ -119,9 +123,6 @@ use App\Http\Controllers\MaintenanceVisitController;
 use App\Http\Controllers\MaintenanceWorkOrderController;
 use App\Http\Controllers\MeController;
 use App\Http\Controllers\NewsPostController;
-use App\Http\Controllers\HumanResources\HrAbsenceController;
-use App\Http\Controllers\HumanResources\HrImportController;
-use App\Http\Controllers\HumanResources\HrRecruitmentController;
 use App\Http\Controllers\Operational\OperationalTransferController;
 use App\Http\Controllers\Operational\OperationalTransferDocumentController;
 use App\Http\Controllers\Operational\OperationalTransferImportController;
@@ -236,6 +237,8 @@ Route::middleware('auth:sanctum')->get('/user', function (Request $request) {
 });
 
 require __DIR__.'/social_work.php';
+
+require __DIR__.'/psychology.php';
 
 require __DIR__.'/libro_digital.php';
 
@@ -996,6 +999,7 @@ Route::middleware('auth:sanctum')->group(function () {
 
         Route::get('/course-assignments', [InspectoriaCourseAssignmentController::class, 'index']);
         Route::post('/course-assignments', [InspectoriaCourseAssignmentController::class, 'store'])->middleware('permission:asignar_cursos_inspectoria');
+        Route::post('/course-assignments/bulk', [InspectoriaCourseAssignmentController::class, 'bulkStore'])->middleware('permission:asignar_cursos_inspectoria');
         Route::put('/course-assignments/{assignment}', [InspectoriaCourseAssignmentController::class, 'update'])->middleware('permission:asignar_cursos_inspectoria');
         Route::delete('/course-assignments/{assignment}', [InspectoriaCourseAssignmentController::class, 'destroy'])->middleware('permission:asignar_cursos_inspectoria');
 
@@ -1007,13 +1011,14 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/students', [InspectoriaStudentController::class, 'index'])->middleware('permission:ver_fichas_inspectoria');
         Route::get('/students/{student}', [InspectoriaStudentController::class, 'show'])->middleware('permission:ver_fichas_inspectoria');
 
-
         Route::get('/withdrawals', [InspectoriaWithdrawalController::class, 'index'])->middleware('permission:ver_retiros_inspectoria');
         Route::get('/withdrawals/{withdrawal}', [InspectoriaWithdrawalController::class, 'show'])->middleware('permission:ver_retiros_inspectoria');
 
         Route::get('/daily-log', [InspectoriaDailyLogController::class, 'index']);
         Route::post('/daily-log', [InspectoriaDailyLogController::class, 'store'])->middleware('permission:registrar_bitacora_inspectoria');
         Route::put('/daily-log/{dailyLog}', [InspectoriaDailyLogController::class, 'update'])->middleware('permission:registrar_bitacora_inspectoria');
+        Route::get('/statistics/staff-lateness', [InspectoriaStatisticsController::class, 'staffLateness'])
+            ->middleware('permission:ver_estadisticas_inspectoria');
     });
 
     Route::prefix('operational/transfers')->group(function () {

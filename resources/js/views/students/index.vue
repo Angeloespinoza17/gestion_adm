@@ -818,8 +818,8 @@ export default {
 
       return withBreakHints.replace(/([^\s\u200B]{18})(?=[^\s\u200B])/g, "$1\u200B");
     },
-    downloadPdf(rows, columns, scope) {
-      const pdfMake = getPdfMake();
+    async downloadPdf(rows, columns, scope) {
+      const pdfMake = await getPdfMake();
       const activeFilters = [
         this.filters.academic_year_id
           ? `Año: ${this.academicYearOptions.find((item) => item.value === this.filters.academic_year_id)?.text || "-"}`

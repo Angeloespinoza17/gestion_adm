@@ -207,7 +207,7 @@ export default {
       try {
         const logoDataUrl = await this.loadPassLogo();
         const definition = buildLibraryPassPdfDefinition(item, { logoDataUrl });
-        getPdfMake()
+        (await getPdfMake())
           .createPdf(definition)
           .download(`pase-${item.pass_code}.pdf`);
       } catch (error) {

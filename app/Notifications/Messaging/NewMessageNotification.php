@@ -4,13 +4,17 @@ namespace App\Notifications\Messaging;
 
 use App\Models\Messaging\Message;
 use Illuminate\Bus\Queueable;
+use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Notifications\Notification;
 
-class NewMessageNotification extends Notification
+class NewMessageNotification extends Notification implements ShouldQueue
 {
     use Queueable;
 
-    public function __construct(public Message $message) {}
+    public function __construct(public Message $message)
+    {
+        $this->onQueue('notifications')->afterCommit();
+    }
 
     public function via(object $notifiable): array
     {

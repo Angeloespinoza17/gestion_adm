@@ -55,11 +55,11 @@ class Conversation extends Model
 
     public function scopeVisibleTo(Builder $query, User $user): Builder
     {
-        return $query->whereHas('participants', fn (Builder $q) => $q->where('user_id', $user->id));
+        return $query->whereHas('participants', fn (Builder $q) => $q->where('user_id', $user->id)->whereNull('left_at'));
     }
 
     public function participantFor(User $user): ?ConversationParticipant
     {
-        return $this->participants()->where('user_id', $user->id)->first();
+        return $this->participants()->where('user_id', $user->id)->whereNull('left_at')->first();
     }
 }

@@ -145,9 +145,9 @@ export default {
         this.error = this.formatError(error);
       }
     },
-    exportPdf() {
+    async exportPdf() {
       if (!this.event) return;
-      const pdfMake = getPdfMake();
+      const pdfMake = await getPdfMake();
       const docDefinition = {
         content: [
           { text: this.event.title, style: "header" },

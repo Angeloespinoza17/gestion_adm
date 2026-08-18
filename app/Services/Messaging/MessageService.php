@@ -2,7 +2,6 @@
 
 namespace App\Services\Messaging;
 
-use App\Events\Messaging\MessageCreated;
 use App\Models\Messaging\Conversation;
 use App\Models\Messaging\Message;
 use App\Models\Messaging\MessageAttachment;
@@ -15,7 +14,7 @@ use Illuminate\Support\Str;
 
 class MessageService
 {
-    public function __construct(private AuditService $audit) {}
+    public function __construct(private AuditService $audit, private MessagingBroadcaster $broadcaster) {}
 
     public function send(Conversation $conversation, User $actor, array $data): Message
     {
@@ -51,14 +50,12 @@ class MessageService
             if ($requiresAck) {
                 $this->audit->record('acknowledgement_requested', $actor->id, $conversation->id, $message->id);
             }
-            DB::afterCommit(function () use ($message, $recipients) {
+            DB::afterCommit(function () use ($message, $recipients, $actor) {
                 $message->load('conversation');
                 foreach ($recipients as $recipient) {
                     $recipient->user->notify(new NewMessageNotification($message));
                 }
-                if (config('messaging.realtime.enabled')) {
-                    event(new MessageCreated($message));
-                }
+                $this->broadcaster->messageCreated($message, $actor->id);
             });
 
             return $message->load(['sender:id,name,profile_photo_path', 'attachments', 'reactions']);

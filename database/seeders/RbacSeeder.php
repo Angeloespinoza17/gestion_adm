@@ -146,6 +146,7 @@ class RbacSeeder extends Seeder
             ['slug' => 'social_work.referrals.submit', 'name' => 'Enviar Derivaciones a Trabajo Social'],
             ['slug' => 'social_work.pickup_restrictions.manage', 'name' => 'Gestionar Restricciones de Retiro en Trabajo Social'],
             ['slug' => 'registrar_bitacora_inspectoria', 'name' => 'Registrar Bitácora Diaria de Inspectoría'],
+            ['slug' => 'ver_estadisticas_inspectoria', 'name' => 'Ver Estadísticas de Inspectoría'],
 
             // Módulos específicos
             ['slug' => 'ver_salud', 'name' => 'Ver Enfermería / Salud'],
@@ -286,6 +287,7 @@ class RbacSeeder extends Seeder
             ['slug' => 'inspectoria_alumnas', 'name' => 'Alumnas y fichas', 'frontend_route' => '/inspectoria/alumnas', 'icon' => null, 'sort' => 4, 'parent' => 'inspectoria'],
             ['slug' => 'inspectoria_retiros', 'name' => 'Retiros de alumnas', 'frontend_route' => '/inspectoria/retiros', 'icon' => null, 'sort' => 6, 'parent' => 'inspectoria'],
             ['slug' => 'inspectoria_bitacora', 'name' => 'Bitácora diaria', 'frontend_route' => '/inspectoria/bitacora', 'icon' => null, 'sort' => 7, 'parent' => 'inspectoria'],
+            ['slug' => 'inspectoria_estadisticas', 'name' => 'Estadísticas', 'frontend_route' => '/inspectoria/estadisticas', 'icon' => 'bx-bar-chart-alt-2', 'sort' => 8, 'parent' => 'inspectoria'],
             ['slug' => 'schedule_teacher', 'name' => 'Horario docente', 'frontend_route' => '/schedule/teacher', 'icon' => null, 'sort' => 1, 'parent' => 'schedule'],
             ['slug' => 'schedule_course', 'name' => 'Horario por curso', 'frontend_route' => '/schedule/course', 'icon' => null, 'sort' => 2, 'parent' => 'schedule'],
             ['slug' => 'schedule_config', 'name' => 'Configuración horaria', 'frontend_route' => '/schedule/config', 'icon' => null, 'sort' => 3, 'parent' => 'schedule'],
@@ -594,6 +596,7 @@ class RbacSeeder extends Seeder
             'ver_fichas_inspectoria',
             'ver_retiros_inspectoria',
             'registrar_bitacora_inspectoria',
+            'ver_estadisticas_inspectoria',
         ]));
 
         $rolesBySlug['administrador']->modules()->sync($this->ids($modulesBySlug, [
@@ -801,6 +804,7 @@ class RbacSeeder extends Seeder
             'inspectoria_alumnas',
             'inspectoria_retiros',
             'inspectoria_bitacora',
+            'inspectoria_estadisticas',
         ]));
 
         // Coordinación académica
@@ -1186,6 +1190,7 @@ class RbacSeeder extends Seeder
             'ver_retiros_inspectoria',
             'social_work.referrals.submit',
             'registrar_bitacora_inspectoria',
+            'ver_estadisticas_inspectoria',
             'ver_dashboard',
             'ver_estudiantes',
             'ver_ficha_estudiante',
@@ -1226,6 +1231,7 @@ class RbacSeeder extends Seeder
             'inspectoria_alumnas',
             'inspectoria_retiros',
             'inspectoria_bitacora',
+            'inspectoria_estadisticas',
             'dashboard',
             'students',
             'students_directory',
@@ -1271,6 +1277,7 @@ class RbacSeeder extends Seeder
             'ver_retiros_inspectoria',
             'social_work.referrals.submit',
             'registrar_bitacora_inspectoria',
+            'ver_estadisticas_inspectoria',
         ]));
 
         $rolesBySlug['coordinador_inspectoria']->modules()->sync($this->ids($modulesBySlug, [
@@ -1281,6 +1288,7 @@ class RbacSeeder extends Seeder
             'inspectoria_alumnas',
             'inspectoria_retiros',
             'inspectoria_bitacora',
+            'inspectoria_estadisticas',
             'social_work',
             'social_work_referrals',
         ]));

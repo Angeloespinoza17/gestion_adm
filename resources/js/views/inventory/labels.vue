@@ -62,7 +62,7 @@ export default {
       this.printing = true;
       this.error = null;
       try {
-        const pdfMake = getPdfMake();
+        const pdfMake = await getPdfMake();
 
         // Expandir a una lista plana de etiquetas
         const labels = [];

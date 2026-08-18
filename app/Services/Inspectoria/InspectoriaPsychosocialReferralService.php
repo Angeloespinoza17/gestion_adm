@@ -3,12 +3,17 @@
 namespace App\Services\Inspectoria;
 
 use App\Models\Inspectoria\InspectoriaAttention;
+use App\Models\Psychology\PsychologyReferral;
 use App\Models\SocialWork\Referral;
 use App\Models\User;
+use App\Services\Psychology\PsychologyWorkflowService;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 
 class InspectoriaPsychosocialReferralService
 {
+    public function __construct(private readonly PsychologyWorkflowService $psychologyWorkflow) {}
+
     public function sync(InspectoriaAttention $attention, User $actor): ?Referral
     {
         if (! in_array('derivacion_psicosocial', $attention->actions_taken ?? [], true)
@@ -28,7 +33,7 @@ class InspectoriaPsychosocialReferralService
 
         $actor->loadMissing('staff');
 
-        return Referral::query()->updateOrCreate(
+        $socialReferral = Referral::query()->updateOrCreate(
             ['inspectoria_attention_id' => $attention->id],
             [
                 'student_profile_id' => $attention->student_profile_id,
@@ -53,6 +58,39 @@ class InspectoriaPsychosocialReferralService
                 'updated_by' => $actor->id,
             ],
         );
+
+        if (Schema::hasTable('psychology_referrals') && ! PsychologyReferral::query()->where('source_type', 'inspectoria_attention')->where('source_id', $attention->id)->exists()) {
+            $psychologyReferral = $this->psychologyWorkflow->createReferral([
+                'student_profile_id' => $attention->student_profile_id,
+                'course_section_id' => $attention->course_section_id,
+                'suggested_user_id' => $attention->psychosocial_referral_user_id,
+                'assigned_user_id' => $attention->psychosocial_referral_user_id,
+                'origin_area' => 'inspectoria',
+                'source_type' => 'inspectoria_attention',
+                'source_id' => $attention->id,
+                'suggested_urgency' => $attention->priority === 'urgente' ? 'critical' : 'medium',
+                'primary_reason' => Str::limit($reason, 160, ''),
+                'observed_facts' => $attention->brief_note ?: "Atención de Inspectoría {$attention->attention_code}; revisar antecedentes autorizados.",
+                'measures_taken' => $actionLabels === [] ? null : implode(', ', $actionLabels),
+                'immediate_response_needed' => $attention->priority === 'urgente',
+                'guardian_informed' => (bool) $attention->guardian_notified,
+                'guardian_contact_status' => $attention->guardian_notified ? 'contacted' : 'not_contacted',
+                'purpose_declaration_accepted' => true,
+                'submit' => true,
+            ], $actor);
+
+            if ($attention->psychosocial_referral_user_id) {
+                $professional = User::query()->find($attention->psychosocial_referral_user_id);
+                if ($professional) {
+                    $this->psychologyWorkflow->assignReferral($psychologyReferral, $professional, $actor, [
+                        'reason' => 'Profesional seleccionada desde Atención rápida de Inspectoría.',
+                        'professional_priority' => $attention->priority === 'urgente' ? 'critical' : null,
+                    ]);
+                }
+            }
+        }
+
+        return $socialReferral;
     }
 
     /**

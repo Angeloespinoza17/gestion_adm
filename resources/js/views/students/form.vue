@@ -657,7 +657,7 @@ export default {
       this.error = null;
 
       try {
-        const pdfMake = getPdfMake();
+        const pdfMake = await getPdfMake();
         const personalRows = [
           ["Nombre registral", this.textValue(this.form.registered_name || this.student?.registered_name_resolved)],
           ["Nombres", this.textValue(this.form.first_name)],

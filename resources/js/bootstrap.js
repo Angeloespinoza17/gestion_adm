@@ -25,6 +25,11 @@ window.axios.interceptors.request.use((config) => {
         config.headers['X-Authorization'] = config.headers['X-Authorization'] || value;
         config.headers['X-Api-Token'] = config.headers['X-Api-Token'] || token;
     }
+    const socketId = window.Echo?.socketId?.();
+    if (socketId) {
+        config.headers = config.headers || {};
+        config.headers['X-Socket-ID'] = socketId;
+    }
     return config;
 });
 
@@ -36,6 +41,7 @@ window.axios.interceptors.response.use(
             localStorage.removeItem('user');
             localStorage.removeItem('permissions');
             localStorage.removeItem('impersonator_token');
+            window.Echo?.disconnect?.();
         }
         return Promise.reject(error);
     }

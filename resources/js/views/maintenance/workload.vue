@@ -1,13 +1,8 @@
 <script>
 import axios from "axios";
 import Layout from "../../layouts/main.vue";
-import pdfMake from "pdfmake/build/pdfmake";
-import pdfFonts from "pdfmake/build/vfs_fonts";
+import { getPdfMake } from "../../utils/pdfmake";
 import { fetchPdfCompatibleImage } from "../../utils/pdf-image";
-
-// `vfs_fonts` es CommonJS (module.exports = vfs). Según el bundler puede llegar
-// como objeto `vfs` directo o como `{ pdfMake: { vfs } }`.
-pdfMake.vfs = pdfFonts?.pdfMake?.vfs || pdfFonts;
 
 export default {
   components: { Layout },
@@ -361,7 +356,8 @@ export default {
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
     },
-    exportPdf() {
+    async exportPdf() {
+      const pdfMake = await getPdfMake();
       const tableHeader = ["Responsable", "Asignadas", "Pendientes", "Vencidas", "Criticas", "Cerradas", "Estado"].map((text) => ({
         text,
         bold: true,
@@ -452,6 +448,7 @@ export default {
       pdfMake.createPdf(docDefinition).download(`carga-trabajo-${new Date().toISOString().slice(0, 10)}.pdf`);
     },
     async exportAssigneePdf(assigneeOverride = null) {
+      const pdfMake = await getPdfMake();
       const assignee = typeof assigneeOverride === "string" ? assigneeOverride : this.filters.assignee;
       const assigneeLabel = this.assigneeLabel(assignee);
 

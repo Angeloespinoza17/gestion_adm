@@ -58,6 +58,12 @@ const socialWorkRoute = (path, title, permission = 'social_work.dashboard.view')
     component: () => import('../views/social-work/index.vue'),
 })
 
+const psychologyRoute = (path, title, view, permission = 'psychology.access') => ({
+    path,
+    meta: { authRequired: true, title, permission, psychologyView: view },
+    component: () => import('../views/psychology/index.vue'),
+})
+
 const routes = [
     {
         path: '/',
@@ -520,6 +526,11 @@ const routes = [
         component: () => import('../views/inspectoria/index.vue'),
     },
     {
+        path: '/inspectoria/estadisticas',
+        meta: { authRequired: true, title: 'Estadísticas de Inspectoría', permission: 'ver_estadisticas_inspectoria' },
+        component: () => import('../views/inspectoria/index.vue'),
+    },
+    {
         path: '/operational/transfers',
         meta: { authRequired: true, title: 'Mis solicitudes de traslado', permission: 'ver_traslados_operativos' },
         component: () => import('../views/operational/transfers/index.vue'),
@@ -826,6 +837,15 @@ const routes = [
         meta: { authRequired: true, title: 'Reportes del Equipo de Apoyo', permission: 'ver_reportes_apoyo_profesional' },
         component: () => import('../views/apoyo-profesional/index.vue'),
     },
+    psychologyRoute('/psychology', 'Psicología Escolar', 'dashboard'),
+    psychologyRoute('/psychology/referrals', 'Derivaciones de Psicología', 'referrals'),
+    psychologyRoute('/psychology/cases', 'Casos de Psicología', 'cases'),
+    psychologyRoute('/psychology/calendar', 'Agenda de Psicología', 'calendar'),
+    psychologyRoute('/psychology/tasks', 'Tareas de Psicología', 'tasks'),
+    psychologyRoute('/psychology/alerts', 'Alertas de Psicología', 'alerts'),
+    psychologyRoute('/psychology/reports', 'Reportes de Psicología', 'reports', 'psychology.reports.aggregate'),
+    psychologyRoute('/psychology/configuration', 'Configuración de Psicología', 'config', 'psychology.config.manage'),
+    psychologyRoute('/psychology/audit', 'Auditoría de Psicología', 'audit', 'psychology.audit.view'),
     {
         path: '/centro-apuntes',
         meta: { authRequired: true, title: 'Dashboard Centro de Apuntes', permission: 'ver_modulo_centro_apuntes' },

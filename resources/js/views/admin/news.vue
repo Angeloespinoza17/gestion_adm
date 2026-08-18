@@ -1,7 +1,7 @@
 <script>
 import axios from "axios";
 import { Ckeditor } from "@ckeditor/ckeditor5-vue";
-import ClassicEditor from "@ckeditor/ckeditor5-build-classic";
+import { markRaw } from "vue";
 import Swal from "sweetalert2";
 import Layout from "../../layouts/main.vue";
 import LoadingState from "../../components/ui/loading-state.vue";
@@ -74,7 +74,8 @@ export default {
   components: { Ckeditor, Layout, LoadingState },
   data() {
     return {
-      editor: ClassicEditor,
+      editor: null,
+      editorLoading: false,
       editorConfig: {
         toolbar: [
           "heading",
@@ -153,6 +154,18 @@ export default {
     this.load();
   },
   methods: {
+    async ensureEditor() {
+      if (this.editor || this.editorLoading) return;
+      this.editorLoading = true;
+      try {
+        const module = await import("@ckeditor/ckeditor5-build-classic");
+        this.editor = markRaw(module.default);
+      } catch (error) {
+        this.error = "No fue posible cargar el editor de contenido.";
+      } finally {
+        this.editorLoading = false;
+      }
+    },
     async loadCatalogs() {
       try {
         const response = await axios.get("/api/admin/news/catalogs");
@@ -195,16 +208,17 @@ export default {
       this.featuredFilter = "";
       this.load();
     },
-    openCreate() {
+    async openCreate() {
       this.form = emptyForm();
       this.imageFile = null;
       this.imagePreview = "";
       this.error = null;
       this.success = null;
       this.showModal = true;
+      await this.ensureEditor();
       this.clearImageInput();
     },
-    openEdit(item) {
+    async openEdit(item) {
       this.form = {
         id: item.id,
         title: item.title || "",
@@ -250,6 +264,7 @@ export default {
       this.error = null;
       this.success = null;
       this.showModal = true;
+      await this.ensureEditor();
       this.clearImageInput();
     },
     onImage(event) {
@@ -951,7 +966,8 @@ export default {
           <div class="col-md-12">
             <label class="form-label">Contenido</label>
             <div class="form-ckeditor news-editor">
-              <Ckeditor v-model="form.body" :editor="editor" :config="editorConfig" />
+              <div v-if="editorLoading" class="editor-loading"><span class="spinner-border spinner-border-sm"></span> Cargando editor…</div>
+              <Ckeditor v-else-if="editor" v-model="form.body" :editor="editor" :config="editorConfig" />
             </div>
           </div>
         </div>

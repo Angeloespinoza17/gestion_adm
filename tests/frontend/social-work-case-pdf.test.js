@@ -16,8 +16,8 @@ import { downloadSocialCaseMaster } from '../../resources/js/utils/social-work-e
 describe('Ficha PDF de casos sociales', () => {
   beforeEach(() => { pdfState.definition = null; pdfState.filename = '' })
 
-  it('genera una ficha confidencial completa aun cuando no existen intervenciones', () => {
-    downloadSocialCaseMaster({
+  it('genera una ficha confidencial completa aun cuando no existen intervenciones', async () => {
+    await downloadSocialCaseMaster({
       code: 'TS-2026-00001', title: 'Acompañamiento familiar', status: 'borrador',
       student: { first_name: 'Elena', last_name: 'Soto', rut: '11.111.111-1' },
       course_section: { display_name: '5° básico A' }, priority: 'media', risk_level: 'sin_evaluar',
@@ -31,5 +31,26 @@ describe('Ficha PDF de casos sociales', () => {
     expect(JSON.stringify(pdfState.definition.content)).toContain('FICHA MAESTRA DE CASO')
     expect(JSON.stringify(pdfState.definition.content)).toContain('Sin intervenciones registradas')
     expect(pdfState.filename).toBe('ficha-social-TS-2026-00001.pdf')
+  })
+
+  it('incluye participantes y funcionarios de apoyo de cada atención', async () => {
+    await downloadSocialCaseMaster({
+      code: 'TS-2026-00002', title: 'Seguimiento', status: 'borrador',
+      student: { first_name: 'Elena', last_name: 'Soto' }, responsible: { name: 'Trabajadora Social' },
+      interventions: [{
+        activity_date: '2026-08-17', kind: 'entrevista', objective: 'Coordinar apoyo', result: 'Acuerdos adoptados',
+        participants: [
+          { type: 'guardian', role: 'participant', name: 'María Soto' },
+          { type: 'staff', role: 'participant', name: 'Profesor Carlos' },
+          { type: 'staff', role: 'support', name: 'Orientadora Ana' },
+        ],
+      }],
+      status_history: [], alerts: [],
+    })
+
+    const serialized = JSON.stringify(pdfState.definition.content)
+    expect(serialized).toContain('Participantes / apoyos')
+    expect(serialized).toContain('Participan: María Soto, Profesor Carlos')
+    expect(serialized).toContain('Apoyan: Orientadora Ana')
   })
 })

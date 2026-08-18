@@ -235,7 +235,8 @@ export const menuItems = [
             { id: 9084, label: 'Alumnas y fichas', link: '/inspectoria/alumnas', parentId: 9080 },
             { id: 9087, label: 'Restricciones de retiro', link: '/inspectoria/restricciones', parentId: 9080 },
             { id: 9086, label: 'Retiros de alumnas', link: '/inspectoria/retiros', parentId: 9080 },
-            { id: 9085, label: 'Bitácora diaria', link: '/inspectoria/bitacora', parentId: 9080 }
+            { id: 9085, label: 'Bitácora diaria', link: '/inspectoria/bitacora', parentId: 9080 },
+            { id: 9088, label: 'Estadísticas', link: '/inspectoria/estadisticas', parentId: 9080 }
         ]
     },
     {
@@ -409,6 +410,20 @@ export const menuItems = [
                 link: '/apoyo-profesional/reportes',
                 parentId: 9240
             }
+        ]
+    },
+    {
+        id: 9270,
+        label: 'Psicología Escolar',
+        icon: 'bx-bulb',
+        subItems: [
+            { id: 9271, label: 'Dashboard', link: '/psychology', parentId: 9270 },
+            { id: 9272, label: 'Derivaciones', link: '/psychology/referrals', parentId: 9270 },
+            { id: 9273, label: 'Casos', link: '/psychology/cases', parentId: 9270 },
+            { id: 9274, label: 'Agenda', link: '/psychology/calendar', parentId: 9270 },
+            { id: 9275, label: 'Tareas', link: '/psychology/tasks', parentId: 9270 },
+            { id: 9276, label: 'Alertas', link: '/psychology/alerts', parentId: 9270 },
+            { id: 9277, label: 'Reportes', link: '/psychology/reports', parentId: 9270 }
         ]
     },
     {

@@ -2,10 +2,7 @@
 import axios from "axios";
 import Layout from "../../layouts/main.vue";
 import LoadingState from "../../components/ui/loading-state.vue";
-import pdfMake from "pdfmake/build/pdfmake";
-import pdfFonts from "pdfmake/build/vfs_fonts";
-
-pdfMake.vfs = pdfFonts?.pdfMake?.vfs || pdfFonts;
+import { getPdfMake } from "../../utils/pdfmake";
 
 export default {
   components: { Layout, LoadingState },
@@ -221,6 +218,7 @@ export default {
       URL.revokeObjectURL(url);
     },
     async exportPdf() {
+      const pdfMake = await getPdfMake();
       const fetchImageAsDataUrl = async (url) => {
         if (!url) return null;
         try {

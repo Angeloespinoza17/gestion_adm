@@ -9,7 +9,7 @@ use Illuminate\Support\Facades\DB;
 
 class AcknowledgementService
 {
-    public function __construct(private AuditService $audit) {}
+    public function __construct(private AuditService $audit, private MessagingBroadcaster $broadcaster) {}
 
     public function acknowledge(Message $message, User $actor, ?string $comment): MessageRecipient
     {
@@ -26,7 +26,10 @@ class AcknowledgementService
             $message->touch();
             $this->audit->record('message_acknowledged', $actor->id, $message->conversation_id, $message->id, $actor->id, ['version' => $message->current_version, 'content_hash' => $message->content_hash, 'method' => 'explicit_web_action']);
 
-            return $recipient->fresh();
+            $receipt = $recipient->fresh();
+            DB::afterCommit(fn () => $this->broadcaster->messageAcknowledged($message->fresh(), $receipt));
+
+            return $receipt;
         });
     }
 }

@@ -202,7 +202,7 @@ export default {
       this.error = null;
 
       try {
-        const pdfMake = getPdfMake();
+        const pdfMake = await getPdfMake();
         const normalize = (value) =>
           value === null || value === undefined || value === "" ? "-" : String(value);
         const palette = {

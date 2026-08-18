@@ -4,7 +4,7 @@ return [
     'enabled' => env('MESSAGING_ENABLED', true),
     'realtime' => [
         'enabled' => env('MESSAGING_REALTIME_ENABLED', true),
-        'poll_interval_ms' => (int) env('MESSAGING_POLL_INTERVAL_MS', 5000),
+        'recovery_limit' => (int) env('MESSAGING_RECOVERY_LIMIT', 100),
     ],
     'messages' => [
         'edit_window_minutes' => (int) env('MESSAGING_EDIT_WINDOW_MINUTES', 15),

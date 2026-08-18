@@ -27,12 +27,14 @@ class InspectoriaAccessService
 
     public const DAILY_LOG = 'registrar_bitacora_inspectoria';
 
+    public const STATISTICS = 'ver_estadisticas_inspectoria';
+
     /** @var array<int, Collection<int, int>> */
     private array $assignedCourseIds = [];
 
     public function canView(?User $user): bool
     {
-        return $this->hasAny($user, [self::VIEW, self::ATTENTIONS, self::ASSIGNMENTS, self::PASSES, self::STUDENTS, self::WITHDRAWALS, self::DAILY_LOG]);
+        return $this->hasAny($user, [self::VIEW, self::ATTENTIONS, self::ASSIGNMENTS, self::PASSES, self::STUDENTS, self::WITHDRAWALS, self::DAILY_LOG, self::STATISTICS]);
     }
 
     public function can(?User $user, string $permission): bool
@@ -92,6 +94,7 @@ class InspectoriaAccessService
 
         return $query->where(function (Builder $inner) use ($courseIds, $user) {
             $inner->whereIn('course_section_id', $courseIds)
+                ->orWhereHas('associatedCourses', fn (Builder $courses) => $courses->whereIn('course_sections.id', $courseIds))
                 ->orWhere(function (Builder $general) use ($user) {
                     $general->whereNull('course_section_id')
                         ->where('inspector_staff_id', $user->staff_id);

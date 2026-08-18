@@ -1,16 +1,18 @@
-import pdfMake from "pdfmake/build/pdfmake";
-import * as pdfFonts from "pdfmake/build/vfs_fonts";
-
-let initialized = false;
+let pdfMakePromise;
 
 export function getPdfMake() {
-  if (!initialized) {
-    const vfs = pdfFonts?.pdfMake?.vfs || pdfFonts?.default?.pdfMake?.vfs;
-    if (vfs) {
-      pdfMake.vfs = vfs;
-    }
-    initialized = true;
+  if (!pdfMakePromise) {
+    pdfMakePromise = Promise.all([
+      import("pdfmake/build/pdfmake"),
+      import("pdfmake/build/vfs_fonts"),
+    ]).then(([pdfMakeModule, fontsModule]) => {
+      const pdfMake = pdfMakeModule.default || pdfMakeModule;
+      const fonts = fontsModule.default || fontsModule;
+      const vfs = fonts?.pdfMake?.vfs || fonts?.vfs || fonts;
+      if (vfs) pdfMake.vfs = vfs;
+      return pdfMake;
+    });
   }
-  return pdfMake;
-}
 
+  return pdfMakePromise;
+}

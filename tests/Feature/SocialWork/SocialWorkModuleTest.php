@@ -9,6 +9,7 @@ use App\Models\Permission;
 use App\Models\Pme\PmeStudentSepClassification;
 use App\Models\Role;
 use App\Models\SocialWork\Alert;
+use App\Models\SocialWork\Intervention;
 use App\Models\SocialWork\ProgramType;
 use App\Models\SocialWork\Referral;
 use App\Models\SocialWork\SocialCase;
@@ -74,6 +75,53 @@ class SocialWorkModuleTest extends TestCase
         $case = $this->createCase(['status' => 'cerrado', 'closure_conclusion' => 'Cerrado']);
         $this->postJson("/api/social-work/cases/{$case->id}/interventions", ['kind' => 'llamado', 'activity_date' => today()->toDateString(), 'objective' => 'Seguimiento', 'status' => 'finalizada', 'confidentiality' => 'restringido'])
             ->assertUnprocessable()->assertJsonValidationErrors('case_id');
+    }
+
+    public function test_attention_records_guardian_staff_participants_and_multiple_support_staff(): void
+    {
+        $this->student->update(['guardian_name' => 'María Soto']);
+        $teacher = User::factory()->create(['active' => true, 'user_type' => 'staff', 'name' => 'Profesor Carlos']);
+        $supportOne = User::factory()->create(['active' => true, 'user_type' => 'staff', 'name' => 'Orientadora Ana']);
+        $supportTwo = User::factory()->create(['active' => true, 'user_type' => 'staff', 'name' => 'Inspectora Paula']);
+        $case = $this->createCase();
+
+        $this->postJson("/api/social-work/cases/{$case->id}/interventions", [
+            'kind' => 'entrevista',
+            'activity_date' => today()->toDateString(),
+            'objective' => 'Coordinar apoyos para la estudiante',
+            'status' => 'finalizada',
+            'confidentiality' => 'restringido',
+            'participant_types' => ['guardian', 'staff'],
+            'participant_staff_ids' => [$teacher->id],
+            'support_staff_ids' => [$supportOne->id, $supportTwo->id],
+        ])->assertCreated();
+
+        $intervention = Intervention::query()->latest('id')->firstOrFail();
+        $participants = collect($intervention->participants);
+
+        $this->assertSame('María Soto', $participants->firstWhere('type', 'guardian')['name']);
+        $this->assertSame('Profesor Carlos', $participants->firstWhere('user_id', $teacher->id)['name']);
+        $this->assertSame(
+            [$supportOne->id, $supportTwo->id],
+            $participants->where('role', 'support')->pluck('user_id')->values()->all(),
+        );
+        $this->assertSame(['guardian', 'staff'], $intervention->structured_data['participant_types']);
+        $this->assertSame([$supportOne->id, $supportTwo->id], $intervention->structured_data['support_staff_ids']);
+
+        $this->getJson("/api/social-work/cases/{$case->id}")
+            ->assertOk()
+            ->assertJsonPath('data.interventions.0.participants.0.type', 'guardian')
+            ->assertJsonPath('data.interventions.0.participants.1.name', 'Profesor Carlos')
+            ->assertJsonPath('data.interventions.0.participants.2.role', 'support');
+
+        $this->postJson("/api/social-work/cases/{$case->id}/interventions", [
+            'kind' => 'entrevista',
+            'activity_date' => today()->toDateString(),
+            'objective' => 'Registro inválido sin funcionario seleccionado',
+            'status' => 'finalizada',
+            'confidentiality' => 'restringido',
+            'participant_types' => ['staff'],
+        ])->assertUnprocessable()->assertJsonValidationErrors('participant_staff_ids');
     }
 
     public function test_referring_teacher_does_not_gain_case_access(): void

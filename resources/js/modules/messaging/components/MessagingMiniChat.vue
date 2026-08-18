@@ -1,8 +1,8 @@
 <script setup>
-import axios from "axios";
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import api from "../api/messagingApi";
+import { useMessagingRealtime } from "../composables/useMessagingRealtime";
 import { messagingStore as store } from "../stores/messagingStore";
 
 const route = useRoute();
@@ -21,7 +21,6 @@ const acknowledgementMessage = ref(null);
 const acknowledgementComment = ref("");
 const acknowledgementSaving = ref(false);
 const timeline = ref(null);
-let timer = null;
 let titleTimer = null;
 let baseDocumentTitle = "CNSC Gestión";
 
@@ -29,7 +28,13 @@ const hidden = computed(() => route.path.startsWith("/mensajeria"));
 const activeId = computed(() => store.state.activeConversation?.public_id);
 const messages = computed(() => store.state.messagesByConversation[activeId.value] || []);
 const unreadCount = computed(() => Number(store.state.summary.unread_messages || 0));
-const pollSeconds = computed(() => Math.round(Number(store.state.config.realtime?.poll_interval_ms || 5000) / 1000));
+const connectionLabel = computed(() => ({
+  connected: "En tiempo real",
+  connecting: "Conectando…",
+  reconnecting: "Reconectando…",
+  offline: "Sin conexión",
+  unavailable: "Conexión no disponible",
+}[store.state.realtimeConnectionState] || "Conectando…"));
 const conversations = computed(() => {
   const term = query.value.trim().toLocaleLowerCase("es");
   if (!term) return store.state.conversations;
@@ -61,32 +66,23 @@ const acknowledgementComplete = (message) => {
   return Number(summary?.total || 0) > 0 && Number(summary.acknowledged || 0) >= Number(summary.total || 0);
 };
 
+useMessagingRealtime(activeId);
+
 async function initialize() {
   if (initialized.value || initializing.value || hidden.value) return;
   initializing.value = true;
   try {
-    await Promise.all([store.loadConfig(), store.loadSummary(), store.loadConversations()]);
-    currentUser.value = (await axios.get("/api/me/profile")).data.data || {};
+    await store.loadConfig();
+    currentUser.value = store.state.config.user || {};
+    await store.loadSummary();
     available.value = Boolean(store.state.config.enabled ?? true);
     initialized.value = true;
-    schedulePolling();
   } catch (requestError) {
     available.value = false;
     if (requestError.response?.status !== 401) console.warn("No fue posible iniciar el chat flotante.", requestError);
   } finally {
     initializing.value = false;
   }
-}
-
-function schedulePolling() {
-  if (timer) window.clearInterval(timer);
-  const delay = Number(store.state.config.realtime?.poll_interval_ms || 5000);
-  timer = window.setInterval(syncMini, Math.max(delay, 3000));
-}
-
-async function syncMini() {
-  if (hidden.value || !initialized.value) return;
-  try { await store.sync(); } catch (_) { store.setRealtime("polling"); }
 }
 
 function updateTabAlert() {
@@ -113,7 +109,6 @@ function updateTabAlert() {
 }
 
 function handleVisibilityChange() {
-  syncMini();
   updateTabAlert();
 }
 
@@ -246,17 +241,12 @@ onMounted(() => {
   baseDocumentTitle = document.title.replace(/^\(\d+\)\s*/, "") || "CNSC Gestión";
   updateTabAlert();
   document.addEventListener("visibilitychange", handleVisibilityChange);
-  window.addEventListener("focus", handleVisibilityChange);
-  window.addEventListener("online", syncMini);
 });
 
 onBeforeUnmount(() => {
-  if (timer) window.clearInterval(timer);
   if (titleTimer) window.clearInterval(titleTimer);
   document.title = baseDocumentTitle;
   document.removeEventListener("visibilitychange", handleVisibilityChange);
-  window.removeEventListener("focus", handleVisibilityChange);
-  window.removeEventListener("online", syncMini);
 });
 </script>
 
@@ -272,7 +262,7 @@ onBeforeUnmount(() => {
               <i v-else-if="store.state.activeConversation.type !== 'direct'" class="bx" :class="typeIcon(store.state.activeConversation.type)"></i>
               <span v-else>{{ initials(store.state.activeConversation.title) }}</span>
             </span>
-            <div class="mini-header-copy"><strong>{{ store.state.activeConversation.title }}</strong><small><span></span> Actualización cada {{ pollSeconds }} s</small></div>
+            <div class="mini-header-copy"><strong>{{ store.state.activeConversation.title }}</strong><small><span></span> {{ connectionLabel }}</small></div>
           </template>
           <template v-else>
             <span class="mini-brand"><i class="bx bx-message-square-dots"></i></span>
@@ -299,7 +289,7 @@ onBeforeUnmount(() => {
             <div v-if="opening" class="mini-state"><span class="spinner-border spinner-border-sm"></span> Abriendo conversación…</div>
             <div v-else-if="!conversations.length" class="mini-empty"><span><i class="bx bx-message-rounded"></i></span><strong>{{ query ? 'Sin resultados' : 'No hay conversaciones' }}</strong><small>{{ query ? 'Prueba con otro término.' : 'Abre la mensajería completa para comenzar.' }}</small></div>
           </div>
-          <footer class="mini-list-footer"><button type="button" @click="openFullMessaging"><i class="bx bx-plus"></i> Nueva conversación</button><span>Sincronizado automáticamente</span></footer>
+          <footer class="mini-list-footer"><button type="button" @click="openFullMessaging"><i class="bx bx-plus"></i> Nueva conversación</button><span>{{ connectionLabel }}</span></footer>
         </template>
 
         <template v-else-if="store.state.activeConversation">

@@ -82,7 +82,13 @@ const participantCaption = computed(() => {
 });
 const attachmentAccept = computed(() => (store.state.config.attachments?.extensions || []).map((item) => `.${item}`).join(","));
 const groupReady = computed(() => groupTitle.value.trim().length >= 2 && selectedUsers.value.length > 0 && !createSaving.value);
-const pollSeconds = computed(() => Math.round(Number(store.state.config.realtime?.poll_interval_ms || 5000) / 1000));
+const connectionLabel = computed(() => ({
+  connected: "En tiempo real",
+  connecting: "Conectando…",
+  reconnecting: "Reconectando…",
+  offline: "Sin conexión",
+  unavailable: "Conexión no disponible",
+}[store.state.realtimeConnectionState] || "Conectando…"));
 const acknowledgementComplete = (message) => {
   const summary = message.acknowledgement_summary;
   return Number(summary?.total || 0) > 0 && Number(summary.acknowledged || 0) >= Number(summary.total || 0);
@@ -140,6 +146,23 @@ useMessagingRealtime(activeId);
 const scrollBottom = () => nextTick(() => {
   if (timeline.value) timeline.value.scrollTop = timeline.value.scrollHeight;
 });
+
+async function loadOlderPreservingPosition() {
+  const element = timeline.value;
+  if (!element || store.state.loading.older) return;
+  const previousHeight = element.scrollHeight;
+  const previousTop = element.scrollTop;
+  const loaded = await store.loadOlder();
+  if (!loaded) return;
+  await nextTick();
+  element.scrollTop = previousTop + (element.scrollHeight - previousHeight);
+}
+
+function handleTimelineScroll() {
+  if (timeline.value?.scrollTop <= 100 && store.state.hasOlderByConversation[activeId.value]) {
+    loadOlderPreservingPosition().catch(() => {});
+  }
+}
 
 watch(() => messages.value.at(-1)?.public_id, async () => {
   const element = timeline.value;
@@ -497,10 +520,9 @@ async function acknowledge() {
 }
 
 onMounted(async () => {
-  await Promise.all([store.loadConfig(), store.loadSummary(), store.loadConversations()]);
-  try {
-    currentUser.value = (await import("axios").then((module) => module.default.get("/api/me/profile"))).data.data || {};
-  } catch (_) { /* La sesión ya está validada por la ruta. */ }
+  await store.loadConfig();
+  currentUser.value = store.state.config.user || {};
+  await Promise.all([store.loadSummary(), store.loadConversations()]);
   const id = route.params.conversationId || store.state.conversations[0]?.public_id;
   if (id) await openConversation(id, true);
 });
@@ -526,7 +548,7 @@ onBeforeUnmount(() => {
         <div class="hero-actions">
           <div class="connection-state" :class="store.state.realtimeConnectionState">
             <span class="connection-dot"></span>
-            {{ store.state.realtimeConnectionState === "connected" ? "En tiempo real" : `Actualización cada ${pollSeconds} s` }}
+            {{ connectionLabel }}
           </div>
           <button class="create-group-button" type="button" @click="openCreate('group')">
             <i class="bx bx-group"></i>
@@ -638,7 +660,7 @@ onBeforeUnmount(() => {
               </div>
             </header>
 
-            <div ref="timeline" class="message-timeline" aria-live="polite">
+            <div ref="timeline" class="message-timeline" aria-live="polite" @scroll.passive="handleTimelineScroll">
               <div class="timeline-intro">
                 <span class="conversation-avatar conversation-avatar--intro" :class="avatarTone(activeConversation.title)">
                   <i v-if="activeConversation.type !== 'direct'" class="bx" :class="typeMeta(activeConversation.type).icon"></i>
@@ -649,8 +671,9 @@ onBeforeUnmount(() => {
                 <span class="privacy-note"><i class="bx bx-lock-alt"></i> Solo los participantes pueden ver este contenido</span>
               </div>
 
-              <button v-if="messages.length >= 40" class="load-older" type="button" @click="store.loadOlder">
-                <i class="bx bx-history"></i> Ver mensajes anteriores
+              <button v-if="store.state.hasOlderByConversation[activeId]" class="load-older" type="button" :disabled="store.state.loading.older" @click="loadOlderPreservingPosition">
+                <i class="bx" :class="store.state.loading.older ? 'bx-loader-alt bx-spin' : 'bx-history'"></i>
+                {{ store.state.loading.older ? 'Cargando anteriores…' : 'Ver mensajes anteriores' }}
               </button>
 
               <template v-for="(message, index) in messages" :key="message.public_id">

@@ -61,11 +61,11 @@ export default {
         this.loading = false;
       }
     },
-    exportDashboardPdf() {
+    async exportDashboardPdf() {
       this.exportingReport = true;
 
       try {
-        const pdfMake = getPdfMake();
+        const pdfMake = await getPdfMake();
         const generatedAt = new Date();
         const fileStamp = generatedAt.toISOString().slice(0, 10);
         const docDefinition = {

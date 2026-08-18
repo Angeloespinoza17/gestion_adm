@@ -253,8 +253,8 @@ export default {
         await this.showRequestError(error, "No se pudo exportar el manojo");
       }
     },
-    downloadGroupPdf(group, groupKeys) {
-      const pdfMake = getPdfMake();
+    async downloadGroupPdf(group, groupKeys) {
+      const pdfMake = await getPdfMake();
       const title = `Manojo de llaves: ${this.groupLabel(group)}`;
       const generatedAt = this.formatDateTime(localDateTimeInput(new Date()));
       const rows = groupKeys.map((key) => [

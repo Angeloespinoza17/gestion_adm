@@ -53,8 +53,8 @@ export function downloadStudentReportExcel(fileName, sections) {
   URL.revokeObjectURL(url);
 }
 
-export function downloadStudentReportPdf(fileName, title, subtitle, sections, context = {}) {
-  const pdfMake = getPdfMake();
+export async function downloadStudentReportPdf(fileName, title, subtitle, sections, context = {}) {
+  const pdfMake = await getPdfMake();
   const content = [
     {
       columns: [

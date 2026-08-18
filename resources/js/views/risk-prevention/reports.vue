@@ -71,7 +71,7 @@ export default {
     async exportPdf() {
       this.exporting = true;
       try {
-        const pdfMake = getPdfMake();
+        const pdfMake = await getPdfMake();
         const docDefinition = {
           content: [
             { text: "Reporte de Prevención de Riesgos", style: "title" },

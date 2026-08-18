@@ -322,7 +322,7 @@ export default {
       this.saving = true;
       this.error = null;
       try {
-        const pdfMake = getPdfMake();
+        const pdfMake = await getPdfMake();
 
         let mainImage = null;
         if (this.item.image_url) {

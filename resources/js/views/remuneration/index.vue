@@ -1398,7 +1398,7 @@ export default {
         },
       };
     },
-    exportImportBookPdf() {
+    async exportImportBookPdf() {
       if (!this.importBookSortedRows.length) {
         Swal.fire("Sin datos", "No hay filas importadas para exportar.", "warning");
         return;
@@ -1410,7 +1410,7 @@ export default {
 
       this.importBookPdfExporting = true;
       try {
-        const pdfMake = getPdfMake();
+        const pdfMake = await getPdfMake();
         const fileBase = (this.selectedImport?.original_filename || `libro_${this.selectedImport?.id || ""}`)
           .replace(/\.[^.]+$/, "")
           .replace(/[^a-z0-9_-]+/gi, "_");
@@ -1511,7 +1511,7 @@ export default {
         const response = await axios.get("/api/remuneraciones/payrolls/pdf-data", {
           params: this.cleanParams(params),
         });
-        const pdfMake = getPdfMake();
+        const pdfMake = await getPdfMake();
         pdfMake.createPdf(this.buildPayrollPdfDefinition(response.data)).download(filename);
       } catch (error) {
         Swal.fire("Error", formatRemunerationError(error, "No fue posible generar el PDF."), "error");
@@ -1652,7 +1652,7 @@ export default {
       };
     },
     async downloadCertificatePdf(item) {
-      const pdfMake = getPdfMake();
+      const pdfMake = await getPdfMake();
       const staff = item.staff || {};
       const docDefinition = {
         pageSize: "A4",

@@ -11,13 +11,14 @@ use App\Notifications\Messaging\AcknowledgementReminderNotification;
 use App\Notifications\Messaging\NewMessageNotification;
 use App\Services\Messaging\AcknowledgementService;
 use App\Services\Messaging\AuditService;
+use App\Services\Messaging\MessagingBroadcaster;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class ReceiptController extends Controller
 {
-    public function __construct(private AcknowledgementService $service, private AuditService $audit) {}
+    public function __construct(private AcknowledgementService $service, private AuditService $audit, private MessagingBroadcaster $broadcaster) {}
 
     public function delivered(Request $request): JsonResponse
     {
@@ -43,6 +44,7 @@ class ReceiptController extends Controller
             ->filter(fn ($notification) => $readMessageIds->has($notification->data['message_id'] ?? null))
             ->each->markAsRead();
         $this->audit->record('message_read', $request->user()->id, $conversation->id, $through->id, $request->user()->id, ['through' => $through->public_id, 'count' => $count]);
+        $this->broadcaster->messageRead($conversation, $request->user()->id, $through->public_id, $count);
 
         return response()->json(['data' => ['updated' => $count, 'through_message_id' => $through->public_id]]);
     }

@@ -1,10 +1,7 @@
 <script>
 import axios from "axios";
 import Layout from "../../layouts/main.vue";
-import pdfMake from "pdfmake/build/pdfmake";
-import pdfFonts from "pdfmake/build/vfs_fonts";
-
-pdfMake.vfs = pdfFonts?.pdfMake?.vfs || pdfFonts;
+import { getPdfMake } from "../../utils/pdfmake";
 
 const pad = (value) => String(value).padStart(2, "0");
 const localYMD = (date = new Date()) => `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
@@ -389,6 +386,7 @@ export default {
       this.error = null;
 
       try {
+        const pdfMake = await getPdfMake();
         const visits = await this.fetchExportVisits();
         const filters = this.exportFilters();
         const filterLabels = this.exportFilterLabels(filters);
@@ -505,6 +503,7 @@ export default {
       this.error = null;
 
       try {
+        const pdfMake = await getPdfMake();
         const visits = await this.fetchExportVisits();
         const filters = this.exportFilters();
         const filterLabels = this.exportFilterLabels(filters);

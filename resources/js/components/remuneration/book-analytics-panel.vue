@@ -508,7 +508,7 @@ export default {
       }
       this.exportingPdf = true;
       try {
-        const pdfMake = getPdfMake();
+        const pdfMake = await getPdfMake();
         const metrics = this.analytics.metrics || {};
         const rows = [
           ["Dotación", metrics.workers || 0],
@@ -716,7 +716,7 @@ export default {
 
       this.exportingConceptPdf = true;
       try {
-        const pdfMake = getPdfMake();
+        const pdfMake = await getPdfMake();
         const drilldown = this.analytics.concept_drilldown;
         const selected = drilldown.selected || {};
         const metrics = drilldown.metrics || {};
@@ -830,7 +830,7 @@ export default {
 
       this.exportingUnionPdf = true;
       try {
-        const pdfMake = getPdfMake();
+        const pdfMake = await getPdfMake();
         const trendRows = (union.trend || []).map((item) => ({ label: item.period, value: item.amount }));
         const conceptRows = (union.by_concept || []).slice(0, 10).map((item) => ({ label: item.label, value: item.amount }));
         const typeRows = (union.by_type || []).map((item) => ({ label: item.type, value: item.amount }));

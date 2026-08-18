@@ -36,7 +36,7 @@ class BibliotecaCatalogsController extends Controller
         $students = StudentProfile::query()
             ->with(['enrollments.courseSection.educationLevel'])
             ->orderBy('first_name')
-            ->limit(500)
+            ->orderBy('last_name')
             ->get()
             ->map(function (StudentProfile $student) {
                 $enrollment = $student->preferredEnrollment();

@@ -799,7 +799,7 @@ export default {
       this.error = null;
 
       try {
-        const pdfMake = getPdfMake();
+        const pdfMake = await getPdfMake();
         let profileImage = null;
 
         if (this.staff.profile_photo_url) {

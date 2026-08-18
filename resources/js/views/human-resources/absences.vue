@@ -183,7 +183,7 @@ export default {
             } catch (error) { this.alertError(error) } finally { this.importing = false }
         },
         exportCsv() { window.location.href = `/api/human-resources/absences/export?year=${this.filters.year}` },
-        exportCalendarPdf() {
+        async exportCalendarPdf() {
             if (!this.calendarRecords.length || !this.calendarRange) {
                 Swal.fire({ icon: 'info', title: 'No hay ausencias visibles', text: 'Selecciona un período con registros antes de exportar.' })
                 return
@@ -320,9 +320,9 @@ export default {
                     tableCell: { fontSize: 7.2, color: '#445066', margin: [2, 4] },
                 },
                 defaultStyle: { font: 'Roboto' },
-            }
+            };
 
-            getPdfMake().createPdf(definition).download(`calendario-ausencias-${this.calendarRange.from}-al-${this.calendarRange.to}.pdf`)
+            (await getPdfMake()).createPdf(definition).download(`calendario-ausencias-${this.calendarRange.from}-al-${this.calendarRange.to}.pdf`)
         },
         labelClass(status) {
             if (['justificada', 'tramitada', 'cerrada'].includes(status)) return 'bg-success-subtle text-success'

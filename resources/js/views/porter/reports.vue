@@ -233,12 +233,12 @@ export default {
         this.exporting = false;
       }
     },
-    exportPdf() {
+    async exportPdf() {
       if (!this.canExport || this.exporting) return;
 
       this.exporting = true;
       try {
-        const pdfMake = getPdfMake();
+        const pdfMake = await getPdfMake();
         const content = [
           { text: "Reporte de Portería", style: "title" },
           { text: `Periodo ${this.periodLabel}`, style: "muted", margin: [0, 0, 0, 12] },

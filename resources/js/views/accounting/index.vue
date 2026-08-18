@@ -965,7 +965,7 @@ export default {
     async downloadSubsidyComparisonPdf() {
       this.downloadingSubsidyPdf = true;
       try {
-        const pdfMake = getPdfMake();
+        const pdfMake = await getPdfMake();
         const comparison = this.subsidyDashboard.comparison || {};
         const currentPeriodLabel = this.subsidyPeriodLabel(this.subsidyPeriod);
         const comparisonPeriodLabel = this.subsidyPeriodLabel(comparison.period || this.subsidyComparePeriod);

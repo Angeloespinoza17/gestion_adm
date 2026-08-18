@@ -395,7 +395,7 @@ export default {
       this.exportingPdf = true;
 
       try {
-        const pdfMake = getPdfMake();
+        const pdfMake = await getPdfMake();
         const paragraphs = String(sourceContent)
           .split(/\n{2,}/)
           .map((item) => item.trim())

@@ -21,7 +21,9 @@ class MessagingController extends Controller
 
     public function config(Request $request): JsonResponse
     {
-        return response()->json(['enabled' => (bool) config('messaging.enabled'), 'realtime' => ['enabled' => (bool) config('messaging.realtime.enabled'), 'poll_interval_ms' => config('messaging.realtime.poll_interval_ms')], 'messages' => ['max_length' => config('messaging.messages.max_length')], 'attachments' => ['max_files' => config('messaging.attachments.max_files'), 'max_size_mb' => config('messaging.attachments.max_size_mb'), 'extensions' => config('messaging.attachments.extensions')], 'reactions' => config('messaging.reactions'), 'capabilities' => ['send_announcement' => $request->user()->isSuperAdmin() || $request->user()->hasPermission('messaging.send_announcement') || $request->user()->hasPermission('gestionar_comunicaciones_internas')]]);
+        $user = $request->user();
+
+        return response()->json(['enabled' => (bool) config('messaging.enabled'), 'user' => ['id' => $user->id, 'name' => $user->name, 'email' => $user->email, 'photo' => $user->profile_photo_url], 'realtime' => ['enabled' => (bool) config('messaging.realtime.enabled'), 'recovery_limit' => config('messaging.realtime.recovery_limit')], 'messages' => ['max_length' => config('messaging.messages.max_length')], 'attachments' => ['max_files' => config('messaging.attachments.max_files'), 'max_size_mb' => config('messaging.attachments.max_size_mb'), 'extensions' => config('messaging.attachments.extensions')], 'reactions' => config('messaging.reactions'), 'capabilities' => ['send_announcement' => $user->isSuperAdmin() || $user->hasPermission('messaging.send_announcement') || $user->hasPermission('gestionar_comunicaciones_internas')]]);
     }
 
     public function users(Request $request): JsonResponse
@@ -36,11 +38,11 @@ class MessagingController extends Controller
     public function search(Request $request): JsonResponse
     {
         $data = $request->validate(['query' => ['required', 'string', 'min:2', 'max:200'], 'conversation_id' => ['nullable', 'string', 'size:26']]);
-        $query = Message::query()->whereNull('deleted_at')->whereHas('conversation.participants', fn ($q) => $q->where('user_id', $request->user()->id))->where(fn ($q) => $q->where('body', 'like', '%'.$data['query'].'%')->orWhere('subject', 'like', '%'.$data['query'].'%')->orWhereHas('attachments', fn ($a) => $a->where('original_name', 'like', '%'.$data['query'].'%')));
+        $query = Message::query()->whereNull('deleted_at')->whereHas('conversation.participants', fn ($q) => $q->where('user_id', $request->user()->id)->whereNull('left_at'))->where(fn ($q) => $q->where('body', 'like', '%'.$data['query'].'%')->orWhere('subject', 'like', '%'.$data['query'].'%')->orWhereHas('attachments', fn ($a) => $a->where('original_name', 'like', '%'.$data['query'].'%')));
         if (! empty($data['conversation_id'])) {
             $query->whereHas('conversation', fn ($q) => $q->where('public_id', $data['conversation_id']));
         } $items = $query->with(['conversation:id,public_id,title', 'sender:id,name'])->latest('id')->limit(50)->get();
 
-        return response()->json(['data' => $items->map(fn ($m) => ['public_id' => $m->public_id, 'conversation_id' => $m->conversation->public_id, 'conversation_title' => $m->conversation->title, 'sender' => $m->sender?->name, 'subject' => $m->subject, 'excerpt' => mb_strimwidth((string) $m->body,0,240,'…'), 'sent_at' => $m->sent_at])]);
+        return response()->json(['data' => $items->map(fn ($m) => ['public_id' => $m->public_id, 'conversation_id' => $m->conversation->public_id, 'conversation_title' => $m->conversation->title, 'sender' => $m->sender?->name, 'subject' => $m->subject, 'excerpt' => mb_strimwidth((string) $m->body, 0, 240, '…'), 'sent_at' => $m->sent_at])]);
     }
 }

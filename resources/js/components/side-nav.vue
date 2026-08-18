@@ -65,6 +65,7 @@ const MENU_ICON_BY_SLUG = {
   security: "bx-shield-quarter",
   relevant_calendar: "bx-calendar-event",
   social_work: "bx-heart",
+  psychology: "bx-bulb",
   settings: "bx-cog",
 };
 
@@ -92,6 +93,7 @@ const MENU_ICON_BY_LABEL = {
   "control de nochero": "bx-shield-quarter",
   "calendario y fechas relevantes": "bx-calendar-event",
   "trabajo social": "bx-heart",
+  "psicologia escolar": "bx-bulb",
   configuracion: "bx-cog",
 };
 
@@ -107,6 +109,7 @@ const MENU_ICON_BY_ROUTE = {
   "/contabilidad": "bx-wallet-alt",
   "/informatica": "bx-laptop",
   "/social-work": "bx-heart",
+  "/psychology": "bx-bulb",
   "/inventory/items": "bx-box",
   "/inventory/management": "bx-box",
 };
@@ -811,12 +814,8 @@ export default {
 
       return MENU_LANDING_ROUTE_BY_SLUG[normalizeMenuKey(item.slug)] || null;
     },
-    shouldHideMenuItem(item) {
-      const label = normalizeMenuKey(item.name || item.label);
-      const slug = normalizeMenuKey(item.slug);
-      const route = item.frontend_route || item.link;
-
-      return slug === "psychology" || slug === "psicologia" || label === "psicologia" || route === "/psychology";
+    shouldHideMenuItem() {
+      return false;
     },
     resolveMenuIcon(item) {
       const slug = normalizeMenuKey(item.slug);

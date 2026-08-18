@@ -651,7 +651,7 @@ export default {
     async downloadAct(record) {
       this.downloadingAct = record.id || record.folio;
       try {
-        const pdfMake = getPdfMake();
+        const pdfMake = await getPdfMake();
         const definition = await this.buildActDefinition(record);
         pdfMake.createPdf(definition).download(`${record.folio || "acta-entrega-epp"}.pdf`);
         await showRiskSuccess("El acta se descargó correctamente.");

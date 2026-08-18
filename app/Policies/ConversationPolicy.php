@@ -10,7 +10,7 @@ class ConversationPolicy
 {
     public function view(User $user, Conversation $conversation): Response
     {
-        return $user->active && $conversation->participants()->where('user_id', $user->id)->exists()
+        return $user->active && $conversation->participants()->where('user_id', $user->id)->whereNull('left_at')->exists()
             ? Response::allow()
             : Response::denyAsNotFound();
     }

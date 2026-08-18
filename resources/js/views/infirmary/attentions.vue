@@ -355,6 +355,28 @@ export default {
         attention.accompanied_by_staff?.full_name || attention.accompanied_by_name,
       ].filter(Boolean).join(" · ");
     },
+    guardianContacts(attention) {
+      const student = attention?.student || {};
+
+      return [
+        {
+          type: "primary",
+          label: "Apoderado principal",
+          name: student.guardian_name,
+          relationship: student.guardian_relationship || student.guardian_role,
+          phone: student.guardian_phone,
+          email: student.guardian_email,
+        },
+        {
+          type: "backup",
+          label: "Apoderado suplente",
+          name: student.guardian_backup_name,
+          relationship: student.guardian_backup_relationship || student.guardian_backup_role,
+          phone: student.guardian_backup_phone,
+          email: student.guardian_backup_email,
+        },
+      ];
+    },
     optionLabel(options, value) {
       return (options || []).find((option) => String(option.value) === String(value))?.text || humanizeInfirmaryStatus(value);
     },
@@ -661,7 +683,7 @@ export default {
           await this.loadCertificateLogo();
         }
 
-        const pdfMake = getPdfMake();
+        const pdfMake = await getPdfMake();
         const definition = buildSchoolInsuranceCertificateDefinition(form, this.certificateLogoDataUrl);
         pdfMake.createPdf(definition).download(schoolInsuranceCertificateFileName(form));
       } catch (error) {
@@ -802,7 +824,7 @@ export default {
 
       try {
         const detail = await this.fetchAttentionDetail(attention);
-        const pdfMake = getPdfMake();
+        const pdfMake = await getPdfMake();
         const reference = this.accidentReference(detail);
         const student = this.studentName(detail);
         const fileName = `ficha_atencion_${String(detail.correlative_number || detail.id).padStart(5, "0")}_${this.pdfFileSegment(student)}.pdf`;
@@ -939,6 +961,7 @@ export default {
             <span>${this.escapeHtml(contact.label || (contact.type === "backup" ? "Apoderado suplente" : "Apoderado principal"))}</span>
             <strong>${this.escapeHtml(contact.name || "Sin nombre registrado")}</strong>
             <small><i class="bx bx-phone"></i> ${this.escapeHtml(contact.phone || "Sin teléfono registrado")}</small>
+            <small><i class="bx bx-envelope"></i> ${this.escapeHtml(contact.email || "Sin correo registrado")}</small>
           </div>
         `)
         .join("");
@@ -1104,6 +1127,49 @@ export default {
                 ></textarea>
               </div>
               <div class="col-12">
+                <div class="infirmary-call-section">
+                  <label class="infirmary-call-toggle" for="swal-register-call">
+                    <input id="swal-register-call" type="checkbox" />
+                    <span class="infirmary-call-toggle__icon"><i class="bx bx-phone-call"></i></span>
+                    <span>
+                      <strong>Registrar llamado telefónico</strong>
+                      <small>Activa esta opción para dejar constancia de lo ocurrido durante la llamada.</small>
+                    </span>
+                  </label>
+                  <div id="swal-call-wrapper" class="row g-3 mt-1 d-none">
+                    <div class="col-md-6">
+                      <label class="form-label">Contacto registrado</label>
+                      <select id="swal-call-contact" class="form-select"></select>
+                    </div>
+                    <div class="col-md-6">
+                      <label class="form-label">Resultado de la llamada</label>
+                      <select id="swal-call-status" class="form-select">${this.swalSelectOptions(this.catalogs.call_status_options, "contesto")}</select>
+                    </div>
+                    <div class="col-md-4">
+                      <label class="form-label">Persona contactada</label>
+                      <input id="swal-call-person" class="form-control" placeholder="Nombre del apoderado" />
+                    </div>
+                    <div class="col-md-4">
+                      <label class="form-label">Relación</label>
+                      <input id="swal-call-relationship" class="form-control" placeholder="Ej: madre, padre, tutor" />
+                    </div>
+                    <div class="col-md-4">
+                      <label class="form-label">Número telefónico</label>
+                      <input id="swal-call-phone" class="form-control" type="tel" placeholder="Número utilizado" />
+                    </div>
+                    <div class="col-12">
+                      <label class="form-label">¿Qué ocurrió durante la llamada?</label>
+                      <textarea
+                        id="swal-call-summary"
+                        class="form-control"
+                        rows="3"
+                        placeholder="Registra lo conversado, indicaciones entregadas y respuesta del apoderado"
+                      ></textarea>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div class="col-12">
                 <label class="form-label d-block">Categoría Tratamiento</label>
                 ${this.swalCheckboxOptions(this.treatmentCategoryOptions, "swal-treatment-category", "swal-treatment-category", ["fisico"])}
               </div>
@@ -1194,6 +1260,12 @@ export default {
           const oxygenSaturationInput = popup.querySelector("#swal-oxygen-saturation");
           const otherTreatmentWrapper = popup.querySelector("#swal-other-treatment-wrapper");
           const otherTreatmentInput = popup.querySelector("#swal-other-treatment");
+          const registerCallInput = popup.querySelector("#swal-register-call");
+          const callWrapper = popup.querySelector("#swal-call-wrapper");
+          const callContactSelect = popup.querySelector("#swal-call-contact");
+          const callPersonInput = popup.querySelector("#swal-call-person");
+          const callRelationshipInput = popup.querySelector("#swal-call-relationship");
+          const callPhoneInput = popup.querySelector("#swal-call-phone");
 
           const syncAccidentFields = () => {
             const isAccident = this.isAccidentCategory(categorySelect.value);
@@ -1285,6 +1357,48 @@ export default {
             }
           };
 
+          const selectedGuardianContacts = () => selectedStudent?.medical_context?.emergency_contacts || [];
+
+          const applySelectedCallContact = () => {
+            const contact = selectedGuardianContacts().find((item) => item.type === callContactSelect.value);
+
+            if (contact) {
+              callPersonInput.value = contact.name || "";
+              callRelationshipInput.value = contact.relationship || "";
+              callPhoneInput.value = contact.phone || "";
+              return;
+            }
+
+            if (callContactSelect.value === "other") {
+              callPersonInput.value = "";
+              callRelationshipInput.value = "";
+              callPhoneInput.value = "";
+            }
+          };
+
+          const syncCallContacts = () => {
+            const contacts = selectedGuardianContacts();
+            const options = contacts.map((contact) => {
+              const label = [contact.label, contact.name, contact.phone].filter(Boolean).join(" · ");
+              return `<option value="${this.escapeHtml(contact.type)}">${this.escapeHtml(label)}</option>`;
+            });
+
+            callContactSelect.innerHTML = [
+              '<option value="">Seleccione un contacto</option>',
+              ...options,
+              '<option value="other">Otro contacto</option>',
+            ].join("");
+
+            if (contacts.length) {
+              callContactSelect.value = contacts[0].type;
+              applySelectedCallContact();
+            }
+          };
+
+          const syncCallFields = () => {
+            callWrapper.classList.toggle("d-none", !registerCallInput.checked);
+          };
+
           const renderMessage = (message, variant = "muted") => {
             resultsContainer.innerHTML = `<div class="small text-${variant} p-2">${this.escapeHtml(message)}</div>`;
           };
@@ -1324,6 +1438,7 @@ export default {
                   selectedContainer.innerHTML = this.swalMedicalContextHtml(selectedStudent);
                   resultsContainer.innerHTML = "";
                   searchInput.value = selectedStudent.full_name;
+                  syncCallContacts();
                 });
               });
             } catch (error) {
@@ -1337,6 +1452,7 @@ export default {
           searchInput.addEventListener("input", () => {
             selectedStudent = null;
             selectedContainer.textContent = "Sin estudiante seleccionada.";
+            syncCallContacts();
             window.clearTimeout(searchDebounce);
             if (searchInput.value.trim().length >= 2) {
               searchDebounce = window.setTimeout(searchStudents, 300);
@@ -1358,11 +1474,15 @@ export default {
           categorySelect.addEventListener("change", syncAccidentFields);
           accidentLocationSelect.addEventListener("change", syncAccidentFields);
           companionTypeSelect.addEventListener("change", syncCompanionFields);
+          registerCallInput.addEventListener("change", syncCallFields);
+          callContactSelect.addEventListener("change", applySelectedCallContact);
           popup.querySelectorAll(".swal-treatment-category").forEach((input) => {
             input.addEventListener("change", syncTreatmentFields);
           });
           syncAccidentFields();
           syncCompanionFields();
+          syncCallContacts();
+          syncCallFields();
           syncTreatmentFields();
         },
         preConfirm: () => {
@@ -1406,6 +1526,9 @@ export default {
           const derivationSupportTeams = treatmentCategories.includes("derivacion")
             ? checkedValues(".swal-derivation-support")
             : [];
+          const hasPhoneCall = Boolean(popup.querySelector("#swal-register-call")?.checked);
+          const callPerson = value("swal-call-person");
+          const callSummary = value("swal-call-summary");
 
           if (!occurredAt) {
             Swal.showValidationMessage("Ingresa la fecha de accidente.");
@@ -1434,6 +1557,16 @@ export default {
 
           if (treatmentCategories.includes("derivacion") && !value("swal-treatment-derivation-type")) {
             Swal.showValidationMessage("Selecciona el tipo de derivación.");
+            return false;
+          }
+
+          if (hasPhoneCall && !callPerson) {
+            Swal.showValidationMessage("Indica la persona contactada en el llamado telefónico.");
+            return false;
+          }
+
+          if (hasPhoneCall && !callSummary) {
+            Swal.showValidationMessage("Describe qué ocurrió durante la llamada telefónica.");
             return false;
           }
 
@@ -1481,7 +1614,19 @@ export default {
               notes: null,
             }] : [],
             referrals: [],
-            calls: [],
+            calls: hasPhoneCall ? [{
+              called_at: attendedAt,
+              person_contacted: callPerson,
+              relationship: value("swal-call-relationship") || null,
+              phone_number: value("swal-call-phone") || null,
+              call_status: value("swal-call-status") || "pendiente",
+              reason: "Contacto realizado durante la atención",
+              conversation_summary: callSummary,
+              commitments: null,
+              estimated_arrival_at: null,
+              duration_minutes: null,
+              called_by_user_id: null,
+            }] : [],
             follow_ups: [],
           };
         },
@@ -1936,6 +2081,34 @@ export default {
           <div class="infirmary-view-reference">{{ accidentReference(selectedAttention) }}</div>
         </div>
 
+        <div class="infirmary-view-section infirmary-view-section--contacts">
+          <h6><i class="bx bx-phone-call me-1"></i> Datos de contacto de apoderados</h6>
+          <div class="infirmary-guardian-grid">
+            <div
+              v-for="contact in guardianContacts(selectedAttention)"
+              :key="`guardian-${contact.type}`"
+              class="infirmary-guardian-card"
+            >
+              <div class="infirmary-guardian-card__heading">
+                <span>{{ contact.label }}</span>
+                <i :class="contact.type === 'backup' ? 'bx bx-user-plus' : 'bx bx-user-check'"></i>
+              </div>
+              <strong>{{ contact.name || "Sin nombre registrado" }}</strong>
+              <small>{{ contact.relationship || "Relación no informada" }}</small>
+              <div class="infirmary-guardian-card__contact">
+                <a v-if="contact.phone" :href="`tel:${contact.phone}`">
+                  <i class="bx bx-phone"></i>{{ contact.phone }}
+                </a>
+                <span v-else><i class="bx bx-phone"></i>Sin teléfono registrado</span>
+                <a v-if="contact.email" :href="`mailto:${contact.email}`">
+                  <i class="bx bx-envelope"></i>{{ contact.email }}
+                </a>
+                <span v-else><i class="bx bx-envelope"></i>Sin correo registrado</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
         <div class="infirmary-view-grid">
           <div class="infirmary-view-field">
             <span>Fecha accidente</span>
@@ -2048,7 +2221,10 @@ export default {
               <div v-if="selectedAttention.calls?.length" class="infirmary-view-list mt-2">
                 <div v-for="call in selectedAttention.calls" :key="`view-call-${call.id}`" class="infirmary-view-item">
                   <div class="fw-semibold">{{ call.person_contacted }} · {{ humanizeInfirmaryStatus(call.call_status) }}</div>
-                  <div class="text-muted small">{{ formatInfirmaryDateTime(call.called_at) }}</div>
+                  <div class="text-muted small">
+                    {{ formatInfirmaryDateTime(call.called_at) }}
+                    <span v-if="call.relationship || call.phone_number"> · {{ [call.relationship, call.phone_number].filter(Boolean).join(" · ") }}</span>
+                  </div>
                   <p class="mb-0 mt-2">{{ call.conversation_summary || call.reason || "-" }}</p>
                 </div>
               </div>
@@ -2530,8 +2706,12 @@ export default {
                 <BFormSelect v-model="call.call_status" :options="normalizeOptions(catalogs.call_status_options)" />
               </div>
               <div class="col-12">
-                <label class="form-label">Resumen</label>
-                <BFormTextarea v-model="call.conversation_summary" rows="2" />
+                <label class="form-label">¿Qué ocurrió durante la llamada?</label>
+                <BFormTextarea
+                  v-model="call.conversation_summary"
+                  rows="3"
+                  placeholder="Registra lo conversado, indicaciones entregadas y respuesta del apoderado"
+                />
               </div>
               <div class="col-12 text-end">
                 <BButton variant="outline-danger" size="sm" @click="removeCall(index)">Quitar</BButton>
@@ -2644,6 +2824,54 @@ export default {
 .infirmary-treatment-section__body {
   display: grid;
   gap: 0.875rem;
+}
+
+.infirmary-call-section {
+  background: #f7faff;
+  border: 1px solid #dce5f2;
+  border-radius: 8px;
+  padding: 0.875rem;
+}
+
+.infirmary-call-toggle {
+  align-items: center;
+  cursor: pointer;
+  display: flex;
+  gap: 0.75rem;
+  margin: 0;
+}
+
+.infirmary-call-toggle > input {
+  height: 1rem;
+  width: 1rem;
+}
+
+.infirmary-call-toggle__icon {
+  align-items: center;
+  background: #e9efff;
+  border-radius: 8px;
+  color: #5066d8;
+  display: inline-flex;
+  flex: 0 0 2.35rem;
+  font-size: 1.25rem;
+  height: 2.35rem;
+  justify-content: center;
+}
+
+.infirmary-call-toggle strong,
+.infirmary-call-toggle small {
+  display: block;
+}
+
+.infirmary-call-toggle strong {
+  color: #303846;
+  font-size: 0.92rem;
+}
+
+.infirmary-call-toggle small {
+  color: #707b8d;
+  font-size: 0.78rem;
+  margin-top: 0.15rem;
 }
 
 .infirmary-date-cell {
@@ -2778,6 +3006,75 @@ export default {
   color: #303846;
   font-weight: 700;
   margin-bottom: 0.85rem;
+}
+
+.infirmary-view-section--contacts {
+  background: #f7faff;
+}
+
+.infirmary-guardian-grid {
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.infirmary-guardian-card {
+  background: #fff;
+  border: 1px solid #dce5f2;
+  border-radius: 8px;
+  display: grid;
+  gap: 0.25rem;
+  min-width: 0;
+  padding: 0.85rem;
+}
+
+.infirmary-guardian-card__heading {
+  align-items: center;
+  color: #63708a;
+  display: flex;
+  font-size: 0.72rem;
+  font-weight: 700;
+  justify-content: space-between;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.infirmary-guardian-card__heading i {
+  color: #566ee8;
+  font-size: 1.15rem;
+}
+
+.infirmary-guardian-card > strong {
+  color: #303846;
+  font-size: 0.95rem;
+  overflow-wrap: anywhere;
+}
+
+.infirmary-guardian-card > small {
+  color: #7a8498;
+}
+
+.infirmary-guardian-card__contact {
+  border-top: 1px solid #edf0f5;
+  display: grid;
+  gap: 0.35rem;
+  margin-top: 0.45rem;
+  padding-top: 0.55rem;
+}
+
+.infirmary-guardian-card__contact a,
+.infirmary-guardian-card__contact span {
+  align-items: center;
+  color: #526078;
+  display: flex;
+  font-size: 0.82rem;
+  gap: 0.4rem;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.infirmary-guardian-card__contact a {
+  color: #415ac5;
 }
 
 .infirmary-view-stack {
@@ -3136,6 +3433,10 @@ export default {
   }
 
   .infirmary-attention-swal .swal-guardian-contacts__grid {
+    grid-template-columns: 1fr;
+  }
+
+  .infirmary-guardian-grid {
     grid-template-columns: 1fr;
   }
 }

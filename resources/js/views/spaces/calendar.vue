@@ -478,7 +478,7 @@ export default {
 
       try {
         const rows = await this.fetchReservationsForExport();
-        const pdfMake = getPdfMake();
+        const pdfMake = await getPdfMake();
         const pdfHeader = ["Evento", "Dependencia", "Funcionario", "Departamento", "Estado", "Inicio", "Término"].map(
           (text) => ({ text, style: "tableHeader" })
         );

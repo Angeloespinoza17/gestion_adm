@@ -32,7 +32,7 @@ class InspectoriaCatalogController extends Controller
         $courseScoped = $this->access->isCourseScoped($user);
         $assignedCourseIds = $courseScoped ? $this->access->assignedCourseIds($user) : collect();
 
-        $courses = CourseSection::query()->withCount('enrollments')->orderBy('display_name')
+        $courses = CourseSection::query()->where('active', true)->withCount('enrollments')->orderBy('display_name')
             ->when($courseScoped, fn ($query) => $query->whereIn('id', $assignedCourseIds))
             ->get(['id', 'academic_year_id', 'display_name', 'section_name']);
 
@@ -74,14 +74,21 @@ class InspectoriaCatalogController extends Controller
             })
             ->orderBy('full_name')->get(['id', 'full_name', 'rut', 'cargo_id']);
 
+        $staff = Staff::query()
+            ->where('active', true)
+            ->with('cargo:id,name')
+            ->orderBy('full_name')
+            ->get(['id', 'full_name', 'rut', 'cargo_id']);
+
         return response()->json([
             'academic_years' => AcademicYear::query()
                 ->when($courseScoped, fn ($query) => $query->whereIn('id', $courses->pluck('academic_year_id')))
-                ->ordered()->get(['id', 'name', 'year', 'is_active']),
+                ->ordered()->get(['id', 'name', 'year', 'starts_at', 'ends_at', 'is_active']),
             'active_academic_year_id' => $activeYear?->id,
             'courses' => $courses,
             'students' => $students,
             'inspectors' => $inspectors,
+            'staff' => $staff,
             'request_types' => $this->options(InspectoriaAttention::REQUEST_TYPES),
             'attention_actions' => $this->options(InspectoriaAttention::ACTIONS),
             'psychosocial_professionals' => $this->psychosocialProfessionals->options(),
@@ -99,6 +106,7 @@ class InspectoriaCatalogController extends Controller
                 'view_withdrawals' => $this->access->can($request->user(), InspectoriaAccessService::WITHDRAWALS),
                 'manage_pickup_restrictions' => $this->access->can($request->user(), InspectoriaAccessService::RESTRICTIONS),
                 'manage_daily_log' => $this->access->can($request->user(), InspectoriaAccessService::DAILY_LOG),
+                'view_statistics' => $this->access->can($request->user(), InspectoriaAccessService::STATISTICS),
             ],
         ]);
     }

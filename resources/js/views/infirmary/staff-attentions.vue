@@ -522,7 +522,7 @@ export default {
     async exportPdf(attention) {
       try {
         const detail = await this.fetchDetail(attention);
-        const pdfMake = getPdfMake();
+        const pdfMake = await getPdfMake();
         const treatmentLines = (detail.treatments || []).map((item, index) =>
           `${index + 1}. ${this.treatmentSummary(item)}`
         );

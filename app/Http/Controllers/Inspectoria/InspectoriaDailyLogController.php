@@ -5,11 +5,14 @@ namespace App\Http\Controllers\Inspectoria;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Inspectoria\SaveInspectoriaDailyLogRequest;
 use App\Models\Inspectoria\InspectoriaDailyLog;
+use App\Models\Staff;
 use App\Models\User;
 use App\Services\Inspectoria\InspectoriaAccessService;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Arr;
+use Illuminate\Support\Facades\DB;
 
 class InspectoriaDailyLogController extends Controller
 {
@@ -21,14 +24,17 @@ class InspectoriaDailyLogController extends Controller
         $search = trim((string) $request->query('search'));
         $query = InspectoriaDailyLog::query()->with([
             'student:id,first_name,last_name,registered_name,rut', 'courseSection:id,display_name',
-            'inspector:id,full_name', 'registeredBy:id,name',
+            'inspector:id,full_name', 'registeredBy:id,name', 'lateStaff:id,full_name,cargo_id',
+            'lateStaff.cargo:id,name', 'associatedCourses:id,display_name',
         ]);
         $this->access->scopeDailyLogs($query, $request->user());
         $query->when($search !== '', function (Builder $query) use ($search) {
             $query->where(function (Builder $inner) use ($search) {
                 $inner->where('title', 'like', "%{$search}%")->orWhere('detail', 'like', "%{$search}%")
                     ->orWhereHas('student', fn ($student) => $student->where('registered_name', 'like', "%{$search}%")
-                        ->orWhere('first_name', 'like', "%{$search}%")->orWhere('last_name', 'like', "%{$search}%"));
+                        ->orWhere('first_name', 'like', "%{$search}%")->orWhere('last_name', 'like', "%{$search}%"))
+                    ->orWhereHas('lateStaff', fn ($staff) => $staff->where('full_name', 'like', "%{$search}%"))
+                    ->orWhereHas('associatedCourses', fn ($course) => $course->where('display_name', 'like', "%{$search}%"));
             });
         })->when($request->filled('date'), fn ($q) => $q->whereDate('happened_at', $request->query('date')))
             ->when($request->filled('category'), fn ($q) => $q->where('category', $request->query('category')))
@@ -44,11 +50,17 @@ class InspectoriaDailyLogController extends Controller
         $user = $request->user();
         $payload = $request->validated();
         $this->assertPayloadAccess($user, $payload);
-        $entry = InspectoriaDailyLog::query()->create([
-            ...$payload, 'inspector_staff_id' => $user->staff_id,
-            'registered_by_user_id' => $user->id, 'status' => $request->input('status', 'registrado'),
-            'created_by' => $user->id, 'updated_by' => $user->id,
-        ]);
+        $entry = DB::transaction(function () use ($payload, $request, $user) {
+            [$attributes, $courseIds] = $this->preparePayload($payload);
+            $entry = InspectoriaDailyLog::query()->create([
+                ...$attributes, 'inspector_staff_id' => $user->staff_id,
+                'registered_by_user_id' => $user->id, 'status' => $request->input('status', 'registrado'),
+                'created_by' => $user->id, 'updated_by' => $user->id,
+            ]);
+            $entry->associatedCourses()->sync($courseIds);
+
+            return $entry;
+        });
 
         return response()->json(['message' => 'Entrada de bitácora registrada.', 'data' => $this->load($entry)], 201);
     }
@@ -60,16 +72,24 @@ class InspectoriaDailyLogController extends Controller
         abort_unless($this->canAccessEntry($user, $dailyLog), 403);
         $payload = $request->validated();
         $this->assertPayloadAccess($user, $payload);
-        $dailyLog->fill($payload);
-        $dailyLog->updated_by = $user->id;
-        $dailyLog->save();
+        DB::transaction(function () use ($dailyLog, $payload, $user) {
+            [$attributes, $courseIds] = $this->preparePayload($payload);
+            $dailyLog->fill($attributes);
+            $dailyLog->updated_by = $user->id;
+            $dailyLog->save();
+            $dailyLog->associatedCourses()->sync($courseIds);
+        });
 
         return response()->json(['message' => 'Entrada actualizada.', 'data' => $this->load($dailyLog)]);
     }
 
     private function load(InspectoriaDailyLog $entry): InspectoriaDailyLog
     {
-        return $entry->fresh(['student:id,first_name,last_name,registered_name,rut', 'courseSection:id,display_name', 'inspector:id,full_name', 'registeredBy:id,name']);
+        return $entry->fresh([
+            'student:id,first_name,last_name,registered_name,rut', 'courseSection:id,display_name',
+            'inspector:id,full_name', 'registeredBy:id,name', 'lateStaff:id,full_name,cargo_id',
+            'lateStaff.cargo:id,name', 'associatedCourses:id,display_name',
+        ]);
     }
 
     private function assertPayloadAccess(User $user, array $payload): void
@@ -84,6 +104,9 @@ class InspectoriaDailyLogController extends Controller
         if (! empty($payload['course_section_id'])) {
             abort_unless($this->access->canAccessCourse($user, (int) $payload['course_section_id']), 403, 'El curso no está asignado a esta inspectora.');
         }
+        foreach ($payload['associated_course_ids'] ?? [] as $courseId) {
+            abort_unless($this->access->canAccessCourse($user, (int) $courseId), 403, 'Uno de los cursos asociados no está asignado a esta inspectora.');
+        }
     }
 
     private function canAccessEntry(User $user, InspectoriaDailyLog $entry): bool
@@ -92,8 +115,33 @@ class InspectoriaDailyLogController extends Controller
             return true;
         }
 
-        return $entry->course_section_id
-            ? $this->access->canAccessCourse($user, (int) $entry->course_section_id)
-            : (int) $entry->inspector_staff_id === (int) $user->staff_id;
+        if ($entry->course_section_id) {
+            return $this->access->canAccessCourse($user, (int) $entry->course_section_id);
+        }
+
+        if ($entry->is_staff_lateness && $entry->associatedCourses()->exists()) {
+            return $entry->associatedCourses()->whereIn('course_sections.id', $this->access->assignedCourseIds($user))->exists();
+        }
+
+        return (int) $entry->inspector_staff_id === (int) $user->staff_id;
+    }
+
+    /** @return array{0: array<string, mixed>, 1: array<int, int>} */
+    private function preparePayload(array $payload): array
+    {
+        $courseIds = array_values(array_unique(array_map('intval', $payload['associated_course_ids'] ?? [])));
+        $attributes = Arr::except($payload, ['associated_course_ids']);
+
+        if ($attributes['is_staff_lateness'] ?? false) {
+            $staff = Staff::query()->findOrFail($attributes['late_staff_id']);
+            $attributes['late_staff_name_snapshot'] = $staff->full_name;
+        } else {
+            $attributes['late_staff_id'] = null;
+            $attributes['late_staff_name_snapshot'] = null;
+            $attributes['lateness_minutes'] = null;
+            $courseIds = [];
+        }
+
+        return [$attributes, $courseIds];
     }
 }

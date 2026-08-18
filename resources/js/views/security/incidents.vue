@@ -169,8 +169,8 @@ export default {
         this.saving = false;
       }
     },
-    exportPdf() {
-      const pdfMake = getPdfMake();
+    async exportPdf() {
+      const pdfMake = await getPdfMake();
       pdfMake.createPdf({
         pageOrientation: "landscape",
         content: [

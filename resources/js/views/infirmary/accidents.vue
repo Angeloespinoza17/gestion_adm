@@ -257,7 +257,7 @@ export default {
 
         await this.loadCertificateLogo();
 
-        const pdfMake = getPdfMake();
+        const pdfMake = await getPdfMake();
         const definition = buildSchoolInsuranceCertificateDefinition(form, this.certificateLogoDataUrl);
         pdfMake.createPdf(definition).download(schoolInsuranceCertificateFileName(form));
       } catch (error) {
