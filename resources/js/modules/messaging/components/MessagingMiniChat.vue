@@ -72,9 +72,8 @@ async function initialize() {
   if (initialized.value || initializing.value || hidden.value) return;
   initializing.value = true;
   try {
-    await store.loadConfig();
+    await Promise.all([store.loadConfig(), store.loadSummary()]);
     currentUser.value = store.state.config.user || {};
-    await store.loadSummary();
     available.value = Boolean(store.state.config.enabled ?? true);
     initialized.value = true;
   } catch (requestError) {

@@ -67,8 +67,29 @@ class BackupManagementTest extends TestCase
 
         $response->assertOk()
             ->assertDownload($filename)
-            ->assertHeader('Content-Type', 'application/gzip');
-        $this->assertSame('backup-content', $response->streamedContent());
+            ->assertHeader('Content-Type', 'application/gzip')
+            ->assertHeader('Content-Length', (string) strlen('backup-content'))
+            ->assertHeader('Accept-Ranges', 'bytes');
+        $this->assertSame('backup-content', $response->baseResponse->getFile()->getContent());
+    }
+
+    public function test_super_admin_can_download_using_the_browser_token_cookie(): void
+    {
+        $user = User::factory()->create(['active' => true]);
+        $role = Role::query()->firstOrCreate(
+            ['slug' => 'super_admin'],
+            ['name' => 'Super Admin', 'active' => true],
+        );
+        $user->roles()->attach($role);
+        $token = $user->createToken('browser-backup-download')->plainTextToken;
+        $filename = 'mysql-2026-08-18_023047.sql.gz';
+        Storage::disk('local')->put("backups/database/{$filename}", 'cookie-download');
+
+        $this->withUnencryptedCookie('cnsc_token', $token)
+            ->get("/api/admin/backups/{$filename}/download")
+            ->assertOk()
+            ->assertDownload($filename)
+            ->assertHeader('Content-Length', (string) strlen('cookie-download'));
     }
 
     public function test_unavailable_or_unsupported_files_cannot_be_downloaded(): void

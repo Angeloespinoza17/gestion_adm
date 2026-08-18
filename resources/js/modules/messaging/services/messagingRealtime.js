@@ -8,6 +8,28 @@ let activeChannel = null;
 let activeConversationId = null;
 let hasConnected = false;
 
+const localHosts = new Set(["localhost", "127.0.0.1", "::1"]);
+
+export function resolveMessagingRealtimeOptions(
+  env = import.meta.env,
+  location = window.location,
+) {
+  const pageHost = location.hostname;
+  const pageScheme = location.protocol.replace(":", "") || "https";
+  const configuredHost = String(env.VITE_REVERB_HOST || "").trim();
+  const configuredScheme = String(env.VITE_REVERB_SCHEME || "").trim();
+  const invalidLocalConfig = !localHosts.has(pageHost) && localHosts.has(configuredHost);
+  const host = invalidLocalConfig ? pageHost : (configuredHost || pageHost);
+  const scheme = invalidLocalConfig ? pageScheme : (configuredScheme || pageScheme);
+  const defaultPort = scheme === "https" ? 443 : 80;
+  const configuredPort = Number(env.VITE_REVERB_PORT || defaultPort);
+  const port = invalidLocalConfig || !Number.isInteger(configuredPort) || configuredPort < 1
+    ? defaultPort
+    : configuredPort;
+
+  return { host, scheme, port, forceTLS: scheme === "https" };
+}
+
 const connectionState = (state) => {
   const normalized = {
     initialized: "connecting",
@@ -58,14 +80,15 @@ export async function ensureMessagingRealtime(userId) {
   messagingStore.setRealtime(navigator.onLine ? "connecting" : "offline");
   echoPromise = Promise.all([import("laravel-echo"), import("pusher-js")]).then(([echoModule, pusherModule]) => {
     const Echo = echoModule.default;
+    const realtime = resolveMessagingRealtimeOptions();
     window.Pusher = pusherModule.default;
     echo = new Echo({
       broadcaster: "reverb",
       key: import.meta.env.VITE_REVERB_APP_KEY,
-      wsHost: import.meta.env.VITE_REVERB_HOST || window.location.hostname,
-      wsPort: Number(import.meta.env.VITE_REVERB_PORT || 80),
-      wssPort: Number(import.meta.env.VITE_REVERB_PORT || 443),
-      forceTLS: (import.meta.env.VITE_REVERB_SCHEME || window.location.protocol.replace(":", "")) === "https",
+      wsHost: realtime.host,
+      wsPort: realtime.port,
+      wssPort: realtime.port,
+      forceTLS: realtime.forceTLS,
       enabledTransports: ["ws", "wss"],
       authEndpoint: "/broadcasting/auth",
       auth: { headers: authHeaders() },

@@ -27,13 +27,11 @@ import "@vueform/multiselect/themes/default.css"
  * to use in your application's views. An example is included for you.
  */
 
-const app = createApp({});
+const app = createApp(App);
 const AsyncApexChart = defineAsyncComponent(() => import("vue3-apexcharts").then((module) => module.default));
 
-app.component("example-component", App);
 app.component("apexchart", AsyncApexChart);
 app.use(routes);
-app.use(App);
 app.use(i18n);
 app.directive("maska", vMaska)
 app.mixin(helper);

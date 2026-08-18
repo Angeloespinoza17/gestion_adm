@@ -1,6 +1,5 @@
 <script>
 import axios from "axios";
-import Swal from "sweetalert2";
 import Layout from "../../layouts/main.vue";
 
 export default {
@@ -14,7 +13,6 @@ export default {
         retention_days: 0,
       },
       loading: true,
-      downloading: null,
       error: "",
     };
   },
@@ -36,32 +34,15 @@ export default {
         this.loading = false;
       }
     },
-    async downloadBackup(backup) {
-      this.downloading = backup.id;
+    downloadUrl(backup) {
+      return `/api/admin/backups/${encodeURIComponent(backup.id)}/download`;
+    },
+    prepareDownload() {
+      const token = localStorage.getItem("token");
+      if (!token) return;
 
-      try {
-        const response = await axios.get(
-          `/api/admin/backups/${encodeURIComponent(backup.id)}/download`,
-          { responseType: "blob" },
-        );
-        const url = window.URL.createObjectURL(new Blob([response.data]));
-        const link = document.createElement("a");
-        link.href = url;
-        link.download = backup.filename;
-        document.body.appendChild(link);
-        link.click();
-        link.remove();
-        window.URL.revokeObjectURL(url);
-      } catch (error) {
-        await Swal.fire({
-          icon: "error",
-          title: "No se pudo descargar",
-          text: error.response?.data?.message || "El respaldo ya no está disponible.",
-          confirmButtonText: "Entendido",
-        });
-      } finally {
-        this.downloading = null;
-      }
+      const secure = window.location.protocol === "https:" ? "; secure" : "";
+      document.cookie = `cnsc_token=${encodeURIComponent(token)}; path=/; samesite=lax${secure}`;
     },
     formatDate(value) {
       if (!value) return "Sin fecha";
@@ -186,16 +167,15 @@ export default {
               <td><span class="badge bg-soft-primary text-primary">{{ backup.format }}</span></td>
               <td>{{ backup.size_human }}</td>
               <td class="text-end">
-                <BButton
-                  variant="primary"
-                  size="sm"
-                  :disabled="downloading === backup.id"
-                  @click="downloadBackup(backup)"
+                <a
+                  class="btn btn-primary btn-sm"
+                  :href="downloadUrl(backup)"
+                  :download="backup.filename"
+                  @click="prepareDownload"
                 >
-                  <BSpinner v-if="downloading === backup.id" small class="me-1"></BSpinner>
-                  <i v-else class="bx bx-download me-1"></i>
-                  {{ downloading === backup.id ? "Descargando..." : "Descargar" }}
-                </BButton>
+                  <i class="bx bx-download me-1"></i>
+                  Descargar
+                </a>
               </td>
             </tr>
           </tbody>

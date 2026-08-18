@@ -6,7 +6,7 @@ use App\Http\Controllers\Controller;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Storage;
-use Symfony\Component\HttpFoundation\StreamedResponse;
+use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
 class BackupController extends Controller
 {
@@ -45,7 +45,7 @@ class BackupController extends Controller
         ])->header('Cache-Control', 'no-store, no-cache, must-revalidate, private');
     }
 
-    public function download(string $filename): StreamedResponse
+    public function download(string $filename): BinaryFileResponse
     {
         abort_unless($this->isBackupFilename($filename), 404);
 
@@ -54,23 +54,15 @@ class BackupController extends Controller
 
         abort_unless($disk->exists($path), 404);
 
-        $stream = $disk->readStream($path);
-        abort_unless(is_resource($stream), 404);
-
-        return response()->streamDownload(
-            function () use ($stream): void {
-                try {
-                    fpassthru($stream);
-                } finally {
-                    fclose($stream);
-                }
-            },
+        return response()->download(
+            $disk->path($path),
             $filename,
             [
                 'Content-Type' => str_ends_with($filename, '.sqlite')
                     ? 'application/vnd.sqlite3'
                     : 'application/gzip',
                 'Cache-Control' => 'no-store, no-cache, must-revalidate, private',
+                'Accept-Ranges' => 'bytes',
                 'X-Content-Type-Options' => 'nosniff',
             ],
         );

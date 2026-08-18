@@ -1,6 +1,7 @@
 import { onBeforeUnmount, watch } from "vue";
 import { messagingStore } from "../stores/messagingStore";
 import {
+  disconnectMessagingRealtime,
   ensureMessagingRealtime,
   reconnectMessagingRealtime,
   subscribeMessagingConversation,
@@ -10,7 +11,11 @@ export function useMessagingRealtime(activeId) {
   const stopConnectionWatch = watch(
     () => [messagingStore.state.config?.realtime?.enabled, messagingStore.state.config?.user?.id],
     ([enabled, userId]) => {
-      if (enabled && userId) ensureMessagingRealtime(userId).catch(() => {});
+      if (enabled && userId) {
+        ensureMessagingRealtime(userId).catch(() => {});
+        return;
+      }
+      disconnectMessagingRealtime();
     },
     { immediate: true }
   );

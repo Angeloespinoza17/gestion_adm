@@ -5,6 +5,7 @@ import { mount } from "@vue/test-utils";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const realtime = vi.hoisted(() => ({
+  disconnectMessagingRealtime: vi.fn(),
   ensureMessagingRealtime: vi.fn().mockResolvedValue(null),
   reconnectMessagingRealtime: vi.fn(),
   subscribeMessagingConversation: vi.fn().mockResolvedValue(null),

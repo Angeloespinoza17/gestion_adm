@@ -14,6 +14,8 @@ window.axios.defaults.headers.common['X-Requested-With'] = 'XMLHttpRequest';
 const token = localStorage.getItem('token');
 if (token) {
     window.axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+    const secure = window.location.protocol === 'https:' ? '; secure' : '';
+    document.cookie = `cnsc_token=${encodeURIComponent(token)}; path=/; samesite=lax${secure}`;
 }
 
 window.axios.interceptors.request.use((config) => {

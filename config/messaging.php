@@ -3,7 +3,10 @@
 return [
     'enabled' => env('MESSAGING_ENABLED', true),
     'realtime' => [
-        'enabled' => env('MESSAGING_REALTIME_ENABLED', true),
+        'enabled' => env(
+            'MESSAGING_REALTIME_ENABLED',
+            env('APP_ENV', 'production') !== 'production'
+        ),
         'recovery_limit' => (int) env('MESSAGING_RECOVERY_LIMIT', 100),
     ],
     'messages' => [

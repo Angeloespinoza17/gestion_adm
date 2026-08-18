@@ -59,7 +59,6 @@ export default defineConfig({
         alias: {
             '@/assets/images': fileURLToPath(new URL('./resources/images', import.meta.url)),
             '@': fileURLToPath(new URL('./resources/js', import.meta.url)),
-            vue: 'vue/dist/vue.esm-bundler.js',
             // '@': '/resources/sass'
         },
     },
