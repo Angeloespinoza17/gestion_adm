@@ -7,6 +7,7 @@ use App\Http\Requests\LibroDigital\UpdateLessonRecordRequest;
 use App\Models\LibroDigital\ClassSession;
 use App\Services\LibroDigital\AuditEventWriter;
 use App\Services\LibroDigital\CurriculumObjectiveScopeService;
+use App\Services\LibroDigital\Curriculum\CurriculumProgramScopeService;
 use App\Services\LibroDigital\LibroDigitalAccessContext;
 use App\Services\LibroDigital\OptimisticLock;
 use Illuminate\Http\JsonResponse;
@@ -20,6 +21,7 @@ class LessonRecordController extends LibroDigitalController
         private readonly OptimisticLock $locks,
         private readonly AuditEventWriter $audit,
         private readonly CurriculumObjectiveScopeService $curriculumScope,
+        private readonly CurriculumProgramScopeService $programScope,
     ) {
         parent::__construct($access);
     }
@@ -46,8 +48,16 @@ class LessonRecordController extends LibroDigitalController
             (int) $model->schedule_subject_id,
             array_values($data['curriculum_objective_ids'] ?? []),
         );
+        $programContext = $this->programScope->resolve(
+            $model->book,
+            (int) $model->schedule_subject_id,
+            array_key_exists('curriculum_program_id', $data) ? $data['curriculum_program_id'] : $model->curriculum_program_id,
+            array_key_exists('curriculum_unit_id', $data) ? $data['curriculum_unit_id'] : $model->curriculum_unit_id,
+            array_key_exists('curriculum_axis_id', $data) ? $data['curriculum_axis_id'] : $model->curriculum_axis_id,
+            array_values($data['curriculum_objective_ids'] ?? []),
+        );
 
-        DB::transaction(function () use ($request, $model, $data): void {
+        DB::transaction(function () use ($request, $model, $data, $programContext): void {
             $locked = ClassSession::query()->lockForUpdate()->findOrFail($model->id);
             $nextRevision = ((int) $locked->revision) + 1;
             DB::table('lcd_session_topics')->insert([
@@ -120,6 +130,9 @@ class LessonRecordController extends LibroDigitalController
                 'content_summary' => $data['contents'],
                 'activity_summary' => $data['activities'],
                 'observation' => $data['observations'] ?? $locked->observation,
+                'curriculum_program_id' => $programContext['program']?->id,
+                'curriculum_unit_id' => $programContext['unit']?->id,
+                'curriculum_axis_id' => $programContext['axis']?->id,
                 'revision' => $nextRevision,
                 'lock_version' => ((int) $locked->lock_version) + 1,
                 'updated_by' => $request->user()->id,
@@ -135,6 +148,7 @@ class LessonRecordController extends LibroDigitalController
     /** @return array<string, mixed> */
     private function payload(ClassSession $session): array
     {
+        $session->loadMissing(['curriculumProgram', 'curriculumUnit', 'curriculumAxis']);
         $latestObjective = DB::table('lcd_session_objectives')->where('class_session_id', $session->id)->orderByDesc('id')->first();
         $methodology = DB::table('lcd_session_resources')->where('class_session_id', $session->id)->where('resource_type', 'methodology')->orderByDesc('id')->value('description');
         $resources = DB::table('lcd_session_resources')->where('class_session_id', $session->id)->where('resource_type', 'teaching_resources')->orderByDesc('id')->value('description');
@@ -151,6 +165,9 @@ class LessonRecordController extends LibroDigitalController
             'resources' => $resources,
             'observations' => $observations ?? $session->observation,
             'curriculum_objective_ids' => $curriculumIds,
+            'curriculum_program_id' => $session->curriculumProgram?->public_id,
+            'curriculum_unit_id' => $session->curriculumUnit?->public_id,
+            'curriculum_axis_id' => $session->curriculumAxis?->public_id,
             'treatment_level' => $latestObjective?->treatment_level,
             'progress_percentage' => $latestObjective?->progress_percent,
             'revision' => (int) $session->revision,

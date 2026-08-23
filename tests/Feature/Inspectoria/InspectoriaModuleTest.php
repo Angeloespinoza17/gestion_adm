@@ -190,6 +190,36 @@ class InspectoriaModuleTest extends TestCase
         $this->assertSame(2, InspectoriaCourseAssignment::query()->count());
     }
 
+    public function test_daily_log_catalog_only_exposes_enabled_courses_from_the_current_academic_year(): void
+    {
+        [$currentYear, $currentCourse] = $this->academicContext();
+        $level = EducationLevel::query()->findOrFail($currentCourse->education_level_id);
+        $currentYear->update(['is_active' => false]);
+        $historicalYear = AcademicYear::query()->create([
+            'name' => 'Año escolar 2025', 'year' => 2025,
+            'starts_at' => '2025-03-01', 'ends_at' => '2025-12-31',
+            'is_active' => true, 'is_closed' => true,
+        ]);
+        $historicalCourse = CourseSection::query()->create([
+            'academic_year_id' => $historicalYear->id, 'education_level_id' => $level->id,
+            'section_name' => 'A', 'display_name' => $currentCourse->display_name, 'active' => true,
+        ]);
+        $disabledCurrentCourse = CourseSection::query()->create([
+            'academic_year_id' => $currentYear->id, 'education_level_id' => $level->id,
+            'section_name' => 'B', 'display_name' => '2° medio B', 'active' => false,
+        ]);
+
+        $this->getJson('/api/inspectoria/catalogs')
+            ->assertOk()
+            ->assertJsonPath('active_academic_year_id', $historicalYear->id)
+            ->assertJsonPath('current_academic_year_id', $currentYear->id)
+            ->assertJsonCount(1, 'current_courses')
+            ->assertJsonPath('current_courses.0.id', $currentCourse->id)
+            ->assertJsonMissingPath('current_courses.1')
+            ->assertJsonFragment(['id' => $historicalCourse->id])
+            ->assertJsonMissing(['id' => $disabledCurrentCourse->id]);
+    }
+
     public function test_bulk_assignment_skips_courses_with_current_assignments_and_creates_the_available_ones(): void
     {
         [$year, $course] = $this->academicContext();

@@ -2,10 +2,16 @@
 import { onMounted, reactive, ref, watch } from "vue";
 import PsychologyBadge from "./PsychologyBadge.vue";
 import PsychologyModal from "./PsychologyModal.vue";
-import { usePsychology } from "../../composables/usePsychology";
+import {
+    priorityLabels,
+    psychologyStatusLabels,
+    usePsychology,
+} from "../../composables/usePsychology";
 const props = defineProps({ catalogs: { type: Object, required: true } });
 const emit = defineEmits(["changed"]);
 const api = usePsychology();
+const labelFor = (value, priority = false) =>
+    (priority ? priorityLabels[value] : psychologyStatusLabels[value]) || value;
 const list = ref({ data: [], meta: {} });
 const showForm = ref(false);
 const selected = ref(null);
@@ -149,32 +155,59 @@ onMounted(load);
 <template>
     <div>
         <div class="psi-toolbar">
-            <div>
-                <h4>Derivaciones</h4>
-                <p>Bandeja segura con paginación del servidor.</p>
+            <div class="psi-toolbar-copy">
+                <span class="psi-toolbar-icon"
+                    ><i class="bx bx-transfer-alt"></i
+                ></span>
+                <div>
+                    <span class="psi-eyebrow">Ingreso y priorización</span>
+                    <h4>
+                        {{
+                            catalogs.capabilities.personal_scope
+                                ? "Mis derivaciones"
+                                : "Derivaciones"
+                        }}
+                    </h4>
+                    <p>
+                        {{
+                            catalogs.capabilities.personal_scope
+                                ? "Bandeja privada con las derivaciones creadas por ti o asignadas a tu atención."
+                                : "Bandeja segura con paginación del servidor."
+                        }}
+                    </p>
+                </div>
             </div>
-            <button
-                v-if="catalogs.capabilities.create_referral"
-                class="btn btn-primary"
-                @click="showForm = true"
-            >
-                <i class="bx bx-plus me-1"></i>Nueva derivación
-            </button>
+            <div class="d-flex align-items-center gap-2">
+                <span
+                    v-if="catalogs.capabilities.personal_scope"
+                    class="psi-private-chip"
+                >
+                    <i class="bx bx-lock-alt"></i> Bandeja privada
+                </span>
+                <button
+                    v-if="catalogs.capabilities.create_referral"
+                    class="btn btn-primary psi-primary-action"
+                    @click="showForm = true"
+                >
+                    <i class="bx bx-plus me-1"></i>Nueva derivación
+                </button>
+            </div>
         </div>
         <div v-if="api.error.value" class="alert alert-danger">
             {{ api.error.value }}
         </div>
         <div class="psi-table-card">
             <div class="card-body">
-                <div class="row g-2 mb-3">
-                    <div class="col-md-6">
+                <div class="psi-list-filters">
+                    <div class="psi-search-field">
+                        <i class="bx bx-search"></i>
                         <input
                             v-model="filters.search"
                             class="form-control"
                             placeholder="Buscar por código o estudiante"
                         />
                     </div>
-                    <div class="col-md-3">
+                    <div>
                         <select v-model="filters.status" class="form-select">
                             <option value="">Todos los estados</option>
                             <option
@@ -193,11 +226,11 @@ onMounted(load);
                                 :key="value"
                                 :value="value"
                             >
-                                {{ value }}
+                                {{ labelFor(value) }}
                             </option>
                         </select>
                     </div>
-                    <div class="col-md-3">
+                    <div>
                         <select v-model="filters.priority" class="form-select">
                             <option value="">Toda prioridad</option>
                             <option
@@ -210,7 +243,7 @@ onMounted(load);
                                 :key="value"
                                 :value="value"
                             >
-                                {{ value }}
+                                {{ labelFor(value, true) }}
                             </option>
                         </select>
                     </div>
@@ -700,22 +733,82 @@ onMounted(load);
     display: flex;
     align-items: center;
     justify-content: space-between;
-    margin-bottom: 1rem;
-    padding: 1.35rem 1.5rem;
+    margin-bottom: 0.75rem;
+    padding: 0.85rem 1rem;
     background: radial-gradient(circle at 92% 0, #eee9ff 0, transparent 38%),
         linear-gradient(135deg, #fff, #f7fbff);
     border: 1px solid #dfe7ef;
-    border-radius: 20px;
-    box-shadow: 0 18px 48px rgba(39, 48, 77, 0.075);
+    border-radius: 15px;
+    box-shadow: 0 10px 28px rgba(39, 48, 77, 0.055);
+}
+.psi-toolbar-copy {
+    display: flex;
+    align-items: center;
+    gap: 0.85rem;
+}
+.psi-toolbar-icon {
+    display: grid;
+    flex: 0 0 auto;
+    width: 2.4rem;
+    height: 2.4rem;
+    place-items: center;
+    color: #65517f;
+    background: #f0edf8;
+    border-radius: 11px;
+    font-size: 1.15rem;
+}
+.psi-eyebrow {
+    color: #806c9d;
+    font-size: 0.62rem;
+    font-weight: 800;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
 }
 .psi-toolbar h4 {
     margin: 0;
     color: #23354d;
+    font-size: 0.95rem;
 }
 .psi-toolbar p {
     margin: 0.2rem 0 0;
     color: #758298;
-    font-size: 0.8rem;
+    font-size: 0.7rem;
+}
+.psi-private-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.5rem 0.7rem;
+    color: #5c4a76;
+    background: rgba(240, 237, 248, 0.9);
+    border: 1px solid #e3dced;
+    border-radius: 999px;
+    font-size: 0.68rem;
+    font-weight: 700;
+}
+.psi-primary-action {
+    display: inline-flex;
+    align-items: center;
+    height: 38px;
+    padding: 0 0.8rem;
+    border: 0;
+    border-radius: 9px;
+    box-shadow: 0 5px 12px rgba(85, 110, 230, 0.18);
+    font-size: 0.7rem;
+    font-weight: 700;
+}
+@media (max-width: 575.98px) {
+    .psi-toolbar {
+        align-items: flex-start;
+        flex-direction: column;
+        padding: 1rem;
+    }
+    .psi-toolbar-copy {
+        align-items: flex-start;
+    }
+    .psi-list-filters {
+        grid-template-columns: 1fr;
+    }
 }
 td small {
     display: block;
@@ -743,9 +836,47 @@ td small {
 .psi-table-card {
     background: #fff;
     border: 1px solid #dfe7ef;
-    border-radius: 20px;
-    box-shadow: 0 18px 48px rgba(39, 48, 77, 0.075);
+    border-radius: 16px;
+    box-shadow: 0 14px 38px rgba(39, 48, 77, 0.06);
     overflow: hidden;
+}
+.psi-table-card > .card-body {
+    padding: 0.8rem;
+}
+.psi-list-filters {
+    display: grid;
+    grid-template-columns: minmax(280px, 2fr) minmax(170px, 1fr) minmax(
+            170px,
+            1fr
+        );
+    gap: 0.6rem;
+    margin-bottom: 0.8rem;
+    padding: 0.7rem;
+    background: #f4f8fa;
+    border: 1px solid #dce7ec;
+    border-radius: 12px;
+}
+.psi-list-filters .form-control,
+.psi-list-filters .form-select {
+    height: 40px;
+    border-color: #dbe3ec;
+    border-radius: 9px;
+    font-size: 0.74rem;
+}
+.psi-search-field {
+    position: relative;
+}
+.psi-search-field > i {
+    position: absolute;
+    z-index: 1;
+    top: 50%;
+    left: 0.75rem;
+    color: #8492a4;
+    font-size: 1rem;
+    transform: translateY(-50%);
+}
+.psi-search-field .form-control {
+    padding-left: 2.25rem;
 }
 .psi-table-card .table > :not(caption) > * > * {
     padding: 0.82rem 1rem;
@@ -786,6 +917,11 @@ td small {
 }
 .psi-pre {
     white-space: pre-wrap;
+}
+@media (max-width: 767.98px) {
+    .psi-list-filters {
+        grid-template-columns: 1fr;
+    }
 }
 @keyframes pulse {
     to {

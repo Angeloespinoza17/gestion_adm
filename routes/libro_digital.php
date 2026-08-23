@@ -12,6 +12,7 @@ use App\Http\Controllers\LibroDigital\CoexistenceController;
 use App\Http\Controllers\LibroDigital\ConfigurationController;
 use App\Http\Controllers\LibroDigital\CurriculumController;
 use App\Http\Controllers\LibroDigital\CurriculumImportController;
+use App\Http\Controllers\LibroDigital\CurriculumProgramController;
 use App\Http\Controllers\LibroDigital\EarlyWithdrawalController;
 use App\Http\Controllers\LibroDigital\EdeController;
 use App\Http\Controllers\LibroDigital\LateArrivalController;
@@ -34,6 +35,7 @@ Route::prefix('libro-digital/v1')
 
         Route::get('/books', [BookController::class, 'index'])->name('books.index');
         Route::post('/books', [BookController::class, 'store'])->middleware('lcd.idempotency')->name('books.store');
+        Route::post('/books/bulk-open', [BookController::class, 'bulkOpen'])->middleware('lcd.idempotency')->name('books.bulk-open');
         Route::get('/books/{book}', [BookController::class, 'show'])->name('books.show');
         Route::patch('/books/{book}', [BookController::class, 'update'])->middleware('lcd.idempotency')->name('books.update');
         Route::post('/books/{book}/preflight', [BookController::class, 'preflight'])->middleware('lcd.idempotency')->name('books.preflight');
@@ -44,6 +46,9 @@ Route::prefix('libro-digital/v1')
 
         Route::get('/subjects', [SubjectController::class, 'index'])->name('subjects.index');
         Route::post('/subjects', [SubjectController::class, 'store'])->middleware(['permission:libro_digital.subject_catalog.manage', 'lcd.idempotency'])->name('subjects.store');
+        Route::post('/subjects/bulk-status', [SubjectController::class, 'bulkStatus'])->middleware(['permission:libro_digital.subject_catalog.manage', 'lcd.idempotency'])->name('subjects.bulk-status');
+        Route::get('/subjects/external-catalog', [SubjectController::class, 'externalCatalog'])->name('subjects.external-catalog');
+        Route::put('/subjects/external-mappings', [SubjectController::class, 'updateExternalMappings'])->middleware(['permission:libro_digital.subject_catalog.manage', 'lcd.idempotency'])->name('subjects.external-mappings.update');
         Route::patch('/subjects/{subject}', [SubjectController::class, 'update'])->middleware(['permission:libro_digital.subject_catalog.manage', 'lcd.idempotency'])->name('subjects.update');
 
         Route::get('/books/{book}/sessions', [SessionController::class, 'index'])->name('sessions.index');
@@ -74,6 +79,28 @@ Route::prefix('libro-digital/v1')
         Route::post('/curriculum/imports/{import}/activate', [CurriculumImportController::class, 'activate'])
             ->middleware(['permission:libro_digital.curriculum.activate', 'lcd.idempotency'])
             ->name('curriculum.imports.activate');
+
+        Route::prefix('curriculum/program-catalog')->middleware('permission:libro_digital.curriculum_programs.view')->group(function (): void {
+            Route::get('/matrix', [CurriculumProgramController::class, 'matrix'])->name('curriculum.programs.matrix');
+            Route::get('/search', [CurriculumProgramController::class, 'search'])->name('curriculum.programs.search');
+            Route::get('/programs', [CurriculumProgramController::class, 'index'])->name('curriculum.programs.index');
+            Route::post('/programs/manual', [CurriculumProgramController::class, 'createManual'])->middleware(['permission:libro_digital.curriculum_programs.import', 'lcd.idempotency'])->name('curriculum.programs.manual.store');
+            Route::get('/programs/{program}', [CurriculumProgramController::class, 'showProgram'])->name('curriculum.programs.show');
+            Route::post('/programs/{program}/export-pdf', [CurriculumProgramController::class, 'exportPdf'])->middleware(['permission:libro_digital.curriculum_programs.export_pdf', 'lcd.idempotency'])->name('curriculum.programs.export-pdf');
+            Route::post('/programs/{program}/archive', [CurriculumProgramController::class, 'archiveProgram'])->middleware(['permission:libro_digital.curriculum_programs.archive', 'lcd.idempotency'])->name('curriculum.programs.archive');
+            Route::get('/imports', [CurriculumProgramController::class, 'imports'])->name('curriculum.program-imports.index');
+            Route::post('/imports', [CurriculumProgramController::class, 'upload'])->middleware(['permission:libro_digital.curriculum_programs.import', 'lcd.idempotency'])->name('curriculum.program-imports.store');
+            Route::get('/imports/{file}', [CurriculumProgramController::class, 'showImport'])->name('curriculum.program-imports.show');
+            Route::post('/imports/{file}/validate', [CurriculumProgramController::class, 'validateImport'])->middleware(['permission:libro_digital.curriculum_programs.review', 'lcd.idempotency'])->name('curriculum.program-imports.validate');
+            Route::post('/imports/{file}/publish', [CurriculumProgramController::class, 'publishImport'])->middleware(['permission:libro_digital.curriculum_programs.publish', 'lcd.idempotency'])->name('curriculum.program-imports.publish');
+            Route::post('/imports/{file}/reprocess', [CurriculumProgramController::class, 'reprocess'])->middleware(['permission:libro_digital.curriculum_programs.reprocess', 'lcd.idempotency'])->name('curriculum.program-imports.reprocess');
+            Route::post('/imports/{file}/archive', [CurriculumProgramController::class, 'archiveImport'])->middleware(['permission:libro_digital.curriculum_programs.archive', 'lcd.idempotency'])->name('curriculum.program-imports.archive');
+            Route::patch('/candidates/{candidate}', [CurriculumProgramController::class, 'reviewCandidate'])->middleware(['permission:libro_digital.curriculum_programs.review', 'lcd.idempotency'])->name('curriculum.program-imports.candidates.review');
+            Route::post('/conflicts/{conflict}/resolve', [CurriculumProgramController::class, 'resolveConflict'])->middleware(['permission:libro_digital.curriculum_programs.resolve_conflicts', 'lcd.idempotency'])->name('curriculum.program-imports.conflicts.resolve');
+            Route::post('/batches/{batch}/publish', [CurriculumProgramController::class, 'publishBatch'])->middleware(['permission:libro_digital.curriculum_programs.publish', 'lcd.idempotency'])->name('curriculum.program-imports.batches.publish');
+            Route::get('/documents/{document}/pages/{page}', [CurriculumProgramController::class, 'documentPage'])->whereNumber('page')->middleware('permission:libro_digital.curriculum_programs.documents.view')->name('curriculum.documents.pages.show');
+            Route::get('/documents/{document}/download', [CurriculumProgramController::class, 'downloadDocument'])->middleware('permission:libro_digital.curriculum_programs.documents.view')->name('curriculum.documents.download');
+        });
         Route::get('/books/{book}/curriculum-coverage', [CurriculumController::class, 'coverage'])->name('curriculum.coverage');
         Route::get('/sessions/{session}/attendance', [AttendanceController::class, 'show'])->name('attendance.show');
         Route::put('/sessions/{session}/attendance', [AttendanceController::class, 'update'])->middleware('lcd.idempotency')->name('attendance.update');
@@ -133,7 +160,7 @@ Route::prefix('libro-digital/v1')
         // The controller permits either report viewers or the export owner. This
         // keeps polling usable for an export-only role without exposing peers' jobs.
         Route::get('/reports/{report}', [ReportController::class, 'show'])->name('reports.show');
-        Route::get('/reports/{report}/download', [ReportController::class, 'download'])->middleware('permission:libro_digital.reports.export')->name('reports.download');
+        Route::get('/reports/{report}/download', [ReportController::class, 'download'])->name('reports.download');
 
         Route::get('/ede/versions', [EdeController::class, 'versions'])->name('ede.versions.index');
         Route::get('/ede/mappings', [EdeController::class, 'mappings'])->name('ede.mappings.index');

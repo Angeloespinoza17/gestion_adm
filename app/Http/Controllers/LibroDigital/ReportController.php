@@ -50,6 +50,7 @@ class ReportController extends LibroDigitalController
             ['closure_status', 'Estado de cierres', 'Sesiones, días y meses'],
             ['executive', 'Informe ejecutivo', 'Síntesis institucional del periodo'],
             ['curriculum_objectives', 'Objetivos curriculares', 'Catálogo oficial, estado y trazabilidad de fuentes', ['pdf', 'xlsx']],
+            ['curriculum_program', 'Ficha curricular ministerial', 'Programa, unidades, OA, gráficos y fuentes por página', ['pdf']],
         ];
 
         return $this->collectionResponse(collect($definitions)->map(fn (array $definition) => [
@@ -219,10 +220,12 @@ class ReportController extends LibroDigitalController
     {
         $user = $request->user();
         $canView = $user->hasPermission('libro_digital.reports.view');
-        $canExportOwn = $user->hasPermission('libro_digital.reports.export')
+        $canExport = $user->hasPermission('libro_digital.reports.export')
+            || ($export->report_type === 'curriculum_program' && $user->hasPermission('libro_digital.curriculum_programs.export_pdf'));
+        $canExportOwn = $canExport
             && (int) $export->requested_by === (int) $user->id;
         if (! $this->access->canAccessSchool($user, (int) $export->school_id)
-            || ($requireExport && ! $user->hasPermission('libro_digital.reports.export'))
+            || ($requireExport && ! $canExport)
             || (! $canView && ! $canExportOwn)) {
             abort(403);
         }

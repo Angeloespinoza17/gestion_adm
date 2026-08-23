@@ -42,9 +42,11 @@ Fuera de `local`, `development` y `testing`, la aplicación bloquea globalmente 
 El script `scripts/deploy.sh` aplica además estas condiciones antes de migrar:
 
 1. cancela el despliegue si el árbol Git local contiene cambios sin confirmar;
-2. limpia la configuración remota y comprueba que el entorno sea exactamente `production`;
-3. muestra `migrate:status`;
-4. ejecuta `backup:database --no-prune` y se detiene si el respaldo falla;
-5. solo entonces ejecuta `migrate --force --no-interaction`.
+2. compila el release local sin tocar producción;
+3. como primera operación remota, comprueba que el entorno sea exactamente `production` y muestra `migrate:status`;
+4. registra conteos de tablas críticas, ejecuta `backup:database --no-prune`, verifica la integridad del archivo con `gzip -t` o `PRAGMA integrity_check`, calcula su SHA-256 y se detiene si cualquiera de esas comprobaciones falla;
+5. solo después del respaldo sincroniza los archivos e instala dependencias;
+6. ejecuta exclusivamente `migrate --force --no-interaction`, nunca seeders ni comandos de reinicio de base de datos;
+7. vuelve a medir las tablas críticas y cancela la validación si cualquier conteo disminuyó.
 
 El respaldo previo al despliegue no sustituye las copias externas ni las pruebas periódicas de restauración.

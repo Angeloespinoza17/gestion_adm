@@ -14,12 +14,13 @@ use App\Models\SocialWork\SupportDevice;
 use App\Models\SocialWork\TransportPass;
 use App\Models\StudentProfile;
 use App\Services\SocialWork\AccessService;
+use App\Services\Attendance\StudentMonthlyAttendanceContextService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
 class StudentController extends Controller
 {
-    public function index(Request $request): JsonResponse
+    public function index(Request $request, StudentMonthlyAttendanceContextService $attendanceContext): JsonResponse
     {
         $query = StudentProfile::query()->select(['id', 'first_name', 'last_name', 'registered_name', 'rut', 'general_status', 'guardian_name', 'guardian_phone', 'is_pie_participant'])
             ->with(['enrollments' => fn ($q) => $q->with(['academicYear:id,name,year', 'courseSection:id,display_name,education_level_id', 'courseSection.educationLevel:id,name'])->latest('academic_year_id'), 'socialWorkCases' => fn ($q) => $q->select(['id', 'primary_student_id', 'risk_level', 'last_activity_at', 'next_milestone', 'responsible_user_id'])->latest('last_activity_at')])
@@ -41,10 +42,12 @@ class StudentController extends Controller
             ->when($request->query('risk_level'), fn ($q, $v) => $q->whereHas('socialWorkCases', fn ($c) => $c->where('risk_level', $v)));
 
         $page = $query->orderBy('last_name')->orderBy('first_name')->paginate(min((int) $request->query('per_page', 20), 100));
+        $attendanceProfiles = $attendanceContext->forStudents($page->getCollection()->pluck('id'));
         $canContact = $request->user()->hasPermission('social_work.confidential.view');
-        $page->getCollection()->transform(function ($student) use ($canContact) {
+        $page->getCollection()->transform(function ($student) use ($canContact, $attendanceProfiles) {
             $student->current_enrollment = $student->enrollments->first();
             $student->latest_social_case = $student->socialWorkCases->first();
+            $student->attendance_profile = $attendanceProfiles->get($student->id);
             if (! $canContact) unset($student->guardian_phone);
             unset($student->enrollments, $student->socialWorkCases);
             return $student;
@@ -52,10 +55,10 @@ class StudentController extends Controller
         return response()->json($page);
     }
 
-    public function show(Request $request, StudentProfile $student, AccessService $access): JsonResponse
+    public function show(Request $request, StudentProfile $student, AccessService $access, StudentMonthlyAttendanceContextService $attendanceContext): JsonResponse
     {
         $cases = $access->applyCaseVisibility(SocialCase::where('primary_student_id', $student->id), $request->user())->with(['responsible:id,name', 'courseSection:id,display_name'])->latest('opened_on')->get();
-        $data = ['student' => $student->load(['enrollments.academicYear:id,name,year', 'enrollments.courseSection:id,display_name']), 'cases' => $cases, 'programs' => StudentProgram::with('programType')->where('student_profile_id', $student->id)->get(), 'protection_measures' => ProtectionMeasure::where('student_profile_id', $student->id)->get(), 'junaeb' => JunaebBenefit::with(['benefitType', 'deliveries.items'])->where('student_profile_id', $student->id)->get(), 'transport_passes' => TransportPass::where('student_profile_id', $student->id)->get(), 'medical_services' => MedicalService::where('student_profile_id', $student->id)->get(), 'support_devices' => SupportDevice::where('student_profile_id', $student->id)->get(), 'alerts' => Alert::where('student_profile_id', $student->id)->latest('alerted_at')->get()];
+        $data = ['student' => $student->load(['enrollments.academicYear:id,name,year', 'enrollments.courseSection:id,display_name']), 'attendance_profile' => $attendanceContext->forStudent($student), 'cases' => $cases, 'programs' => StudentProgram::with('programType')->where('student_profile_id', $student->id)->get(), 'protection_measures' => ProtectionMeasure::where('student_profile_id', $student->id)->get(), 'junaeb' => JunaebBenefit::with(['benefitType', 'deliveries.items'])->where('student_profile_id', $student->id)->get(), 'transport_passes' => TransportPass::where('student_profile_id', $student->id)->get(), 'medical_services' => MedicalService::where('student_profile_id', $student->id)->get(), 'support_devices' => SupportDevice::where('student_profile_id', $student->id)->get(), 'alerts' => Alert::where('student_profile_id', $student->id)->latest('alerted_at')->get()];
         if ($request->user()->hasPermission('social_work.medical_documents.view')) $data['medical_certificates'] = MedicalCertificate::where('student_profile_id', $student->id)->get();
         if (! $request->user()->hasPermission('social_work.confidential.view')) $data['student']->makeHidden(['guardian_phone', 'guardian_email', 'address', 'health_observations', 'pie_diagnosis']);
         return response()->json(['data' => $data]);

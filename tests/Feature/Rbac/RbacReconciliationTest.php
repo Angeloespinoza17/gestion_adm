@@ -57,6 +57,8 @@ class RbacReconciliationTest extends TestCase
             ->push('libro_digital')
             ->push('inspectoria')
             ->push('operational_transfers')
+            ->push('psychology')
+            ->unique()
             ->sort()
             ->values()
             ->all();

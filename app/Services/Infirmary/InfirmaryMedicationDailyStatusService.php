@@ -142,18 +142,18 @@ class InfirmaryMedicationDailyStatusService
 
     private function isActiveOn(InfirmaryMedicationAuthorization $authorization, CarbonInterface $day): bool
     {
-        if (! in_array($authorization->status, [
-            InfirmaryMedicationAuthorization::STATUS_VIGENTE,
-            InfirmaryMedicationAuthorization::STATUS_PROXIMA_A_VENCER,
-        ], true)) {
-            return false;
-        }
-
         if ($authorization->start_date && $authorization->start_date->startOfDay()->greaterThan($day)) {
             return false;
         }
 
-        return ! $authorization->end_date || ! $authorization->end_date->startOfDay()->lessThan($day);
+        if ($authorization->end_date && $authorization->end_date->startOfDay()->lessThan($day)) {
+            return false;
+        }
+
+        return collect([
+            $authorization->medical_authorization_expires_at,
+            $authorization->guardian_authorization_expires_at,
+        ])->filter()->doesntContain(fn ($expiresAt) => $expiresAt->copy()->startOfDay()->lessThan($day));
     }
 
     private function schedulesFor(InfirmaryMedicationAuthorization $authorization): Collection

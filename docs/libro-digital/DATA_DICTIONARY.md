@@ -4,6 +4,8 @@
 
 Las once migraciones `2026_08_13_000001` a `000011` definen **69 tablas** con prefijo `lcd_`. El conteo fue contrastado contra `Schema::create('lcd_*')`: `000009`/`000010` amplían tablas existentes y `000011` crea las dos tablas de trazabilidad por documento/objetivo. Son aditivas: usan guardas de esquema, claves foráneas `RESTRICT`/`SET NULL` y `down()` sin operaciones destructivas.
 
+La ampliación `2026_08_22_150000_create_lcd_subject_catalog_management_tables` agrega **2 tablas** de administración de asignaturas, para un total de 71 tablas `lcd_*`. Es forward-only, no inserta aliases ni modifica registros de `schedule_subjects`.
+
 Al **2026-08-14**, `000001`–`000011` están `Ran` en la base local verificada, incluidas track, identidad scoped y las dos tablas fuente–objetivo. Las FK curriculares instaladas usan `RESTRICT` o `SET NULL`, sin `CASCADE`. Este corte local no sustituye migración/restore sobre staging, copia con datos ni motor productivo.
 
 Este documento describe el esquema implementado. No todas las tablas tienen todavía un caso de uso, modelo o endpoint; una tabla vacía no demuestra cumplimiento operativo.
@@ -64,7 +66,23 @@ Una eliminación o cambio en el maestro no debe borrar historia LCD. Por eso se 
 | `lcd_curriculum_import_evidences` | Evidencia asociada a un lote. | Lote/catálogo, `source_key` en metadata, tipo/estado, URL o archivo privado cifrado, MIME/tamaño, SHA-256, manifiesto, confidencialidad, captura y verificación. | Cumplimiento restringido; FK `RESTRICT`. Un adjunto solo es habilitante si su hash real coincide con la declaración. |
 | `lcd_curriculum_catalog_activations` | Decisión separada que habilita una versión para escuela/año. | Catálogo/lote, versión de activación, idempotencia, estado, vigencia, snapshot de alcance, manifiesto/`decision_hash`, solicitante/aprobador/activador y supersesión/revocación. | Gobierno curricular. Declarado en `000008`; no existe activación válida observada. |
 | `lcd_curriculum_sources` | Documento oficial verificado que participa en un catálogo consolidado. | Catálogo/fuente normativa, `source_key` única por catálogo, `source_scope`, acto/URL, hash declarado y verificado, vigencia, track/asignatura/tipo opcionales, estado/metadata. | Cumplimiento curricular. Declarado en `000011`, pendiente localmente; al activar, cada fila corresponde a bytes archivados y verificados, no a un scope agregado. |
+
+### Programas curriculares y documentos PDF
+
+| Grupo de tablas | Propósito y controles | Clasificación |
+|---|---|---|
+| `lcd_curriculum_versions`, `lcd_curriculum_programs` | Versión normativa y programa por asignatura/nivel; identidad hashada, revisión, publicación y vigencia. | Curricular oficial. |
+| `lcd_curriculum_documents`, `lcd_curriculum_document_pages`, `lcd_curriculum_document_sections`, `lcd_curriculum_document_program` | PDF cifrado, SHA-256, extracción/paginación física e impresa, secciones y relación de fuente. | Curricular restringido hasta publicación; descarga autenticada. |
+| `lcd_curriculum_axes`, `lcd_curriculum_units`, `lcd_curriculum_skills`, `lcd_curriculum_skill_formulations`, `lcd_curriculum_attitudes`, `lcd_curriculum_keywords`, `lcd_curriculum_elements` | Estructura normalizada y reutilizable con identidad, orden y metadatos curriculares. | Curricular. |
+| `lcd_curriculum_program_axes`, `lcd_curriculum_program_objectives`, `lcd_curriculum_unit_objectives`, `lcd_curriculum_axis_objectives`, `lcd_curriculum_unit_skills`, `lcd_curriculum_unit_attitudes`, `lcd_curriculum_unit_keywords`, `lcd_curriculum_element_relations` | Relaciones n:m con orden, documento, página y texto original. Todas usan FK `RESTRICT`; no se publican OA implícitos. | Curricular/auditable. |
+| `lcd_curriculum_import_files`, `lcd_curriculum_import_candidates`, `lcd_curriculum_import_conflicts`, `lcd_curriculum_import_logs` | Staging por archivo, progreso, confianza, decisiones, conflictos y bitácora. Único escuela+SHA evita duplicados. | Interno restringido/auditable. |
+
+`lcd_class_sessions` puede referenciar programa, unidad y eje; `lcd_assessments` puede referenciar programa y unidad. Las columnas son nulas y aditivas para conservar registros históricos. El servicio de dominio exige programa publicado, misma asignatura/nivel y OA pertenecientes a la unidad.
 | `lcd_learning_objective_sources` | Relación N:M entre objetivo y documentos fuente. | Objetivo/fuente, rol, localizador, `relationship_hash` y snapshot de fuente; unicidad por objetivo+fuente+rol+localizador. | Trazabilidad oficial. Declarado en `000011`, pendiente localmente; cada objetivo requiere exactamente un `canonical_text`, y otros roles no lo sustituyen. |
+| `lcd_subject_catalog_profiles` | Presentación escalable de una asignatura sin alterar su identidad técnica compartida. | Asignatura única, nombre visible, tipo, descripción, tipos de enseñanza JSON y actores. | Configuración curricular interna; FK de asignatura `RESTRICT`. |
+| `lcd_subject_external_aliases` | Match confirmado entre un nombre proveniente de otro libro digital y una asignatura institucional. | Escuela, asignatura, sistema de origen, alcance, tipo de enseñanza, nombre externo normalizado, clave SHA-256, vigencia, confirmador y fecha. | Configuración escolar auditable; unicidad escuela+origen+clave e índices para resolución de importación. |
+
+Los 149 nombres de **Libro digital anterior** viven en configuración versionada y no se siembran en estas tablas. Solo una confirmación explícita crea o actualiza un alias escolar. La importación prioriza el alias compatible con el tipo de enseñanza; ante cero o más de un destino mantiene la asignatura pendiente.
 
 ## 3. Sesiones, leccionario, asistencia y firma
 

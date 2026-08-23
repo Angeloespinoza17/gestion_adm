@@ -11,6 +11,7 @@ use App\Models\Infirmary\InfirmaryAccident;
 use App\Models\Infirmary\InfirmaryAttention;
 use App\Models\Infirmary\InfirmaryMedicationAdministration;
 use App\Models\Infirmary\InfirmaryMedicationAuthorization;
+use App\Services\StudentProtection\GuardianRestrictionService;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
@@ -19,6 +20,8 @@ use Illuminate\Support\Str;
 class InfirmaryStudentContextService
 {
     private ?Collection $teachers = null;
+
+    public function __construct(private readonly GuardianRestrictionService $guardianRestrictions) {}
 
     public function activeAcademicYear(): ?AcademicYear
     {
@@ -88,6 +91,17 @@ class InfirmaryStudentContextService
             ])
             ->orderBy('start_date')
             ->get();
+        $student->loadMissing([
+            'pickupRestrictions' => fn ($query) => $query
+                ->activeOn()
+                ->latest('starts_on')
+                ->latest('id'),
+        ]);
+        $activeGuardianRestrictions = $this->guardianRestrictions->activePayload($student, false);
+        $emergencyContacts = $this->guardianRestrictions->decorateContacts(
+            $this->emergencyContacts($student),
+            $activeGuardianRestrictions,
+        );
 
         return [
             'id' => $student->id,
@@ -107,7 +121,8 @@ class InfirmaryStudentContextService
             'fit_for_physical_education' => $student->fit_for_physical_education,
             'has_private_school_insurance' => $student->has_private_school_insurance,
             'health_observations' => $this->meaningfulMedicalText($student->health_observations),
-            'emergency_contacts' => $this->emergencyContacts($student),
+            'emergency_contacts' => $emergencyContacts,
+            'guardian_restrictions' => $activeGuardianRestrictions,
             'allergies' => $student->has_medication_allergies ? $student->medication_allergies_details : null,
             'chronic_illness' => $student->has_chronic_illness ? $student->chronic_illness_details : null,
             'physical_restrictions' => $student->has_physical_restrictions ? $student->physical_restrictions_details : null,
@@ -159,6 +174,10 @@ class InfirmaryStudentContextService
                 'enrollments' => fn ($query) => $query
                     ->when($activeYear, fn ($inner) => $inner->where('academic_year_id', $activeYear->id))
                     ->with('courseSection:id,display_name'),
+                'pickupRestrictions' => fn ($query) => $query
+                    ->activeOn()
+                    ->latest('starts_on')
+                    ->latest('id'),
             ])
             ->when($tokens !== [], function (Builder $query) use ($tokens, $searchableColumns, $normalizedRutColumn) {
                 foreach ($tokens as $token) {
@@ -401,6 +420,7 @@ class InfirmaryStudentContextService
                 'type' => 'primary',
                 'label' => 'Apoderado principal',
                 'name' => $student->guardian_name,
+                'rut' => $student->guardian_rut,
                 'relationship' => $student->guardian_relationship ?: $student->guardian_role,
                 'phone' => $student->guardian_phone,
                 'email' => $student->guardian_email,
@@ -409,6 +429,7 @@ class InfirmaryStudentContextService
                 'type' => 'backup',
                 'label' => 'Apoderado suplente',
                 'name' => $student->guardian_backup_name,
+                'rut' => $student->guardian_backup_rut,
                 'relationship' => $student->guardian_backup_relationship ?: $student->guardian_backup_role,
                 'phone' => $student->guardian_backup_phone,
                 'email' => $student->guardian_backup_email,

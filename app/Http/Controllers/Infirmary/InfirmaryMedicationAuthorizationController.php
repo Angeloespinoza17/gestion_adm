@@ -28,16 +28,19 @@ class InfirmaryMedicationAuthorizationController extends Controller
     public function index(Request $request): JsonResponse
     {
         $this->authorize('viewAny', InfirmaryMedicationAuthorization::class);
-        $this->stockService->refreshDynamicStatuses();
 
         $search = trim((string) $request->query('search'));
         $studentId = $request->query('student_profile_id');
         $medicationId = $request->query('medication_id');
         $status = trim((string) $request->query('status'));
         $dailyStatusFilter = trim((string) $request->query('daily_status'));
-        $today = now(config('app.timezone'));
-        $dayStart = $today->copy()->startOfDay();
-        $dayEnd = $today->copy()->endOfDay();
+        $controlDate = $this->requestedControlDate($request);
+        $dayStart = $controlDate->copy()->startOfDay();
+        $dayEnd = $controlDate->copy()->endOfDay();
+
+        if ($controlDate->isToday()) {
+            $this->stockService->refreshDynamicStatuses();
+        }
 
         $query = InfirmaryMedicationAuthorization::query()
             ->when($search !== '', function ($query) use ($search) {
@@ -60,9 +63,9 @@ class InfirmaryMedicationAuthorizationController extends Controller
 
         $dailyRelations = [
             'schedules' => fn ($relation) => $relation->where('active', true)->orderBy('dose_order'),
-            'administrations' => fn ($relation) => $relation->where(function ($administrations) use ($today, $dayStart, $dayEnd) {
+            'administrations' => fn ($relation) => $relation->where(function ($administrations) use ($controlDate, $dayStart, $dayEnd) {
                 $administrations
-                    ->whereDate('scheduled_for_date', $today->toDateString())
+                    ->where('scheduled_for_date', $controlDate->toDateString())
                     ->orWhere(function ($legacy) use ($dayStart, $dayEnd) {
                         $legacy
                             ->whereNull('scheduled_for_date')
@@ -75,9 +78,9 @@ class InfirmaryMedicationAuthorizationController extends Controller
             $matchingIds = (clone $query)
                 ->with($dailyRelations)
                 ->get()
-                ->filter(function (InfirmaryMedicationAuthorization $authorization) use ($today, $dailyStatusFilter) {
+                ->filter(function (InfirmaryMedicationAuthorization $authorization) use ($controlDate, $dailyStatusFilter) {
                     return $this->dailyStatusService->matchesFilter(
-                        $this->dailyStatusService->forAuthorization($authorization, $today),
+                        $this->dailyStatusService->forAuthorization($authorization, $controlDate),
                         $dailyStatusFilter,
                     );
                 })
@@ -94,17 +97,17 @@ class InfirmaryMedicationAuthorizationController extends Controller
             ], $dailyRelations))
             ->withCount('administrations')
             ->latest('start_date')
-            ->paginate((int) $request->query('per_page', 15));
+            ->paginate(min(max($request->integer('per_page', 15), 1), 100));
 
-        $items->getCollection()->each(function (InfirmaryMedicationAuthorization $authorization) use ($today) {
+        $items->getCollection()->each(function (InfirmaryMedicationAuthorization $authorization) use ($controlDate) {
             $authorization->setAttribute(
                 'daily_status',
-                $this->dailyStatusService->forAuthorization($authorization, $today),
+                $this->dailyStatusService->forAuthorization($authorization, $controlDate),
             );
         });
 
         $response = $items->toArray();
-        $response['daily_status_date'] = $today->toDateString();
+        $response['daily_status_date'] = $controlDate->toDateString();
 
         return response()->json($response);
     }
@@ -143,10 +146,14 @@ class InfirmaryMedicationAuthorizationController extends Controller
         ], 201);
     }
 
-    public function show(InfirmaryMedicationAuthorization $authorization): JsonResponse
+    public function show(Request $request, InfirmaryMedicationAuthorization $authorization): JsonResponse
     {
         $this->authorize('view', $authorization);
-        $this->stockService->refreshDynamicStatuses();
+        $controlDate = $this->requestedControlDate($request);
+
+        if ($controlDate->isToday()) {
+            $this->stockService->refreshDynamicStatuses();
+        }
 
         $authorization->load([
             'student:id,first_name,last_name,rut,guardian_name,guardian_phone,guardian_email',
@@ -159,7 +166,10 @@ class InfirmaryMedicationAuthorizationController extends Controller
             'createdBy:id,name',
             'updatedBy:id,name',
         ]);
-        $authorization->setAttribute('daily_status', $this->dailyStatusService->forAuthorization($authorization));
+        $authorization->setAttribute(
+            'daily_status',
+            $this->dailyStatusService->forAuthorization($authorization, $controlDate),
+        );
 
         return response()->json([
             'data' => $authorization,
@@ -416,6 +426,17 @@ class InfirmaryMedicationAuthorizationController extends Controller
             ->when($doseOrders !== [], fn ($query) => $query->whereNotIn('dose_order', $doseOrders))
             ->when($doseOrders === [], fn ($query) => $query)
             ->delete();
+    }
+
+    private function requestedControlDate(Request $request): Carbon
+    {
+        $validated = $request->validate([
+            'control_date' => ['nullable', 'date_format:Y-m-d'],
+        ]);
+
+        return isset($validated['control_date'])
+            ? Carbon::createFromFormat('Y-m-d', $validated['control_date'], config('app.timezone'))->startOfDay()
+            : now(config('app.timezone'));
     }
 
     private function dailyFrequencyLabel(int $dailyDoseCount): string

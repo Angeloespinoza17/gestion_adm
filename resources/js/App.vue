@@ -1,10 +1,20 @@
-<script setup>
-import { computed, defineAsyncComponent } from "vue";
-import { useRoute } from "vue-router";
+<script>
+import { defineAsyncComponent } from "vue";
+import layoutMixin from "./mixins/layouts.mixin";
 
-const route = useRoute();
-const MessagingMiniChat = defineAsyncComponent(() => import("./modules/messaging/components/MessagingMiniChat.vue"));
-const authenticated = computed(() => Boolean(localStorage.getItem("token")) && !["/login", "/register"].includes(route.path));
+export default {
+  name: "App",
+  mixins: [layoutMixin],
+  components: {
+    MessagingMiniChat: defineAsyncComponent(() => import("./modules/messaging/components/MessagingMiniChat.vue")),
+  },
+  computed: {
+    authenticated() {
+      return Boolean(localStorage.getItem("token"))
+        && !["/login", "/register"].includes(this.$route.path);
+    },
+  },
+};
 </script>
 
 <template>

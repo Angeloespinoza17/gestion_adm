@@ -27,7 +27,7 @@ class AttendanceApiTest extends TestCase
             'name' => '2026', 'year' => 2026, 'starts_at' => '2026-03-01',
             'ends_at' => '2026-12-31', 'is_active' => true, 'is_closed' => false,
         ]);
-        $level = EducationLevel::query()->create(['name' => '2º Básico', 'order' => 2, 'type' => 'basica']);
+        $level = EducationLevel::query()->where('order', 4)->firstOrFail();
         $course = CourseSection::query()->create([
             'academic_year_id' => $year->id,
             'education_level_id' => $level->id,
@@ -127,7 +127,7 @@ class AttendanceApiTest extends TestCase
             'name' => '2026', 'year' => 2026, 'starts_at' => '2026-03-01',
             'ends_at' => '2026-12-31', 'is_active' => true, 'is_closed' => false,
         ]);
-        $level = EducationLevel::query()->create(['name' => '2º Básico', 'order' => 2, 'type' => 'basica']);
+        $level = EducationLevel::query()->where('order', 4)->firstOrFail();
         $course = CourseSection::query()->create([
             'academic_year_id' => $year->id,
             'education_level_id' => $level->id,

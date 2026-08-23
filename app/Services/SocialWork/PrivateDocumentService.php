@@ -21,7 +21,8 @@ class PrivateDocumentService {
     }
     public function download(Document|MedicalCertificate $document, User $user) {
         $this->audit->record('document.downloaded', $document, $user, [], ['original_name' => $document->original_name]);
-        abort_unless(Storage::disk('local')->exists($document->getRawOriginal('private_path')), 404);
-        return Storage::disk('local')->download($document->getRawOriginal('private_path'), $document->original_name, ['Content-Type' => $document->mime_type, 'Cache-Control' => 'private, no-store']);
+        $privatePath = $document->getRawOriginal('private_path');
+        abort_unless(filled($privatePath) && Storage::disk('local')->exists($privatePath), 404);
+        return Storage::disk('local')->download($privatePath, $document->original_name, ['Content-Type' => $document->mime_type, 'Cache-Control' => 'private, no-store']);
     }
 }

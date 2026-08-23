@@ -87,6 +87,7 @@ class AttendanceReportService
                 'generated_at' => now()->toIso8601String(),
                 'capabilities' => [
                     'can_import' => $user?->hasPermission('importar_asistencia') ?? false,
+                    'can_import_grades' => $user?->hasPermission('importar_calificaciones') ?? false,
                     'can_edit' => $user?->hasPermission('editar_asistencia') ?? false,
                     'can_manage_alerts' => $user?->hasPermission('gestionar_alertas_asistencia') ?? false,
                     'can_project_revenue' => $user?->hasPermission('proyectar_ingresos_asistencia') ?? false,

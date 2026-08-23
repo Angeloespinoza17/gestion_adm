@@ -94,6 +94,23 @@ class InfirmaryMedicationDailyStatusServiceTest extends TestCase
         $this->assertSame('sos', $status['state']);
     }
 
+    #[Test]
+    public function it_reconstructs_a_past_active_day_even_when_the_routine_is_terminated_today(): void
+    {
+        $authorization = $this->authorizationWithSchedules(1);
+        $authorization->status = InfirmaryMedicationAuthorization::STATUS_TERMINADA;
+        $authorization->end_date = '2026-07-16';
+
+        $status = $this->service->forAuthorization(
+            $authorization,
+            Carbon::parse('2026-07-15 10:00:00', 'America/Santiago'),
+        );
+
+        $this->assertTrue($status['applicable']);
+        $this->assertSame('pending', $status['state']);
+        $this->assertSame('2026-07-15', $status['date']);
+    }
+
     private function authorizationWithSchedules(int $count): InfirmaryMedicationAuthorization
     {
         $authorization = new InfirmaryMedicationAuthorization([

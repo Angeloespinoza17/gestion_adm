@@ -36,6 +36,11 @@ const CurriculumObjectivesSection = defineAsyncComponent(() =>
         "../../components/libro-digital/sections/CurriculumObjectivesSection.vue"
     )
 );
+const CurriculumProgramsSection = defineAsyncComponent(() =>
+    import(
+        "../../components/libro-digital/sections/CurriculumProgramsSection.vue"
+    )
+);
 const BookWorkspaceSection = defineAsyncComponent(() =>
     import("../../components/libro-digital/sections/BookWorkspaceSection.vue")
 );
@@ -100,6 +105,15 @@ const sections = [
         icon: "bx-grid-alt",
         path: "/libro-digital/subjects",
         capability: "can_view_subjects",
+    },
+    {
+        key: "programs",
+        label: "Programas",
+        shortLabel: "Programas",
+        description: "Libros ministeriales",
+        icon: "bx-library",
+        path: "/libro-digital/curriculum-programs",
+        capability: "can_view_curriculum_programs",
     },
     {
         key: "curriculum",
@@ -184,6 +198,15 @@ const sectionMeta = {
         closingRule:
             "La consulta no altera el catálogo. Solo los objetivos disponibles pueden incorporarse al leccionario.",
     },
+    programs: {
+        title: "Catálogo curricular ministerial",
+        explanation:
+            "Importa, revisa y publica programas oficiales con unidades, objetivos, ejes, habilidades y evidencia por página.",
+        responsible:
+            "UTP y coordinación revisan; la publicación queda limitada a usuarios con permiso explícito.",
+        closingRule:
+            "Una carga nunca publica automáticamente: los conflictos críticos deben resolverse y el catálogo maestro no se duplica.",
+    },
     workspace: {
         title: "Trabajo docente",
         explanation:
@@ -228,6 +251,8 @@ const queryValue = (value) => (Array.isArray(value) ? value[0] : value);
 const pathSection = computed(() => {
     const path = route.path;
     if (/^\/libro-digital\/books\/[^/]+/.test(path)) return "workspace";
+    if (path.startsWith("/libro-digital/curriculum-programs"))
+        return "programs";
     if (path.startsWith("/libro-digital/objectives")) return "curriculum";
     if (path.startsWith("/libro-digital/subjects")) return "subjects";
     if (
@@ -661,6 +686,13 @@ watch(
                 />
                 <CurriculumObjectivesSection
                     v-else-if="activeSection === 'curriculum'"
+                    :context="context"
+                    :catalogs="catalogs"
+                    :capabilities="capabilities"
+                    :refresh-token="refreshToken"
+                />
+                <CurriculumProgramsSection
+                    v-else-if="activeSection === 'programs'"
                     :context="context"
                     :catalogs="catalogs"
                     :capabilities="capabilities"

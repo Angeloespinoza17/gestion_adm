@@ -19,6 +19,7 @@ use App\Models\LibroDigital\TeachingGroup;
 use App\Services\LibroDigital\AuditEventWriter;
 use App\Services\LibroDigital\CanonicalJson;
 use App\Services\LibroDigital\CurriculumObjectiveScopeService;
+use App\Services\LibroDigital\Curriculum\CurriculumProgramScopeService;
 use App\Services\LibroDigital\LibroDigitalAccessContext;
 use App\Services\LibroDigital\OptimisticLock;
 use Illuminate\Database\Eloquent\Builder;
@@ -34,6 +35,7 @@ class AssessmentController extends LibroDigitalController
         private readonly CanonicalJson $canonical,
         private readonly AuditEventWriter $audit,
         private readonly CurriculumObjectiveScopeService $curriculumScope,
+        private readonly CurriculumProgramScopeService $programScope,
     ) {
         parent::__construct($access);
     }
@@ -77,8 +79,15 @@ class AssessmentController extends LibroDigitalController
         if ($data['scheduled_on'] < $year->starts_at->format('Y-m-d') || $data['scheduled_on'] > $year->ends_at->format('Y-m-d')) {
             throw new LibroDigitalException('La evaluación debe quedar dentro del año académico del libro.', 'LCD_ASSESSMENT_DATE_OUTSIDE_YEAR');
         }
+        $programContext = $this->programScope->resolve(
+            $bookModel,
+            (int) $group->schedule_subject_id,
+            $data['curriculum_program_id'] ?? null,
+            $data['curriculum_unit_id'] ?? null,
+            objectiveIds: array_values($data['curriculum_objective_ids'] ?? []),
+        );
 
-        $assessment = DB::transaction(function () use ($request, $bookModel, $group, $assignment, $year, $data): Assessment {
+        $assessment = DB::transaction(function () use ($request, $bookModel, $group, $assignment, $year, $data, $programContext): Assessment {
             $scheme = GradingScheme::query()->firstOrCreate(
                 ['school_id' => $bookModel->school_id, 'code' => 'CL_1_7', 'version' => '1'],
                 [
@@ -121,6 +130,8 @@ class AssessmentController extends LibroDigitalController
                 'grading_scheme_id' => $scheme->id,
                 'schedule_subject_id' => $group->schedule_subject_id,
                 'teacher_assignment_id' => $assignment->id,
+                'curriculum_program_id' => $programContext['program']?->id,
+                'curriculum_unit_id' => $programContext['unit']?->id,
                 'name' => $data['name'],
                 'description' => $data['description'] ?? null,
                 'assessment_type' => $data['assessment_type'],
@@ -161,8 +172,15 @@ class AssessmentController extends LibroDigitalController
                 throw new LibroDigitalException('La evaluación debe quedar dentro del año académico del libro.', 'LCD_ASSESSMENT_DATE_OUTSIDE_YEAR');
             }
         }
+        $programContext = $this->programScope->resolve(
+            $model->book,
+            (int) $model->schedule_subject_id,
+            array_key_exists('curriculum_program_id', $data) ? $data['curriculum_program_id'] : $model->curriculum_program_id,
+            array_key_exists('curriculum_unit_id', $data) ? $data['curriculum_unit_id'] : $model->curriculum_unit_id,
+            objectiveIds: array_values($data['curriculum_objective_ids'] ?? data_get($model->instrument_metadata, 'curriculum_objective_ids', [])),
+        );
 
-        DB::transaction(function () use ($request, $model, $data): void {
+        DB::transaction(function () use ($request, $model, $data, $programContext): void {
             $locked = Assessment::query()->lockForUpdate()->findOrFail($model->id);
             $this->locks->assert($locked, $request);
             $metadata = $locked->instrument_metadata ?? [];
@@ -181,6 +199,8 @@ class AssessmentController extends LibroDigitalController
                 'weight' => array_key_exists('weighting', $data) ? ($data['weighting'] ?? 0) : $locked->weight,
                 'maximum_score' => array_key_exists('maximum_score', $data) ? $data['maximum_score'] : $locked->maximum_score,
                 'instrument_metadata' => $metadata,
+                'curriculum_program_id' => $programContext['program']?->id,
+                'curriculum_unit_id' => $programContext['unit']?->id,
                 'revision' => $locked->revision + 1,
                 'lock_version' => $locked->lock_version + 1,
                 'updated_by' => $request->user()->id,
@@ -242,6 +262,9 @@ class AssessmentController extends LibroDigitalController
                     ...$record,
                     'student_enrollment_id' => $link->student_enrollment_id,
                     'enrollment_link_id' => $link->id,
+                    // Una corrección explícita desde Libro Digital prevalece sobre futuras recargas masivas.
+                    'annual_grade_import_id' => null,
+                    'annual_grade_import_cell_id' => null,
                     'record_hash' => $this->canonical->hash([
                         'assessment_public_id' => $locked->public_id,
                         'student_profile_id' => $link->student_profile_id,
@@ -479,6 +502,7 @@ class AssessmentController extends LibroDigitalController
     /** @return array<string, mixed> */
     private function payload(Assessment $assessment, int $expected, bool $includeResults = false): array
     {
+        $assessment->loadMissing(['curriculumProgram', 'curriculumUnit']);
         $metadata = $assessment->instrument_metadata ?? [];
 
         return [
@@ -494,6 +518,8 @@ class AssessmentController extends LibroDigitalController
             'maximum_score' => $assessment->maximum_score !== null ? (float) $assessment->maximum_score : null,
             'grading_scale' => $metadata['grading_scale'] ?? '1_to_7',
             'curriculum_objective_ids' => array_values($metadata['curriculum_objective_ids'] ?? []),
+            'curriculum_program_id' => $assessment->curriculumProgram?->public_id,
+            'curriculum_unit_id' => $assessment->curriculumUnit?->public_id,
             'status' => $this->statusValue($assessment->status),
             'results_count' => (int) ($assessment->results_count ?? $assessment->results()->count()),
             'expected_results_count' => $expected,

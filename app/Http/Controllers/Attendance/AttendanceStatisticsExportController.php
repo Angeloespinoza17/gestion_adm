@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Attendance\CreateAttendanceExportRequest;
 use App\Models\Attendance\AttendanceExportJob;
 use App\Services\Attendance\AttendanceExportService;
+use App\Services\Attendance\AttendanceManagementAccessService;
 use App\Services\Attendance\AttendanceStatisticsAuditService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -18,29 +19,43 @@ class AttendanceStatisticsExportController extends Controller
         CreateAttendanceExportRequest $request,
         AttendanceExportService $exports,
         AttendanceStatisticsAuditService $audit,
+        AttendanceManagementAccessService $access,
     ): JsonResponse {
-        $export = $exports->create($request->validated(), $request->user());
+        $data = $request->validated();
+        $studentId = (int) ($data['filters']['student_profile_id'] ?? 0);
+        if (in_array($data['report_type'], ['individual', 'family_interview'], true)) {
+            abort_unless($studentId > 0 && $access->canViewStudent($request->user(), $studentId, (int) $data['academic_year_id']), 403);
+        }
+        $courseId = (int) ($data['filters']['course_section_id'] ?? 0);
+        if ($data['report_type'] === 'course_management') {
+            abort_unless($courseId > 0, 422, 'Selecciona un curso para generar el reporte.');
+            abort_if(! $access->canViewAll($request->user()) && ! $access->courseIds($request->user(), (int) $data['academic_year_id'])->contains($courseId), 403);
+        }
+        $export = $exports->create($data, $request->user());
         $audit->log('export_requested', $export, $request->user(), newValues: $request->validated(), request: $request);
 
         return response()->json($this->payload($export), 202);
     }
 
-    public function index(Request $request): JsonResponse
+    public function index(Request $request, AttendanceManagementAccessService $access): JsonResponse
     {
+        abort_unless($access->canExport($request->user()), 403);
         return response()->json([
             'data' => AttendanceExportJob::query()->where('user_id', $request->user()->id)->latest('id')->limit(30)->get()->map(fn ($export) => $this->payload($export)),
         ]);
     }
 
-    public function show(Request $request, AttendanceExportJob $attendanceExportJob): JsonResponse
+    public function show(Request $request, AttendanceExportJob $attendanceExportJob, AttendanceManagementAccessService $access): JsonResponse
     {
+        abort_unless($access->canExport($request->user()), 403);
         abort_unless($attendanceExportJob->user_id === $request->user()->id || $request->user()->hasPermission('attendance_statistics.manage_reports'), 403);
 
         return response()->json($this->payload($attendanceExportJob));
     }
 
-    public function download(Request $request, AttendanceExportJob $attendanceExportJob): StreamedResponse
+    public function download(Request $request, AttendanceExportJob $attendanceExportJob, AttendanceManagementAccessService $access): StreamedResponse
     {
+        abort_unless($access->canExport($request->user()), 403);
         abort_unless($attendanceExportJob->user_id === $request->user()->id || $request->user()->hasPermission('attendance_statistics.manage_reports'), 403);
         abort_unless($attendanceExportJob->status === 'completed' && $attendanceExportJob->file_path && Storage::disk('local')->exists($attendanceExportJob->file_path), 404);
         $extension = pathinfo($attendanceExportJob->file_path, PATHINFO_EXTENSION);

@@ -7,6 +7,7 @@ use App\Models\Permission;
 use App\Models\Role;
 use App\Models\SystemModule;
 use App\Models\User;
+use App\Services\RiskPrevention\RiskMatrixConfigurationInstaller;
 use Database\Seeders\Support\PreventsProductionSeeding;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Seeder;
@@ -24,6 +25,7 @@ class RbacSeeder extends Seeder
         $this->seedCargos();
         $this->seedPermissions();
         $this->seedModules();
+        app(RiskMatrixConfigurationInstaller::class)->install();
         $this->seedRolesAndAssignments();
         $this->seedSuperAdminUser();
         app(LibroDigitalSeeder::class)->seedRbacAndNavigation();
@@ -110,6 +112,8 @@ class RbacSeeder extends Seeder
             ['slug' => 'administrar_cursos_academicos', 'name' => 'Administrar Cursos Académicos'],
             ['slug' => 'gestionar_matriculas_estudiantes', 'name' => 'Gestionar Matrículas Estudiantiles'],
             ['slug' => 'promover_estudiantes', 'name' => 'Promover Estudiantes'],
+            ['slug' => 'grade_statistics.view', 'name' => 'Ver estadísticas de calificaciones'],
+            ['slug' => 'grade_statistics.view_students', 'name' => 'Ver consolidado nominal de calificaciones'],
 
             // Horarios docentes
             ['slug' => 'ver_horarios', 'name' => 'Ver Horarios Docentes'],
@@ -147,6 +151,8 @@ class RbacSeeder extends Seeder
             ['slug' => 'social_work.pickup_restrictions.manage', 'name' => 'Gestionar Restricciones de Retiro en Trabajo Social'],
             ['slug' => 'registrar_bitacora_inspectoria', 'name' => 'Registrar Bitácora Diaria de Inspectoría'],
             ['slug' => 'ver_estadisticas_inspectoria', 'name' => 'Ver Estadísticas de Inspectoría'],
+            ['slug' => 'ver_licencias_medicas_estudiantes', 'name' => 'Ver Licencias Médicas de Estudiantes'],
+            ['slug' => 'crear_licencias_medicas_estudiantes', 'name' => 'Registrar Licencias Médicas de Estudiantes'],
 
             // Módulos específicos
             ['slug' => 'ver_salud', 'name' => 'Ver Enfermería / Salud'],
@@ -279,6 +285,7 @@ class RbacSeeder extends Seeder
             ['slug' => 'students_movements', 'name' => 'Cambios y retiros', 'frontend_route' => '/students/movements', 'icon' => null, 'sort' => 6, 'parent' => 'students'],
             ['slug' => 'students_reports', 'name' => 'Reportes', 'frontend_route' => '/students/reports', 'icon' => null, 'sort' => 7, 'parent' => 'students'],
             ['slug' => 'students_attendance_statistics', 'name' => 'Estadísticas de asistencia', 'frontend_route' => '/students/attendance-statistics', 'icon' => null, 'sort' => 8, 'parent' => 'students'],
+            ['slug' => 'students_grade_statistics', 'name' => 'Estadísticas de calificaciones', 'frontend_route' => '/students/grade-statistics', 'icon' => 'bx-line-chart', 'sort' => 10, 'parent' => 'students'],
             ['slug' => 'schedule', 'name' => 'Horarios docentes', 'frontend_route' => null, 'icon' => 'bx-calendar-event', 'sort' => 23],
             ['slug' => 'inspectoria', 'name' => 'Inspectoría', 'frontend_route' => null, 'icon' => 'bx-shield-quarter', 'sort' => 24],
             ['slug' => 'inspectoria_atenciones', 'name' => 'Atención rápida', 'frontend_route' => '/inspectoria/atenciones', 'icon' => null, 'sort' => 1, 'parent' => 'inspectoria'],
@@ -288,6 +295,7 @@ class RbacSeeder extends Seeder
             ['slug' => 'inspectoria_retiros', 'name' => 'Retiros de alumnas', 'frontend_route' => '/inspectoria/retiros', 'icon' => null, 'sort' => 6, 'parent' => 'inspectoria'],
             ['slug' => 'inspectoria_bitacora', 'name' => 'Bitácora diaria', 'frontend_route' => '/inspectoria/bitacora', 'icon' => null, 'sort' => 7, 'parent' => 'inspectoria'],
             ['slug' => 'inspectoria_estadisticas', 'name' => 'Estadísticas', 'frontend_route' => '/inspectoria/estadisticas', 'icon' => 'bx-bar-chart-alt-2', 'sort' => 8, 'parent' => 'inspectoria'],
+            ['slug' => 'inspectoria_medical_leaves', 'name' => 'Licencias médicas', 'frontend_route' => '/inspectoria/licencias-medicas', 'icon' => 'bx-file-blank', 'sort' => 9, 'parent' => 'inspectoria'],
             ['slug' => 'schedule_teacher', 'name' => 'Horario docente', 'frontend_route' => '/schedule/teacher', 'icon' => null, 'sort' => 1, 'parent' => 'schedule'],
             ['slug' => 'schedule_course', 'name' => 'Horario por curso', 'frontend_route' => '/schedule/course', 'icon' => null, 'sort' => 2, 'parent' => 'schedule'],
             ['slug' => 'schedule_config', 'name' => 'Configuración horaria', 'frontend_route' => '/schedule/config', 'icon' => null, 'sort' => 3, 'parent' => 'schedule'],
@@ -334,19 +342,20 @@ class RbacSeeder extends Seeder
             ['slug' => 'contracts_clauses', 'name' => 'Cláusulas', 'frontend_route' => '/contracts/clauses', 'icon' => null, 'sort' => 3, 'parent' => 'contracts'],
             ['slug' => 'contracts_signatures', 'name' => 'Firmas', 'frontend_route' => '/contracts/signatures', 'icon' => null, 'sort' => 4, 'parent' => 'contracts'],
             ['slug' => 'infirmary', 'name' => 'Enfermería', 'frontend_route' => '/infirmary', 'icon' => 'bx-plus-medical', 'sort' => 50],
+            ['slug' => 'infirmary_medical_leaves', 'name' => 'Licencias médicas', 'frontend_route' => '/infirmary/medical-leaves', 'icon' => 'bx-file-blank', 'sort' => 8, 'parent' => 'infirmary'],
             ['slug' => 'psychology', 'name' => 'Psicología', 'frontend_route' => '/psychology', 'icon' => 'bx-brain', 'sort' => 60],
             ['slug' => 'convivencia', 'name' => 'Convivencia Escolar', 'frontend_route' => '/convivencia', 'icon' => 'bx-happy', 'sort' => 70],
             ['slug' => 'risk_prevention', 'name' => 'Prevención de Riesgos', 'frontend_route' => '/risk-prevention', 'icon' => 'bx-shield-quarter', 'sort' => 80],
             ['slug' => 'risk_prevention_dashboard', 'name' => 'Dashboard', 'frontend_route' => '/risk-prevention', 'icon' => null, 'sort' => 1, 'parent' => 'risk_prevention'],
-            ['slug' => 'risk_prevention_extinguishers', 'name' => 'Extintores', 'frontend_route' => '/risk-prevention/extinguishers', 'icon' => null, 'sort' => 2, 'parent' => 'risk_prevention'],
-            ['slug' => 'risk_prevention_accidents', 'name' => 'Accidentes', 'frontend_route' => '/risk-prevention/accidents', 'icon' => null, 'sort' => 3, 'parent' => 'risk_prevention'],
-            ['slug' => 'risk_prevention_emergencies', 'name' => 'Emergencias y planes', 'frontend_route' => '/risk-prevention/emergencies', 'icon' => null, 'sort' => 4, 'parent' => 'risk_prevention'],
-            ['slug' => 'risk_prevention_epp', 'name' => 'EPP y seguridad', 'frontend_route' => '/risk-prevention/epp', 'icon' => null, 'sort' => 5, 'parent' => 'risk_prevention'],
-            ['slug' => 'risk_prevention_trainings', 'name' => 'Capacitaciones', 'frontend_route' => '/risk-prevention/trainings', 'icon' => null, 'sort' => 6, 'parent' => 'risk_prevention'],
-            ['slug' => 'risk_prevention_personnel', 'name' => 'Gestión del personal', 'frontend_route' => '/risk-prevention/personnel', 'icon' => null, 'sort' => 7, 'parent' => 'risk_prevention'],
-            ['slug' => 'risk_prevention_documents', 'name' => 'Gestión documental empresa', 'frontend_route' => '/risk-prevention/documents', 'icon' => null, 'sort' => 8, 'parent' => 'risk_prevention'],
-            ['slug' => 'risk_prevention_staff_documents', 'name' => 'Gestión documental', 'frontend_route' => '/risk-prevention/document-management', 'icon' => null, 'sort' => 9, 'parent' => 'risk_prevention'],
-            ['slug' => 'risk_prevention_reports', 'name' => 'Reportes', 'frontend_route' => '/risk-prevention/reports', 'icon' => null, 'sort' => 10, 'parent' => 'risk_prevention'],
+            ['slug' => 'risk_prevention_extinguishers', 'name' => 'Extintores', 'frontend_route' => '/risk-prevention/extinguishers', 'icon' => null, 'sort' => 10, 'parent' => 'risk_prevention'],
+            ['slug' => 'risk_prevention_accidents', 'name' => 'Accidentes', 'frontend_route' => '/risk-prevention/accidents', 'icon' => null, 'sort' => 20, 'parent' => 'risk_prevention'],
+            ['slug' => 'risk_prevention_emergencies', 'name' => 'Emergencias y planes', 'frontend_route' => '/risk-prevention/emergencies', 'icon' => null, 'sort' => 30, 'parent' => 'risk_prevention'],
+            ['slug' => 'risk_prevention_epp', 'name' => 'EPP y seguridad', 'frontend_route' => '/risk-prevention/epp', 'icon' => null, 'sort' => 40, 'parent' => 'risk_prevention'],
+            ['slug' => 'risk_prevention_trainings', 'name' => 'Capacitaciones', 'frontend_route' => '/risk-prevention/trainings', 'icon' => null, 'sort' => 50, 'parent' => 'risk_prevention'],
+            ['slug' => 'risk_prevention_personnel', 'name' => 'Gestión del personal', 'frontend_route' => '/risk-prevention/personnel', 'icon' => null, 'sort' => 60, 'parent' => 'risk_prevention'],
+            ['slug' => 'risk_prevention_documents', 'name' => 'Gestión documental empresa', 'frontend_route' => '/risk-prevention/documents', 'icon' => null, 'sort' => 70, 'parent' => 'risk_prevention'],
+            ['slug' => 'risk_prevention_staff_documents', 'name' => 'Gestión documental', 'frontend_route' => '/risk-prevention/document-management', 'icon' => null, 'sort' => 80, 'parent' => 'risk_prevention'],
+            ['slug' => 'risk_prevention_reports', 'name' => 'Reportes', 'frontend_route' => '/risk-prevention/reports', 'icon' => null, 'sort' => 90, 'parent' => 'risk_prevention'],
 
             // Mantención (padre + submódulos)
             ['slug' => 'maintenance', 'name' => 'Mantención', 'frontend_route' => null, 'icon' => 'bx-wrench', 'sort' => 90],
@@ -476,6 +485,8 @@ class RbacSeeder extends Seeder
             'administrar_cursos_academicos',
             'gestionar_matriculas_estudiantes',
             'promover_estudiantes',
+            'grade_statistics.view',
+            'grade_statistics.view_students',
             'ver_horarios',
             'editar_horarios',
             'configurar_horarios',
@@ -597,6 +608,8 @@ class RbacSeeder extends Seeder
             'ver_retiros_inspectoria',
             'registrar_bitacora_inspectoria',
             'ver_estadisticas_inspectoria',
+            'ver_licencias_medicas_estudiantes',
+            'crear_licencias_medicas_estudiantes',
         ]));
 
         $rolesBySlug['administrador']->modules()->sync($this->ids($modulesBySlug, [
@@ -608,6 +621,7 @@ class RbacSeeder extends Seeder
             'students_courses',
             'students_promotions',
             'students_movements',
+            'students_grade_statistics',
             'schedule',
             'schedule_teacher',
             'schedule_course',
@@ -740,10 +754,14 @@ class RbacSeeder extends Seeder
             'exportar_rondas_seguridad',
             'ver_horarios',
             'ver_reportes_carga_horaria',
+            'grade_statistics.view',
+            'grade_statistics.view_students',
         ]));
 
         $rolesBySlug['direccion']->modules()->sync($this->ids($modulesBySlug, [
             'dashboard',
+            'students',
+            'students_grade_statistics',
             'porter',
             'porter_dashboard',
             'porter_students',
@@ -805,6 +823,8 @@ class RbacSeeder extends Seeder
             'inspectoria_retiros',
             'inspectoria_bitacora',
             'inspectoria_estadisticas',
+            'inspectoria_medical_leaves',
+            'infirmary_medical_leaves',
         ]));
 
         // Coordinación académica
@@ -814,6 +834,8 @@ class RbacSeeder extends Seeder
             'gestionar_comunicaciones_internas',
             'ver_funcionarios',
             'ver_estudiantes',
+            'grade_statistics.view',
+            'grade_statistics.view_students',
             'ver_ficha_estudiante',
             'ver_porteria',
             'registrar_bitacora_porteria',
@@ -855,6 +877,7 @@ class RbacSeeder extends Seeder
             'students_directory',
             'students_levels',
             'students_courses',
+            'students_grade_statistics',
             'porter',
             'porter_dashboard',
             'porter_students',
@@ -1002,6 +1025,8 @@ class RbacSeeder extends Seeder
             'ver_estudiantes',
             'ver_ficha_estudiante',
             'ver_salud',
+            'ver_licencias_medicas_estudiantes',
+            'crear_licencias_medicas_estudiantes',
             'ver_tareas',
             'gestionar_tareas',
         ]));
@@ -1011,6 +1036,7 @@ class RbacSeeder extends Seeder
             'students',
             'students_directory',
             'infirmary',
+            'infirmary_medical_leaves',
             'tasks',
             'tasks_backlog',
         ]));
@@ -1136,6 +1162,8 @@ class RbacSeeder extends Seeder
             'ver_prevencion_riesgos',
             'gestionar_prevencion_riesgos',
             'exportar_prevencion_riesgos',
+            'ver_documentos_prevencion_difundibles',
+            ...array_keys(app(RiskMatrixConfigurationInstaller::class)->permissions()),
             'ver_mantencion',
             'ver_reportes_mantencion',
             'ver_reportes',
@@ -1155,6 +1183,10 @@ class RbacSeeder extends Seeder
             'dashboard',
             'risk_prevention',
             'risk_prevention_dashboard',
+            'risk_prevention_risk_matrices',
+            'risk_prevention_risk_imports',
+            'risk_prevention_risk_catalogs',
+            'risk_prevention_preventive_program',
             'risk_prevention_extinguishers',
             'risk_prevention_accidents',
             'risk_prevention_emergencies',
@@ -1191,6 +1223,8 @@ class RbacSeeder extends Seeder
             'social_work.referrals.submit',
             'registrar_bitacora_inspectoria',
             'ver_estadisticas_inspectoria',
+            'ver_licencias_medicas_estudiantes',
+            'crear_licencias_medicas_estudiantes',
             'ver_dashboard',
             'ver_estudiantes',
             'ver_ficha_estudiante',
@@ -1232,6 +1266,7 @@ class RbacSeeder extends Seeder
             'inspectoria_retiros',
             'inspectoria_bitacora',
             'inspectoria_estadisticas',
+            'inspectoria_medical_leaves',
             'dashboard',
             'students',
             'students_directory',
@@ -1278,6 +1313,8 @@ class RbacSeeder extends Seeder
             'social_work.referrals.submit',
             'registrar_bitacora_inspectoria',
             'ver_estadisticas_inspectoria',
+            'ver_licencias_medicas_estudiantes',
+            'crear_licencias_medicas_estudiantes',
         ]));
 
         $rolesBySlug['coordinador_inspectoria']->modules()->sync($this->ids($modulesBySlug, [
@@ -1289,6 +1326,7 @@ class RbacSeeder extends Seeder
             'inspectoria_retiros',
             'inspectoria_bitacora',
             'inspectoria_estadisticas',
+            'inspectoria_medical_leaves',
             'social_work',
             'social_work_referrals',
         ]));

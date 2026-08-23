@@ -6,6 +6,7 @@ use App\Models\Permission;
 use App\Models\Role;
 use App\Models\SystemModule;
 use App\Models\User;
+use App\Services\RiskPrevention\RiskMatrixConfigurationInstaller;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\Hash;
 
@@ -18,6 +19,7 @@ class PrevencionRiesgosModuleSeeder extends Seeder
         $this->ensureRoles();
         $this->ensureSuperAdminUser();
         $this->assignPermissionsAndModules();
+        app(RiskMatrixConfigurationInstaller::class)->install();
     }
 
     private function seedPermissions(): void
@@ -57,15 +59,19 @@ class PrevencionRiesgosModuleSeeder extends Seeder
 
         $children = [
             ['slug' => 'risk_prevention_dashboard', 'name' => 'Dashboard', 'route' => '/risk-prevention', 'sort' => 1],
-            ['slug' => 'risk_prevention_extinguishers', 'name' => 'Extintores', 'route' => '/risk-prevention/extinguishers', 'sort' => 2],
-            ['slug' => 'risk_prevention_accidents', 'name' => 'Accidentes', 'route' => '/risk-prevention/accidents', 'sort' => 3],
-            ['slug' => 'risk_prevention_emergencies', 'name' => 'Emergencias y planes', 'route' => '/risk-prevention/emergencies', 'sort' => 4],
-            ['slug' => 'risk_prevention_epp', 'name' => 'EPP y seguridad', 'route' => '/risk-prevention/epp', 'sort' => 5],
-            ['slug' => 'risk_prevention_trainings', 'name' => 'Capacitaciones', 'route' => '/risk-prevention/trainings', 'sort' => 6],
-            ['slug' => 'risk_prevention_personnel', 'name' => 'Gestión del personal', 'route' => '/risk-prevention/personnel', 'sort' => 7],
-            ['slug' => 'risk_prevention_documents', 'name' => 'Gestión documental empresa', 'route' => '/risk-prevention/documents', 'sort' => 8],
-            ['slug' => 'risk_prevention_staff_documents', 'name' => 'Gestión documental', 'route' => '/risk-prevention/document-management', 'sort' => 9],
-            ['slug' => 'risk_prevention_reports', 'name' => 'Reportes', 'route' => '/risk-prevention/reports', 'sort' => 10],
+            ['slug' => 'risk_prevention_risk_matrices', 'name' => 'Matrices IPER/MIPER', 'route' => '/risk-prevention/matrices', 'sort' => 2],
+            ['slug' => 'risk_prevention_risk_imports', 'name' => 'Importaciones IPER', 'route' => '/risk-prevention/matrices/importaciones', 'sort' => 3],
+            ['slug' => 'risk_prevention_risk_catalogs', 'name' => 'Catálogos y metodología', 'route' => '/risk-prevention/matrices/catalogos', 'sort' => 4],
+            ['slug' => 'risk_prevention_preventive_program', 'name' => 'Programa de Trabajo Preventivo', 'route' => '/risk-prevention/preventive-program', 'sort' => 5],
+            ['slug' => 'risk_prevention_extinguishers', 'name' => 'Extintores', 'route' => '/risk-prevention/extinguishers', 'sort' => 10],
+            ['slug' => 'risk_prevention_accidents', 'name' => 'Accidentes', 'route' => '/risk-prevention/accidents', 'sort' => 20],
+            ['slug' => 'risk_prevention_emergencies', 'name' => 'Emergencias y planes', 'route' => '/risk-prevention/emergencies', 'sort' => 30],
+            ['slug' => 'risk_prevention_epp', 'name' => 'EPP y seguridad', 'route' => '/risk-prevention/epp', 'sort' => 40],
+            ['slug' => 'risk_prevention_trainings', 'name' => 'Capacitaciones', 'route' => '/risk-prevention/trainings', 'sort' => 50],
+            ['slug' => 'risk_prevention_personnel', 'name' => 'Gestión del personal', 'route' => '/risk-prevention/personnel', 'sort' => 60],
+            ['slug' => 'risk_prevention_documents', 'name' => 'Gestión documental empresa', 'route' => '/risk-prevention/documents', 'sort' => 70],
+            ['slug' => 'risk_prevention_staff_documents', 'name' => 'Gestión documental', 'route' => '/risk-prevention/document-management', 'sort' => 80],
+            ['slug' => 'risk_prevention_reports', 'name' => 'Reportes', 'route' => '/risk-prevention/reports', 'sort' => 90],
         ];
 
         foreach ($children as $child) {
@@ -141,11 +147,16 @@ class PrevencionRiesgosModuleSeeder extends Seeder
             'ver_prevencion_riesgos',
             'gestionar_prevencion_riesgos',
             'exportar_prevencion_riesgos',
+            'ver_documentos_prevencion_difundibles',
         ])->get()->keyBy('slug');
 
         $modules = SystemModule::query()->whereIn('slug', [
             'risk_prevention',
             'risk_prevention_dashboard',
+            'risk_prevention_risk_matrices',
+            'risk_prevention_risk_imports',
+            'risk_prevention_risk_catalogs',
+            'risk_prevention_preventive_program',
             'risk_prevention_extinguishers',
             'risk_prevention_accidents',
             'risk_prevention_emergencies',

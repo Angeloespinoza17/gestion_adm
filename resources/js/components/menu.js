@@ -144,6 +144,30 @@ export const menuItems = [
             },
             {
                 id: 9392,
+                label: "Matrices IPER/MIPER",
+                link: "/risk-prevention/matrices",
+                parentId: 939
+            },
+            {
+                id: 93920,
+                label: "Importaciones IPER",
+                link: "/risk-prevention/matrices/importaciones",
+                parentId: 939
+            },
+            {
+                id: 93921,
+                label: "Catálogos y metodología",
+                link: "/risk-prevention/matrices/catalogos",
+                parentId: 939
+            },
+            {
+                id: 93922,
+                label: "Programa preventivo",
+                link: "/risk-prevention/preventive-program",
+                parentId: 939
+            },
+            {
+                id: 93923,
                 label: "Extintores",
                 link: "/risk-prevention/extinguishers",
                 parentId: 939
@@ -255,6 +279,18 @@ export const menuItems = [
                 label: "Estadísticas de asistencia",
                 link: "/students/attendance-statistics",
                 parentId: 9050
+            },
+            {
+                id: 9059,
+                label: "Gestión de ausencia",
+                link: "/students/attendance-management",
+                parentId: 9050
+            },
+            {
+                id: 9060,
+                label: "Estadísticas de calificaciones",
+                link: "/students/grade-statistics",
+                parentId: 9050
             }
         ]
     },
@@ -335,7 +371,8 @@ export const menuItems = [
             { id: 9083, label: "Pases prioritarios", link: "/inspectoria/pases", parentId: 9080 },
             { id: 9084, label: "Alumnas y fichas", link: "/inspectoria/alumnas", parentId: 9080 },
             { id: 9086, label: "Retiros de alumnas", link: "/inspectoria/retiros", parentId: 9080 },
-            { id: 9085, label: "Bitácora diaria", link: "/inspectoria/bitacora", parentId: 9080 }
+            { id: 9085, label: "Bitácora diaria", link: "/inspectoria/bitacora", parentId: 9080 },
+            { id: 9089, label: "Licencias médicas", link: "/inspectoria/licencias-medicas", parentId: 9080 }
         ]
     },
     {

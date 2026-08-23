@@ -65,7 +65,21 @@ class CatalogController extends LibroDigitalController
                 'section_name' => $course->section_name,
                 'level' => $course->educationLevel?->only(['id', 'name', 'type']),
             ])->values(),
-            'subjects' => ScheduleSubject::query()->where('active', true)->orderBy('name')->get(['id', 'name', 'code', 'area', 'color', 'active']),
+            'subjects' => ScheduleSubject::query()
+                ->with('catalogProfile')
+                ->where('active', true)
+                ->orderBy('name')
+                ->get(['id', 'name', 'code', 'area', 'color', 'active'])
+                ->map(fn (ScheduleSubject $subject): array => [
+                    'id' => $subject->id,
+                    'name' => $subject->resolvedDisplayName(),
+                    'technical_name' => $subject->name,
+                    'code' => $subject->code,
+                    'area' => $subject->area,
+                    'color' => $subject->color,
+                    'active' => (bool) $subject->active,
+                    'education_types' => $subject->catalogProfile?->education_types ?? [],
+                ])->values(),
             'teachers' => Staff::query()->where('active', true)->orderBy('full_name')->get(['id', 'full_name', 'institutional_email', 'active']),
             'school_day_blocks' => SchoolDayBlock::query()->where('assignable', true)->orderBy('order')->get(['id', 'school_day_template_id', 'day_of_week', 'start_time', 'end_time', 'label', 'order']),
             'regulatory_profiles' => RegulatoryProfile::query()->where('active', true)->orderByDesc('effective_from')->get(['id', 'public_id', 'code', 'name', 'version', 'effective_from', 'effective_to']),

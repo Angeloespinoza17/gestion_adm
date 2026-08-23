@@ -9,13 +9,17 @@ use App\Models\Inspectoria\InspectoriaDailyLog;
 use App\Models\Inspectoria\InspectoriaPass;
 use App\Models\StudentProfile;
 use App\Services\Inspectoria\InspectoriaAccessService;
+use App\Services\Attendance\StudentMonthlyAttendanceContextService;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
 class InspectoriaStudentController extends Controller
 {
-    public function __construct(private readonly InspectoriaAccessService $access) {}
+    public function __construct(
+        private readonly InspectoriaAccessService $access,
+        private readonly StudentMonthlyAttendanceContextService $attendanceContext,
+    ) {}
 
     public function index(Request $request): JsonResponse
     {
@@ -43,7 +47,8 @@ class InspectoriaStudentController extends Controller
                     ->when($activeYear, fn ($q) => $q->where('academic_year_id', $activeYear->id)));
             })->orderBy('last_name')->orderBy('first_name')->paginate((int) $request->query('per_page', 18));
 
-        $students->setCollection($students->getCollection()->map(function (StudentProfile $student) use ($activeYear) {
+        $attendanceProfiles = $this->attendanceContext->forStudents($students->getCollection()->pluck('id'), $activeYear?->id);
+        $students->setCollection($students->getCollection()->map(function (StudentProfile $student) use ($activeYear, $attendanceProfiles) {
             $enrollment = $student->preferredEnrollment($activeYear);
 
             return [
@@ -52,6 +57,7 @@ class InspectoriaStudentController extends Controller
                 'guardian_name' => $student->guardian_name, 'guardian_phone' => $student->guardian_phone,
                 'course' => $enrollment?->snapshot_course_display_name ?? $enrollment?->courseSection?->display_name,
                 'course_section_id' => $enrollment?->course_section_id,
+                'attendance_profile' => $attendanceProfiles->get($student->id),
             ];
         }));
 
@@ -80,6 +86,7 @@ class InspectoriaStudentController extends Controller
 
         return response()->json(['data' => [
             'student' => $student,
+            'attendance_profile' => $this->attendanceContext->forStudent($student, $activeYear?->id),
             'attentions' => $attentions->latest('attended_at')->limit(30)->get(),
             'passes' => $passes->latest('issued_at')->limit(30)->get(),
             'daily_logs' => $dailyLogs->latest('happened_at')->limit(30)->get(),

@@ -21,6 +21,18 @@ import {
   toInputDateTime,
 } from "../../components/infirmary/module-utils";
 
+const localDateString = (date = new Date()) => {
+  const pad = (part) => String(part).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+};
+
+const shiftedDateString = (value, days) => {
+  const [year, month, day] = String(value || localDateString()).split("-").map(Number);
+  const date = new Date(year, month - 1, day);
+  date.setDate(date.getDate() + days);
+  return localDateString(date);
+};
+
 export default {
   components: {
     Layout,
@@ -58,7 +70,9 @@ export default {
         daily_status: null,
       },
       authorizations: [],
-      dailyStatusDate: "",
+      medicationMode: "today",
+      controlDate: localDateString(),
+      dailyStatusDate: localDateString(),
       pagination: { current_page: 1, total: 0, per_page: 15 },
       selectedAuthorization: null,
       showModal: false,
@@ -77,6 +91,31 @@ export default {
     },
     canExport() {
       return Boolean(this.catalogs.capabilities?.can_export);
+    },
+    isTodayControlDate() {
+      return this.controlDate === localDateString();
+    },
+    historyMaxDate() {
+      return shiftedDateString(localDateString(), -1);
+    },
+    canAdvanceHistory() {
+      return this.controlDate < this.historyMaxDate;
+    },
+    periodTitle() {
+      return this.medicationMode === "today" ? "Medicaciones del día" : "Histórico de medicaciones";
+    },
+    dailyControlHeading() {
+      return this.medicationMode === "today" ? "Administración de hoy" : "Administración del día";
+    },
+    selectedDateLong() {
+      if (!this.controlDate) return "";
+      const [year, month, day] = this.controlDate.split("-").map(Number);
+      return new Date(year, month - 1, day).toLocaleDateString("es-CL", {
+        weekday: "long",
+        day: "numeric",
+        month: "long",
+        year: "numeric",
+      });
     },
     medicationOptions() {
       return [{ value: null, text: "Todos" }].concat(
@@ -110,10 +149,14 @@ export default {
       return this.selectOptions(this.catalogs.medication_schedule_mode_options || []);
     },
     dailyStatusOptions() {
-      return this.selectOptions(this.catalogs.medication_daily_status_options || [], {
+      const options = this.selectOptions(this.catalogs.medication_daily_status_options || [], {
         value: null,
         text: "Todos",
       });
+
+      return options.map((option) => option.value === "not_applicable" && this.medicationMode === "history"
+        ? { ...option, text: "No aplica en la fecha" }
+        : option);
     },
     doseUnitOptions() {
       return this.selectOptions(this.catalogs.medication_dose_unit_options || []);
@@ -284,10 +327,10 @@ export default {
       return authorization?.daily_status?.label || "Sin control diario";
     },
     dailyStatusDetail(authorization) {
-      return authorization?.daily_status?.detail || "No hay información para hoy.";
+      return authorization?.daily_status?.detail || "No hay información para la fecha seleccionada.";
     },
     canRegisterToday(authorization) {
-      if (!authorization) return false;
+      if (!authorization || !this.isTodayControlDate) return false;
       if (authorization.regimen_type === "sos") return true;
       const dailyStatus = authorization.daily_status;
       return Boolean(dailyStatus?.applicable && dailyStatus?.pending_count > 0);
@@ -491,6 +534,7 @@ export default {
         const response = await axios.get("/api/infirmary/medication-authorizations", {
           params: {
             page,
+            control_date: this.controlDate,
             ...this.filters,
           },
         });
@@ -514,7 +558,9 @@ export default {
     },
     async fetchAuthorization(authorization) {
       try {
-        const response = await axios.get(`/api/infirmary/medication-authorizations/${authorization.id}`);
+        const response = await axios.get(`/api/infirmary/medication-authorizations/${authorization.id}`, {
+          params: { control_date: this.controlDate },
+        });
         this.selectedAuthorization = response.data.data;
         if (this.selectedAuthorization?.student_profile_id) {
           const history = await axios.get(`/api/infirmary/student-history/${this.selectedAuthorization.student_profile_id}`);
@@ -533,6 +579,28 @@ export default {
     selectStudent(student) {
       this.filters.student_profile_id = student.id;
       this.loadAuthorizations(1);
+    },
+    async setMedicationMode(mode) {
+      if (mode === this.medicationMode) return;
+
+      this.medicationMode = mode;
+      this.controlDate = mode === "today"
+        ? localDateString()
+        : (this.isTodayControlDate ? this.historyMaxDate : this.controlDate);
+      this.selectedAuthorization = null;
+      await this.loadAuthorizations(1);
+    },
+    async selectControlDate() {
+      if (!this.controlDate) return;
+      this.selectedAuthorization = null;
+      await this.loadAuthorizations(1);
+    },
+    async shiftControlDate(days) {
+      const candidate = shiftedDateString(this.controlDate, days);
+      if (candidate > this.historyMaxDate) return;
+
+      this.controlDate = candidate;
+      await this.selectControlDate();
     },
     selectFormStudent(student) {
       this.form.student_profile_id = student.id;
@@ -738,23 +806,80 @@ export default {
 
 <template>
   <Layout>
-    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+    <div class="infirmary-medication-heading mb-3">
       <div>
-        <h4 class="mb-0">Administración de medicamentos</h4>
+        <span class="infirmary-medication-eyebrow">CONTROL DE MEDICACIONES</span>
+        <h4 class="mb-0">{{ periodTitle }}</h4>
         <div class="text-muted">
-          Rutinas de suministro por estudiante y registro diario de dosis administradas o no administradas.
+          {{ medicationMode === "today"
+            ? "Rutinas de suministro y avance de las dosis programadas para hoy."
+            : "Consulta el estado y los registros de suministro de una fecha anterior." }}
         </div>
       </div>
-      <div class="d-flex gap-2">
-        <InfirmaryHelpButton
-          title="Ayuda: administración de medicamentos"
-          text="Aquí se crean rutinas de suministro, se controla su vigencia y se registra cada dosis diaria con motivo si no fue administrada."
-        />
-        <BButton v-if="canManage" variant="primary" @click="openCreate">Nueva rutina</BButton>
+      <div class="infirmary-medication-heading__actions">
+        <div class="infirmary-medication-mode" role="tablist" aria-label="Periodo de medicaciones">
+          <button
+            type="button"
+            role="tab"
+            :aria-selected="medicationMode === 'today'"
+            :class="{ active: medicationMode === 'today' }"
+            @click="setMedicationMode('today')"
+          >
+            <i class="bx bx-calendar-check"></i>
+            Medicaciones de hoy
+          </button>
+          <button
+            type="button"
+            role="tab"
+            :aria-selected="medicationMode === 'history'"
+            :class="{ active: medicationMode === 'history' }"
+            @click="setMedicationMode('history')"
+          >
+            <i class="bx bx-history"></i>
+            Histórico
+          </button>
+        </div>
+        <div class="d-flex gap-2 justify-content-end">
+          <InfirmaryHelpButton
+            title="Ayuda: administración de medicamentos"
+            text="Aquí se crean rutinas de suministro, se controla su vigencia y se revisa cada día. El histórico es de consulta y no permite registrar dosis retroactivas."
+          />
+          <BButton v-if="canManage" variant="primary" @click="openCreate">Nueva rutina</BButton>
+        </div>
       </div>
     </div>
 
     <BAlert v-if="error" show variant="danger" class="mb-3">{{ error }}</BAlert>
+
+    <section v-if="medicationMode === 'history'" class="infirmary-history-date mb-3">
+      <div class="infirmary-history-date__icon"><i class="bx bx-calendar-alt"></i></div>
+      <div class="infirmary-history-date__copy">
+        <span>FECHA EN REVISIÓN</span>
+        <strong>{{ selectedDateLong }}</strong>
+        <small>Se muestran las rutinas y el cumplimiento correspondiente únicamente a este día.</small>
+      </div>
+      <div class="infirmary-history-date__controls">
+        <button type="button" title="Día anterior" aria-label="Ver día anterior" @click="shiftControlDate(-1)">
+          <i class="bx bx-chevron-left"></i>
+        </button>
+        <BFormInput
+          v-model="controlDate"
+          type="date"
+          :max="historyMaxDate"
+          aria-label="Fecha histórica de medicaciones"
+          @change="selectControlDate"
+        />
+        <button
+          type="button"
+          title="Día siguiente"
+          aria-label="Ver día siguiente"
+          :disabled="!canAdvanceHistory"
+          @click="shiftControlDate(1)"
+        >
+          <i class="bx bx-chevron-right"></i>
+        </button>
+      </div>
+    </section>
 
     <BCard class="mb-3">
       <template #header>
@@ -762,7 +887,7 @@ export default {
           <div class="fw-semibold">Filtros de rutinas</div>
           <InfirmaryHelpButton
             title="Ayuda: filtros de rutinas"
-            text="Filtra por estudiante, medicamento, vigencia o texto libre para revisar rutinas activas e históricas."
+            text="Filtra por estudiante, medicamento, vigencia o texto libre dentro de la fecha que estás revisando."
           />
         </div>
       </template>
@@ -780,7 +905,7 @@ export default {
           <BFormSelect v-model="filters.status" :options="statusOptions" />
         </div>
         <div class="col-lg-2">
-          <label class="form-label">Control de hoy</label>
+          <label class="form-label">{{ medicationMode === "today" ? "Control de hoy" : "Control del día" }}</label>
           <BFormSelect v-model="filters.daily_status" :options="dailyStatusOptions" />
         </div>
         <div class="col-lg-2 d-flex align-items-end gap-2">
@@ -796,10 +921,15 @@ export default {
     <BCard>
       <template #header>
         <div class="d-flex justify-content-between align-items-center gap-2 flex-wrap">
-          <div class="fw-semibold">Rutinas de suministro</div>
+          <div>
+            <div class="fw-semibold">Rutinas de suministro</div>
+            <small class="text-muted">{{ pagination.total }} rutinas encontradas · {{ formatInfirmaryDate(dailyStatusDate) }}</small>
+          </div>
           <InfirmaryHelpButton
             title="Ayuda: lista de rutinas"
-            text="La tabla muestra el avance de las dosis esperadas hoy y permite identificar de inmediato las rutinas pendientes."
+            :text="medicationMode === 'today'
+              ? 'La tabla muestra el avance de las dosis esperadas hoy y permite identificar de inmediato las rutinas pendientes.'
+              : 'La tabla reconstruye el estado que tuvo cada rutina en la fecha histórica seleccionada.'"
           />
         </div>
       </template>
@@ -816,7 +946,7 @@ export default {
               <th>Vía</th>
               <th>Término</th>
               <th>
-                <div>Administración de hoy</div>
+                <div>{{ dailyControlHeading }}</div>
                 <small v-if="dailyStatusDate" class="text-muted fw-normal">{{ formatInfirmaryDate(dailyStatusDate) }}</small>
               </th>
               <th class="text-end">Acciones</th>
@@ -824,7 +954,11 @@ export default {
           </thead>
           <tbody>
             <tr v-if="!authorizations.length">
-              <td colspan="7" class="text-center text-muted py-4">No hay rutinas para los filtros seleccionados.</td>
+              <td colspan="7" class="text-center text-muted py-4">
+                {{ medicationMode === "today"
+                  ? "No hay rutinas para los filtros seleccionados."
+                  : "No hay rutinas para la fecha y los filtros seleccionados." }}
+              </td>
             </tr>
             <template v-else>
               <tr
@@ -870,7 +1004,7 @@ export default {
                       <i class="mdi mdi-eye-outline"></i>
                     </button>
                     <button
-                      v-if="canManage"
+                      v-if="canManage && medicationMode === 'today'"
                       type="button"
                       class="cnsc-action-btn cnsc-action-btn--edit"
                       title="Editar rutina"
@@ -880,10 +1014,14 @@ export default {
                       <i class="mdi mdi-pencil-outline"></i>
                     </button>
                     <button
-                      v-if="canManage"
+                      v-if="canManage && medicationMode === 'today'"
                       type="button"
                       class="cnsc-action-btn cnsc-action-btn--success"
-                      :title="canRegisterToday(authorization) ? 'Registrar dosis' : dailyStatusDetail(authorization)"
+                      :title="canRegisterToday(authorization)
+                        ? 'Registrar dosis'
+                        : medicationMode === 'history'
+                          ? 'El histórico es solo de consulta'
+                          : dailyStatusDetail(authorization)"
                       aria-label="Registrar dosis"
                       :disabled="!canRegisterToday(authorization)"
                       @click.stop="openAdministration(authorization)"
@@ -891,7 +1029,7 @@ export default {
                       <i class="mdi mdi-pill"></i>
                     </button>
                     <button
-                      v-if="canManage"
+                      v-if="canManage && medicationMode === 'today'"
                       type="button"
                       class="cnsc-action-btn cnsc-action-btn--delete"
                       title="Eliminar rutina"
@@ -936,7 +1074,7 @@ export default {
               PDF ficha
             </BButton>
             <BButton
-              v-if="canManage"
+              v-if="canManage && medicationMode === 'today'"
               size="sm"
               variant="outline-primary"
               @click="showViewModal = false; openEdit(selectedAuthorization)"
@@ -945,7 +1083,7 @@ export default {
               Editar rutina
             </BButton>
             <BButton
-              v-if="canManage"
+              v-if="canManage && medicationMode === 'today'"
               size="sm"
               variant="primary"
               :disabled="!canRegisterToday(selectedAuthorization)"
@@ -1005,9 +1143,9 @@ export default {
                 <div><InfirmaryStatusBadge :status="selectedAuthorization.status" /></div>
               </div>
               <div class="infirmary-medication-detail">
-                <span>Administración de hoy</span>
+                <span>{{ dailyControlHeading }}</span>
                 <div><BBadge :variant="dailyStatusVariant(selectedAuthorization)">{{ dailyStatusLabel(selectedAuthorization) }}</BBadge></div>
-                <small>{{ dailyStatusDetail(selectedAuthorization) }}</small>
+                <small>{{ formatInfirmaryDate(dailyStatusDate) }} · {{ dailyStatusDetail(selectedAuthorization) }}</small>
               </div>
             </div>
 
@@ -1026,7 +1164,7 @@ export default {
           <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
             <h5 class="mb-0">Detalle de administración</h5>
             <BButton
-              v-if="canManage"
+              v-if="canManage && medicationMode === 'today'"
               size="sm"
               variant="primary"
               :disabled="!canRegisterToday(selectedAuthorization)"
@@ -1249,6 +1387,146 @@ export default {
 </template>
 
 <style scoped>
+.infirmary-medication-heading {
+  align-items: flex-start;
+  display: flex;
+  gap: 1.25rem;
+  justify-content: space-between;
+}
+
+.infirmary-medication-heading > div:first-child {
+  min-width: 0;
+}
+
+.infirmary-medication-eyebrow {
+  color: #229a9b;
+  display: block;
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  margin-bottom: 0.3rem;
+}
+
+.infirmary-medication-heading__actions {
+  align-items: flex-end;
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+}
+
+.infirmary-medication-mode {
+  background: #edf3f6;
+  border-radius: 13px;
+  display: flex;
+  padding: 0.3rem;
+}
+
+.infirmary-medication-mode button {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: 10px;
+  color: #647987;
+  display: inline-flex;
+  font-size: 0.82rem;
+  font-weight: 750;
+  gap: 0.42rem;
+  padding: 0.65rem 0.85rem;
+  transition: background-color 0.16s ease, box-shadow 0.16s ease, color 0.16s ease;
+}
+
+.infirmary-medication-mode button.active {
+  background: #fff;
+  box-shadow: 0 3px 10px rgba(30, 63, 84, 0.1);
+  color: #173b57;
+}
+
+.infirmary-medication-mode button i {
+  font-size: 1rem;
+}
+
+.infirmary-history-date {
+  align-items: center;
+  background: linear-gradient(120deg, #173b57, #216d7b);
+  border-radius: 16px;
+  box-shadow: 0 10px 24px rgba(23, 59, 87, 0.13);
+  color: #fff;
+  display: flex;
+  gap: 0.9rem;
+  padding: 1rem 1.15rem;
+}
+
+.infirmary-history-date__icon {
+  align-items: center;
+  background: rgba(255, 255, 255, 0.13);
+  border-radius: 12px;
+  display: flex;
+  flex: 0 0 44px;
+  font-size: 1.35rem;
+  height: 44px;
+  justify-content: center;
+}
+
+.infirmary-history-date__copy {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.infirmary-history-date__copy span {
+  font-size: 0.61rem;
+  font-weight: 800;
+  letter-spacing: 0.11em;
+  opacity: 0.72;
+}
+
+.infirmary-history-date__copy strong {
+  font-size: 0.92rem;
+  margin-top: 0.12rem;
+  text-transform: capitalize;
+}
+
+.infirmary-history-date__copy small {
+  font-size: 0.72rem;
+  margin-top: 0.15rem;
+  opacity: 0.8;
+}
+
+.infirmary-history-date__controls {
+  align-items: center;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 12px;
+  display: flex;
+  gap: 0.35rem;
+  padding: 0.35rem;
+}
+
+.infirmary-history-date__controls button {
+  align-items: center;
+  background: rgba(255, 255, 255, 0.12);
+  border: 0;
+  border-radius: 8px;
+  color: #fff;
+  display: flex;
+  font-size: 1.15rem;
+  height: 34px;
+  justify-content: center;
+  width: 34px;
+}
+
+.infirmary-history-date__controls button:disabled {
+  cursor: not-allowed;
+  opacity: 0.35;
+}
+
+.infirmary-history-date__controls :deep(.form-control) {
+  border: 0;
+  font-size: 0.78rem;
+  min-width: 142px;
+}
+
 .infirmary-medication-actions {
   align-items: center;
   display: inline-flex;
@@ -1344,5 +1622,50 @@ export default {
   color: #3f4858;
   margin-bottom: 0;
   overflow-wrap: anywhere;
+}
+
+@media (max-width: 900px) {
+  .infirmary-medication-heading {
+    flex-direction: column;
+  }
+
+  .infirmary-medication-heading__actions {
+    align-items: stretch;
+    width: 100%;
+  }
+
+  .infirmary-medication-mode {
+    width: 100%;
+  }
+
+  .infirmary-medication-mode button {
+    flex: 1;
+    justify-content: center;
+  }
+
+  .infirmary-history-date {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .infirmary-history-date__controls {
+    margin-left: 3.65rem;
+    width: calc(100% - 3.65rem);
+  }
+
+  .infirmary-history-date__controls :deep(.form-control) {
+    flex: 1;
+  }
+}
+
+@media (max-width: 520px) {
+  .infirmary-medication-mode {
+    flex-direction: column;
+  }
+
+  .infirmary-history-date__controls {
+    margin-left: 0;
+    width: 100%;
+  }
 }
 </style>

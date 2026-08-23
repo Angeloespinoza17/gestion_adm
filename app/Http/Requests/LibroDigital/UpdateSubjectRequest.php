@@ -23,9 +23,13 @@ class UpdateSubjectRequest extends FormRequest
             'area' => ['sometimes', 'nullable', 'string', 'max:100'],
             'color' => ['sometimes', 'nullable', 'regex:/^#[0-9A-Fa-f]{6}$/'],
             'active' => ['sometimes', 'boolean'],
+            'display_name' => ['sometimes', 'nullable', 'string', 'max:191'],
+            'subject_type' => ['sometimes', 'nullable', Rule::in(['official', 'common_plan', 'differentiated', 'workshop', 'institutional'])],
+            'description' => ['sometimes', 'nullable', 'string', 'max:1000'],
+            'education_types' => ['sometimes', 'nullable', 'array', 'max:3'],
+            'education_types.*' => ['string', 'distinct', Rule::in(['parvularia', 'basica', 'media'])],
             'official_code' => ['prohibited'],
             'type' => ['prohibited'],
-            'description' => ['prohibited'],
             'lock_version' => ['required', 'integer', 'min:1'],
         ];
     }

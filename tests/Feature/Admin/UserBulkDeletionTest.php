@@ -38,11 +38,7 @@ class UserBulkDeletionTest extends TestCase
         $actor = $this->authenticateUserAdministrator();
         $regularUser = User::factory()->create();
         $superAdmin = User::factory()->create(['active' => true]);
-        $superAdminRole = Role::query()->create([
-            'name' => 'Super Admin',
-            'slug' => 'super_admin',
-            'active' => true,
-        ]);
+        $superAdminRole = Role::query()->where('slug', 'super_admin')->firstOrFail();
         $superAdmin->roles()->attach($superAdminRole);
 
         $this->deleteJson('/api/admin/users/bulk', [
@@ -61,11 +57,7 @@ class UserBulkDeletionTest extends TestCase
         $actor = $this->authenticateUserAdministrator();
         $regularUser = User::factory()->create(['name' => 'Usuario eliminable']);
         $superAdmin = User::factory()->create(['name' => 'Usuario protegido']);
-        $superAdminRole = Role::query()->create([
-            'name' => 'Super Admin',
-            'slug' => 'super_admin',
-            'active' => true,
-        ]);
+        $superAdminRole = Role::query()->where('slug', 'super_admin')->firstOrFail();
         $superAdmin->roles()->attach($superAdminRole);
 
         $response = $this->getJson('/api/admin/users?per_page=100')->assertOk();

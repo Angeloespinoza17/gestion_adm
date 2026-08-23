@@ -272,6 +272,19 @@ export default {
         this.form.has_physical_restrictions,
       ].filter(Boolean).length;
     },
+    attendanceProfile() {
+      return this.student?.attendance_profile?.latest || null;
+    },
+    attendanceHistory() {
+      return this.student?.attendance_profile?.history || [];
+    },
+    attendanceRateTone() {
+      const value = Number(this.attendanceProfile?.attendance_rate);
+      if (!Number.isFinite(value)) return "empty";
+      if (value < 85) return "critical";
+      if (value < 90) return "warning";
+      return "ok";
+    },
   },
   async mounted() {
     await this.load();
@@ -487,6 +500,11 @@ export default {
 
       const normalized = typeof value === "string" ? value.trim() : value;
       return normalized === "" ? fallback : normalized;
+    },
+    attendanceMonthLabel(period) {
+      if (!period) return "Sin período";
+      const [year, month] = String(period).split("-");
+      return new Date(Number(year), Number(month) - 1, 1).toLocaleDateString("es-CL", { month: "long", year: "numeric" });
     },
     boolValue(value) {
       if (value === true) return "Sí";
@@ -970,6 +988,24 @@ export default {
               <span :style="{ width: `${profileCompletion}%` }"></span>
             </div>
           </div>
+        </div>
+      </section>
+
+      <section v-if="!isNew && attendanceProfile" class="student-attendance-context">
+        <div class="student-attendance-context__lead">
+          <span class="student-attendance-context__icon"><i class="bx bx-line-chart"></i></span>
+          <div><small>ÚLTIMO REPORTE INSTITUCIONAL</small><h2>Asistencia y apoyos</h2><p>{{ attendanceMonthLabel(attendanceProfile.period) }} · {{ attendanceProfile.course || 'Curso no informado' }}</p></div>
+        </div>
+        <div class="student-attendance-context__rate" :class="`is-${attendanceRateTone}`">
+          <span>Asistencia mensual</span><strong>{{ attendanceProfile.attendance_rate === null ? '—' : `${Number(attendanceProfile.attendance_rate).toFixed(1)}%` }}</strong><small>{{ attendanceProfile.present_days }} presentes · {{ attendanceProfile.absent_days }} ausentes</small>
+        </div>
+        <div class="student-attendance-context__flags">
+          <span :class="{ active: attendanceProfile.is_sep_priority }"><i class="bx bx-star"></i>{{ attendanceProfile.is_sep_priority ? 'SEP prioritaria' : 'No prioritaria' }}</span>
+          <span :class="{ active: attendanceProfile.is_sep_preferential }"><i class="bx bx-badge-check"></i>{{ attendanceProfile.is_sep_preferential ? 'SEP preferente' : 'No preferente' }}</span>
+          <span :class="{ active: attendanceProfile.is_pie }"><i class="bx bx-universal-access"></i>{{ attendanceProfile.is_pie ? 'Participante PIE' : 'Sin PIE' }}</span>
+        </div>
+        <div class="student-attendance-context__history" aria-label="Historial mensual reciente">
+          <span v-for="month in attendanceHistory.slice(0, 6)" :key="month.period" :title="`${attendanceMonthLabel(month.period)} · ${Number(month.attendance_rate || 0).toFixed(1)}%`"><i></i><strong>{{ String(attendanceMonthLabel(month.period)).slice(0, 3) }}</strong><small>{{ month.attendance_rate === null ? '—' : `${Math.round(month.attendance_rate)}%` }}</small></span>
         </div>
       </section>
 
@@ -2057,6 +2093,140 @@ export default {
   transition: width 180ms ease;
 }
 
+.student-attendance-context {
+  display: grid;
+  grid-template-columns: minmax(250px, 1.25fr) 190px minmax(300px, 1fr) minmax(230px, 0.8fr);
+  gap: 0;
+  align-items: stretch;
+  overflow: hidden;
+  margin-bottom: 0.75rem;
+  border: 1px solid #dbe6e2;
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 8px 24px rgba(23, 32, 51, 0.05);
+}
+
+.student-attendance-context > div {
+  min-width: 0;
+  padding: 0.8rem 0.9rem;
+}
+
+.student-attendance-context > div + div {
+  border-left: 1px solid #e3ebe8;
+}
+
+.student-attendance-context__lead {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  background: linear-gradient(135deg, #f2faf7, #fff);
+}
+
+.student-attendance-context__icon {
+  display: grid;
+  width: 42px;
+  height: 42px;
+  flex: 0 0 42px;
+  place-items: center;
+  border-radius: 11px;
+  background: #daf2e8;
+  color: #177357;
+  font-size: 1.25rem;
+}
+
+.student-attendance-context__lead small,
+.student-attendance-context__lead h2,
+.student-attendance-context__lead p,
+.student-attendance-context__rate span,
+.student-attendance-context__rate strong,
+.student-attendance-context__rate small {
+  display: block;
+}
+
+.student-attendance-context__lead small,
+.student-attendance-context__rate span {
+  color: #718093;
+  font-size: 0.59rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+}
+
+.student-attendance-context__lead h2 {
+  margin: 0.12rem 0;
+  color: #2a374b;
+  font-size: 0.92rem;
+}
+
+.student-attendance-context__lead p,
+.student-attendance-context__rate small {
+  margin: 0;
+  color: #7b8797;
+  font-size: 0.62rem;
+}
+
+.student-attendance-context__rate strong {
+  margin: 0.08rem 0;
+  color: #1b7759;
+  font-size: 1.25rem;
+}
+
+.student-attendance-context__rate.is-warning strong { color: #9a661e; }
+.student-attendance-context__rate.is-critical strong { color: #b33243; }
+.student-attendance-context__rate.is-empty strong { color: #7b8797; }
+
+.student-attendance-context__flags {
+  display: flex;
+  flex-wrap: wrap;
+  align-content: center;
+  gap: 0.35rem;
+}
+
+.student-attendance-context__flags span {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.28rem 0.45rem;
+  border-radius: 999px;
+  background: #eef2f4;
+  color: #748090;
+  font-size: 0.61rem;
+  font-weight: 700;
+}
+
+.student-attendance-context__flags span.active {
+  background: #edf0fb;
+  color: #405189;
+}
+
+.student-attendance-context__history {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.28rem;
+}
+
+.student-attendance-context__history > span {
+  display: grid;
+  min-width: 33px;
+  justify-items: center;
+  gap: 0.08rem;
+}
+
+.student-attendance-context__history i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #3e9a76;
+}
+
+.student-attendance-context__history strong,
+.student-attendance-context__history small {
+  font-size: 0.56rem;
+}
+
+.student-attendance-context__history strong { color: #536174; text-transform: uppercase; }
+.student-attendance-context__history small { color: #7b8797; }
+
 .student-operational-alerts {
   display: flex;
   gap: 1rem;
@@ -2367,6 +2537,17 @@ export default {
   .student-profile-fact--completion {
     grid-column: span 2;
   }
+
+  .student-attendance-context {
+    grid-template-columns: 1fr 180px 1fr;
+  }
+
+  .student-attendance-context__history {
+    grid-column: 1 / -1;
+    justify-content: flex-start;
+    border-top: 1px solid #e3ebe8;
+    border-left: 0 !important;
+  }
 }
 
 @media (max-width: 767.98px) {
@@ -2435,6 +2616,15 @@ export default {
   .student-profile-fact--completion {
     grid-column: 1 / -1;
     border-right: 0;
+  }
+
+  .student-attendance-context {
+    grid-template-columns: 1fr;
+  }
+
+  .student-attendance-context > div + div {
+    border-top: 1px solid #e3ebe8;
+    border-left: 0;
   }
 
   .student-operational-alerts {

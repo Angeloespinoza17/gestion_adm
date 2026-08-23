@@ -120,15 +120,91 @@ class PsychologyWorkflowService
         }
 
         return DB::transaction(function () use ($referral, $payload, $user) {
-            $responsibleId = (int) ($payload['responsible_user_id'] ?? $referral->assigned_user_id ?: $user->id);
-            $case = PsychologyCase::query()->create($payload + ['code' => sprintf('PSI-%s-%06d', now()->format('Y'), PsychologyCase::withTrashed()->max('id') + 1), 'student_profile_id' => $referral->student_profile_id, 'origin_referral_id' => $referral->id, 'responsible_user_id' => $responsibleId, 'opened_at' => now(), 'last_activity_at' => now(), 'created_by' => $user->id, 'updated_by' => $user->id]);
-            PsychologyCaseAssignment::query()->create(['case_id' => $case->id, 'user_id' => $responsibleId, 'role' => 'primary', 'reason' => 'Apertura del caso', 'assigned_at' => now(), 'assigned_by' => $user->id]);
-            $referral->forceFill(['case_id' => $case->id, 'assigned_user_id' => $responsibleId, 'updated_by' => $user->id])->save();
+            $case = $this->createCase(
+                (int) $referral->student_profile_id,
+                $referral->id,
+                $payload,
+                $user,
+                (int) ($referral->assigned_user_id ?: $user->id),
+                'Apertura desde derivación',
+            );
+            $referral->forceFill(['case_id' => $case->id, 'assigned_user_id' => $case->responsible_user_id, 'updated_by' => $user->id])->save();
             $this->transitionReferral($referral, 'linked_to_existing_case', $user, ['case_id' => $case->id, 'reason' => 'Caso abierto desde derivación']);
-            $this->audit->record('case.opened', $case, $user, [], ['status' => $case->status, 'priority' => $case->priority]);
 
             return $case;
         });
+    }
+
+    public function openDirectCase(array $payload, User $user): PsychologyCase
+    {
+        return DB::transaction(function () use ($payload, $user) {
+            $studentProfileId = (int) $payload['student_profile_id'];
+            unset($payload['student_profile_id']);
+
+            return $this->createCase(
+                $studentProfileId,
+                null,
+                $payload,
+                $user,
+                $user->id,
+                'Apertura directa sin derivación',
+            );
+        });
+    }
+
+    private function createCase(
+        int $studentProfileId,
+        ?int $originReferralId,
+        array $payload,
+        User $user,
+        int $defaultResponsibleId,
+        string $assignmentReason,
+    ): PsychologyCase {
+        $activeCase = PsychologyCase::query()
+            ->where('student_profile_id', $studentProfileId)
+            ->where('status', '!=', 'closed')
+            ->lockForUpdate()
+            ->first(['id', 'code']);
+        if ($activeCase) {
+            throw ValidationException::withMessages([
+                'student_profile_id' => "La estudiante ya tiene el caso activo {$activeCase->code}. Abre esa ficha o vincula la derivación existente.",
+            ]);
+        }
+
+        $responsibleId = (int) ($payload['responsible_user_id'] ?? $defaultResponsibleId);
+        $responsible = User::query()->whereKey($responsibleId)->where('active', true)->firstOrFail();
+        if (! app(PsychologyAccessService::class)->canBeAssignedToPsychology($responsible)) {
+            throw ValidationException::withMessages(['responsible_user_id' => 'La persona seleccionada no tiene un rol profesional habilitado para Psicología.']);
+        }
+
+        $case = PsychologyCase::query()->create(array_merge($payload, [
+            'code' => sprintf('PSI-%s-%06d', now()->format('Y'), PsychologyCase::withTrashed()->max('id') + 1),
+            'student_profile_id' => $studentProfileId,
+            'origin_referral_id' => $originReferralId,
+            'responsible_user_id' => $responsibleId,
+            'opened_at' => now(),
+            'last_activity_at' => now(),
+            'created_by' => $user->id,
+            'updated_by' => $user->id,
+        ]));
+        PsychologyCaseAssignment::query()->create([
+            'case_id' => $case->id,
+            'user_id' => $responsibleId,
+            'role' => 'primary',
+            'reason' => $assignmentReason,
+            'assigned_at' => now(),
+            'assigned_by' => $user->id,
+        ]);
+        $this->audit->record(
+            'case.opened',
+            $case,
+            $user,
+            [],
+            ['status' => $case->status, 'priority' => $case->priority, 'origin' => $originReferralId ? 'referral' : 'direct'],
+            $assignmentReason,
+        );
+
+        return $case;
     }
 
     public function reassignCase(PsychologyCase $case, User $professional, User $actor, string $reason): PsychologyCase

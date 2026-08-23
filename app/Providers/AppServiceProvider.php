@@ -5,6 +5,9 @@ namespace App\Providers;
 use App\Contracts\LibroDigital\BulkTeacherIdentityVerifier;
 use App\Contracts\LibroDigital\SigeIntegrationGateway;
 use App\Contracts\LibroDigital\TeacherIdentityVerifier;
+use App\Contracts\LibroDigital\Curriculum\CurriculumDocumentClassifierInterface;
+use App\Contracts\LibroDigital\Curriculum\PdfOcrExtractorInterface;
+use App\Contracts\LibroDigital\Curriculum\PdfTextExtractorInterface;
 use App\Services\Attendance\AttendanceParserRegistry;
 use App\Services\Attendance\LirmiAttendancePdfParser;
 use App\Services\LibroDigital\Identity\DisabledIdentityVerifier;
@@ -13,6 +16,15 @@ use App\Services\LibroDigital\Identity\MineducBulkIdentityVerifier;
 use App\Services\LibroDigital\Identity\MineducTransactionalIdentityVerifier;
 use App\Services\LibroDigital\Sige\DisabledSigeGateway;
 use App\Services\LibroDigital\Sige\SigeManualReconciliationGateway;
+use App\Services\LibroDigital\Curriculum\CurricularBasesDocumentParser;
+use App\Services\LibroDigital\Curriculum\CurriculumDocumentParserRegistry;
+use App\Services\LibroDigital\Curriculum\CurriculumPrioritizationParser;
+use App\Services\LibroDigital\Curriculum\GenericCurriculumDocumentParser;
+use App\Services\LibroDigital\Curriculum\HeuristicCurriculumDocumentClassifier;
+use App\Services\LibroDigital\Curriculum\ProgramStudyDocumentParser;
+use App\Services\LibroDigital\Curriculum\SmalotPdfTextExtractor;
+use App\Services\LibroDigital\Curriculum\StudyPlanDocumentParser;
+use App\Services\LibroDigital\Curriculum\UnavailablePdfOcrExtractor;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\ServiceProvider;
 use Laravel\Sanctum\Sanctum;
@@ -26,6 +38,17 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register()
     {
+        $this->app->singleton(PdfTextExtractorInterface::class, SmalotPdfTextExtractor::class);
+        $this->app->singleton(PdfOcrExtractorInterface::class, UnavailablePdfOcrExtractor::class);
+        $this->app->singleton(CurriculumDocumentClassifierInterface::class, HeuristicCurriculumDocumentClassifier::class);
+        $this->app->singleton(CurriculumDocumentParserRegistry::class, fn ($app) => new CurriculumDocumentParserRegistry([
+            $app->make(ProgramStudyDocumentParser::class),
+            $app->make(CurricularBasesDocumentParser::class),
+            $app->make(StudyPlanDocumentParser::class),
+            $app->make(CurriculumPrioritizationParser::class),
+            $app->make(GenericCurriculumDocumentParser::class),
+        ]));
+
         $this->app->singleton(AttendanceParserRegistry::class, fn ($app) => new AttendanceParserRegistry([
             $app->make(LirmiAttendancePdfParser::class),
         ]));

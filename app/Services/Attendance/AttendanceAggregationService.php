@@ -24,6 +24,7 @@ class AttendanceAggregationService
         private readonly AttendanceStatisticsPeriodService $periods,
         private readonly AttendanceCalculationService $calculations,
         private readonly AttendanceRiskService $risks,
+        private readonly AttendanceManagementAccessService $access,
     ) {}
 
     public function dashboard(array $filters, ?User $user): array
@@ -31,6 +32,7 @@ class AttendanceAggregationService
         $period = $this->periods->resolve($filters);
         /** @var AcademicYear $year */
         $year = $period['academic_year'];
+        $filters = $this->scopedFilters($filters, $user, $year->id);
         $target = $this->target($year->id, $period['from'], $period['to']);
         $daily = $this->dailyRows($filters, $year->id, $period['from'], $period['to']);
         $yearDaily = $period['from'] === $year->starts_at->format('Y-m-d') && $period['to'] === $year->ends_at->format('Y-m-d')
@@ -60,7 +62,7 @@ class AttendanceAggregationService
                 'data_status' => $summary['expected'] > 0 ? 'available' : 'no_data',
                 'capabilities' => $this->capabilities($user),
             ],
-            'catalogs' => $this->catalogs($year->id),
+            'catalogs' => $this->catalogs($year->id, $user),
             'summary' => [
                 ...$summary,
                 'target_rate' => $target,
@@ -93,10 +95,11 @@ class AttendanceAggregationService
         ];
     }
 
-    public function students(array $filters): array
+    public function students(array $filters, ?User $user = null): array
     {
         $period = $this->periods->resolve($filters);
         $year = $period['academic_year'];
+        $filters = $this->scopedFilters($filters, $user, $year->id);
         $aggregate = $this->studentAggregateQuery($filters, $year->id, $period['from'], $period['to']);
         $query = DB::query()->fromSub($aggregate, 'metrics')
             ->when($filters['search'] ?? null, function (Builder $query, string $search) {
@@ -125,10 +128,11 @@ class AttendanceAggregationService
         ];
     }
 
-    public function student(array $filters, StudentProfile $student): array
+    public function student(array $filters, StudentProfile $student, ?User $user = null): array
     {
         $period = $this->periods->resolve($filters);
         $year = $period['academic_year'];
+        $filters = $this->scopedFilters($filters, $user, $year->id);
         $filters['student_profile_id'] = $student->id;
         $daily = $this->dailyRows($filters, $year->id, $period['from'], $period['to']);
         $summary = $this->summarizeDaily($daily);
@@ -141,11 +145,8 @@ class AttendanceAggregationService
         $courseAverage = $enrollment
             ? $this->summarizeDaily($this->dailyRows(['course_section_id' => $enrollment->course_section_id], $year->id, $period['from'], $period['to']))['attendance_rate']
             : null;
-        $records = DB::table('attendance_records as ar')
+        $records = $this->recordsQuery($filters, $year->id, $period['from'], $period['to'])
             ->leftJoin('attendance_absence_reasons as reason', 'reason.id', '=', 'ar.absence_reason_id')
-            ->where('ar.academic_year_id', $year->id)
-            ->where('ar.student_profile_id', $student->id)
-            ->whereBetween('ar.attendance_date', [$period['from'], $period['to']])
             ->orderByDesc('ar.attendance_date')
             ->get(['ar.id', 'ar.attendance_date', 'ar.status', 'ar.is_justified', 'ar.minutes_late', 'ar.early_departure', 'ar.notes', 'reason.name as reason']);
 
@@ -175,12 +176,14 @@ class AttendanceAggregationService
         ];
     }
 
-    public function heatmap(array $filters): array
+    public function heatmap(array $filters, ?User $user = null): array
     {
         $period = $this->periods->resolve($filters);
         $year = $period['academic_year'];
+        $filters = $this->scopedFilters($filters, $user, $year->id);
         $courseId = (int) ($filters['course_section_id'] ?? 0);
         abort_unless($courseId > 0, 422, 'Selecciona un curso para construir la matriz.');
+        abort_if(isset($filters['allowed_course_ids']) && ! in_array($courseId, $filters['allowed_course_ids'], true), 403);
         $students = StudentEnrollment::query()
             ->where('academic_year_id', $year->id)
             ->where('course_section_id', $courseId)
@@ -192,12 +195,9 @@ class AttendanceAggregationService
                 'name' => $enrollment->studentProfile?->registered_name_resolved,
                 'rut' => $enrollment->studentProfile?->rut,
             ]);
-        $records = DB::table('attendance_records')
-            ->where('academic_year_id', $year->id)
-            ->where('course_section_id', $courseId)
-            ->whereBetween('attendance_date', [$period['from'], $period['to']])
-            ->orderBy('attendance_date')
-            ->get(['student_profile_id', 'attendance_date', 'status', 'is_justified', 'minutes_late', 'early_departure'])
+        $records = $this->recordsQuery($filters, $year->id, $period['from'], $period['to'])
+            ->orderBy('ar.attendance_date')
+            ->get(['ar.student_profile_id', 'ar.attendance_date', 'ar.status', 'ar.is_justified', 'ar.minutes_late', 'ar.early_departure'])
             ->groupBy('student_profile_id');
         $dates = DB::table('school_days')->where('academic_year_id', $year->id)->where('is_school_day', true)->whereBetween('date', [$period['from'], $period['to']])->orderBy('date')->pluck('date');
 
@@ -225,12 +225,29 @@ class AttendanceAggregationService
     private function recordsQuery(array $filters, int $academicYearId, string $from, string $to): Builder
     {
         return DB::table('attendance_records as ar')
+            ->join('school_days as sd', function ($join) {
+                $join->on('sd.id', '=', 'ar.school_day_id')
+                    ->on('sd.academic_year_id', '=', 'ar.academic_year_id');
+            })
             ->join('course_sections as cs', 'cs.id', '=', 'ar.course_section_id')
             ->join('education_levels as el', 'el.id', '=', 'cs.education_level_id')
             ->join('student_profiles as sp', 'sp.id', '=', 'ar.student_profile_id')
             ->leftJoin('student_enrollments as se', 'se.id', '=', 'ar.student_enrollment_id')
             ->where('ar.academic_year_id', $academicYearId)
             ->whereBetween('ar.attendance_date', [$from, $to])
+            ->where('sd.is_school_day', true)
+            ->where('sd.status', 'confirmed')
+            ->where(function (Builder $query): void {
+                $query->whereNull('ar.student_enrollment_id')
+                    ->orWhere(function (Builder $enrollment): void {
+                        $enrollment->where(function (Builder $start): void {
+                            $start->whereNull('se.enrolled_at')->orWhereColumn('ar.attendance_date', '>=', 'se.enrolled_at');
+                        })->where(function (Builder $end): void {
+                            $end->whereNull('se.withdrawn_at')->orWhereColumn('ar.attendance_date', '<=', 'se.withdrawn_at');
+                        });
+                    });
+            })
+            ->when(array_key_exists('allowed_course_ids', $filters), fn (Builder $query) => $query->whereIn('ar.course_section_id', array_map('intval', (array) $filters['allowed_course_ids'])))
             ->when($filters['course_section_id'] ?? null, fn (Builder $query, $id) => $query->where('ar.course_section_id', (int) $id))
             ->when($filters['education_level_id'] ?? null, fn (Builder $query, $id) => $query->where('cs.education_level_id', (int) $id))
             ->when($filters['school_day_template_id'] ?? null, fn (Builder $query, $id) => $query->where('cs.school_day_template_id', (int) $id))
@@ -243,6 +260,17 @@ class AttendanceAggregationService
             ->when($filters['gender'] ?? null, fn (Builder $query, $value) => $query->where('sp.gender', $value))
             ->when($filters['commune'] ?? null, fn (Builder $query, $value) => $query->where('sp.commune', $value))
             ->when(isset($filters['is_pie_participant']), fn (Builder $query) => $query->where('sp.is_pie_participant', (bool) $filters['is_pie_participant']));
+    }
+
+    private function scopedFilters(array $filters, ?User $user, int $academicYearId): array
+    {
+        if (! $user || $this->access->canViewAll($user)) {
+            return $filters;
+        }
+
+        $filters['allowed_course_ids'] = $this->access->courseIds($user, $academicYearId)->all();
+
+        return $filters;
     }
 
     private function dailyRows(array $filters, int $academicYearId, string $from, string $to): Collection
@@ -484,12 +512,17 @@ class AttendanceAggregationService
             : (float) (AttendanceProjectionSetting::query()->where('academic_year_id', $yearId)->value('target_attendance_rate') ?? config('attendance.projection.target_attendance_rate', 85));
     }
 
-    private function catalogs(int $yearId): array
+    private function catalogs(int $yearId, ?User $user = null): array
     {
+        $courses = CourseSection::query()->where('academic_year_id', $yearId)->with('schoolDayTemplate:id,name')->orderBy('display_name');
+        if ($user) {
+            $this->access->applyCourseScope($courses, $user, 'id', $yearId);
+        }
+
         return [
             'academic_years' => AcademicYear::query()->ordered()->get(['id', 'name', 'year', 'starts_at', 'ends_at', 'is_active', 'is_closed']),
             'levels' => EducationLevel::query()->orderBy('order')->get(['id', 'name', 'type']),
-            'courses' => CourseSection::query()->where('academic_year_id', $yearId)->with('schoolDayTemplate:id,name')->orderBy('display_name')->get(['id', 'education_level_id', 'school_day_template_id', 'display_name']),
+            'courses' => $courses->get(['id', 'education_level_id', 'school_day_template_id', 'display_name']),
             'risk_levels' => $this->risks->levels($yearId)->values(),
             'absence_reasons' => DB::table('attendance_absence_reasons')->where('active', true)->orderBy('sort_order')->get(['id', 'code', 'name', 'category', 'is_sensitive']),
             'communes' => StudentProfile::query()->whereNotNull('commune')->where('commune', '<>', '')->distinct()->orderBy('commune')->pluck('commune'),
@@ -501,6 +534,7 @@ class AttendanceAggregationService
     {
         return AttendanceAlert::query()
             ->where('academic_year_id', $yearId)
+            ->when(array_key_exists('allowed_course_ids', $filters), fn ($query) => $query->whereIn('course_section_id', $filters['allowed_course_ids']))
             ->when($filters['course_section_id'] ?? null, fn ($query, $id) => $query->where('course_section_id', (int) $id))
             ->whereIn('status', ['open', 'acknowledged', 'in_progress'])
             ->get();
@@ -510,6 +544,7 @@ class AttendanceAggregationService
     {
         return AttendanceIntervention::query()
             ->where('academic_year_id', $yearId)
+            ->when(array_key_exists('allowed_course_ids', $filters), fn ($query) => $query->whereIn('course_section_id', $filters['allowed_course_ids']))
             ->when($filters['course_section_id'] ?? null, fn ($query, $id) => $query->where('course_section_id', (int) $id));
     }
 

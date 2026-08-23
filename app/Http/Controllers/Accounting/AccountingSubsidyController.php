@@ -23,11 +23,21 @@ class AccountingSubsidyController extends Controller
         $payload = $request->validate([
             'period' => ['nullable', 'date_format:Y-m'],
             'compare_period' => ['nullable', 'date_format:Y-m', 'different:period'],
+            'jec' => ['nullable', 'boolean'],
+            'sep_category' => ['nullable', Rule::in(['autonomo', 'emergente'])],
+            'include_gratuity' => ['nullable', 'boolean'],
+            'concentration_band' => ['nullable', Rule::in(['auto', 'none', '15_30', '30_45', '45_60', '60_plus'])],
         ]);
 
         return response()->json($this->subsidyService->dashboard(
             $payload['period'] ?? null,
             $payload['compare_period'] ?? null,
+            collect($payload)->only([
+                'jec',
+                'sep_category',
+                'include_gratuity',
+                'concentration_band',
+            ])->all(),
         ));
     }
 

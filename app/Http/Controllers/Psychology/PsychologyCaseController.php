@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Psychology;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Psychology\AssignPsychologyRequest;
 use App\Http\Requests\Psychology\OpenPsychologyCaseRequest;
+use App\Http\Requests\Psychology\StoreDirectPsychologyCaseRequest;
 use App\Http\Resources\Psychology\PsychologyCaseResource;
 use App\Models\Psychology\PsychologyCase;
 use App\Models\Psychology\PsychologyReferral;
@@ -14,6 +15,7 @@ use App\Services\Psychology\PsychologyAuditService;
 use App\Services\Psychology\PsychologyWorkflowService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Validation\ValidationException;
 
 class PsychologyCaseController extends Controller
 {
@@ -37,12 +39,23 @@ class PsychologyCaseController extends Controller
         return response()->json(['message' => 'Caso abierto.', 'data' => new PsychologyCaseResource($case->load(['student.enrollments', 'responsibleUser']))], 201);
     }
 
+    public function store(StoreDirectPsychologyCaseRequest $request): JsonResponse
+    {
+        abort_unless($request->user()->hasPermission('psychology.cases.create'), 403);
+        $case = $this->workflow->openDirectCase($request->validated(), $request->user());
+
+        return response()->json([
+            'message' => 'Caso creado sin derivación previa.',
+            'data' => new PsychologyCaseResource($case->load(['student.enrollments', 'responsibleUser'])),
+        ], 201);
+    }
+
     public function show(PsychologyCase $case): PsychologyCaseResource
     {
         $this->authorize('view', $case);
         $this->audit->record('case.viewed', $case, request()->user());
 
-        return new PsychologyCaseResource($case->load(['student.enrollments', 'responsibleUser', 'assignments.user:id,name', 'collaborators:id,name', 'referrals.student', 'plans.versions', 'activities.responsibleUser:id,name', 'activities.addenda.author:id,name', 'riskAssessments.actions.responsibleUser:id,name', 'tasks.responsibleUser:id,name', 'documents.uploadedBy:id,name', 'consents', 'externalReferrals', 'sharedFeedback.author:id,name', 'closures.author:id,name', 'reopenings.author:id,name']));
+        return new PsychologyCaseResource($case->load(['student.enrollments', 'responsibleUser', 'assignments.user:id,name', 'collaborators:id,name', 'referrals.student', 'plans.responsibleUser:id,name', 'plans.versions.author:id,name', 'activities.responsibleUser:id,name', 'activities.addenda.author:id,name', 'coordinationRequests.requester:id,name', 'coordinationRequests.recipient:id,name', 'coordinationRequests.responder:id,name', 'riskAssessments.actions.responsibleUser:id,name', 'tasks.responsibleUser:id,name', 'documents.uploadedBy:id,name', 'consents', 'externalReferrals', 'sharedFeedback.author:id,name', 'closures.author:id,name', 'reopenings.author:id,name']));
     }
 
     public function assign(AssignPsychologyRequest $request, PsychologyCase $case): PsychologyCaseResource
@@ -50,6 +63,9 @@ class PsychologyCaseController extends Controller
         abort_unless($request->user()->hasPermission('psychology.cases.reassign'), 403);
         $this->authorize('view', $case);
         $professional = User::query()->where('active', true)->findOrFail($request->integer('user_id'));
+        if (! $this->access->canBeAssignedToPsychology($professional)) {
+            throw ValidationException::withMessages(['user_id' => 'La persona seleccionada no tiene un rol profesional habilitado para Psicología.']);
+        }
 
         return new PsychologyCaseResource($this->workflow->reassignCase($case, $professional, $request->user(), $request->string('reason')->toString())->load(['student.enrollments', 'responsibleUser']));
     }

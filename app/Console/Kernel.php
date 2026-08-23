@@ -20,6 +20,11 @@ class Kernel extends ConsoleKernel
         $schedule->job(new NotifyPsychologyDeadlines)->dailyAt('07:30')->timezone(config('psychology.timezone', 'America/Santiago'))->withoutOverlapping();
         $schedule->command('permissions:notify-upcoming --days=2')->dailyAt('07:00');
         $schedule->command('attendance:rebuild-alerts')->dailyAt('06:30')->withoutOverlapping();
+        $schedule->command('attendance:analyze')
+            ->dailyAt('06:45')
+            ->timezone(config('attendance_management.timezone', 'America/Santiago'))
+            ->onOneServer()
+            ->withoutOverlapping();
         $schedule->command('attendance:run-scheduled-reports')->everyFiveMinutes()->withoutOverlapping();
         $schedule->job(new MonitorLibroDigitalServices)
             ->everyFiveMinutes()
@@ -52,6 +57,10 @@ class Kernel extends ConsoleKernel
             ->withoutOverlapping();
         $schedule->command('social-work:evaluate-risks')
             ->dailyAt('06:50')
+            ->onOneServer()
+            ->withoutOverlapping();
+        $schedule->command('risk-matrices:send-reminders')
+            ->dailyAt('07:15')
             ->onOneServer()
             ->withoutOverlapping();
     }

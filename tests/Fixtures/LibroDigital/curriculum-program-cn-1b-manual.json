@@ -1,0 +1,98 @@
+{
+  "subject_name": "Ciencias Naturales",
+  "education_level_name": "1° básico",
+  "official_name": "Ciencias Naturales — Programa de Estudio — Primer Año Básico",
+  "official_code": "MINEDUC-CN-1B-2960-2012",
+  "description": "Programa oficial de Ciencias Naturales para Primer Año Básico. Registro manual creado para disponer del libro sin esperar la extracción automática del PDF.",
+  "issuing_authority": "Ministerio de Educación de Chile",
+  "decree": "Decreto Supremo de Educación N.º 2960/2012",
+  "edition": "Segunda edición 2018",
+  "publication_year": 2018,
+  "official_url": "https://www.curriculumnacional.cl/recursos/bases-curriculares-1-6-basico",
+  "estimated_weeks": 38,
+  "estimated_pedagogical_hours": 114,
+  "curriculum_track": "GENERAL",
+  "source_page_count": 184,
+  "publish_now": true,
+  "objective_codes": [
+    "CN01 OA 01", "CN01 OA 02", "CN01 OA 03", "CN01 OA 04",
+    "CN01 OA 05", "CN01 OA 06", "CN01 OA 07", "CN01 OA 08",
+    "CN01 OA 09", "CN01 OA 10", "CN01 OA 11", "CN01 OA 12",
+    "CN01 OAH a", "CN01 OAH b", "CN01 OAH c", "CN01 OAH d"
+  ],
+  "axes": [
+    {
+      "name": "Ciencias de la Vida",
+      "description": "Seres vivos, cuerpo humano, sentidos, hábitos saludables, plantas y animales.",
+      "objective_codes": ["CN01 OA 01", "CN01 OA 02", "CN01 OA 03", "CN01 OA 04", "CN01 OA 05", "CN01 OA 06", "CN01 OA 07"]
+    },
+    {
+      "name": "Ciencias Físicas y Químicas",
+      "description": "Materiales, sus propiedades, transformaciones y usos tecnológicos.",
+      "objective_codes": ["CN01 OA 08", "CN01 OA 09", "CN01 OA 10"]
+    },
+    {
+      "name": "Ciencias de la Tierra y el Universo",
+      "description": "Ciclo diario, día y noche, estaciones y sus efectos en el ambiente.",
+      "objective_codes": ["CN01 OA 11", "CN01 OA 12"]
+    }
+  ],
+  "units": [
+    {
+      "unit_code": "U1",
+      "official_title": "Unidad 1",
+      "purpose": "Desarrollar hábitos de vida saludable, reconocer los sentidos y distinguir las características de los seres vivos mediante observación y exploración guiada.",
+      "semester": 1,
+      "estimated_pedagogical_hours": 30,
+      "page_start": 55,
+      "page_end": 76,
+      "objective_codes": ["CN01 OA 07", "CN01 OA 06", "CN01 OA 01"],
+      "knowledge": ["Hábitos de vida saludable y autocuidado", "Ubicación, función y protección de los sentidos", "Características y necesidades de los seres vivos"],
+      "skills": ["Explorar y observar usando los sentidos", "Seguir instrucciones y manipular materiales en forma segura", "Comunicar observaciones mediante lenguaje oral, escrito y dibujos"],
+      "attitudes": ["Manifestar compromiso con un estilo de vida saludable", "Demostrar curiosidad e interés por el entorno natural", "Reconocer y seguir normas de seguridad"],
+      "keywords": ["hábitos saludables", "sentidos", "seres vivos", "autocuidado"]
+    },
+    {
+      "unit_code": "U2",
+      "official_title": "Unidad 2",
+      "purpose": "Observar, comparar y clasificar animales y plantas, reconocer sus estructuras y valorar especies chilenas proponiendo medidas para su cuidado.",
+      "semester": 1,
+      "estimated_pedagogical_hours": 30,
+      "page_start": 77,
+      "page_end": 96,
+      "objective_codes": ["CN01 OA 02", "CN01 OA 03", "CN01 OA 04", "CN01 OA 05"],
+      "knowledge": ["Características observables y hábitat de los animales", "Estructuras principales de las plantas", "Clasificación de semillas, frutos, flores y tallos", "Plantas y animales de Chile y medidas para su cuidado"],
+      "skills": ["Observar y comparar características de seres vivos", "Clasificar a partir de criterios observables", "Comunicar ideas, experiencias y resultados"],
+      "attitudes": ["Reconocer la importancia del entorno natural y sus recursos", "Trabajar colaborativamente y con perseverancia"],
+      "keywords": ["animales", "plantas", "clasificación", "hábitat", "cuidado del ambiente"]
+    },
+    {
+      "unit_code": "U3",
+      "official_title": "Unidad 3",
+      "purpose": "Explorar materiales presentes en objetos cotidianos, describir sus propiedades y cambios, y seleccionar materiales para diseñar soluciones tecnológicas simples.",
+      "semester": 2,
+      "estimated_pedagogical_hours": 30,
+      "page_start": 97,
+      "page_end": 118,
+      "objective_codes": ["CN01 OA 08", "CN01 OA 09", "CN01 OA 10"],
+      "knowledge": ["Tipos y propiedades de los materiales", "Cambios provocados por fuerza, luz, calor y agua", "Selección de materiales para objetos tecnológicos simples"],
+      "skills": ["Explorar y experimentar en forma guiada", "Medir con unidades no estandarizadas", "Diseñar soluciones simples y comunicar resultados"],
+      "attitudes": ["Trabajar rigurosa y perseverantemente", "Usar materiales e instrumentos en forma segura"],
+      "keywords": ["materiales", "propiedades", "cambios", "fuerza", "calor", "tecnología"]
+    },
+    {
+      "unit_code": "U4",
+      "official_title": "Unidad 4",
+      "purpose": "Observar y registrar el ciclo diario y las estaciones, describiendo sus cambios y efectos sobre los seres vivos y el ambiente.",
+      "semester": 2,
+      "estimated_pedagogical_hours": 24,
+      "page_start": 119,
+      "page_end": 136,
+      "objective_codes": ["CN01 OA 11", "CN01 OA 12"],
+      "knowledge": ["Ciclo diario y diferencias entre día y noche", "Sol, Luna, estrellas y luminosidad del cielo", "Ciclo de las estaciones y sus efectos"],
+      "skills": ["Observar y registrar fenómenos del entorno", "Comparar observaciones y comunicar explicaciones", "Representar ciclos mediante modelos y dibujos"],
+      "attitudes": ["Demostrar curiosidad por los fenómenos naturales", "Asumir responsabilidades en el trabajo colaborativo"],
+      "keywords": ["día", "noche", "Sol", "Luna", "estaciones", "ambiente"]
+    }
+  ]
+}

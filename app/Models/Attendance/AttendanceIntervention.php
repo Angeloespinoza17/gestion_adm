@@ -18,20 +18,30 @@ class AttendanceIntervention extends Model
     use HasFactory, SoftDeletes;
 
     protected $fillable = [
-        'folio', 'academic_year_id', 'course_section_id', 'student_profile_id', 'attendance_alert_id',
+        'folio', 'attendance_case_id', 'intervention_type_id', 'academic_year_id', 'course_section_id', 'student_profile_id', 'attendance_alert_id',
         'convivencia_case_id', 'risk_level_id', 'responsible_user_id', 'status', 'probable_cause',
-        'description', 'opened_at', 'first_contact_at', 'first_action_at', 'due_on', 'result',
+        'description', 'opened_at', 'first_contact_at', 'first_action_at', 'due_on', 'result', 'result_summary', 'next_action_at',
         'closed_at', 'closure_reason', 'closed_by', 'created_by', 'updated_by',
     ];
 
     protected $casts = [
         'opened_at' => 'datetime', 'first_contact_at' => 'datetime', 'first_action_at' => 'datetime',
-        'due_on' => 'date:Y-m-d', 'closed_at' => 'datetime',
+        'due_on' => 'date:Y-m-d', 'next_action_at' => 'datetime', 'closed_at' => 'datetime',
     ];
 
     public function academicYear(): BelongsTo
     {
         return $this->belongsTo(AcademicYear::class);
+    }
+
+    public function attendanceCase(): BelongsTo
+    {
+        return $this->belongsTo(AttendanceCase::class);
+    }
+
+    public function interventionType(): BelongsTo
+    {
+        return $this->belongsTo(AttendanceInterventionType::class, 'intervention_type_id');
     }
 
     public function courseSection(): BelongsTo

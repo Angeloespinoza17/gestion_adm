@@ -28,13 +28,20 @@ class InspectoriaCatalogController extends Controller
     {
         abort_unless($this->access->canView($request->user()), 403);
         $user = $request->user();
-        $activeYear = AcademicYear::query()->where('is_active', true)->first();
+        $academicYears = AcademicYear::query()
+            ->ordered()
+            ->get(['id', 'name', 'year', 'starts_at', 'ends_at', 'is_active']);
+        $activeYear = $academicYears->firstWhere('is_active', true);
+        $currentAcademicYear = $academicYears->firstWhere('year', today()->year);
         $courseScoped = $this->access->isCourseScoped($user);
         $assignedCourseIds = $courseScoped ? $this->access->assignedCourseIds($user) : collect();
 
         $courses = CourseSection::query()->where('active', true)->withCount('enrollments')->orderBy('display_name')
             ->when($courseScoped, fn ($query) => $query->whereIn('id', $assignedCourseIds))
             ->get(['id', 'academic_year_id', 'display_name', 'section_name']);
+        $currentCourses = $currentAcademicYear
+            ? $courses->where('academic_year_id', $currentAcademicYear->id)->values()
+            : collect();
 
         $students = StudentProfile::query()
             ->with(['enrollments' => fn ($query) => $query
@@ -81,11 +88,13 @@ class InspectoriaCatalogController extends Controller
             ->get(['id', 'full_name', 'rut', 'cargo_id']);
 
         return response()->json([
-            'academic_years' => AcademicYear::query()
-                ->when($courseScoped, fn ($query) => $query->whereIn('id', $courses->pluck('academic_year_id')))
-                ->ordered()->get(['id', 'name', 'year', 'starts_at', 'ends_at', 'is_active']),
+            'academic_years' => $courseScoped
+                ? $academicYears->whereIn('id', $courses->pluck('academic_year_id'))->values()
+                : $academicYears,
             'active_academic_year_id' => $activeYear?->id,
+            'current_academic_year_id' => $currentAcademicYear?->id,
             'courses' => $courses,
+            'current_courses' => $currentCourses,
             'students' => $students,
             'inspectors' => $inspectors,
             'staff' => $staff,

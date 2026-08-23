@@ -8,32 +8,65 @@ use Illuminate\Support\Facades\Schema;
 class AccountingAccessService
 {
     public const CONFIDENTIAL_ACCESS_PERMISSION = 'contabilidad.acceso_confidencial';
+
     public const VIEW_PERMISSION = 'contabilidad.ver';
+
     public const DASHBOARD_PERMISSION = 'contabilidad.dashboard';
+
     public const BUDGET_VIEW_PERMISSION = 'contabilidad.presupuesto.ver';
+
     public const BUDGET_CREATE_PERMISSION = 'contabilidad.presupuesto.crear';
+
     public const BUDGET_APPROVE_PERMISSION = 'contabilidad.presupuesto.aprobar';
+
+    public const BUDGET_EXECUTION_VIEW_PERMISSION = 'contabilidad.ejecucion_presupuestaria.ver';
+
+    public const BUDGET_EXECUTION_IMPORT_PERMISSION = 'contabilidad.ejecucion_presupuestaria.importar';
+
+    public const BUDGET_EXECUTION_EXPORT_PERMISSION = 'contabilidad.ejecucion_presupuestaria.exportar';
+
     public const COST_CENTER_PERMISSION = 'contabilidad.centros_costo.gestionar';
+
     public const MANUAL_PERMISSION = 'contabilidad.manual_cuentas.gestionar';
+
     public const INCOMES_PERMISSION = 'contabilidad.ingresos.gestionar';
+
     public const EXPENSES_PERMISSION = 'contabilidad.egresos.gestionar';
+
     public const PAYMENTS_PERMISSION = 'contabilidad.pagos.gestionar';
+
     public const CASH_FUND_PERMISSION = 'contabilidad.caja_chica.gestionar';
+
     public const FUNDS_RENDER_PERMISSION = 'contabilidad.fondos_rendir.gestionar';
+
     public const RECONCILIATION_PERMISSION = 'contabilidad.conciliacion.gestionar';
+
     public const FUNDING_PANEL_PERMISSION = 'contabilidad.subvenciones.ver';
+
     public const SUBSIDY_IMPORT_PERMISSION = 'contabilidad.subvenciones.importar';
+
     public const SUBSIDY_APPROVE_PERMISSION = 'contabilidad.subvenciones.aprobar';
+
     public const SUBSIDY_RECONCILE_PERMISSION = 'contabilidad.subvenciones.conciliar';
+
     public const SUBSIDY_POST_PERMISSION = 'contabilidad.subvenciones.contabilizar';
+
     public const CHEQUES_PERMISSION = 'contabilidad.cheques.gestionar';
+
     public const INVOICES_PERMISSION = 'contabilidad.facturas.gestionar';
+
     public const HONORARIES_PERMISSION = 'contabilidad.boletas.gestionar';
+
     public const F29_PERMISSION = 'contabilidad.f29.gestionar';
+
     public const DECLARATIONS_PERMISSION = 'contabilidad.dj.gestionar';
+
     public const INCOME_TAX_PERMISSION = 'contabilidad.renta.gestionar';
+
     public const BALANCE_PERMISSION = 'contabilidad.balance.ver';
+
     public const EXPORT_PERMISSION = 'contabilidad.reportes.exportar';
+
     public const ADMIN_PERMISSION = 'contabilidad.admin';
 
     /**
@@ -48,6 +81,9 @@ class AccountingAccessService
             ['slug' => self::BUDGET_VIEW_PERMISSION, 'name' => 'Ver presupuesto Contabilidad'],
             ['slug' => self::BUDGET_CREATE_PERMISSION, 'name' => 'Crear presupuesto Contabilidad'],
             ['slug' => self::BUDGET_APPROVE_PERMISSION, 'name' => 'Aprobar presupuesto Contabilidad'],
+            ['slug' => self::BUDGET_EXECUTION_VIEW_PERMISSION, 'name' => 'Ver ejecución presupuestaria'],
+            ['slug' => self::BUDGET_EXECUTION_IMPORT_PERMISSION, 'name' => 'Importar ejecución presupuestaria'],
+            ['slug' => self::BUDGET_EXECUTION_EXPORT_PERMISSION, 'name' => 'Exportar ejecución presupuestaria'],
             ['slug' => self::COST_CENTER_PERMISSION, 'name' => 'Gestionar centros de costo'],
             ['slug' => self::MANUAL_PERMISSION, 'name' => 'Gestionar manual de cuentas'],
             ['slug' => self::INCOMES_PERMISSION, 'name' => 'Gestionar ingresos'],
@@ -93,6 +129,8 @@ class AccountingAccessService
             'accounting_manual_accounts',
             'accounting_budgets',
             'accounting_budget_lines',
+            'accounting_budget_execution_imports',
+            'accounting_budget_execution_lines',
             'accounting_bank_accounts',
             'accounting_incomes',
             'accounting_subsidy_imports',
@@ -117,7 +155,7 @@ class AccountingAccessService
     public function isInstalled(): bool
     {
         foreach ($this->requiredTables() as $table) {
-            if (!Schema::hasTable($table)) {
+            if (! Schema::hasTable($table)) {
                 return false;
             }
         }
@@ -158,7 +196,7 @@ class AccountingAccessService
      */
     private function hasAny(?User $user, array $permissions): bool
     {
-        if (!$user || !$user->active) {
+        if (! $user || ! $user->active) {
             return false;
         }
 

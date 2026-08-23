@@ -153,6 +153,7 @@ class AttendanceAlertService
             ->where('academic_year_id', $academicYearId)
             ->when($courseSectionId, fn ($query) => $query->where('course_section_id', $courseSectionId))
             ->whereNotNull('student_profile_id')
+            ->whereIn('type', ['low_attendance', 'consecutive_absences', 'monthly_drop', 'monthly_absences', 'frequent_lateness'])
             ->whereIn('status', ['open', 'acknowledged', 'in_progress'])
             ->when($studentActiveIds->isNotEmpty(), fn ($query) => $query->whereNotIn('id', $studentActiveIds))
             ->when($studentActiveIds->isEmpty(), fn ($query) => $query)

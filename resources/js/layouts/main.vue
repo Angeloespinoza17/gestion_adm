@@ -9,7 +9,7 @@ export default {
       loader: false
     };
   },
-  beforeCreate() {
+  created() {
     if (localStorage.getItem("layout")) {
       var layout = localStorage.getItem("layout");
       layout = JSON.parse(layout);

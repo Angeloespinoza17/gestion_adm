@@ -289,6 +289,18 @@ export default {
             link: "/students/attendance-statistics",
             parentId: "fallback-students",
           },
+          {
+            id: "fallback-students-attendance-management",
+            label: "Gestión de ausencia",
+            link: "/students/attendance-management",
+            parentId: "fallback-students",
+          },
+          {
+            id: "fallback-students-grade-statistics",
+            label: "Estadísticas de calificaciones",
+            link: "/students/grade-statistics",
+            parentId: "fallback-students",
+          },
         ],
       };
     },
@@ -473,6 +485,30 @@ export default {
             parentId: "fallback-risk-prevention",
           },
           {
+            id: "fallback-risk-prevention-risk-matrices",
+            label: "Matrices IPER/MIPER",
+            link: "/risk-prevention/matrices",
+            parentId: "fallback-risk-prevention",
+          },
+          {
+            id: "fallback-risk-prevention-risk-imports",
+            label: "Importaciones IPER",
+            link: "/risk-prevention/matrices/importaciones",
+            parentId: "fallback-risk-prevention",
+          },
+          {
+            id: "fallback-risk-prevention-risk-catalogs",
+            label: "Catálogos y metodología",
+            link: "/risk-prevention/matrices/catalogos",
+            parentId: "fallback-risk-prevention",
+          },
+          {
+            id: "fallback-risk-prevention-preventive-program",
+            label: "Programa de Trabajo Preventivo",
+            link: "/risk-prevention/preventive-program",
+            parentId: "fallback-risk-prevention",
+          },
+          {
             id: "fallback-risk-prevention-extinguishers",
             label: "Extintores",
             link: "/risk-prevention/extinguishers",
@@ -576,6 +612,19 @@ export default {
             label: "Medicamentos",
             link: "/infirmary/medications",
             parentId: "fallback-infirmary",
+          },
+          {
+            id: "fallback-infirmary-medical-leaves",
+            label: "Licencias médicas",
+            link: "/infirmary/medical-leaves",
+            parentId: "fallback-infirmary",
+          },
+          {
+            id: "fallback-infirmary-daily-log",
+            label: "Bitácora diaria",
+            link: "/infirmary/daily-log",
+            parentId: "fallback-infirmary",
+            requiresDynamicModule: true,
           },
         ],
       };
@@ -909,6 +958,10 @@ export default {
           childLinks.some((link) =>
             [
               "/risk-prevention",
+              "/risk-prevention/matrices",
+              "/risk-prevention/matrices/importaciones",
+              "/risk-prevention/matrices/catalogos",
+              "/risk-prevention/preventive-program",
               "/risk-prevention/extinguishers",
               "/risk-prevention/accidents",
               "/risk-prevention/emergencies",
@@ -967,11 +1020,13 @@ export default {
           ...fallbackInfirmary,
           id: parentId,
           icon: item.icon || fallbackInfirmary.icon,
-          subItems: fallbackInfirmary.subItems.map((subitem) => ({
-            ...subitem,
-            id: existingIdsByRoute.get(subitem.link) || subitem.id,
-            parentId,
-          })),
+          subItems: fallbackInfirmary.subItems
+            .filter((subitem) => !subitem.requiresDynamicModule || existingIdsByRoute.has(subitem.link))
+            .map((subitem) => ({
+              ...subitem,
+              id: existingIdsByRoute.get(subitem.link) || subitem.id,
+              parentId,
+            })),
         };
       });
     },

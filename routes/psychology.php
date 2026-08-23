@@ -3,6 +3,7 @@
 use App\Http\Controllers\Psychology\PsychologyCaseController;
 use App\Http\Controllers\Psychology\PsychologyCatalogController;
 use App\Http\Controllers\Psychology\PsychologyConfigurationController;
+use App\Http\Controllers\Psychology\PsychologyCoordinationController;
 use App\Http\Controllers\Psychology\PsychologyDashboardController;
 use App\Http\Controllers\Psychology\PsychologyDocumentController;
 use App\Http\Controllers\Psychology\PsychologyReferralController;
@@ -24,15 +25,18 @@ Route::middleware(['auth:sanctum', 'permission:psychology.access'])->prefix('psy
     Route::post('/referrals/{referral}/open-case', [PsychologyCaseController::class, 'open'])->middleware('permission:psychology.cases.create');
 
     Route::get('/cases', [PsychologyCaseController::class, 'index']);
+    Route::post('/cases', [PsychologyCaseController::class, 'store'])->middleware(['permission:psychology.cases.create', 'throttle:30,1']);
     Route::get('/cases/{case}', [PsychologyCaseController::class, 'show']);
     Route::post('/cases/{case}/assign', [PsychologyCaseController::class, 'assign'])->middleware('permission:psychology.cases.reassign');
     Route::post('/cases/{case}/close', [PsychologyCaseController::class, 'close'])->middleware('permission:psychology.cases.close');
     Route::post('/cases/{case}/reopen', [PsychologyCaseController::class, 'reopen'])->middleware('permission:psychology.cases.reopen');
     Route::post('/cases/{case}/activities', [PsychologyWorkflowController::class, 'storeActivity'])->middleware('permission:psychology.sessions.create');
     Route::post('/activities/{activity}/finalize', [PsychologyWorkflowController::class, 'finalizeActivity'])->middleware('permission:psychology.sessions.create');
+    Route::post('/activities/{activity}/export', [PsychologyWorkflowController::class, 'exportActivity'])->middleware('throttle:20,1');
     Route::post('/activities/{activity}/addenda', [PsychologyWorkflowController::class, 'addAddendum'])->middleware('permission:psychology.sessions.create');
     Route::post('/cases/{case}/plans', [PsychologyWorkflowController::class, 'storePlan'])->middleware('permission:psychology.sessions.create');
     Route::post('/plans/{plan}/versions', [PsychologyWorkflowController::class, 'versionPlan'])->middleware('permission:psychology.sessions.create');
+    Route::post('/plans/{plan}/export', [PsychologyWorkflowController::class, 'exportPlan'])->middleware('throttle:20,1');
     Route::post('/cases/{case}/risk-assessments', [PsychologyWorkflowController::class, 'storeRisk'])->middleware(['permission:psychology.risk.create', 'throttle:30,1']);
     Route::post('/risk-assessments/{risk}/acknowledge', [PsychologyWorkflowController::class, 'acknowledgeRisk'])->middleware('permission:psychology.risk.view');
     Route::post('/cases/{case}/tasks', [PsychologyWorkflowController::class, 'storeTask'])->middleware('permission:psychology.sessions.create');
@@ -40,11 +44,13 @@ Route::middleware(['auth:sanctum', 'permission:psychology.access'])->prefix('psy
     Route::post('/cases/{case}/consents', [PsychologyWorkflowController::class, 'storeConsent'])->middleware('permission:psychology.sessions.create');
     Route::post('/cases/{case}/external-referrals', [PsychologyWorkflowController::class, 'storeExternalReferral'])->middleware('permission:psychology.sessions.create');
     Route::post('/cases/{case}/feedback', [PsychologyWorkflowController::class, 'storeFeedback'])->middleware('permission:psychology.sessions.create');
+    Route::post('/cases/{case}/coordinations', [PsychologyCoordinationController::class, 'store'])->middleware('permission:psychology.sessions.create');
 
     Route::post('/documents', [PsychologyDocumentController::class, 'store'])->middleware(['permission:psychology.documents.upload', 'throttle:20,1']);
     Route::get('/documents/{document}/download', [PsychologyDocumentController::class, 'download'])->middleware(['permission:psychology.documents.download', 'throttle:60,1']);
     Route::delete('/documents/{document}', [PsychologyDocumentController::class, 'destroy'])->middleware('permission:psychology.documents.upload');
     Route::get('/calendar', [PsychologyWorkflowController::class, 'calendar']);
+    Route::get('/follow-ups', [PsychologyWorkflowController::class, 'followUps']);
     Route::get('/reports', PsychologyReportController::class)->middleware('permission:psychology.reports.aggregate');
     Route::get('/reports/export.csv', [PsychologyReportController::class, 'csv'])->middleware(['permission:psychology.reports.nominal', 'throttle:10,1']);
     Route::post('/exports', [PsychologyReportController::class, 'queue'])->middleware(['permission:psychology.reports.nominal', 'throttle:10,1']);

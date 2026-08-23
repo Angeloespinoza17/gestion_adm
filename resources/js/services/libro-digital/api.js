@@ -158,7 +158,18 @@ const saveJson = (payload, filename) => {
 
 const subjectMutationPayload = (payload = {}) =>
     Object.fromEntries(
-        ["school_id", "name", "code", "area", "color", "active"]
+        [
+            "school_id",
+            "name",
+            "code",
+            "area",
+            "color",
+            "active",
+            "display_name",
+            "subject_type",
+            "description",
+            "education_types",
+        ]
             .filter((key) => payload[key] !== undefined)
             .map((key) => [key, payload[key]])
     );
@@ -182,6 +193,7 @@ export const libroDigitalApi = {
             { ...payload, lock_version: recordVersion(book) },
             book
         ),
+    bulkOpenBooks: (payload) => post("/books/bulk-open", payload),
     roster: (bookId, params, signal) =>
         get(`/books/${bookId}/roster`, params, signal),
 
@@ -197,6 +209,11 @@ export const libroDigitalApi = {
             },
             subject
         ),
+    bulkSubjectStatus: (payload) => post("/subjects/bulk-status", payload),
+    externalSubjectCatalog: (params, signal) =>
+        get("/subjects/external-catalog", params, signal),
+    updateExternalSubjectMappings: (payload) =>
+        put("/subjects/external-mappings", payload),
 
     sessions: (bookId, params, signal) =>
         get(`/books/${bookId}/sessions`, params, signal),
@@ -287,6 +304,58 @@ export const libroDigitalApi = {
         download(
             `${LIBRO_DIGITAL_API_BASE}/curriculum/imports/template`,
             "plantilla-importacion-curriculo-nt1-4m.xlsx"
+        ),
+    curriculumProgramMatrix: (params, signal) =>
+        get("/curriculum/program-catalog/matrix", params, signal),
+    curriculumPrograms: (params, signal) =>
+        get("/curriculum/program-catalog/programs", params, signal),
+    curriculumProgram: (programId, params, signal) =>
+        get(
+            `/curriculum/program-catalog/programs/${programId}`,
+            params,
+            signal
+        ),
+    searchCurriculumPrograms: (params, signal) =>
+        get("/curriculum/program-catalog/search", params, signal),
+    curriculumProgramImports: (params, signal) =>
+        get("/curriculum/program-catalog/imports", params, signal),
+    curriculumProgramImport: (fileId, params, signal) =>
+        get(
+            `/curriculum/program-catalog/imports/${fileId}`,
+            params,
+            signal
+        ),
+    uploadCurriculumProgramDocuments: (formData) =>
+        post("/curriculum/program-catalog/imports", formData),
+    createManualCurriculumProgram: (formData) =>
+        post("/curriculum/program-catalog/programs/manual", formData),
+    reviewCurriculumProgramCandidate: (candidateId, payload) =>
+        patch(
+            `/curriculum/program-catalog/candidates/${candidateId}`,
+            payload
+        ),
+    resolveCurriculumProgramConflict: (conflictId, payload) =>
+        post(
+            `/curriculum/program-catalog/conflicts/${conflictId}/resolve`,
+            payload
+        ),
+    curriculumProgramImportAction: (fileId, action, payload = {}) =>
+        post(
+            `/curriculum/program-catalog/imports/${fileId}/${action}`,
+            payload
+        ),
+    exportCurriculumProgramPdf: (programId, payload) =>
+        post(
+            `/curriculum/program-catalog/programs/${programId}/export-pdf`,
+            payload
+        ),
+    curriculumDocumentUrl: (documentId) =>
+        `${LIBRO_DIGITAL_API_BASE}/curriculum/program-catalog/documents/${documentId}/download`,
+    curriculumDocumentPage: (documentId, page, params, signal) =>
+        get(
+            `/curriculum/program-catalog/documents/${documentId}/pages/${page}`,
+            params,
+            signal
         ),
 
     attendance: (sessionId, signal) =>

@@ -20,6 +20,28 @@ class User extends Authenticatable
     use HasApiTokens, HasFactory, Notifiable;
 
     /**
+     * Legacy production assignments may contain broader Psychology permissions.
+     * Keep the database history intact and enforce the psychologist scope here.
+     *
+     * @var array<int, string>
+     */
+    private const SCOPED_PSYCHOLOGY_PERMISSIONS = [
+        'psychology.access',
+        'psychology.referrals.view_own',
+        'psychology.referrals.update',
+        'psychology.cases.create',
+        'psychology.cases.view_assigned',
+        'psychology.sessions.create',
+        'psychology.sessions.view_private',
+        'psychology.risk.create',
+        'psychology.risk.view',
+        'psychology.documents.upload',
+        'psychology.documents.download',
+        'psychology.cases.close',
+        'psychology.reports.aggregate',
+    ];
+
+    /**
      * The attributes that are mass assignable.
      *
      * @var array<int, string>
@@ -198,6 +220,10 @@ class User extends Authenticatable
 
     public function isSuperAdmin(): bool
     {
+        if ($this->relationLoaded('roles')) {
+            return $this->roles->contains('slug', 'super_admin');
+        }
+
         return $this->roles()->where('slug', 'super_admin')->exists();
     }
 
@@ -240,6 +266,14 @@ class User extends Authenticatable
             && ! $this->hasTemporaryHomeOnlyAccess()
         ) {
             $permissions[] = RiskPreventionAccessService::DISSEMINATED_DOCUMENTS_PERMISSION;
+        }
+
+        if ($roles->contains('slug', 'psicologo') && ! $roles->contains('slug', 'coordinador_psicologia')) {
+            $permissions = array_values(array_filter(
+                $permissions,
+                fn (string $permission): bool => ! str_starts_with($permission, 'psychology.')
+                    || in_array($permission, self::SCOPED_PSYCHOLOGY_PERMISSIONS, true),
+            ));
         }
 
         return array_values(array_unique($permissions));

@@ -94,6 +94,10 @@ class EnfermeriaSeeder extends Seeder
             ['slug' => 'gestionar_accidentes_enfermeria', 'name' => 'Gestionar accidentes escolares de Enfermería'],
             ['slug' => 'ver_reportes_enfermeria', 'name' => 'Ver reportes de Enfermería'],
             ['slug' => 'administrar_catalogos_enfermeria', 'name' => 'Administrar catálogos de Enfermería'],
+            ['slug' => 'ver_licencias_medicas_estudiantes', 'name' => 'Ver licencias médicas de estudiantes'],
+            ['slug' => 'crear_licencias_medicas_estudiantes', 'name' => 'Registrar licencias médicas de estudiantes'],
+            ['slug' => 'ver_bitacora_enfermeria', 'name' => 'Ver bitácora de Enfermería'],
+            ['slug' => 'registrar_bitacora_enfermeria', 'name' => 'Registrar bitácora de Enfermería'],
         ];
 
         foreach ($permissions as $permission) {
@@ -127,6 +131,8 @@ class EnfermeriaSeeder extends Seeder
             ['slug' => 'infirmary_inventory', 'name' => 'Inventario', 'route' => '/infirmary/inventory', 'sort' => 5],
             ['slug' => 'infirmary_accidents', 'name' => 'Seguro escolar', 'route' => '/infirmary/accidents', 'sort' => 6],
             ['slug' => 'infirmary_medications', 'name' => 'Medicamentos', 'route' => '/infirmary/medications', 'sort' => 7],
+            ['slug' => 'infirmary_medical_leaves', 'name' => 'Licencias médicas', 'route' => '/infirmary/medical-leaves', 'sort' => 8],
+            ['slug' => 'infirmary_daily_log', 'name' => 'Bitácora diaria', 'route' => '/infirmary/daily-log', 'sort' => 9],
         ];
 
         foreach ($children as $child) {
@@ -164,6 +170,8 @@ class EnfermeriaSeeder extends Seeder
                 'crear_atenciones_enfermeria',
                 'editar_atenciones_enfermeria',
                 'gestionar_accidentes_enfermeria',
+                'ver_licencias_medicas_estudiantes',
+                'crear_licencias_medicas_estudiantes',
             ],
         ];
 

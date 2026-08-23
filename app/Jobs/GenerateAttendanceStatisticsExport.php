@@ -3,14 +3,22 @@
 namespace App\Jobs;
 
 use App\Models\Attendance\AttendanceAlert;
+use App\Models\Attendance\AttendanceActionPlan;
+use App\Models\Attendance\AttendanceCase;
 use App\Models\Attendance\AttendanceDataQualityIssue;
 use App\Models\Attendance\AttendanceExportJob;
 use App\Models\Attendance\AttendanceGoal;
 use App\Models\Attendance\AttendanceIntervention;
+use App\Models\Attendance\AttendancePatternDetection;
+use App\Models\Attendance\AttendanceRiskSnapshot;
 use App\Models\Attendance\AttendanceScheduledReport;
 use App\Models\Security\SecurityNotification;
+use App\Models\StudentProfile;
 use App\Services\Attendance\AttendanceAggregationService;
+use App\Services\Attendance\AttendanceAnalyticsService;
 use App\Services\Attendance\AttendanceFinancialImpactService;
+use App\Services\Attendance\AttendanceManagementAccessService;
+use App\Services\Attendance\AttendanceManagementSettingsService;
 use App\Services\Attendance\AttendancePdfBuilder;
 use App\Services\Attendance\AttendanceStatisticsAuditService;
 use Illuminate\Bus\Queueable;
@@ -37,13 +45,17 @@ class GenerateAttendanceStatisticsExport implements ShouldQueue
         AttendancePdfBuilder $pdf,
         AttendanceFinancialImpactService $financial,
         AttendanceStatisticsAuditService $audit,
+        AttendanceAnalyticsService $analytics,
+        AttendanceManagementAccessService $access,
+        AttendanceManagementSettingsService $managementSettings,
     ): void {
         $export = AttendanceExportJob::query()->with('user')->findOrFail($this->exportId);
         $export->update(['status' => 'processing', 'progress' => 10, 'failure_message' => null]);
 
         try {
             $dashboard = $aggregation->dashboard($export->filters ?? [], $export->user);
-            $sections = $this->sections($export, $dashboard, $aggregation, $financial);
+            $sections = $this->sections($export, $dashboard, $aggregation, $financial, $analytics, $access);
+            $pdfContext = $this->pdfContext($export, $dashboard, $analytics, $access, $managementSettings);
             $metadata = [
                 'periodo' => ($dashboard['meta']['date_range']['from'] ?? '-').' a '.($dashboard['meta']['date_range']['to'] ?? '-'),
                 'año académico' => $dashboard['meta']['academic_year']['name'] ?? '-',
@@ -53,7 +65,7 @@ class GenerateAttendanceStatisticsExport implements ShouldQueue
                 'filtros' => $this->filterSummary($export->filters ?? [], $dashboard),
             ];
             [$contents, $extension, $mime] = match ($export->format) {
-                'pdf' => [$pdf->build('Estadísticas Avanzadas de Asistencia', $metadata, $sections, $dashboard), 'pdf', 'application/pdf'],
+                'pdf' => [$pdf->build($this->reportTitle($export->report_type), $metadata, $sections, $pdfContext), 'pdf', 'application/pdf'],
                 'xls' => [$this->excel($metadata, $sections), 'xls', 'application/vnd.ms-excel'],
                 default => [$this->csv($metadata, $sections), 'csv', 'text/csv'],
             };
@@ -68,7 +80,9 @@ class GenerateAttendanceStatisticsExport implements ShouldQueue
                 'title' => 'Exportación de asistencia lista',
                 'message' => 'El reporte solicitado ya está disponible para descarga.',
                 'priority' => 'media',
-                'action_url' => '/students/attendance-statistics?section=quality&export='.$export->uuid,
+                'action_url' => str_contains($export->report_type, 'management') || in_array($export->report_type, ['individual', 'family_interview', 'critical_cases', 'intervention_effectiveness'], true)
+                    ? '/students/attendance-management?section=reports&export='.$export->uuid
+                    : '/students/attendance-statistics?section=quality&export='.$export->uuid,
             ]);
             $this->notifyScheduledRecipients($export);
             $audit->log('export_completed', $export, $export->user, newValues: ['format' => $export->format, 'report_type' => $export->report_type, 'mime' => $mime]);
@@ -78,7 +92,40 @@ class GenerateAttendanceStatisticsExport implements ShouldQueue
         }
     }
 
-    private function sections(AttendanceExportJob $export, array $dashboard, AttendanceAggregationService $aggregation, AttendanceFinancialImpactService $financial): array
+    private function pdfContext(
+        AttendanceExportJob $export,
+        array $dashboard,
+        AttendanceAnalyticsService $analytics,
+        AttendanceManagementAccessService $access,
+        AttendanceManagementSettingsService $managementSettings,
+    ): array {
+        if (! in_array($export->report_type, ['individual', 'family_interview'], true)) {
+            return $dashboard;
+        }
+
+        $filters = $export->filters ?? [];
+        $studentId = (int) ($filters['student_profile_id'] ?? 0);
+        abort_unless($studentId && $access->canViewStudent($export->user, $studentId, $export->academic_year_id), 403);
+        $student = StudentProfile::query()->findOrFail($studentId);
+        $analysis = $analytics->studentSummary($student, $export->academic_year_id, $filters['as_of'] ?? null);
+        $settings = $managementSettings->forYear($export->academic_year_id);
+        $dashboard['monthly'] = collect($analysis['monthly'])->map(fn (array $row) => [
+            'label' => $row['period'],
+            'attendance_rate' => $row['attendance_rate'],
+        ])->values()->all();
+        $dashboard['summary']['target_rate'] = (float) ($settings['risk_thresholds']['green'] ?? 95);
+
+        return $dashboard;
+    }
+
+    private function sections(
+        AttendanceExportJob $export,
+        array $dashboard,
+        AttendanceAggregationService $aggregation,
+        AttendanceFinancialImpactService $financial,
+        AttendanceAnalyticsService $analytics,
+        AttendanceManagementAccessService $access,
+    ): array
     {
         $summary = $dashboard['summary'];
         $sections = [[
@@ -92,6 +139,10 @@ class GenerateAttendanceStatisticsExport implements ShouldQueue
             ],
         ]];
 
+        if (in_array($export->report_type, ['institutional_management', 'course_management', 'individual', 'family_interview', 'critical_cases', 'intervention_effectiveness'], true)) {
+            return $this->managementSections($export, $dashboard, $sections, $analytics, $access);
+        }
+
         if (in_array($export->report_type, ['executive', 'courses'], true)) {
             $sections[] = ['title' => 'Cursos', 'headers' => ['Curso', 'Nivel', 'Estudiantes', 'Días', 'Presentes', 'Ausentes', 'Asistencia'], 'rows' => collect($dashboard['courses'])->map(fn ($row) => [$row['name'], $row['level'], $row['students'], $row['school_days'], $row['present'], $row['absent'], $this->percent($row['attendance_rate'])])->all()];
         }
@@ -99,7 +150,7 @@ class GenerateAttendanceStatisticsExport implements ShouldQueue
             $rows = collect();
             $page = 1;
             do {
-                $result = $aggregation->students([...($export->filters ?? []), 'page' => $page, 'per_page' => 100]);
+                $result = $aggregation->students([...($export->filters ?? []), 'page' => $page, 'per_page' => 100], $export->user);
                 $rows->push(...$result['data']);
                 $page++;
             } while ($page <= ($result['meta']['last_page'] ?? 1));
@@ -131,6 +182,116 @@ class GenerateAttendanceStatisticsExport implements ShouldQueue
                 'rows' => collect($impact['parameters'])->map(fn ($row) => [$row['name'], $row['currency'], $row['unit_value'], $row['attendance_factor'], $row['current_estimate'], $row['impact_per_point'], $row['valid_from'], $row['source_reference']])->all(),
             ];
             $sections[] = ['title' => 'Advertencia metodológica', 'headers' => ['Nota'], 'rows' => [[$impact['warning']]]];
+        }
+
+        return $sections;
+    }
+
+    private function managementSections(
+        AttendanceExportJob $export,
+        array $dashboard,
+        array $sections,
+        AttendanceAnalyticsService $analytics,
+        AttendanceManagementAccessService $access,
+    ): array {
+        $filters = $export->filters ?? [];
+        $courseIds = $access->canViewAll($export->user)
+            ? null
+            : $access->courseIds($export->user, $export->academic_year_id)->all();
+        $selectedCourseId = isset($filters['course_section_id']) ? (int) $filters['course_section_id'] : null;
+        $latestSnapshot = AttendanceRiskSnapshot::query()->where('academic_year_id', $export->academic_year_id)->max('snapshot_date');
+        $snapshots = AttendanceRiskSnapshot::query()->where('academic_year_id', $export->academic_year_id)
+            ->when($latestSnapshot, fn ($query) => $query->whereDate('snapshot_date', $latestSnapshot))
+            ->when($selectedCourseId, fn ($query) => $query->where('course_section_id', $selectedCourseId))
+            ->when(is_array($courseIds), fn ($query) => $query->whereIn('course_section_id', $courseIds));
+
+        if (in_array($export->report_type, ['institutional_management', 'course_management'], true)) {
+            $riskRows = collect(['green' => 'Asistencia adecuada', 'yellow' => 'Atención preventiva', 'orange' => 'Riesgo de asistencia', 'red' => 'Apoyo prioritario', 'critical' => 'Atención crítica', 'no_data' => 'Sin datos'])
+                ->map(fn (string $label, string $level) => [$label, (clone $snapshots)->where('risk_level', $level)->count()])->values()->all();
+            $sections[] = ['title' => 'Distribución preventiva', 'headers' => ['Nivel', 'Estudiantes'], 'rows' => $riskRows];
+            $patterns = AttendancePatternDetection::query()->where('academic_year_id', $export->academic_year_id)->where('is_active', true)
+                ->when($selectedCourseId, fn ($query) => $query->where('course_section_id', $selectedCourseId))
+                ->when(is_array($courseIds), fn ($query) => $query->whereIn('course_section_id', $courseIds))
+                ->select('pattern_type')->selectRaw('COUNT(*) as total')->selectRaw('AVG(confidence_score) as confidence')
+                ->groupBy('pattern_type')->orderByDesc('total')->get();
+            $sections[] = ['title' => 'Patrones detectados', 'headers' => ['Patrón', 'Estudiantes', 'Confianza media'], 'rows' => $patterns->map(fn ($row) => [str_replace('_', ' ', $row->pattern_type), $row->total, $this->percent((float) $row->confidence)])->all()];
+            $priority = (clone $snapshots)->with(['studentProfile:id,first_name,last_name,registered_name', 'courseSection:id,display_name'])
+                ->whereIn('risk_level', ['orange', 'red', 'critical'])
+                ->orderByRaw("CASE risk_level WHEN 'critical' THEN 3 WHEN 'red' THEN 2 ELSE 1 END DESC")
+                ->orderByDesc('risk_score')->limit(200)->get();
+            $sections[] = ['title' => 'Estudiantes priorizados', 'headers' => ['Estudiante', 'Curso', 'Nivel', 'Asistencia', 'Días perdidos', 'Racha', 'Motivo principal'], 'rows' => $priority->map(fn ($row) => [
+                $row->studentProfile?->registered_name_resolved, $row->courseSection?->display_name, $row->risk_level,
+                $this->percent($row->attendance_percentage), $row->days_absent, $row->consecutive_absences,
+                collect($row->risk_reasons)->first() ?: 'Revisión preventiva',
+            ])->all()];
+        }
+
+        if (in_array($export->report_type, ['critical_cases', 'institutional_management', 'course_management'], true)) {
+            $cases = AttendanceCase::query()->where('academic_year_id', $export->academic_year_id)
+                ->when($export->report_type === 'critical_cases', fn ($query) => $query->where('priority', 'critical'))
+                ->when($selectedCourseId, fn ($query) => $query->where('course_section_id', $selectedCourseId))
+                ->when(is_array($courseIds), fn ($query) => $query->whereIn('course_section_id', $courseIds))
+                ->with(['studentProfile:id,first_name,last_name,registered_name', 'courseSection:id,display_name', 'responsible:id,name'])
+                ->withCount(['interventions', 'familyContacts', 'plans'])->orderByDesc('opened_at')->limit(300)->get();
+            $sections[] = ['title' => $export->report_type === 'critical_cases' ? 'Casos críticos' : 'Gestión de expedientes', 'headers' => ['Folio', 'Estudiante', 'Curso', 'Prioridad', 'Estado', 'Responsable', 'Contactos', 'Intervenciones', 'Planes', 'Próxima revisión'], 'rows' => $cases->map(fn ($case) => [
+                $case->folio, $case->studentProfile?->registered_name_resolved, $case->courseSection?->display_name,
+                $case->priority, $case->status, $case->responsible?->name ?: 'Por asignar', $case->family_contacts_count,
+                $case->interventions_count, $case->plans_count, $case->next_review_on?->format('d-m-Y'),
+            ])->all()];
+        }
+
+        if (in_array($export->report_type, ['individual', 'family_interview'], true)) {
+            $studentId = (int) ($filters['student_profile_id'] ?? 0);
+            abort_unless($studentId && $access->canViewStudent($export->user, $studentId, $export->academic_year_id), 403);
+            $student = StudentProfile::query()->findOrFail($studentId);
+            $analysis = $analytics->studentSummary($student, $export->academic_year_id, $filters['as_of'] ?? null);
+            $summary = $analysis['summary'];
+            $sections[0]['rows'] = [
+                ['Estudiante', $student->registered_name_resolved], ['RUT', $student->rut],
+                ['Asistencia', $this->percent($summary['attendance_percentage'])], ['Días lectivos registrados', $summary['school_days_elapsed']],
+                ['Días presentes', $summary['days_present']], ['Días perdidos', $summary['days_absent']],
+                ['Ausencias justificadas', $summary['justified_absences']], ['Ausencias injustificadas', $summary['unjustified_absences']],
+                ['Atrasos', $summary['late_arrivals']], ['Retiros anticipados', $summary['early_departures']],
+            ];
+            if ($export->report_type === 'individual') {
+                $sections[0]['rows'][] = ['Nivel de atención', $analysis['risk']['label'] ?? 'Sin datos'];
+                $sections[0]['rows'][] = ['Explicación principal', collect($analysis['risk']['explanations'] ?? [])->first() ?: 'Sin señales suficientes'];
+            }
+            $sections[] = ['title' => 'Evolución mensual', 'headers' => ['Mes', 'Presentes', 'Ausentes', 'Asistencia'], 'rows' => collect($analysis['monthly'])->map(fn ($row) => [$row['period'], $row['present'], $row['absent'], $this->percent($row['attendance_rate'])])->all()];
+            $sections[] = ['title' => 'Patrones observados', 'headers' => ['Señal', 'Ocurrencias', 'Confianza', 'Descripción'], 'rows' => collect($analysis['patterns'])->map(fn ($row) => [str_replace('_', ' ', $row->pattern_type), $row->occurrence_count, $this->percent($row->confidence_score), $row->description])->all()];
+            $caseQuery = AttendanceCase::query()->where('student_profile_id', $studentId)->where('academic_year_id', $export->academic_year_id)
+                ->with(['causes.reason', 'plans.actions', 'agreements']);
+            $cases = $caseQuery->get();
+            if ($export->report_type === 'individual') {
+                $allowSensitive = $access->canViewSensitive($export->user);
+                $causeRows = $cases->flatMap(fn ($case) => $case->causes->filter(fn ($cause) => $allowSensitive || ! $cause->is_sensitive)->map(fn ($cause) => [
+                    $case->folio, $cause->reason?->name, $cause->information_source, $cause->identified_on?->format('d-m-Y'),
+                    $allowSensitive ? $cause->observations : null,
+                ]));
+                $sections[] = ['title' => 'Causas identificadas', 'headers' => ['Expediente', 'Causa', 'Fuente', 'Fecha', 'Observación autorizada'], 'rows' => $causeRows->all()];
+            }
+            $planRows = $cases->flatMap(fn ($case) => $case->plans->map(fn ($plan) => [$plan->folio, $plan->objective, $plan->goal_type, $plan->goal_value, $plan->review_on?->format('d-m-Y'), $plan->status]));
+            $sections[] = ['title' => $export->report_type === 'family_interview' ? 'Compromisos y plan compartido' : 'Planes individuales', 'headers' => ['Folio', 'Objetivo', 'Indicador', 'Meta', 'Revisión', 'Estado'], 'rows' => $planRows->all()];
+            $agreementRows = $cases->flatMap(fn ($case) => $case->agreements->map(fn ($agreement) => [$agreement->meeting_date?->format('d-m-Y'), $agreement->agreement, $agreement->commitment_date?->format('d-m-Y'), $agreement->status]));
+            $sections[] = ['title' => 'Acuerdos de entrevista', 'headers' => ['Fecha', 'Acuerdo', 'Compromiso', 'Estado'], 'rows' => $agreementRows->all()];
+            if ($export->report_type === 'family_interview') {
+                $sections[] = ['title' => 'Orientación para la familia', 'headers' => ['Nota'], 'rows' => [['Este documento apoya la conversación y el acompañamiento. No contiene diagnósticos ni puntajes internos de riesgo.']]];
+            }
+        }
+
+        if ($export->report_type === 'intervention_effectiveness') {
+            $plans = AttendanceActionPlan::query()->whereNotNull('evaluated_at')
+                ->whereHas('attendanceCase', function ($query) use ($export, $selectedCourseId, $courseIds): void {
+                    $query->where('academic_year_id', $export->academic_year_id)
+                        ->when($selectedCourseId, fn ($builder) => $builder->where('course_section_id', $selectedCourseId))
+                        ->when(is_array($courseIds), fn ($builder) => $builder->whereIn('course_section_id', $courseIds));
+                })->with(['attendanceCase.studentProfile:id,first_name,last_name,registered_name', 'attendanceCase.courseSection:id,display_name', 'responsible:id,name'])->get();
+            $sections[] = ['title' => 'Planes evaluados', 'headers' => ['Plan', 'Estudiante', 'Curso', 'Responsable', 'Inicial', 'Revisión', 'Variación', 'Resultado'], 'rows' => $plans->map(fn ($plan) => [
+                $plan->folio, $plan->attendanceCase?->studentProfile?->registered_name_resolved, $plan->attendanceCase?->courseSection?->display_name,
+                $plan->responsible?->name, $this->percent($plan->initial_attendance_rate), $this->percent($plan->review_attendance_rate),
+                $plan->result_variation, str_replace('_', ' ', $plan->evaluation_result),
+            ])->all()];
+            $sections[] = ['title' => 'Advertencia metodológica', 'headers' => ['Nota'], 'rows' => [['La variación posterior a una intervención representa una asociación observada. No demuestra que la intervención haya causado el cambio.']]];
         }
 
         return $sections;
@@ -315,7 +476,26 @@ class GenerateAttendanceStatisticsExport implements ShouldQueue
             'goals' => 'Metas institucionales',
             'financial' => 'Impacto financiero',
             'data_quality' => 'Calidad de datos',
+            'institutional_management' => 'Gestión institucional de ausencia',
+            'course_management' => 'Gestión de ausencia por curso',
+            'individual' => 'Ficha individual de asistencia',
+            'family_interview' => 'Reporte para entrevista familiar',
+            'critical_cases' => 'Casos críticos de asistencia',
+            'intervention_effectiveness' => 'Efectividad observada de intervenciones',
         ][$reportType] ?? 'Reporte de asistencia';
+    }
+
+    private function reportTitle(string $reportType): string
+    {
+        return match ($reportType) {
+            'institutional_management' => 'Gestión Institucional de Ausencia',
+            'course_management' => 'Gestión de Ausencia por Curso',
+            'individual' => 'Ficha Individual de Asistencia',
+            'family_interview' => 'Entrevista y Acompañamiento Familiar',
+            'critical_cases' => 'Casos Críticos de Asistencia',
+            'intervention_effectiveness' => 'Efectividad Observada de Intervenciones',
+            default => 'Estadísticas Avanzadas de Asistencia',
+        };
     }
 
     private function filterSummary(array $filters, array $dashboard): string

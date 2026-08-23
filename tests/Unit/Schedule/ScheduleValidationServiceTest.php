@@ -223,12 +223,8 @@ class ScheduleValidationServiceTest extends TestCase
             }
         }
 
-        $level = EducationLevel::query()->create([
-            'name' => '7° básico',
-            'order' => 9,
-            'type' => 'basica',
-            'default_school_day_template_id' => $jornada->id,
-        ]);
+        $level = EducationLevel::query()->where('order', 9)->firstOrFail();
+        $level->update(['default_school_day_template_id' => $jornada->id]);
 
         $course = CourseSection::query()->create([
             'academic_year_id' => $year->id,

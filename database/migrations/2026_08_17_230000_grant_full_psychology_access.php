@@ -105,7 +105,13 @@ return new class extends Migration
                 ],
             );
 
-            $this->syncAccess(['psicologo', 'super_admin'], array_keys(self::PERMISSIONS), self::PSYCHOLOGY_MODULES, $now);
+            $this->syncAccess(['super_admin'], array_keys(self::PERMISSIONS), self::PSYCHOLOGY_MODULES, $now);
+            $this->syncAccess(
+                ['psicologo'],
+                self::ORIGINAL_PSYCHOLOGIST_PERMISSIONS,
+                ['psychology', 'psychology_dashboard', 'psychology_referrals', 'psychology_cases', 'psychology_calendar', 'psychology_tasks', 'psychology_alerts', 'psychology_reports'],
+                $now,
+            );
         });
     }
 

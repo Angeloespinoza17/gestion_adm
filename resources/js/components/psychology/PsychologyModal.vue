@@ -5,6 +5,7 @@ defineProps({
     eyebrow: { type: String, default: "Registro confidencial" },
     title: { type: String, required: true },
     size: { type: String, default: "large" },
+    closeOnBackdrop: { type: Boolean, default: true },
 });
 
 const emit = defineEmits(["close"]);
@@ -37,7 +38,7 @@ onBeforeUnmount(() => {
                 role="dialog"
                 aria-modal="true"
                 :aria-label="title"
-                @click.self="emit('close')"
+                @click.self="closeOnBackdrop && emit('close')"
             >
                 <article class="psi-modal-panel" :class="`is-${size}`">
                     <header>
@@ -92,6 +93,10 @@ onBeforeUnmount(() => {
 }
 .psi-modal-panel.is-xlarge {
     width: min(1180px, 98vw);
+}
+.psi-modal-panel.is-xlarge-tall {
+    width: min(1180px, 98vw);
+    height: min(820px, 92vh);
 }
 .psi-modal-panel > header {
     position: sticky;
@@ -167,6 +172,10 @@ onBeforeUnmount(() => {
     }
     .psi-modal-panel {
         max-height: 98vh;
+    }
+    .psi-modal-panel.is-xlarge-tall {
+        width: 98vw;
+        height: 94vh;
     }
 }
 </style>

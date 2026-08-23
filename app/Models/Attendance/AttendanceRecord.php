@@ -16,7 +16,8 @@ class AttendanceRecord extends Model
     public const ABSENT = 'absent';
 
     protected $fillable = [
-        'attendance_import_id', 'school_day_id', 'academic_year_id', 'course_section_id',
+        'attendance_import_id', 'monthly_attendance_import_id', 'monthly_attendance_import_row_id',
+        'school_day_id', 'academic_year_id', 'course_section_id',
         'student_profile_id', 'student_enrollment_id', 'attendance_date', 'status',
         'absence_reason_id', 'is_justified', 'minutes_late', 'early_departure',
         'arrival_time', 'departure_time', 'corrected_at', 'correction_reason',
@@ -34,6 +35,16 @@ class AttendanceRecord extends Model
     public function attendanceImport(): BelongsTo
     {
         return $this->belongsTo(AttendanceImport::class);
+    }
+
+    public function monthlyAttendanceImport(): BelongsTo
+    {
+        return $this->belongsTo(MonthlyAttendanceImport::class);
+    }
+
+    public function monthlyAttendanceImportRow(): BelongsTo
+    {
+        return $this->belongsTo(MonthlyAttendanceImportRow::class);
     }
 
     public function schoolDay(): BelongsTo

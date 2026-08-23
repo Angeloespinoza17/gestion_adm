@@ -9,7 +9,10 @@ class ForwardOnlyMigrationTest extends TestCase
 {
     public static function migrations(): array
     {
-        return array_map(fn (string $path) => [$path], glob(__DIR__.'/../../../database/migrations/2026_08_13_*.php') ?: []);
+        $paths = glob(__DIR__.'/../../../database/migrations/2026_08_13_*.php') ?: [];
+        $paths[] = __DIR__.'/../../../database/migrations/2026_08_22_150000_create_lcd_subject_catalog_management_tables.php';
+
+        return array_map(fn (string $path) => [$path], $paths);
     }
 
     #[DataProvider('migrations')]

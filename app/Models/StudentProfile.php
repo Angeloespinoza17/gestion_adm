@@ -218,6 +218,21 @@ class StudentProfile extends Model
         return $this->hasMany(\App\Models\SocialWork\SocialCase::class, 'primary_student_id')->latest('opened_on');
     }
 
+    public function psychologyCases(): HasMany
+    {
+        return $this->hasMany(\App\Models\Psychology\PsychologyCase::class, 'student_profile_id');
+    }
+
+    public function psychologyReferrals(): HasMany
+    {
+        return $this->hasMany(\App\Models\Psychology\PsychologyReferral::class, 'student_profile_id');
+    }
+
+    public function monthlyAttendanceRows(): HasMany
+    {
+        return $this->hasMany(\App\Models\Attendance\MonthlyAttendanceImportRow::class, 'student_profile_id');
+    }
+
     public function socialPrograms(): HasMany
     {
         return $this->hasMany(\App\Models\SocialWork\StudentProgram::class, 'student_profile_id');

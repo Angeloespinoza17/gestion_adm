@@ -36,6 +36,7 @@ class AccountingSubsidyService
         private readonly MineducSubsidyParser $parser,
         private readonly AccountingJournalService $journalService,
         private readonly AccountingAuditService $auditService,
+        private readonly AttendanceSubsidyReconciliationService $attendanceReconciliationService,
     ) {}
 
     /**
@@ -354,7 +355,8 @@ class AccountingSubsidyService
         return $this->loadSettlement($postedSettlement);
     }
 
-    public function dashboard(?string $period, ?string $comparePeriod = null): array
+    /** @param array<string,mixed> $calculationOptions */
+    public function dashboard(?string $period, ?string $comparePeriod = null, array $calculationOptions = []): array
     {
         $date = $period
             ? CarbonImmutable::createFromFormat('Y-m', $period)->startOfMonth()
@@ -401,6 +403,7 @@ class AccountingSubsidyService
             ],
             'annual' => $this->annualSummary($date->year),
             'available_years' => $availableYears,
+            'attendance_reconciliation' => $this->attendanceReconciliationService->calculate($date, $calculationOptions),
         ];
     }
 

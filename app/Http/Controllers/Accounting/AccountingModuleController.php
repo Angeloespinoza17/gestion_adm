@@ -146,7 +146,10 @@ class AccountingModuleController extends Controller
                     AccountingAccessService::INCOME_TAX_PERMISSION,
                 ]) ? \App\Models\Accounting\AccountingDeclarationType::query()->where('is_active', true)->orderBy('name')->get(['id', 'code', 'name', 'category']) : null,
             ], static fn ($value): bool => $value !== null),
-            'permissions' => $request->user()?->permissionSlugs() ?? [],
+            'permissions' => array_values(array_unique(array_merge(
+                $request->user()?->permissionSlugs() ?? [],
+                $request->user()?->isSuperAdmin() ? ['__superadmin__'] : [],
+            ))),
         ]);
     }
 

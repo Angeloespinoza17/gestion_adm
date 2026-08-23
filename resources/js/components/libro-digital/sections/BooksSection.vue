@@ -12,6 +12,7 @@ import {
     hasCapability,
     humanize,
     payloadItems,
+    payloadMeta,
     showError,
     showSuccess,
 } from "../module-utils";
@@ -28,6 +29,10 @@ const loading = ref(false);
 const error = ref(null);
 const items = ref([]);
 const search = ref("");
+const educationType = ref("");
+const statusFilter = ref("");
+const selected = ref(new Set());
+const bulkOpening = ref(false);
 const showForm = ref(false);
 const saving = ref(false);
 const editing = ref(null);
@@ -65,21 +70,42 @@ const canManageBooks = computed(() =>
 const scopeKey = computed(() => JSON.stringify(contextParams(props.context)));
 const filtered = computed(() => {
     const needle = search.value.trim().toLocaleLowerCase("es");
-    return items.value.filter(
-        (item) =>
+    return items.value.filter((item) => {
+        const matchesSearch =
             !needle ||
             [
                 bookLabel(item),
                 item.status,
                 item.course?.display_name,
                 item.subject?.name,
+                item.subject?.technical_name,
             ]
                 .filter(Boolean)
                 .join(" ")
                 .toLocaleLowerCase("es")
-                .includes(needle)
-    );
+                .includes(needle);
+        const matchesEducation =
+            !educationType.value ||
+            item.course?.education_type === educationType.value;
+        const matchesStatus =
+            !statusFilter.value || item.status === statusFilter.value;
+
+        return matchesSearch && matchesEducation && matchesStatus;
+    });
 });
+const isActivatable = (item) =>
+    ["draft", "pending_preflight"].includes(
+        String(item.status || "").toLowerCase()
+    );
+const activatableFiltered = computed(() =>
+    filtered.value.filter(isActivatable)
+);
+const selectedCount = computed(() => selected.value.size);
+const allActivatableSelected = computed(
+    () =>
+        activatableFiltered.value.length > 0 &&
+        activatableFiltered.value.every((item) => selected.value.has(item.id))
+);
 
 const resetForm = () =>
     Object.assign(form, {
@@ -106,6 +132,12 @@ const load = async () => {
                 controller.signal
             )
         );
+        const validIds = new Set(
+            items.value.filter(isActivatable).map((item) => item.id)
+        );
+        selected.value = new Set(
+            [...selected.value].filter((id) => validIds.has(id))
+        );
     } catch (requestError) {
         if (requestError?.code !== "ERR_CANCELED") error.value = requestError;
     } finally {
@@ -114,6 +146,9 @@ const load = async () => {
 };
 
 watch([scopeKey, () => props.refreshToken], load, { immediate: true });
+watch(scopeKey, () => {
+    selected.value = new Set();
+});
 onBeforeUnmount(() => controller?.abort());
 
 const openCreate = () => {
@@ -219,6 +254,118 @@ const runAction = async (item, action) => {
     }
 };
 
+const toggleSelected = (item) => {
+    if (!isActivatable(item)) return;
+    const next = new Set(selected.value);
+    if (next.has(item.id)) next.delete(item.id);
+    else next.add(item.id);
+    selected.value = next;
+};
+const toggleAllActivatable = () => {
+    const next = new Set(selected.value);
+    if (allActivatableSelected.value)
+        activatableFiltered.value.forEach((item) => next.delete(item.id));
+    else activatableFiltered.value.forEach((item) => next.add(item.id));
+    selected.value = next;
+};
+const failureSummary = (failedItems) => {
+    const grouped = new Map();
+    failedItems.forEach((item) => {
+        const blockers = Array.isArray(item.details)
+            ? item.details.filter(
+                  (check) =>
+                      check?.required !== false &&
+                      check?.passed === false
+              )
+            : [];
+        const cause = blockers.length
+            ? blockers
+                  .map(
+                      (check) =>
+                          check.label || check.remediation || check.code
+                  )
+                  .filter(Boolean)
+                  .join(" y ")
+            : item.message || "Revisión requerida";
+        const names = grouped.get(cause) || [];
+        names.push(item.display_name || `Libro #${item.id}`);
+        grouped.set(cause, names);
+    });
+
+    return [...grouped.entries()]
+        .slice(0, 5)
+        .map(([cause, names]) => {
+            const examples = names.slice(0, 2).join(", ");
+            const more = names.length > 2 ? ` y ${names.length - 2} más` : "";
+            return `• ${names.length} libro${names.length === 1 ? "" : "s"}: ${cause}.\n  ${examples}${more}`;
+        })
+        .join("\n");
+};
+const runBulkOpen = async () => {
+    if (!selectedCount.value) return;
+    const confirmation = await confirmAction({
+        title: `Activar ${selectedCount.value} libros`,
+        text: "Se validarán cumplimiento y nómina. Los libros sin docente también se abrirán, quedarán identificados como pendientes de asignación y no podrán registrar clases ni firmas hasta completar ese dato.",
+        confirmText: "Validar y activar",
+    });
+    if (!confirmation.isConfirmed) return;
+    bulkOpening.value = true;
+    try {
+        const selectedBooks = items.value.filter((item) =>
+            selected.value.has(item.id)
+        );
+        const response = await libroDigitalApi.bulkOpenBooks({
+            school_id: props.context.school_id,
+            academic_year_id: props.context.academic_year_id || null,
+            allow_unassigned_teacher: true,
+            books: selectedBooks.map((item) => ({
+                id: item.id,
+                lock_version: item.lock_version,
+            })),
+        });
+        const meta = payloadMeta(response);
+        selected.value = new Set();
+        await load();
+        emit("catalog-changed");
+        if (meta.failed) {
+            const failed = failureSummary(
+                payloadItems(response).filter(
+                    (item) => item.result === "failed"
+                )
+            );
+            const { default: Swal } = await import("sweetalert2");
+            await Swal.fire({
+                icon: meta.opened ? "warning" : "error",
+                title: meta.opened
+                    ? "Activación parcialmente completada"
+                    : "No se activaron libros",
+                text: `${meta.opened || 0} activados y ${meta.failed} pendientes de corrección.\n\n${failed}`,
+                confirmButtonText: "Entendido",
+                width: "42rem",
+            });
+        } else if (meta.opened_without_teacher) {
+            const { default: Swal } = await import("sweetalert2");
+            await Swal.fire({
+                icon: "warning",
+                title: "Libros activados con docente pendiente",
+                text: `${meta.opened || 0} libros quedaron abiertos. ${meta.opened_without_teacher} requieren asignar un docente antes de registrar clases, evaluaciones o firmas.`,
+                confirmButtonText: "Entendido",
+                width: "40rem",
+            });
+        } else {
+            await showSuccess(
+                "Libros activados",
+                `${meta.opened || 0} libros superaron el preflight y quedaron abiertos.`
+            );
+        }
+    } catch (requestError) {
+        await showError(requestError, "No se pudo ejecutar la activación masiva");
+        if (requestError.isConflict) await load();
+    } finally {
+        bulkOpening.value = false;
+    }
+};
+
 const availableActions = (item) => {
     const status = String(item.status || "draft").toLowerCase();
     return {
@@ -295,6 +442,8 @@ const bookControlActions = (item) => {
                 size="sm"
                 variant="primary"
                 class="ld-primary-action"
+                aria-label="Nuevo libro"
+                title="Nuevo libro"
                 @click="openCreate"
             >
                 <i class="bx bx-plus" aria-hidden="true"></i
@@ -327,6 +476,26 @@ const bookControlActions = (item) => {
                     ></BButton>
                 </div>
             </div>
+            <div class="ld-commandbar__filter">
+                <label for="lcd-book-education">Tipo de enseñanza</label>
+                <BFormSelect id="lcd-book-education" v-model="educationType" size="sm">
+                    <option value="">Todos los niveles</option>
+                    <option value="parvularia">Educación Parvularia</option>
+                    <option value="basica">Enseñanza Básica</option>
+                    <option value="media">Enseñanza Media</option>
+                </BFormSelect>
+            </div>
+            <div class="ld-commandbar__filter">
+                <label for="lcd-book-status">Estado del libro</label>
+                <BFormSelect id="lcd-book-status" v-model="statusFilter" size="sm">
+                    <option value="">Todos los estados</option>
+                    <option value="draft">Borrador</option>
+                    <option value="pending_preflight">Pendiente de preflight</option>
+                    <option value="open">Abierto</option>
+                    <option value="temporarily_locked">Bloqueado temporalmente</option>
+                    <option value="closed">Cerrado</option>
+                </BFormSelect>
+            </div>
             <div class="ld-commandbar__summary" aria-live="polite">
                 <span class="ld-result-count"
                     ><strong>{{ filtered.length }}</strong> de
@@ -337,6 +506,35 @@ const bookControlActions = (item) => {
                     activo</span
                 >
             </div>
+        </div>
+
+        <div v-if="canManageBooks && items.length" class="ld-bulk-open">
+            <div class="ld-bulk-open__identity">
+                <span aria-hidden="true"><i class="bx bx-list-check"></i></span>
+                <div>
+                    <strong>Activación masiva con preflight</strong>
+                    <small>Selecciona borradores o libros validados; cada uno conserva su resultado y auditoría.</small>
+                </div>
+            </div>
+            <BFormCheckbox
+                :model-value="allActivatableSelected"
+                :indeterminate="selectedCount > 0 && !allActivatableSelected"
+                @update:model-value="toggleAllActivatable"
+            >
+                Seleccionar {{ activatableFiltered.length }} activables
+            </BFormCheckbox>
+            <span class="ld-bulk-open__count"><strong>{{ selectedCount }}</strong> seleccionados</span>
+            <BButton
+                type="button"
+                size="sm"
+                variant="success"
+                :disabled="!selectedCount || bulkOpening"
+                @click="runBulkOpen"
+            >
+                <span v-if="bulkOpening" class="spinner-border spinner-border-sm" aria-hidden="true"></span>
+                <i v-else class="bx bx-lock-open-alt" aria-hidden="true"></i>
+                {{ bulkOpening ? "Activando" : "Activar selección" }}
+            </BButton>
         </div>
 
         <LibroDigitalStatePanel
@@ -403,6 +601,14 @@ const bookControlActions = (item) => {
                         </caption>
                         <thead>
                             <tr>
+                                <th v-if="canManageBooks" scope="col" class="ld-select-column">
+                                    <BFormCheckbox
+                                        :model-value="allActivatableSelected"
+                                        :indeterminate="selectedCount > 0 && !allActivatableSelected"
+                                        aria-label="Seleccionar libros activables visibles"
+                                        @update:model-value="toggleAllActivatable"
+                                    />
+                                </th>
                                 <th scope="col">Libro</th>
                                 <th scope="col">Año / perfil</th>
                                 <th scope="col">Docente</th>
@@ -412,7 +618,19 @@ const bookControlActions = (item) => {
                             </tr>
                         </thead>
                         <tbody>
-                            <tr v-for="item in filtered" :key="item.id">
+                            <tr
+                                v-for="item in filtered"
+                                :key="item.id"
+                                :class="{ 'ld-book-row--selected': selected.has(item.id) }"
+                            >
+                                <td v-if="canManageBooks" class="ld-select-column">
+                                    <BFormCheckbox
+                                        :model-value="selected.has(item.id)"
+                                        :disabled="!isActivatable(item)"
+                                        :aria-label="isActivatable(item) ? `Seleccionar ${bookLabel(item)}` : `${bookLabel(item)} no está disponible para activación masiva`"
+                                        @update:model-value="toggleSelected(item)"
+                                    />
+                                </td>
                                 <td>
                                     <button
                                         type="button"
@@ -455,6 +673,10 @@ const bookControlActions = (item) => {
                                                 "Perfil pendiente"
                                             }}</small
                                         >
+                                        <small class="ld-education-tag">
+                                            <i class="bx bx-layer" aria-hidden="true"></i>
+                                            {{ item.course?.education_type === "basica" ? "Enseñanza Básica" : item.course?.education_type === "media" ? "Enseñanza Media" : item.course?.education_type === "parvularia" ? "Parvularia" : "Nivel no definido" }}
+                                        </small>
                                     </div>
                                 </td>
                                 <td>
@@ -878,12 +1100,20 @@ const bookControlActions = (item) => {
     flex: 1;
     max-width: 520px;
 }
-.ld-commandbar__search > label {
+.ld-commandbar__search > label,
+.ld-commandbar__filter > label {
     display: block;
     margin-bottom: 0.28rem;
     color: #596579;
     font-size: 0.72rem;
     font-weight: 750;
+}
+.ld-commandbar__filter {
+    flex: 0 1 205px;
+}
+.ld-commandbar__filter .form-select {
+    min-height: 40px;
+    font-size: 0.76rem;
 }
 .ld-commandbar__search .input-group-text {
     border-right: 0;
@@ -923,6 +1153,72 @@ const bookControlActions = (item) => {
     color: var(--ld-primary);
     font-size: 0.7rem;
     font-weight: 700;
+}
+.ld-bulk-open {
+    display: flex;
+    align-items: center;
+    gap: 0.85rem;
+    padding: 0.7rem 0.8rem;
+    border: 1px solid #cfe3da;
+    border-radius: 14px;
+    background:
+        radial-gradient(circle at 90% 0, rgba(30, 126, 92, 0.08), transparent 34%),
+        linear-gradient(135deg, #f8fcfa, #f2f9f6);
+    color: #40554e;
+}
+.ld-bulk-open__identity {
+    display: flex;
+    min-width: 0;
+    flex: 1;
+    align-items: center;
+    gap: 0.58rem;
+}
+.ld-bulk-open__identity > span {
+    display: grid;
+    flex: 0 0 36px;
+    width: 36px;
+    height: 36px;
+    place-items: center;
+    border-radius: 10px;
+    background: #dff1ea;
+    color: #237357;
+    font-size: 1rem;
+}
+.ld-bulk-open__identity strong,
+.ld-bulk-open__identity small {
+    display: block;
+}
+.ld-bulk-open__identity strong {
+    color: #2e5447;
+    font-size: 0.78rem;
+}
+.ld-bulk-open__identity small {
+    margin-top: 0.12rem;
+    color: #6c827a;
+    font-size: 0.67rem;
+}
+.ld-bulk-open .form-check {
+    margin: 0;
+    font-size: 0.72rem;
+}
+.ld-bulk-open__count {
+    padding: 0.34rem 0.5rem;
+    border: 1px solid #d4e5df;
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.7);
+    color: #6a7d76;
+    font-size: 0.68rem;
+}
+.ld-bulk-open__count strong {
+    color: #237357;
+}
+.ld-bulk-open .btn {
+    display: inline-flex;
+    min-height: 38px;
+    align-items: center;
+    gap: 0.32rem;
+    font-size: 0.72rem;
+    font-weight: 750;
 }
 .ld-inline-alert {
     display: flex;
@@ -1017,6 +1313,19 @@ const bookControlActions = (item) => {
     border-color: #edf0f4;
     color: #475467;
 }
+.ld-data-table .ld-select-column {
+    width: 46px;
+    min-width: 46px;
+    padding-right: 0.35rem;
+    text-align: center;
+}
+.ld-data-table .ld-select-column .form-check {
+    display: inline-flex;
+    margin: 0;
+}
+.ld-book-row--selected > td {
+    background: #f5f8ff;
+}
 .ld-data-table th:last-child,
 .ld-data-table td:last-child {
     position: sticky;
@@ -1059,6 +1368,10 @@ const bookControlActions = (item) => {
 .ld-cell-primary strong,
 .ld-cell-primary small {
     display: block;
+}
+.ld-cell-primary .ld-education-tag {
+    margin-top: 0.28rem;
+    color: #62729c;
 }
 .ld-record-link strong {
     font-size: 0.78rem;
@@ -1209,6 +1522,19 @@ const bookControlActions = (item) => {
     }
     .ld-commandbar__summary {
         justify-content: space-between;
+    }
+    .ld-commandbar__filter {
+        flex-basis: 100%;
+    }
+    .ld-bulk-open {
+        align-items: stretch;
+        flex-direction: column;
+    }
+    .ld-bulk-open__count {
+        text-align: center;
+    }
+    .ld-bulk-open .btn {
+        justify-content: center;
     }
     .ld-panel-head {
         padding: 0.75rem 0.8rem;

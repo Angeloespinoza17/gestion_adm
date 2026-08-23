@@ -16,11 +16,7 @@ class EducationLevelControllerTest extends TestCase
 
     public function test_it_blocks_deleting_a_level_with_associated_courses(): void
     {
-        $level = EducationLevel::query()->create([
-            'name' => '7° básico',
-            'order' => 9,
-            'type' => 'basica',
-        ]);
+        $level = EducationLevel::query()->where('order', 9)->firstOrFail();
 
         $year = AcademicYear::query()->create([
             'name' => '2026',

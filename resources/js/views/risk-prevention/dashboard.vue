@@ -5,6 +5,7 @@ import LoadingState from "../../components/ui/loading-state.vue";
 import HelpButton from "../../components/risk-prevention/help-button.vue";
 import StatusBadge from "../../components/risk-prevention/status-badge.vue";
 import { formatRiskDate, formatRiskDateTime, formatRiskError, showRiskError } from "../../components/risk-prevention/module-utils";
+import { riskMatrixApi } from "../../services/risk-matrix-api";
 
 export default {
   components: { Layout, LoadingState, HelpButton, StatusBadge },
@@ -12,6 +13,7 @@ export default {
     return {
       loading: false,
       error: null,
+      iper: { metrics: {} },
       data: {
         metrics: {},
         extinguisher_alert_summary: {},
@@ -34,8 +36,13 @@ export default {
       this.error = null;
 
       try {
-        const response = await axios.get("/api/risk-prevention/dashboard");
-        this.data = response.data;
+        const [dashboard, iper] = await Promise.allSettled([
+          axios.get("/api/risk-prevention/dashboard"),
+          riskMatrixApi.dashboard(),
+        ]);
+        if (dashboard.status === "rejected") throw dashboard.reason;
+        this.data = dashboard.value.data;
+        this.iper = iper.status === "fulfilled" ? iper.value : { metrics: {} };
       } catch (error) {
         this.error = formatRiskError(error, "No se pudo cargar el dashboard del módulo.");
         showRiskError(this.error);
@@ -49,19 +56,30 @@ export default {
 
 <template>
   <Layout>
-    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
-      <div>
-        <h4 class="mb-0">Dashboard de Prevención de Riesgos</h4>
-        <div class="text-muted">Control de alertas, vencimientos y trazabilidad preventiva del establecimiento.</div>
+    <section class="prevention-hero">
+      <div class="hero-copy">
+        <span>Gestión preventiva institucional</span>
+        <h1>Prevención de Riesgos</h1>
+        <p>Una visión integrada de peligros, controles, personas, activos y cumplimiento documental del establecimiento.</p>
       </div>
-      <div class="d-flex gap-2">
+      <div class="hero-actions">
         <HelpButton
           title="Ayuda del dashboard"
           text="Este panel resume los vencimientos y pendientes críticos del módulo para priorizar acciones preventivas."
         />
-        <BButton variant="primary" @click="loadDashboard">Actualizar</BButton>
+        <BButton variant="light" @click="loadDashboard"><i class="bx bx-refresh"></i> Actualizar</BButton>
       </div>
-    </div>
+      <div class="hero-orb"></div>
+    </section>
+
+    <nav class="prevention-shortcuts" aria-label="Áreas de prevención">
+      <router-link to="/risk-prevention/matrices"><i class="bx bx-grid-alt"></i><span><strong>Matrices IPER</strong><small>Peligros y evaluación</small></span><i class="bx bx-chevron-right"></i></router-link>
+      <router-link to="/risk-prevention/preventive-program"><i class="bx bx-task"></i><span><strong>Programa preventivo</strong><small>Medidas y responsables</small></span><i class="bx bx-chevron-right"></i></router-link>
+      <router-link to="/risk-prevention/accidents"><i class="bx bx-first-aid"></i><span><strong>Accidentes</strong><small>Registro y seguimiento</small></span><i class="bx bx-chevron-right"></i></router-link>
+      <router-link to="/risk-prevention/extinguishers"><i class="bx bx-shield-quarter"></i><span><strong>Extintores</strong><small>Vigencia y ubicación</small></span><i class="bx bx-chevron-right"></i></router-link>
+      <router-link to="/risk-prevention/epp"><i class="bx bx-check-shield"></i><span><strong>EPP</strong><small>Entrega y reposición</small></span><i class="bx bx-chevron-right"></i></router-link>
+      <router-link to="/risk-prevention/documents"><i class="bx bx-folder-open"></i><span><strong>Documentación</strong><small>Vigencia y difusión</small></span><i class="bx bx-chevron-right"></i></router-link>
+    </nav>
 
     <BAlert v-if="error" show variant="danger" class="mb-3">{{ error }}</BAlert>
     <LoadingState v-if="loading" message="Cargando dashboard de prevención..." />
@@ -77,6 +95,16 @@ export default {
         <strong>{{ data.metrics.documents_due || 0 }}</strong> documentos con vencimiento próximo o vencido.
         Revisa los paneles de seguimiento de esta página.
       </BAlert>
+
+      <section class="iper-command mb-3">
+        <div class="iper-command__intro"><span>Control estratégico IPER/MIPER</span><h2>Riesgos y ejecución preventiva</h2><p>Indicadores de las matrices vigentes y su programa de medidas.</p><router-link to="/risk-prevention/matrices">Abrir gestión IPER <i class="bx bx-right-arrow-alt"></i></router-link></div>
+        <div class="iper-command__metrics">
+          <article><span>Matrices vigentes</span><strong>{{ iper.metrics.current_matrices || 0 }}</strong><small>{{ iper.metrics.draft_matrices || 0 }} borradores</small></article>
+          <article class="important"><span>Riesgos importantes</span><strong>{{ iper.metrics.important_risks || 0 }}</strong><small>requieren medidas</small></article>
+          <article class="critical"><span>Riesgos intolerables</span><strong>{{ iper.metrics.intolerable_risks || 0 }}</strong><small>respuesta inmediata</small></article>
+          <article class="program-progress"><span>Avance preventivo</span><strong>{{ iper.metrics.program_progress || 0 }}%</strong><div><span :style="{ width: `${iper.metrics.program_progress || 0}%` }"></span></div></article>
+        </div>
+      </section>
 
       <div class="row g-3 mb-3">
         <div class="col-md-6 col-xl-3">
@@ -302,6 +330,7 @@ export default {
 </template>
 
 <style scoped>
+.prevention-hero{position:relative;overflow:hidden;display:flex;align-items:flex-end;justify-content:space-between;gap:2rem;margin-bottom:.85rem;padding:1.6rem 1.8rem;border-radius:22px;background:linear-gradient(125deg,#102b46,#155e69 70%,#16806f);color:#fff;box-shadow:0 18px 40px rgba(16,43,70,.18)}.hero-copy{position:relative;z-index:2}.hero-copy>span{color:#a9dde0;font-size:.7rem;font-weight:800;letter-spacing:.11em;text-transform:uppercase}.hero-copy h1{margin:.2rem 0 .35rem;font-size:1.9rem;letter-spacing:-.035em}.hero-copy p{max-width:720px;margin:0;color:#d9ebed;font-size:.86rem}.hero-actions{position:relative;z-index:2;display:flex;gap:.55rem}.hero-actions :deep(button){display:inline-flex;align-items:center;gap:.35rem}.hero-orb{position:absolute;right:-65px;top:-105px;width:270px;height:270px;border:42px solid rgba(255,255,255,.055);border-radius:50%}.prevention-shortcuts{display:grid;grid-template-columns:repeat(6,1fr);gap:.6rem;margin-bottom:.85rem}.prevention-shortcuts>a{display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:.5rem;min-width:0;padding:.7rem;border:1px solid #dce5ea;border-radius:12px;background:#fff;color:#344054;box-shadow:0 5px 16px rgba(16,24,40,.035);transition:.18s}.prevention-shortcuts>a:hover{border-color:#9bc8c5;transform:translateY(-1px)}.prevention-shortcuts>a>i:first-child{display:grid;place-items:center;width:34px;height:34px;border-radius:9px;background:#e7f3f1;color:#16806f;font-size:1.05rem}.prevention-shortcuts strong,.prevention-shortcuts small{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.prevention-shortcuts strong{font-size:.66rem}.prevention-shortcuts small{color:#667085;font-size:.56rem}.prevention-shortcuts>a>i:last-child{color:#98a2b3}.iper-command{display:grid;grid-template-columns:300px 1fr;overflow:hidden;border:1px solid #d9e5e6;border-radius:16px;background:#fff;box-shadow:0 8px 24px rgba(16,24,40,.04)}.iper-command__intro{padding:1rem 1.15rem;background:linear-gradient(145deg,#eff8f7,#f7fbfb)}.iper-command__intro>span{color:#16806f;font-size:.61rem;font-weight:850;letter-spacing:.08em;text-transform:uppercase}.iper-command__intro h2{margin:.2rem 0;font-size:1rem}.iper-command__intro p{margin:0 0 .5rem;color:#667085;font-size:.63rem}.iper-command__intro a{display:inline-flex;align-items:center;gap:.25rem;color:#176b62;font-size:.64rem;font-weight:800}.iper-command__metrics{display:grid;grid-template-columns:repeat(4,1fr)}.iper-command__metrics article{padding:1rem;border-left:1px solid #e8edf1}.iper-command__metrics span,.iper-command__metrics strong,.iper-command__metrics small{display:block}.iper-command__metrics>article>span{color:#667085;font-size:.61rem}.iper-command__metrics strong{margin:.15rem 0;color:#25364a;font-size:1.35rem}.iper-command__metrics small{color:#98a2b3;font-size:.58rem}.iper-command__metrics .important strong{color:#c2410c}.iper-command__metrics .critical strong{color:#be123c}.iper-command__metrics .program-progress>div{height:6px;overflow:hidden;margin-top:.4rem;border-radius:99px;background:#e4ecea}.iper-command__metrics .program-progress>div span{height:100%;border-radius:99px;background:#16806f}
 .risk-card {
   overflow: hidden;
 }
@@ -321,4 +350,8 @@ export default {
 .risk-card--secondary {
   background: linear-gradient(135deg, rgba(108, 117, 125, 0.15), rgba(255, 255, 255, 1));
 }
+
+@media (max-width: 1200px) {.prevention-shortcuts{grid-template-columns:repeat(3,1fr)}.iper-command{grid-template-columns:1fr}.iper-command__metrics article:first-child{border-left:0}}
+@media (max-width: 700px) {.prevention-hero{align-items:flex-start;flex-direction:column;padding:1.3rem}.prevention-shortcuts{grid-template-columns:1fr 1fr}.iper-command__metrics{grid-template-columns:1fr 1fr}.iper-command__metrics article{border-top:1px solid #e8edf1}.hero-copy h1{font-size:1.55rem}}
+@media (max-width: 450px) {.prevention-shortcuts,.iper-command__metrics{grid-template-columns:1fr}}
 </style>

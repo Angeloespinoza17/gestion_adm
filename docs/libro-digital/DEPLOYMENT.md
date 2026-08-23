@@ -29,10 +29,11 @@ No almacenar secretos reales en `.env` versionado, base de datos, logs o esta do
 - [ ] release/commit identificado y artefactos de build reproducibles;
 - [ ] backup consistente de BD y archivos privados; restauración reciente probada;
 - [ ] las once migraciones LCD `000001`–`000011` revisadas como aditivas; 69 tablas `lcd_*` esperadas en el esquema nuevo;
+- [ ] la ampliación de catálogo `2026_08_22_150000` revisada como aditiva y forward-only; 71 tablas `lcd_*` esperadas después de aplicarla, sin aliases ni renombres automáticos;
 - [ ] plan [ROLLBACK.md](ROLLBACK.md) aprobado y versión anterior disponible;
 - [ ] compatibilidad de código anterior/nuevo con el esquema expandido;
 - [ ] almacenamiento privado, cola, scheduler y monitoreo configurados; cinco jobs LCD `ShouldBeUnique` deben ejecutarse en workers supervisados;
-- [ ] capacidad de carga verificada en el runtime web: MySQL `max_allowed_packet >= 64 MiB`, PHP `upload_max_filesize >= 20 MiB` y `post_max_size >= 64 MiB`; el proxy/web server debe aceptar al menos el mismo cuerpo total;
+- [ ] capacidad de carga verificada en el runtime web: MySQL `max_allowed_packet >= 64 MiB`; para el catálogo de programas, PHP `upload_max_filesize >= 40 MiB`, `post_max_size >= 128 MiB` y `max_file_uploads >= 30`; el proxy/web server debe aceptar al menos el mismo cuerpo total;
 - [ ] claves/cifrado y rotación definidos;
 - [ ] permisos y seeder revisados en staging con datos sintéticos;
 - [ ] `OPEN_COMPLIANCE_ITEMS` revisado;
@@ -42,17 +43,18 @@ No almacenar secretos reales en `.env` versionado, base de datos, logs o esta do
 
 ### Evidencia local observada al corte
 
-En el entorno local compartido, al **2026-08-14**, se verificó:
+En el entorno local compartido, al **2026-08-22**, se verificó:
 
 - build frontend final con exit code `0`;
 - suite focalizada literal LCD de cierre: 70 pruebas, 553 assertions, 5,69 s, exit code `0`; solo warning conocido del schema XML de PHPUnit;
 - `000001`–`000011` en estado `Ran`, incluidas identidad scoped y trazabilidad N:M curricular;
 - RBAC/navegación local reconciliados con 35 permisos y 11 módulos LCD;
-- un lote curricular local `activated`: 6.337 objetivos (5.394 activos / 943 inactivos), 6 fuentes, 12.674 relaciones objetivo–fuente y 4 vínculos; 129 asignaturas compartidas, con `MAT` y `PM` como únicas activas;
+- un lote curricular local `activated`: 6.337 objetivos (5.394 activos / 943 inactivos), 6 fuentes y 12.674 relaciones objetivo–fuente; la oferta confirmada desde las cuatro páginas oficiales dejó 58 asignaturas/núcleos oficiales activos y 34 vínculos para los cursos realmente ofrecidos (NT1, NT2, 1B y 2B);
+- 34 libros oficiales preparados con nómina sellada permanecen en `draft` porque no existen horarios/planes que identifiquen al docente; el libro institucional previo de Inglés de 1B sigue `open`. Ningún docente fue supuesto ni copiado entre asignaturas;
 - health técnico `healthy`;
 - contexto institucional vinculado al RBD 6830; preflight local `ready=true`, `core_ready=true`, `module_enabled=true`, con capacidades identidad/EDE/parvularia/SIGE/fiscalización apagadas y no requeridas;
 - cadena de auditoría íntegra sobre 6 eventos. El lote fue solicitado por sistema, pero la misma cuenta `super_admin` aprobó y activó: la implementación lo permite porque solo separa solicitante de aprobador/activador, aunque no cumple la segregación recomendada de tres personas;
-- MySQL local `max_allowed_packet=64 MiB`. El PHP CLI observado conserva `upload_max_filesize=2 MiB` y `post_max_size=8 MiB`; no acredita ni satisface los mínimos web/FPM de 20/64 MiB y debe corregirse/verificarse antes de usar uploads HTTP.
+- MySQL local `max_allowed_packet=64 MiB`. El PHP CLI base observado conserva `upload_max_filesize=2 MiB` y `post_max_size=8 MiB`; no acredita ni satisface los mínimos web/FPM del catálogo de programas (40/128 MiB). En desarrollo se debe iniciar el servidor con `composer serve:curriculum` o aplicar valores equivalentes al proceso web.
 
 Esta es evidencia de una instalación local técnica, no un acta de staging/producción ni UAT curricular. El preflight local verde comprueba el grafo y los controles implementados; no certifica autenticidad, vigencia o completitud normativa, restore, carga, pentest ni capacidad del runtime web. La corrida global histórica tampoco se declara verde. No reescribir la excepción de actores: una operación productiva futura debe usar aprobador y activador distintos o conservar una excepción formal aprobada.
 
@@ -90,9 +92,13 @@ Controles:
 - ejecutar una sola instancia de migración;
 - capturar salida/exit code sin secretos;
 - confirmar las once migraciones `2026_08_13_000001`–`000011` como aplicadas y el total esperado de 69 tablas `lcd_*`;
+- confirmar `2026_08_22_150000_create_lcd_subject_catalog_management_tables` como aplicada y el total esperado de 71 tablas `lcd_*`;
 - comprobar creación/índices/FK de `lcd_*`, incluidas `lcd_early_withdrawals`, `lcd_late_arrival_periods`, `lcd_late_arrivals`, gobierno de importación y `lcd_curriculum_sources`/`lcd_learning_objective_sources`;
+- comprobar las tablas `lcd_curriculum_versions`, `lcd_curriculum_programs`, documentos/páginas/secciones, unidades/ejes/habilidades/actitudes/palabras clave, staging/conflictos/logs y las referencias nulas agregadas a sesiones/evaluaciones;
+- verificar un worker para `LCD_CURRICULUM_IMPORT_QUEUE=curriculum-imports`, acceso de escritura al storage privado y `smalot/pdfparser`; OCR debe seguir `disabled` si no existe runtime probado;
 - comparar conteos antes/después; `000007` agrega estructuras, `000008` gobierno, `000009` track, `000010` hace backfill de identidad scoped y `000011` agrega trazabilidad N:M, sin eliminar historia;
 - verificar que ningún `down()`/deploy borró registros;
+- verificar que `lcd_subject_catalog_profiles` y `lcd_subject_external_aliases` nazcan vacías; los matches del software anterior se confirman posteriormente desde la interfaz y nunca mediante un seeder productivo;
 - no ejecutar `migrate:fresh`, `db:wipe`, `migrate:reset` ni rollback amplio en producción.
 
 ### 4. Ejecutar seeder idempotente
@@ -108,8 +114,8 @@ Debe mantener flags apagados, fuentes sin hash como bloqueadas y catálogos sin 
 ### 5. Validar infraestructura
 
 - importación curricular: comprobar en el MySQL de destino `max_allowed_packet >= 64 MiB`; un valor menor puede cortar la persistencia del payload/manifiesto cifrado aunque PHP haya aceptado la solicitud;
-- runtime PHP web/FPM: comprobar `upload_max_filesize >= 20 MiB` y `post_max_size >= 64 MiB`. La configuración de CLI no acredita la de FPM/Apache; verificar ambos SAPI y reiniciar workers/procesos después de modificarla;
-- proxy/web server/WAF: permitir como mínimo 64 MiB por solicitud y ajustar timeout/buffering. Si una carga legítima agrupa evidencias cuyo total supera 64 MiB, elevar coordinadamente `post_max_size` y el límite del proxy sin cambiar el máximo aplicativo de 20 MiB por archivo;
+- runtime PHP web/FPM: comprobar `upload_max_filesize >= 40 MiB`, `post_max_size >= 128 MiB` y `max_file_uploads >= 30` para el catálogo de programas. La configuración de CLI no acredita la de FPM/Apache; verificar el SAPI que atiende HTTP y reiniciar workers/procesos después de modificarla;
+- proxy/web server/WAF: permitir como mínimo 128 MiB por solicitud para el catálogo de programas y ajustar timeout/buffering. Si un lote legítimo supera ese total, dividirlo o elevar coordinadamente `post_max_size` y el límite del proxy sin cambiar el máximo aplicativo de 40 MiB por PDF;
 - storage privado: escritura/lectura/borrado de objeto de prueba no sensible;
 - workers: colas separadas, timeout/backoff, failed jobs y supervisión;
 - scheduler: una sola ejecución por tarea e idempotencia; probar `schedule:list`, `schedule:run` y el lock compartido de `onOneServer`;
@@ -137,13 +143,14 @@ Archivar resultado por escuela. El preflight actual separa `core_ready` y readin
 
 ### Inventario operativo implementado
 
-Existen 15 comandos LCD. Su presencia no implica que hayan sido ejecutados ni aprobados en producción:
+Existen 16 comandos LCD. Su presencia no implica que hayan sido ejecutados ni aprobados en producción:
 
 | Comandos | Semántica segura |
 |---|---|
 | `lcd:preflight`, `lcd:health`, `lcd:integrity:check`, `lcd:attendance:check-integrity`, `lcd:audit:verify`, `lcd:retention:report` | Solo inspección/reporte; no reparan ni eliminan. |
 | `lcd:detect-missing-sessions`, `lcd:detect-missing-signatures` | Detectan omisiones; no crean sesiones, no firman y no cierran. |
 | `lcd:open-books` | Previsualiza por defecto; solo abre candidatos que pasan preflight con `--execute`, actor y referencia de aprobación. |
+| `lcd:curriculum:sync-official-books` | Previsualiza por defecto la oferta respaldada por el catálogo curricular activado. Con `--execute`, actor y aprobación activa asignaturas, crea perfiles/vínculos, prepara libros y abre solo los que tienen nómina sellada y docente inequívoco en un horario confirmado. En producción exige además `--backup-reference`. |
 | `lcd:attendance:reconcile` | Compara evidencia por defecto. Con `--execute` registra una conciliación manual aprobada; no modifica asistencia ni declara envío oficial. |
 | `lcd:ede:import-standard` | Importa únicamente archivos locales suministrados y calcula sus huellas reales; no descarga, inventa ni activa sin aprobación explícita. No se han importado aún las fuentes oficiales requeridas. |
 | `lcd:ede:preflight` | Inspección EDE; no genera archivos. |

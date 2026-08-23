@@ -3,7 +3,9 @@
 namespace App\Http\Controllers\LibroDigital;
 
 use App\Exceptions\LibroDigital\LibroDigitalException;
+use App\Exceptions\LibroDigital\VersionConflictException;
 use App\Http\Requests\LibroDigital\BookActionRequest;
+use App\Http\Requests\LibroDigital\BulkOpenBooksRequest;
 use App\Http\Requests\LibroDigital\StoreBookRequest;
 use App\Http\Requests\LibroDigital\UpdateBookRequest;
 use App\Http\Resources\LibroDigital\BookResource;
@@ -11,16 +13,14 @@ use App\Models\AcademicYear;
 use App\Models\CourseSection;
 use App\Models\LibroDigital\Book;
 use App\Models\LibroDigital\ClosureReopening;
-use App\Models\LibroDigital\EnrollmentLink;
 use App\Models\LibroDigital\RegulatoryProfile;
 use App\Models\LibroDigital\RosterSnapshot;
 use App\Models\LibroDigital\RosterSnapshotItem;
 use App\Models\LibroDigital\TeacherAssignment;
-use App\Models\LibroDigital\TeachingGroup;
 use App\Models\Schedule\ScheduleSubject;
 use App\Models\Staff;
-use App\Models\StudentEnrollment;
 use App\Services\LibroDigital\AuditEventWriter;
+use App\Services\LibroDigital\BookProvisioningService;
 use App\Services\LibroDigital\CanonicalJson;
 use App\Services\LibroDigital\CompliancePreflightService;
 use App\Services\LibroDigital\LibroDigitalAccessContext;
@@ -29,9 +29,8 @@ use App\Services\LibroDigital\WorkflowStateMachine;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Str;
+use Throwable;
 
 class BookController extends LibroDigitalController
 {
@@ -42,6 +41,7 @@ class BookController extends LibroDigitalController
         private readonly AuditEventWriter $audit,
         private readonly CompliancePreflightService $preflight,
         private readonly WorkflowStateMachine $workflows,
+        private readonly BookProvisioningService $provisioning,
     ) {
         parent::__construct($access);
     }
@@ -89,131 +89,20 @@ class BookController extends LibroDigitalController
             ? RegulatoryProfile::query()->where('active', true)->findOrFail($profileId)
             : RegulatoryProfile::query()->where('active', true)->whereDate('effective_from', '<=', now()->toDateString())->orderByDesc('effective_from')->firstOrFail();
 
-        $book = DB::transaction(function () use ($request, $school, $data, $course, $year, $subject, $teacher, $profile): Book {
-            $codeBase = Str::upper('LCD-'.$year->year.'-'.$course->id.'-'.$subject->id);
-            $code = $codeBase;
-            $suffix = 1;
-            while (Book::query()->where('school_id', $school->id)->where('academic_year_id', $year->id)->where('code', $code)->exists()) {
-                $code = $codeBase.'-'.(++$suffix);
-            }
-
-            $book = Book::query()->create([
-                'school_id' => $school->id,
-                'academic_year_id' => $year->id,
-                'regulatory_profile_id' => $profile->id,
-                'course_section_id' => $course->id,
-                'code' => $code,
-                'rbd_snapshot' => $school->rbd,
-                'year_snapshot' => $year->year,
-                'level_code' => $course->educationLevel?->type,
-                'grade_code' => $course->educationLevel?->name,
-                'course_label' => $course->display_name,
-                'modality_code' => $data['modality'] ?? $course->educationLevel?->type,
-                'status' => 'draft',
-                'revision' => 1,
-                'lock_version' => 1,
-                'created_by' => $request->user()->id,
-                'updated_by' => $request->user()->id,
-            ]);
-
-            $effectiveOn = max($year->starts_at?->toDateString() ?? now()->toDateString(), now()->toDateString());
-            $group = TeachingGroup::query()->create([
-                'school_id' => $school->id,
-                'academic_year_id' => $year->id,
-                'book_id' => $book->id,
-                'course_section_id' => $course->id,
-                'schedule_subject_id' => $subject->id,
-                'code' => $code.'-G1',
-                'name' => $data['name'] ?: $course->display_name.' · '.$subject->name,
-                'course_snapshot' => $course->display_name,
-                'subject_snapshot' => $subject->name,
-                'valid_from' => $year->starts_at ?? now()->toDateString(),
-                'valid_to' => $year->ends_at,
-                'metadata' => ['notes' => $data['notes'] ?? null],
-                'created_by' => $request->user()->id,
-                'updated_by' => $request->user()->id,
-            ]);
-
-            TeacherAssignment::query()->create([
-                'school_id' => $school->id,
-                'academic_year_id' => $year->id,
-                'book_id' => $book->id,
-                'teaching_group_id' => $group->id,
-                'staff_id' => $teacher->id,
-                'user_id' => $teacher->user?->id,
-                'schedule_subject_id' => $subject->id,
-                'teacher_name_snapshot' => $teacher->full_name,
-                'valid_from' => $year->starts_at ?? now()->toDateString(),
-                'valid_to' => $year->ends_at,
-                'is_primary' => true,
-                'active' => true,
-                'assigned_by' => $request->user()->id,
-            ]);
-
-            $enrollments = StudentEnrollment::query()->with('studentProfile')
-                ->where('academic_year_id', $year->id)->where('course_section_id', $course->id)
-                ->whereNotIn('enrollment_status', StudentEnrollment::NON_ROSTER_STATUS_VALUES)
-                ->orderBy('id')->get();
-            $snapshotRows = [];
-            foreach ($enrollments as $index => $enrollment) {
-                $student = $enrollment->studentProfile;
-                $link = EnrollmentLink::query()->create([
-                    'school_id' => $school->id,
-                    'book_id' => $book->id,
-                    'teaching_group_id' => $group->id,
-                    'student_profile_id' => $student->id,
-                    'student_enrollment_id' => $enrollment->id,
-                    'course_section_id' => $course->id,
-                    'list_number' => $index + 1,
-                    'effective_from' => $enrollment->enrolled_at ?? $effectiveOn,
-                    'effective_to' => $enrollment->withdrawn_at,
-                    'status' => 'active',
-                    'student_name_snapshot' => $student->registered_name_resolved,
-                    'identifier_snapshot_encrypted' => filled($student->rut) ? Crypt::encryptString((string) $student->rut) : null,
-                    'enrollment_status_snapshot' => $enrollment->enrollment_status,
-                    'course_snapshot' => $course->display_name,
-                    'created_by' => $request->user()->id,
-                ]);
-                $snapshotRows[] = compact('link', 'student', 'enrollment') + ['list_number' => $index + 1];
-            }
-
-            $snapshotPayload = collect($snapshotRows)->map(fn (array $row) => [
-                'student_profile_id' => $row['student']->id,
-                'student_enrollment_id' => $row['enrollment']->id,
-                'list_number' => $row['list_number'],
-                'name' => $row['student']->registered_name_resolved,
-                'status' => $row['enrollment']->enrollment_status,
-            ])->all();
-            $snapshot = RosterSnapshot::query()->create([
-                'book_id' => $book->id,
-                'teaching_group_id' => $group->id,
-                'effective_on' => $effectiveOn,
-                'reason' => 'book_created',
-                'status' => 'sealed',
-                'student_count' => count($snapshotRows),
-                'snapshot_hash' => $this->canonical->hash($snapshotPayload),
-                'created_by' => $request->user()->id,
-            ]);
-            foreach ($snapshotRows as $row) {
-                $payload = [
-                    'roster_snapshot_id' => $snapshot->id,
-                    'enrollment_link_id' => $row['link']->id,
-                    'student_profile_id' => $row['student']->id,
-                    'student_enrollment_id' => $row['enrollment']->id,
-                    'list_number' => $row['list_number'],
-                    'active_from' => $row['link']->effective_from,
-                    'active_to' => $row['link']->effective_to,
-                    'applicability_status' => 'applicable',
-                    'student_name_snapshot' => $row['student']->registered_name_resolved,
-                    'identifier_snapshot_encrypted' => $row['link']->identifier_snapshot_encrypted,
-                    'course_snapshot' => $course->display_name,
-                    'enrollment_status_snapshot' => $row['enrollment']->enrollment_status,
-                ];
-                RosterSnapshotItem::query()->create($payload + ['record_hash' => $this->canonical->hash($payload)]);
-            }
-
-            return $book;
-        }, 3);
+        $book = $this->provisioning->provision(
+            $school,
+            $year,
+            $course,
+            $subject,
+            $profile,
+            $request->user(),
+            $teacher,
+            [
+                'name' => $data['name'] ?? null,
+                'modality' => $data['modality'] ?? null,
+                'notes' => $data['notes'] ?? null,
+            ],
+        );
 
         $this->audit->write('lcd.book.created', 'create', $book, actor: $request->user(), schoolId: $school->id, academicYearId: $book->academic_year_id, after: $book->toArray(), request: $request);
 
@@ -311,6 +200,83 @@ class BookController extends LibroDigitalController
         return $this->transition($request, $book, 'open', true);
     }
 
+    public function bulkOpen(BulkOpenBooksRequest $request): JsonResponse
+    {
+        $school = $this->school($request);
+        $data = $request->validated();
+        $requested = collect($data['books'])->keyBy(fn (array $item): int => (int) $item['id']);
+        $allowUnassignedTeacher = (bool) ($data['allow_unassigned_teacher'] ?? false);
+        // Los controles institucionales son idénticos para todo el lote y
+        // pueden incluir verificación de catálogo y evidencias archivadas.
+        // Ejecutarlos por libro vuelve lineal una comprobación costosa.
+        $complianceChecks = $this->preflight->run($school->id);
+        $books = Book::query()
+            ->where('school_id', $school->id)
+            ->when($data['academic_year_id'] ?? null, fn (Builder $query, int $yearId) => $query->where('academic_year_id', $yearId))
+            ->whereIn('id', $requested->keys())
+            ->with([
+                ...$this->relations(),
+                'teachingGroups.rosterSnapshots:id,teaching_group_id,status',
+            ])
+            ->get()
+            ->keyBy('id');
+        $results = collect();
+
+        foreach ($requested as $bookId => $item) {
+            $book = $books->get($bookId);
+            if (! $book) {
+                $results->push([
+                    'id' => (int) $bookId,
+                    'result' => 'failed',
+                    'code' => 'LCD_BOOK_NOT_IN_SCOPE',
+                    'message' => 'El libro no pertenece al establecimiento o año seleccionados.',
+                ]);
+
+                continue;
+            }
+            $this->authorize('manage', $book);
+            try {
+                $results->push($this->openBookInBulk(
+                    $request,
+                    $book,
+                    (int) $item['lock_version'],
+                    $complianceChecks,
+                    $allowUnassignedTeacher,
+                ));
+            } catch (LibroDigitalException $exception) {
+                $results->push([
+                    'id' => $book->id,
+                    'public_id' => $book->public_id,
+                    'display_name' => (new BookResource($book))->resolve($request)['display_name'],
+                    'result' => 'failed',
+                    'code' => $exception->errorCode,
+                    'message' => $exception->getMessage(),
+                    'details' => $exception->details,
+                ]);
+            } catch (Throwable $exception) {
+                report($exception);
+                $results->push([
+                    'id' => $book->id,
+                    'public_id' => $book->public_id,
+                    'result' => 'failed',
+                    'code' => 'LCD_BOOK_BULK_OPEN_FAILED',
+                    'message' => 'No fue posible activar este libro. Revisa su configuración e inténtalo nuevamente.',
+                ]);
+            }
+        }
+
+        return $this->collectionResponse($results->all(), [
+            'requested' => $requested->count(),
+            'opened' => $results->where('result', 'opened')->count(),
+            'opened_without_teacher' => $results
+                ->where('result', 'opened')
+                ->filter(fn (array $result): bool => (bool) ($result['teacher_assignment_pending'] ?? false))
+                ->count(),
+            'already_open' => $results->where('result', 'already_open')->count(),
+            'failed' => $results->where('result', 'failed')->count(),
+        ]);
+    }
+
     public function roster(Request $request, string $book): JsonResponse
     {
         $model = $this->book($book);
@@ -364,13 +330,7 @@ class BookController extends LibroDigitalController
         }
         $checks = null;
         if (in_array($target, ['pending_preflight', 'open'], true)) {
-            $checks = $this->preflight->run($book->school_id);
-            $bookChecks = [
-                ['code' => 'sealed_roster', 'passed' => $book->teachingGroups()->whereHas('rosterSnapshots', fn (Builder $query) => $query->where('status', 'sealed'))->exists()],
-                ['code' => 'teacher_assignment', 'passed' => $book->teachingGroups()->whereHas('teacherAssignments', fn (Builder $query) => $query->where('active', true))->exists()],
-            ];
-            $checks['checks'] = [...$checks['checks'], ...$bookChecks];
-            $checks['ready'] = (bool) $checks['ready'] && collect($bookChecks)->every('passed');
+            $checks = $this->bookPreflightChecks($book);
             if (! $checks['ready']) {
                 throw new LibroDigitalException('El libro no supera sus controles normativos, de nómina o asignación docente.', 'LCD_BOOK_PREFLIGHT_FAILED', 422, $checks['checks']);
             }
@@ -445,6 +405,193 @@ class BookController extends LibroDigitalController
         return $this->dataResponse($response, version: $fresh->lock_version);
     }
 
+    /** @return array<string, mixed> */
+    private function openBookInBulk(
+        Request $request,
+        Book $book,
+        int $expectedVersion,
+        array $complianceChecks,
+        bool $allowUnassignedTeacher,
+    ): array {
+        $from = $this->statusValue($book->status);
+        if ($from === 'open') {
+            return [
+                'id' => $book->id,
+                'public_id' => $book->public_id,
+                'display_name' => (new BookResource($book))->resolve($request)['display_name'],
+                'result' => 'already_open',
+                'status' => 'open',
+                'lock_version' => (int) $book->lock_version,
+            ];
+        }
+        if (! in_array($from, ['draft', 'pending_preflight'], true)) {
+            throw new LibroDigitalException(
+                "El libro en estado {$from} no puede activarse masivamente.",
+                'LCD_BOOK_BULK_OPEN_INVALID_STATE',
+                409,
+            );
+        }
+        if ($expectedVersion !== (int) $book->lock_version) {
+            throw new VersionConflictException($expectedVersion, (int) $book->lock_version);
+        }
+
+        $checks = $this->bookPreflightChecks($book, $complianceChecks, $allowUnassignedTeacher);
+        if (! $checks['ready']) {
+            throw new LibroDigitalException(
+                'El libro no supera sus controles normativos, de nómina o asignación docente.',
+                'LCD_BOOK_PREFLIGHT_FAILED',
+                422,
+                $checks['checks'],
+            );
+        }
+
+        $transition = DB::transaction(function () use ($request, $book, $expectedVersion): array {
+            $locked = Book::query()->lockForUpdate()->findOrFail($book->id);
+            $lockedFrom = $this->statusValue($locked->status);
+            if ($lockedFrom === 'open') {
+                return ['from' => 'open', 'pending_revision' => null, 'book' => $locked];
+            }
+            if ($expectedVersion !== (int) $locked->lock_version) {
+                throw new VersionConflictException($expectedVersion, (int) $locked->lock_version);
+            }
+            if (! in_array($lockedFrom, ['draft', 'pending_preflight'], true)) {
+                throw new LibroDigitalException(
+                    "El libro cambió al estado {$lockedFrom} y ya no puede activarse.",
+                    'LCD_BOOK_BULK_OPEN_INVALID_STATE',
+                    409,
+                );
+            }
+
+            $pendingRevision = null;
+            if ($lockedFrom === 'draft') {
+                $this->workflows->assertCan('book', 'draft', 'pending_preflight');
+                $locked->status = 'pending_preflight';
+                $locked->revision++;
+                $locked->lock_version++;
+                $locked->updated_by = $request->user()->id;
+                $locked->save();
+                $pendingRevision = (int) $locked->revision;
+            }
+
+            $this->workflows->assertCan('book', 'pending_preflight', 'open');
+            $locked->status = 'open';
+            $locked->opened_at = now('UTC');
+            $locked->opened_by = $request->user()->id;
+            $locked->closed_at = null;
+            $locked->closed_by = null;
+            $locked->revision++;
+            $locked->lock_version++;
+            $locked->updated_by = $request->user()->id;
+            $locked->save();
+
+            return ['from' => $lockedFrom, 'pending_revision' => $pendingRevision, 'book' => $locked];
+        }, 3);
+
+        /** @var Book $fresh */
+        $fresh = $transition['book'];
+        $fresh->setRelations($book->getRelations());
+        if ($transition['from'] === 'open') {
+            return [
+                'id' => $fresh->id,
+                'public_id' => $fresh->public_id,
+                'display_name' => (new BookResource($fresh))->resolve($request)['display_name'],
+                'result' => 'already_open',
+                'status' => 'open',
+                'lock_version' => (int) $fresh->lock_version,
+            ];
+        }
+        if ($transition['pending_revision'] !== null) {
+            $this->audit->write(
+                'lcd.book.status_changed',
+                'pending_preflight',
+                $fresh,
+                actor: $request->user(),
+                schoolId: $fresh->school_id,
+                academicYearId: $fresh->academic_year_id,
+                before: ['status' => 'draft'],
+                after: ['status' => 'pending_preflight', 'bulk' => true],
+                request: $request,
+                entityRevision: $transition['pending_revision'],
+            );
+        }
+        $this->audit->write(
+            'lcd.book.status_changed',
+            'open',
+            $fresh,
+            actor: $request->user(),
+            schoolId: $fresh->school_id,
+            academicYearId: $fresh->academic_year_id,
+            before: ['status' => $transition['from'] === 'draft' ? 'pending_preflight' : $transition['from']],
+            after: [
+                'status' => 'open',
+                'bulk' => true,
+                'teacher_assignment_pending' => $checks['teacher_assignment_pending'],
+            ],
+            request: $request,
+            entityRevision: $fresh->revision,
+        );
+
+        return [
+            'id' => $fresh->id,
+            'public_id' => $fresh->public_id,
+            'display_name' => (new BookResource($fresh))->resolve($request)['display_name'],
+            'result' => 'opened',
+            'status' => 'open',
+            'lock_version' => (int) $fresh->lock_version,
+            'teacher_assignment_pending' => $checks['teacher_assignment_pending'],
+            'warnings' => $checks['warnings'],
+            'preflight' => $checks,
+        ];
+    }
+
+    /** @return array<string, mixed> */
+    private function bookPreflightChecks(
+        Book $book,
+        ?array $complianceChecks = null,
+        bool $allowUnassignedTeacher = false,
+    ): array {
+        $checks = $complianceChecks ?? $this->preflight->run($book->school_id);
+        $book->loadMissing([
+            'teachingGroups.teacherAssignments:id,teaching_group_id,active',
+            'teachingGroups.rosterSnapshots:id,teaching_group_id,status',
+        ]);
+        $hasSealedRoster = $book->teachingGroups->contains(
+            fn ($group): bool => $group->rosterSnapshots->contains('status', 'sealed')
+        );
+        $hasTeacherAssignment = $book->teachingGroups->contains(
+            fn ($group): bool => $group->teacherAssignments->contains('active', true)
+        );
+        $bookChecks = [
+            [
+                'code' => 'sealed_roster',
+                'label' => 'Nómina inicial sellada',
+                'configured' => $hasSealedRoster,
+                'required' => true,
+                'passed' => $hasSealedRoster,
+                'status' => $hasSealedRoster ? 'passed' : 'blocked',
+                'remediation' => 'Genera y sella la nómina inicial del libro antes de activarlo.',
+            ],
+            [
+                'code' => 'teacher_assignment',
+                'label' => 'Docente asignado',
+                'configured' => $hasTeacherAssignment,
+                'required' => ! $allowUnassignedTeacher,
+                'passed' => $hasTeacherAssignment || $allowUnassignedTeacher,
+                'status' => $hasTeacherAssignment ? 'passed' : ($allowUnassignedTeacher ? 'warning' : 'blocked'),
+                'remediation' => 'Asigna un docente vigente antes de registrar clases, evaluaciones o firmas.',
+            ],
+        ];
+        $checks['checks'] = [...$checks['checks'], ...$bookChecks];
+        $checks['ready'] = (bool) $checks['ready'] && collect($bookChecks)->every('passed');
+        $checks['teacher_assignment_pending'] = ! $hasTeacherAssignment;
+        $checks['warnings'] = collect($bookChecks)
+            ->where('status', 'warning')
+            ->values()
+            ->all();
+
+        return $checks;
+    }
+
     private function bookResponse(Request $request, Book $book, int $status = 200): JsonResponse
     {
         $book->load($this->relations())->loadCount('sessions');
@@ -459,6 +606,12 @@ class BookController extends LibroDigitalController
     /** @return array<int, string> */
     private function relations(): array
     {
-        return ['academicYear', 'courseSection', 'regulatoryProfile', 'teachingGroups.subject', 'teachingGroups.teacherAssignments.staff'];
+        return [
+            'academicYear',
+            'courseSection.educationLevel',
+            'regulatoryProfile',
+            'teachingGroups.subject.catalogProfile',
+            'teachingGroups.teacherAssignments.staff',
+        ];
     }
 }

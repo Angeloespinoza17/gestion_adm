@@ -14,6 +14,7 @@ export const menuItems = [
             { id: 'libro-digital-books', label: 'Libros y cursos', link: '/libro-digital/books', parentId: 'libro-digital' },
             { id: 'libro-digital-subjects', label: 'Asignaturas', link: '/libro-digital/subjects', parentId: 'libro-digital' },
             { id: 'libro-digital-objectives', label: 'Objetivos curriculares', link: '/libro-digital/objectives', parentId: 'libro-digital' },
+            { id: 'libro-digital-curriculum-programs', label: 'Programas ministeriales', link: '/libro-digital/curriculum-programs', parentId: 'libro-digital' },
             { id: 'libro-digital-control', label: 'Firmas y cierres', link: '/libro-digital/control', parentId: 'libro-digital' },
             { id: 'libro-digital-statistics', label: 'Estadísticas', link: '/libro-digital/statistics', parentId: 'libro-digital' },
             { id: 'libro-digital-reports', label: 'Reportes e informes', link: '/libro-digital/reports', parentId: 'libro-digital' },
@@ -103,6 +104,30 @@ export const menuItems = [
             },
             {
                 id: 90652,
+                label: 'Matrices IPER/MIPER',
+                link: '/risk-prevention/matrices',
+                parentId: 9065
+            },
+            {
+                id: 906520,
+                label: 'Importaciones IPER',
+                link: '/risk-prevention/matrices/importaciones',
+                parentId: 9065
+            },
+            {
+                id: 906521,
+                label: 'Catálogos y metodología',
+                link: '/risk-prevention/matrices/catalogos',
+                parentId: 9065
+            },
+            {
+                id: 906522,
+                label: 'Programa preventivo',
+                link: '/risk-prevention/preventive-program',
+                parentId: 9065
+            },
+            {
+                id: 906523,
                 label: 'Extintores',
                 link: '/risk-prevention/extinguishers',
                 parentId: 9065
@@ -236,7 +261,8 @@ export const menuItems = [
             { id: 9087, label: 'Restricciones de retiro', link: '/inspectoria/restricciones', parentId: 9080 },
             { id: 9086, label: 'Retiros de alumnas', link: '/inspectoria/retiros', parentId: 9080 },
             { id: 9085, label: 'Bitácora diaria', link: '/inspectoria/bitacora', parentId: 9080 },
-            { id: 9088, label: 'Estadísticas', link: '/inspectoria/estadisticas', parentId: 9080 }
+            { id: 9088, label: 'Estadísticas', link: '/inspectoria/estadisticas', parentId: 9080 },
+            { id: 9089, label: 'Licencias médicas', link: '/inspectoria/licencias-medicas', parentId: 9080 }
         ]
     },
     {

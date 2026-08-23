@@ -34,6 +34,8 @@ class InfirmaryAttentionTreatment extends Model
         'aplicacion_hielo',
         'toma_temperatura',
         'control_glicemia',
+        'hidratacion_oral',
+        'observacion_breve',
         'otro',
     ];
 
@@ -44,6 +46,13 @@ class InfirmaryAttentionTreatment extends Model
         ['value' => 'medicamento_sos', 'label' => 'Medicamento S.O.S.'],
         ['value' => 'apoyo_equipo_formacion', 'label' => 'Apoyo equipo formación'],
         ['value' => 'curaciones', 'label' => 'Curaciones'],
+        ['value' => 'hidratacion_oral', 'label' => 'Dar agua / hidratación oral'],
+        ['value' => 'reposo', 'label' => 'Reposo breve'],
+        ['value' => 'lavado_heridas', 'label' => 'Limpieza de herida'],
+        ['value' => 'aplicacion_hielo', 'label' => 'Aplicación de hielo'],
+        ['value' => 'vendaje', 'label' => 'Vendaje simple'],
+        ['value' => 'toma_temperatura', 'label' => 'Toma de temperatura'],
+        ['value' => 'observacion_breve', 'label' => 'Observación breve'],
     ];
 
     public const DERIVATION_TYPE_OPTIONS = [

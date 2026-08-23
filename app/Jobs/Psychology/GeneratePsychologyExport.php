@@ -35,7 +35,13 @@ class GeneratePsychologyExport implements ShouldQueue
             $query = PsychologyReferral::query()->with('student:id,first_name,last_name,registered_name')->filter($filters)
                 ->when($filters['from'] ?? null, fn ($q, $from) => $q->where('created_at', '>=', $from.' 00:00:00'))
                 ->when($filters['to'] ?? null, fn ($q, $to) => $q->where('created_at', '<=', $to.' 23:59:59'));
-            $access->applyReferralVisibility($query, $export->author);
+            $access->applyReferralReportScope($query, $export->author);
+            $query->when(! $access->isScopedPsychologist($export->author) && ($filters['professional_id'] ?? null), function ($filtered) use ($filters) {
+                $filtered->where(function ($professional) use ($filters) {
+                    $professional->where('assigned_user_id', $filters['professional_id'])
+                        ->orWhereHas('assignments', fn ($assignment) => $assignment->where('user_id', $filters['professional_id'])->whereNull('ended_at'));
+                });
+            });
             $query->chunkById(500, function ($rows) use ($stream) {
                 foreach ($rows as $row) {
                     fputcsv($stream, [$row->code, $row->student?->registered_name_resolved, $row->status, $row->professional_priority ?: $row->suggested_urgency, $row->created_at?->format('d-m-Y H:i')], ';');

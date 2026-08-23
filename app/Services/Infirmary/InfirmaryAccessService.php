@@ -8,15 +8,28 @@ use Illuminate\Support\Facades\Schema;
 class InfirmaryAccessService
 {
     public const VIEW_PERMISSION = 'ver_enfermeria';
+
     public const CREATE_ATTENTION_PERMISSION = 'crear_atenciones_enfermeria';
+
     public const EDIT_ATTENTION_PERMISSION = 'editar_atenciones_enfermeria';
+
     public const DELETE_ATTENTION_PERMISSION = 'eliminar_atenciones_enfermeria';
+
     public const EXPORT_PERMISSION = 'exportar_enfermeria';
+
     public const INVENTORY_PERMISSION = 'administrar_inventario_enfermeria';
+
     public const MEDICATION_PERMISSION = 'administrar_medicamentos_enfermeria';
+
     public const ACCIDENT_PERMISSION = 'gestionar_accidentes_enfermeria';
+
     public const REPORT_PERMISSION = 'ver_reportes_enfermeria';
+
     public const CATALOG_PERMISSION = 'administrar_catalogos_enfermeria';
+
+    public const VIEW_DAILY_LOG_PERMISSION = 'ver_bitacora_enfermeria';
+
+    public const MANAGE_DAILY_LOG_PERMISSION = 'registrar_bitacora_enfermeria';
 
     /**
      * @return array<int, string>
@@ -42,7 +55,7 @@ class InfirmaryAccessService
     public function isInstalled(): bool
     {
         foreach ($this->requiredTables() as $table) {
-            if (!Schema::hasTable($table)) {
+            if (! Schema::hasTable($table)) {
                 return false;
             }
         }
@@ -52,7 +65,7 @@ class InfirmaryAccessService
 
     public function canViewModule(?User $user): bool
     {
-        if (!$user || !$user->active) {
+        if (! $user || ! $user->active) {
             return false;
         }
 
@@ -71,6 +84,8 @@ class InfirmaryAccessService
             self::REPORT_PERMISSION,
             self::EXPORT_PERMISSION,
             self::CATALOG_PERMISSION,
+            self::VIEW_DAILY_LOG_PERMISSION,
+            self::MANAGE_DAILY_LOG_PERMISSION,
         ] as $permission) {
             if ($user->hasPermission($permission)) {
                 return true;
@@ -127,5 +142,19 @@ class InfirmaryAccessService
     public function canManageCatalogs(?User $user): bool
     {
         return (bool) $user && ($user->isSuperAdmin() || $user->hasPermission(self::CATALOG_PERMISSION));
+    }
+
+    public function canViewDailyLog(?User $user): bool
+    {
+        return (bool) $user && (
+            $user->isSuperAdmin()
+            || $user->hasPermission(self::VIEW_DAILY_LOG_PERMISSION)
+            || $user->hasPermission(self::MANAGE_DAILY_LOG_PERMISSION)
+        );
+    }
+
+    public function canManageDailyLog(?User $user): bool
+    {
+        return (bool) $user && ($user->isSuperAdmin() || $user->hasPermission(self::MANAGE_DAILY_LOG_PERMISSION));
     }
 }

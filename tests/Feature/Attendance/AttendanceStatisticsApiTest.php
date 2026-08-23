@@ -33,7 +33,7 @@ class AttendanceStatisticsApiTest extends TestCase
         $this->getJson('/api/attendance-statistics/dashboard?academic_year_id='.$year->id)
             ->assertForbidden();
 
-        $this->grant($user, ['attendance_statistics.view']);
+        $this->grant($user, ['attendance_statistics.view', 'attendance_statistics.view_global']);
 
         $this->getJson('/api/attendance-statistics/dashboard?academic_year_id='.$year->id.'&period=academic_year')
             ->assertOk()
@@ -54,7 +54,7 @@ class AttendanceStatisticsApiTest extends TestCase
     public function test_student_explorer_and_profile_use_server_side_filters(): void
     {
         [$year, $course, $student, $user] = $this->scenario();
-        $this->grant($user, ['attendance_statistics.view_student']);
+        $this->grant($user, ['attendance_statistics.view_student', 'attendance_statistics.view_global']);
         Sanctum::actingAs($user);
 
         $this->getJson('/api/attendance-statistics/students?academic_year_id='.$year->id.'&course_section_id='.$course->id.'&attendance_max=80')
@@ -101,7 +101,7 @@ class AttendanceStatisticsApiTest extends TestCase
         Storage::fake('local');
         Mail::fake();
         [$year, , , $user] = $this->scenario();
-        $this->grant($user, ['attendance_statistics.view', 'attendance_statistics.export']);
+        $this->grant($user, ['attendance_statistics.view', 'attendance_statistics.view_global', 'attendance_statistics.export']);
         Sanctum::actingAs($user);
 
         $this->postJson('/api/attendance-statistics/simulate', [
@@ -146,7 +146,7 @@ class AttendanceStatisticsApiTest extends TestCase
         Storage::fake('local');
         Mail::fake();
         [$year, , , $user] = $this->scenario();
-        $this->grant($user, ['attendance_statistics.manage_reports', 'attendance_statistics.view']);
+        $this->grant($user, ['attendance_statistics.manage_reports', 'attendance_statistics.view', 'attendance_statistics.view_global']);
         Sanctum::actingAs($user);
 
         $response = $this->postJson('/api/attendance-statistics/scheduled-reports', [
@@ -169,7 +169,8 @@ class AttendanceStatisticsApiTest extends TestCase
     private function scenario(): array
     {
         $year = AcademicYear::query()->create(['name' => '2026', 'year' => 2026, 'starts_at' => '2026-03-01', 'ends_at' => '2026-12-20', 'is_active' => true, 'is_closed' => false]);
-        $level = EducationLevel::query()->create(['name' => '1° Básico', 'order' => 1, 'type' => 'basica']);
+        $levelOrder = ((int) EducationLevel::query()->max('order')) + 100;
+        $level = EducationLevel::query()->create(['name' => '1° Básico pruebas '.$levelOrder, 'order' => $levelOrder, 'type' => 'basica']);
         $course = CourseSection::query()->create(['academic_year_id' => $year->id, 'education_level_id' => $level->id, 'section_name' => 'A', 'display_name' => '1° Básico A', 'active' => true]);
         $student = StudentProfile::query()->create(['first_name' => 'Ana', 'last_name' => 'Demo', 'rut' => '11.111.111-1', 'general_status' => 'activo']);
         $enrollment = StudentEnrollment::query()->create(['student_profile_id' => $student->id, 'academic_year_id' => $year->id, 'course_section_id' => $course->id, 'enrollment_status' => 'regular', 'enrolled_at' => '2026-03-01', 'snapshot_year_name' => '2026', 'snapshot_level_name' => '1° Básico', 'snapshot_section_name' => 'A', 'snapshot_course_display_name' => '1° Básico A']);

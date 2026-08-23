@@ -16,6 +16,10 @@ class CurriculumImportBatch extends LibroDigitalModel
 
     public const STATUS_VALIDATING = 'validating';
 
+    public const STATUS_PROCESSING = 'processing';
+
+    public const STATUS_PENDING_REVIEW = 'pending_review';
+
     public const STATUS_INVALID = 'invalid';
 
     public const STATUS_VALIDATED = 'validated';
@@ -27,6 +31,8 @@ class CurriculumImportBatch extends LibroDigitalModel
     public const STATUSES = [
         self::STATUS_UPLOADED,
         self::STATUS_VALIDATING,
+        self::STATUS_PROCESSING,
+        self::STATUS_PENDING_REVIEW,
         self::STATUS_INVALID,
         self::STATUS_VALIDATED,
         self::STATUS_APPROVED,
@@ -105,5 +111,10 @@ class CurriculumImportBatch extends LibroDigitalModel
     public function activations(): HasMany
     {
         return $this->hasMany(CurriculumCatalogActivation::class, 'import_batch_id');
+    }
+
+    public function files(): HasMany
+    {
+        return $this->hasMany(CurriculumImportFile::class, 'import_batch_id');
     }
 }

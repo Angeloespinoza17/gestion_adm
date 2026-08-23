@@ -7,6 +7,7 @@ use App\Http\Requests\Psychology\SavePsychologyActivityRequest;
 use App\Models\Psychology\PsychologyActivity;
 use App\Models\Psychology\PsychologyCase;
 use App\Models\Psychology\PsychologyConsent;
+use App\Models\Psychology\PsychologyCoordinationRequest;
 use App\Models\Psychology\PsychologyExternalReferral;
 use App\Models\Psychology\PsychologyInterventionPlan;
 use App\Models\Psychology\PsychologyRiskAssessment;
@@ -14,6 +15,7 @@ use App\Models\Psychology\PsychologySharedFeedback;
 use App\Models\Psychology\PsychologyTask;
 use App\Services\Psychology\PsychologyAccessService;
 use App\Services\Psychology\PsychologyAuditService;
+use App\Services\Psychology\PsychologyCoordinationService;
 use App\Services\Psychology\PsychologyNotificationService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -23,7 +25,23 @@ use Illuminate\Validation\ValidationException;
 
 class PsychologyWorkflowController extends Controller
 {
-    public function __construct(private readonly PsychologyAuditService $audit, private readonly PsychologyNotificationService $notifications) {}
+    private const FOLLOW_UP_TYPE_LABELS = [
+        'phone_call' => 'Llamada telefónica',
+        'new_interview' => 'Nueva entrevista',
+        'guardian_contact' => 'Contacto con apoderado(a)',
+        'student_check_in' => 'Seguimiento con estudiante',
+        'teacher_coordination' => 'Coordinación con docente',
+        'external_coordination' => 'Coordinación externa',
+        'case_review' => 'Revisión de caso',
+        'other' => 'Otro seguimiento',
+    ];
+
+    public function __construct(
+        private readonly PsychologyAuditService $audit,
+        private readonly PsychologyNotificationService $notifications,
+        private readonly PsychologyAccessService $access,
+        private readonly PsychologyCoordinationService $coordinationService,
+    ) {}
 
     public function storeActivity(SavePsychologyActivityRequest $request, PsychologyCase $case): JsonResponse
     {
@@ -31,6 +49,8 @@ class PsychologyWorkflowController extends Controller
         abort_unless($request->user()->hasPermission('psychology.sessions.create'), 403);
         $activity = DB::transaction(function () use ($request, $case) {
             $payload = $request->validated();
+            $coordinationPayload = $payload['coordination'] ?? null;
+            unset($payload['coordination']);
             $user = $request->user()->loadMissing(['cargo', 'staff.cargo']);
             $interviewTypes = ['student_interview', 'guardian_interview', 'teacher_interview'];
 
@@ -51,8 +71,7 @@ class PsychologyWorkflowController extends Controller
             }
 
             $finalized = ($payload['status'] ?? 'draft') === 'finalized';
-            $nextReviewOn = $payload['next_action_on']
-                ?? (! empty($payload['next_interview_at']) ? substr($payload['next_interview_at'], 0, 10) : $case->next_review_on);
+            $nextReviewOn = $payload['next_action_on'] ?? $case->next_review_on;
             $activity = $case->activities()->create($payload + ['responsible_user_id' => $user->id, 'created_by' => $user->id, 'updated_by' => $user->id, 'finalized_at' => $finalized ? now() : null, 'finalized_by' => $finalized ? $user->id : null]);
             $case->forceFill([
                 'last_activity_at' => now(),
@@ -61,6 +80,9 @@ class PsychologyWorkflowController extends Controller
                 'updated_by' => $user->id,
             ])->save();
             $this->audit->record('activity.created', $activity, $user, [], ['status' => $activity->status, 'type' => $activity->type, 'interview_number' => $activity->interview_number]);
+            if ($coordinationPayload) {
+                $this->coordinationService->create($case, $coordinationPayload, $user, $activity);
+            }
 
             return $activity;
         });
@@ -71,6 +93,7 @@ class PsychologyWorkflowController extends Controller
     public function finalizeActivity(Request $request, PsychologyActivity $activity): JsonResponse
     {
         $this->authorize('update', $activity->case);
+        abort_unless(app(PsychologyAccessService::class)->canManageActivity($request->user(), $activity), 403);
         abort_unless($request->user()->hasPermission('psychology.sessions.create'), 403);
         if ($activity->status !== 'draft') {
             throw ValidationException::withMessages(['status' => 'La actividad ya fue finalizada. Usa una adenda para corregirla.']);
@@ -81,9 +104,76 @@ class PsychologyWorkflowController extends Controller
         return response()->json(['message' => 'Registro finalizado.', 'data' => $activity]);
     }
 
+    public function exportActivity(Request $request, PsychologyActivity $activity): JsonResponse
+    {
+        $activity->loadMissing(['case.student.enrollments', 'responsibleUser:id,name']);
+        $case = $activity->case;
+        $this->authorize('view', $case);
+        abort_unless($this->access->canManageActivity($request->user(), $activity), 404);
+
+        $student = $case->student;
+        $enrollment = $student?->preferredEnrollment();
+        $includePrivate = $this->access->canViewPrivateNotes($request->user(), $case);
+
+        $this->audit->record('activity.pdf_exported', $activity, $request->user(), [], [
+            'status' => $activity->status,
+            'included_private_content' => $includePrivate,
+        ]);
+
+        return response()->json([
+            'message' => 'Datos de exportación autorizados.',
+            'data' => [
+                'generated_at' => now()->toIso8601String(),
+                'case' => [
+                    'id' => $case->id,
+                    'code' => $case->code,
+                    'status' => $case->status,
+                ],
+                'student' => [
+                    'name' => $student?->registered_name_resolved,
+                    'rut' => $student?->rut,
+                    'course' => $enrollment?->snapshot_course_display_name,
+                ],
+                'activity' => [
+                    'id' => $activity->id,
+                    'type' => $activity->type,
+                    'interview_number' => $activity->interview_number,
+                    'activity_on' => $activity->activity_on?->toDateString(),
+                    'starts_at' => $activity->starts_at,
+                    'ends_at' => $activity->ends_at,
+                    'modality' => $activity->modality,
+                    'location' => $activity->location,
+                    'participant_types' => $activity->participant_types,
+                    'participants' => $activity->participants,
+                    'interviewee_type' => $activity->interviewee_type,
+                    'interviewee_name' => $activity->interviewee_name,
+                    'interviewee_rut' => $includePrivate ? $activity->interviewee_rut : null,
+                    'interviewer_name' => $activity->interviewer_name_snapshot ?: $activity->responsibleUser?->name,
+                    'interviewer_position' => $activity->interviewer_position_snapshot,
+                    'objective' => $activity->objective,
+                    'institutional_summary' => $activity->institutional_summary,
+                    'general_background' => $includePrivate ? $activity->general_background : null,
+                    'private_note' => $includePrivate ? $activity->private_note : null,
+                    'result' => $activity->result,
+                    'agreements' => $activity->agreements,
+                    'next_steps' => $activity->next_steps,
+                    'next_action_on' => $activity->next_action_on?->toDateString(),
+                    'follow_up_type' => $activity->follow_up_type,
+                    'follow_up_type_label' => self::FOLLOW_UP_TYPE_LABELS[$activity->follow_up_type] ?? null,
+                    'attendance_status' => $activity->attendance_status,
+                    'visibility' => $activity->visibility,
+                    'referral_feedback' => $activity->referral_feedback,
+                    'status' => $activity->status,
+                    'finalized_at' => $activity->finalized_at?->toIso8601String(),
+                ],
+            ],
+        ]);
+    }
+
     public function addAddendum(Request $request, PsychologyActivity $activity): JsonResponse
     {
         $this->authorize('update', $activity->case);
+        abort_unless(app(PsychologyAccessService::class)->canManageActivity($request->user(), $activity), 403);
         abort_unless($activity->status === 'finalized', 422);
         $payload = $request->validate(['content' => ['required', 'string', 'max:12000'], 'reason' => ['required', 'string', 'max:2000'], 'visibility' => ['required', Rule::in(['private_psychology', 'psychology_team', 'interdisciplinary_team', 'referral_feedback'])]]);
         $addendum = $activity->addenda()->create($payload + ['created_by' => $request->user()->id]);
@@ -123,6 +213,74 @@ class PsychologyWorkflowController extends Controller
         return response()->json(['message' => 'Nueva versión creada.', 'data' => $version], 201);
     }
 
+    public function exportPlan(Request $request, PsychologyInterventionPlan $plan): JsonResponse
+    {
+        $plan->loadMissing([
+            'case.student.enrollments',
+            'responsibleUser:id,name',
+            'versions.author:id,name',
+        ]);
+        $case = $plan->case;
+        $this->authorize('view', $case);
+
+        $student = $case->student;
+        $enrollment = $student?->preferredEnrollment();
+        $version = $plan->versions->firstWhere('version', $plan->current_version)
+            ?? $plan->versions->first();
+
+        abort_unless($version, 404);
+
+        $this->audit->record('plan.pdf_exported', $plan, $request->user(), [], [
+            'version' => $version->version,
+            'status' => $plan->status,
+        ]);
+
+        return response()->json([
+            'message' => 'Datos del plan autorizados para exportación.',
+            'data' => [
+                'generated_at' => now()->toIso8601String(),
+                'case' => [
+                    'id' => $case->id,
+                    'code' => $case->code,
+                    'status' => $case->status,
+                ],
+                'student' => [
+                    'name' => $student?->registered_name_resolved,
+                    'rut' => $student?->rut,
+                    'course' => $enrollment?->snapshot_course_display_name,
+                ],
+                'plan' => [
+                    'id' => $plan->id,
+                    'status' => $plan->status,
+                    'current_version' => $plan->current_version,
+                    'review_on' => $plan->review_on?->toDateString(),
+                    'responsible_name' => $plan->responsibleUser?->name,
+                    'created_at' => $plan->created_at?->toIso8601String(),
+                    'version' => [
+                        'number' => $version->version,
+                        'general_situation' => $version->general_situation,
+                        'general_objective' => $version->general_objective,
+                        'specific_objectives' => $version->specific_objectives,
+                        'planned_actions' => $version->planned_actions,
+                        'responsibles' => $version->responsibles,
+                        'frequency' => $version->frequency,
+                        'estimated_start_on' => $version->estimated_start_on?->toDateString(),
+                        'estimated_end_on' => $version->estimated_end_on?->toDateString(),
+                        'monitoring_indicators' => $version->monitoring_indicators,
+                        'participants' => $version->participants,
+                        'family_coordination' => $version->family_coordination,
+                        'teacher_coordination' => $version->teacher_coordination,
+                        'coexistence_coordination' => $version->coexistence_coordination,
+                        'external_coordination' => $version->external_coordination,
+                        'review_result' => $version->review_result,
+                        'author_name' => $version->author?->name,
+                        'created_at' => $version->created_at?->toIso8601String(),
+                    ],
+                ],
+            ],
+        ]);
+    }
+
     public function storeRisk(Request $request, PsychologyCase $case): JsonResponse
     {
         $this->authorize('update', $case);
@@ -158,6 +316,9 @@ class PsychologyWorkflowController extends Controller
     {
         $this->authorize('update', $case);
         $payload = $request->validate(['activity_id' => ['nullable', 'integer', 'exists:psychology_activities,id'], 'responsible_user_id' => ['required', 'integer', 'exists:users,id'], 'title' => ['required', 'string', 'max:191'], 'description' => ['nullable', 'string', 'max:4000'], 'type' => ['nullable', 'string', 'max:80'], 'priority' => ['required', Rule::in(['low', 'medium', 'high', 'critical'])], 'due_at' => ['nullable', 'date'], 'remind_at' => ['nullable', 'date', 'before_or_equal:due_at']]);
+        if (! empty($payload['activity_id']) && ! $case->activities()->whereKey($payload['activity_id'])->exists()) {
+            throw ValidationException::withMessages(['activity_id' => 'La actividad seleccionada no pertenece a este caso.']);
+        }
         $task = $case->tasks()->create($payload + ['status' => 'pending', 'created_by' => $request->user()->id, 'updated_by' => $request->user()->id]);
         $this->audit->record('task.created', $task, $request->user(), [], ['priority' => $task->priority, 'due_at' => $task->due_at]);
 
@@ -199,20 +360,171 @@ class PsychologyWorkflowController extends Controller
     {
         $this->authorize('update', $case);
         $payload = $request->validate(['referral_id' => ['nullable', 'integer', 'exists:psychology_referrals,id'], 'content' => ['required', 'string', 'max:8000']]);
+        if (! empty($payload['referral_id']) && ! $case->referrals()->whereKey($payload['referral_id'])->exists() && (int) $case->origin_referral_id !== (int) $payload['referral_id']) {
+            throw ValidationException::withMessages(['referral_id' => 'La derivación seleccionada no pertenece a este caso.']);
+        }
         $feedback = PsychologySharedFeedback::query()->create($payload + ['case_id' => $case->id, 'visibility' => 'referral_feedback', 'created_by' => $request->user()->id]);
         $this->audit->record('feedback.shared', $feedback, $request->user());
 
         return response()->json(['message' => 'Retroalimentación compartible publicada.', 'data' => $feedback], 201);
     }
 
+    public function followUps(Request $request): JsonResponse
+    {
+        $filters = $request->validate([
+            'from' => ['nullable', 'date'],
+            'to' => ['nullable', 'date', 'after_or_equal:from'],
+            'status' => ['nullable', Rule::in(['pending', 'completed', 'overdue'])],
+            'search' => ['nullable', 'string', 'max:100'],
+            'per_page' => ['nullable', 'integer', 'between:10,500'],
+        ]);
+        $visibleCases = PsychologyCase::query()->select('psychology_cases.id');
+        $this->access->applyCaseVisibility($visibleCases, $request->user());
+
+        $query = PsychologyActivity::query()
+            ->whereNotNull('next_action_on')
+            ->whereIn('case_id', $visibleCases)
+            ->with([
+                'case:id,code,student_profile_id,responsible_user_id,status,priority',
+                'case.student.enrollments',
+                'case.responsibleUser:id,name',
+                'responsibleUser:id,name',
+            ])
+            ->when($filters['from'] ?? null, fn ($activities, $from) => $activities->whereDate('next_action_on', '>=', $from))
+            ->when($filters['to'] ?? null, fn ($activities, $to) => $activities->whereDate('next_action_on', '<=', $to))
+            ->when(($filters['status'] ?? null) === 'pending', fn ($activities) => $activities
+                ->whereDate('next_action_on', '>=', today())
+                ->whereHas('case', fn ($case) => $case->where('status', '!=', 'closed')))
+            ->when(($filters['status'] ?? null) === 'overdue', fn ($activities) => $activities
+                ->whereDate('next_action_on', '<', today())
+                ->whereHas('case', fn ($case) => $case->where('status', '!=', 'closed')))
+            ->when(($filters['status'] ?? null) === 'completed', fn ($activities) => $activities
+                ->whereHas('case', fn ($case) => $case->where('status', 'closed')))
+            ->when($filters['search'] ?? null, function ($activities, $search) {
+                $term = trim($search);
+                $activities->where(function ($match) use ($term) {
+                    $match->where('next_steps', 'like', "%{$term}%")
+                        ->orWhereHas('case', fn ($case) => $case
+                            ->where('code', 'like', "%{$term}%")
+                            ->orWhereHas('student', fn ($student) => $student
+                                ->where('first_name', 'like', "%{$term}%")
+                                ->orWhere('last_name', 'like', "%{$term}%")
+                                ->orWhere('registered_name', 'like', "%{$term}%")));
+                });
+            })
+            ->orderBy('next_action_on')
+            ->orderBy('id');
+        $this->access->applyActivityVisibility($query, $request->user());
+
+        $page = $query->paginate($filters['per_page'] ?? 25)->through(function (PsychologyActivity $activity) {
+            $student = $activity->case?->student;
+            $enrollment = $student?->preferredEnrollment();
+            $completed = $activity->case?->status === 'closed';
+            $overdue = ! $completed && $activity->next_action_on?->isBefore(today());
+
+            return [
+                'id' => $activity->id,
+                'activity_id' => $activity->id,
+                'case_id' => $activity->case_id,
+                'case_code' => $activity->case?->code,
+                'case_status' => $activity->case?->status,
+                'case_priority' => $activity->case?->priority,
+                'student_name' => $student?->registered_name_resolved,
+                'course' => $enrollment?->snapshot_course_display_name,
+                'title' => self::FOLLOW_UP_TYPE_LABELS[$activity->follow_up_type] ?? 'Seguimiento',
+                'description' => $activity->next_steps,
+                'follow_up_type' => $activity->follow_up_type,
+                'follow_up_type_label' => self::FOLLOW_UP_TYPE_LABELS[$activity->follow_up_type] ?? 'Seguimiento',
+                'status' => $completed ? 'completed' : ($overdue ? 'overdue' : 'pending'),
+                'priority' => $activity->case?->priority,
+                'due_at' => $activity->next_action_on?->toDateString(),
+                'source_activity_on' => $activity->activity_on?->toDateString(),
+                'source_activity_type' => $activity->type,
+                'responsible_name' => $activity->responsibleUser?->name,
+                'case_responsible_name' => $activity->case?->responsibleUser?->name,
+                'is_overdue' => $overdue,
+            ];
+        });
+
+        return response()->json($page);
+    }
+
     public function calendar(Request $request): JsonResponse
     {
         $from = $request->date('from') ?: now()->startOfMonth();
         $to = $request->date('to') ?: now()->endOfMonth();
-        $caseIds = PsychologyCase::query()->tap(fn ($q) => app(PsychologyAccessService::class)->applyCaseVisibility($q, $request->user()))->pluck('id');
-        $activities = PsychologyActivity::query()->whereIn('case_id', $caseIds)->whereBetween('activity_on', [$from, $to])->with('case:id,code')->get()->map(fn ($a) => ['id' => 'activity-'.$a->id, 'title' => 'Atención de Psicología – Caso '.$a->case->code, 'start' => $a->activity_on->format('Y-m-d').'T'.($a->starts_at ?: '08:00'), 'end' => $a->ends_at ? $a->activity_on->format('Y-m-d').'T'.$a->ends_at : null, 'type' => 'activity']);
-        $tasks = PsychologyTask::query()->whereIn('case_id', $caseIds)->whereBetween('due_at', [$from, $to])->with('case:id,code')->get()->map(fn ($t) => ['id' => 'task-'.$t->id, 'title' => 'Tarea de Psicología – Caso '.$t->case->code, 'start' => $t->due_at?->toIso8601String(), 'type' => 'task']);
+        $visibleCases = PsychologyCase::query()->select('psychology_cases.id');
+        $this->access->applyCaseVisibility($visibleCases, $request->user());
+        $activitiesQuery = PsychologyActivity::query()
+            ->whereIn('case_id', $visibleCases)
+            ->where(function ($dates) use ($from, $to) {
+                $dates->whereBetween('activity_on', [$from, $to])
+                    ->orWhereBetween('next_action_on', [$from, $to]);
+            })
+            ->with('case:id,code');
+        $this->access->applyActivityVisibility($activitiesQuery, $request->user());
+        $activities = $activitiesQuery->get();
+        $attentionEvents = $activities
+            ->filter(fn (PsychologyActivity $activity) => $activity->activity_on?->betweenIncluded($from, $to))
+            ->map(fn (PsychologyActivity $activity) => [
+                'id' => 'activity-'.$activity->id,
+                'title' => 'Atención de Psicología – Caso '.$activity->case->code,
+                'start' => $activity->activity_on->format('Y-m-d').'T'.($activity->starts_at ?: '08:00'),
+                'end' => $activity->ends_at ? $activity->activity_on->format('Y-m-d').'T'.$activity->ends_at : null,
+                'type' => 'activity',
+                'case_id' => $activity->case_id,
+                'backgroundColor' => '#5275c7',
+                'borderColor' => '#5275c7',
+            ]);
+        $followUpEvents = $activities
+            ->filter(fn (PsychologyActivity $activity) => $activity->next_action_on?->betweenIncluded($from, $to))
+            ->map(fn (PsychologyActivity $activity) => [
+                'id' => 'followup-'.$activity->id,
+                'title' => (self::FOLLOW_UP_TYPE_LABELS[$activity->follow_up_type] ?? 'Seguimiento').' – Caso '.$activity->case->code,
+                'start' => $activity->next_action_on?->toDateString(),
+                'allDay' => true,
+                'type' => 'follow_up',
+                'case_id' => $activity->case_id,
+                'activity_id' => $activity->id,
+                'follow_up_type' => $activity->follow_up_type,
+                'backgroundColor' => '#70578f',
+                'borderColor' => '#70578f',
+            ]);
+        $tasksQuery = PsychologyTask::query()
+            ->whereIn('case_id', $visibleCases)
+            ->whereBetween('due_at', [$from, $to])
+            ->with('case:id,code');
+        $this->access->applyTaskVisibility($tasksQuery, $request->user());
+        $tasks = $tasksQuery->get()
+            ->map(fn (PsychologyTask $task) => [
+                'id' => 'task-'.$task->id,
+                'title' => 'Tarea de Psicología – Caso '.$task->case->code,
+                'start' => $task->due_at?->toIso8601String(),
+                'type' => 'task',
+                'case_id' => $task->case_id,
+                'backgroundColor' => '#3f8c71',
+                'borderColor' => '#3f8c71',
+            ]);
 
-        return response()->json(['data' => $activities->concat($tasks)->values()]);
+        $coordinationsQuery = PsychologyCoordinationRequest::query()
+            ->whereIn('case_id', $visibleCases)
+            ->where('status', 'accepted')
+            ->whereBetween('requested_for', [$from, $to])
+            ->with('case:id,code');
+        $this->access->applyCoordinationVisibility($coordinationsQuery, $request->user());
+        $coordinations = $coordinationsQuery->get()
+            ->map(fn (PsychologyCoordinationRequest $coordination) => [
+                'id' => 'coordination-'.$coordination->id,
+                'title' => 'Coordinación aceptada – Caso '.$coordination->case->code,
+                'start' => $coordination->requested_for?->toDateString(),
+                'allDay' => true,
+                'type' => 'coordination',
+                'case_id' => $coordination->case_id,
+                'coordination_id' => $coordination->id,
+                'backgroundColor' => '#b8783d',
+                'borderColor' => '#b8783d',
+            ]);
+
+        return response()->json(['data' => $attentionEvents->concat($followUpEvents)->concat($tasks)->concat($coordinations)->values()]);
     }
 }

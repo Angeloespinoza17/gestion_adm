@@ -62,6 +62,11 @@ class PsychologyCase extends Model
         return $this->hasMany(PsychologyActivity::class, 'case_id')->orderByDesc('activity_on');
     }
 
+    public function coordinationRequests(): HasMany
+    {
+        return $this->hasMany(PsychologyCoordinationRequest::class, 'case_id')->latest();
+    }
+
     public function riskAssessments(): HasMany
     {
         return $this->hasMany(PsychologyRiskAssessment::class, 'case_id')->latest();

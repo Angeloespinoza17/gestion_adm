@@ -42,6 +42,39 @@ class RiskPreventionAccessService
         ];
     }
 
+    /**
+     * El esquema IPER se despliega de forma aditiva y no debe bloquear el
+     * dashboard ni las operaciones históricas de Prevención de Riesgos.
+     *
+     * @return array<int, string>
+     */
+    public function riskMatrixRequiredTables(): array
+    {
+        return [
+            'prevent_risk_methodologies',
+            'prevent_risk_catalog_items',
+            'prevent_risk_matrices',
+            'prevent_risk_matrix_versions',
+            'prevent_risk_matrix_processes',
+            'prevent_risk_matrix_tasks',
+            'prevent_risk_task_positions',
+            'prevent_risk_task_exposures',
+            'prevent_risk_entries',
+            'prevent_risk_hazard_factors',
+            'prevent_risk_assessments',
+            'prevent_risk_controls',
+            'prevent_risk_evidences',
+            'prevent_risk_matrix_participations',
+            'prevent_risk_matrix_reviews',
+            'prevent_preventive_programs',
+            'prevent_preventive_program_actions',
+            'prevent_risk_import_batches',
+            'prevent_risk_import_row_issues',
+            'prevent_risk_audit_logs',
+            'prevent_risk_alert_logs',
+        ];
+    }
+
     public function isInstalled(): bool
     {
         foreach ($this->requiredTables() as $table) {
@@ -59,6 +92,28 @@ class RiskPreventionAccessService
     public function missingTables(): array
     {
         return collect($this->requiredTables())
+            ->reject(fn (string $table) => Schema::hasTable($table))
+            ->values()
+            ->all();
+    }
+
+    public function isRiskMatrixInstalled(): bool
+    {
+        foreach ($this->riskMatrixRequiredTables() as $table) {
+            if (! Schema::hasTable($table)) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    public function missingRiskMatrixTables(): array
+    {
+        return collect($this->riskMatrixRequiredTables())
             ->reject(fn (string $table) => Schema::hasTable($table))
             ->values()
             ->all();

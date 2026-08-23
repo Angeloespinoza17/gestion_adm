@@ -76,6 +76,8 @@ use App\Models\RiskPrevention\RiskPreventionEppDelivery;
 use App\Models\RiskPrevention\RiskPreventionEppItem;
 use App\Models\RiskPrevention\RiskPreventionFireExtinguisher;
 use App\Models\RiskPrevention\RiskPreventionTraining;
+use App\Models\RiskPrevention\RiskMatrix;
+use App\Models\RiskPrevention\RiskMatrixVersion;
 use App\Models\Schedule\ScheduleSubject;
 use App\Models\Security\SecurityIncident;
 use App\Models\Security\SecurityShift;
@@ -129,6 +131,7 @@ use App\Policies\PsychologyCasePolicy;
 use App\Policies\PsychologyDocumentPolicy;
 use App\Policies\PsychologyReferralPolicy;
 use App\Policies\RiskPreventionPolicy;
+use App\Policies\RiskMatrixPolicy;
 use App\Policies\SecurityIncidentPolicy;
 use App\Policies\SecurityShiftPolicy;
 use App\Policies\SocialWork\SocialCasePolicy;
@@ -175,6 +178,8 @@ class AuthServiceProvider extends ServiceProvider
         SecurityIncident::class => SecurityIncidentPolicy::class,
         Task::class => TaskPolicy::class,
         RiskPreventionFireExtinguisher::class => RiskPreventionPolicy::class,
+        RiskMatrix::class => RiskMatrixPolicy::class,
+        RiskMatrixVersion::class => RiskMatrixPolicy::class,
         RiskPreventionAccident::class => RiskPreventionPolicy::class,
         RiskPreventionEmergencyPlan::class => RiskPreventionPolicy::class,
         RiskPreventionEmergencyDrill::class => RiskPreventionPolicy::class,

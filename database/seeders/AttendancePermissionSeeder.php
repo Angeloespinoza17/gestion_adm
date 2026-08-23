@@ -4,6 +4,7 @@ namespace Database\Seeders;
 
 use App\Models\Attendance\AttendanceAbsenceReason;
 use App\Models\Attendance\AttendanceAlertRule;
+use App\Models\Attendance\AttendanceInterventionType;
 use App\Models\Attendance\AttendanceRiskLevel;
 use App\Models\Permission;
 use App\Models\PermissionGroup;
@@ -27,8 +28,9 @@ class AttendancePermissionSeeder extends Seeder
         $group?->permissions()->syncWithoutDetaching($permissions->pluck('id'));
 
         $studentsModule = SystemModule::query()->where('slug', 'students')->first();
+        $managementModule = null;
         if ($studentsModule) {
-            SystemModule::query()->updateOrCreate(
+            $managementModule = SystemModule::query()->updateOrCreate(
                 ['slug' => 'students_attendance_statistics'],
                 [
                     'name' => 'Estadísticas de asistencia',
@@ -39,12 +41,34 @@ class AttendancePermissionSeeder extends Seeder
                     'parent_id' => $studentsModule->id,
                 ],
             );
+            SystemModule::query()->updateOrCreate(
+                ['slug' => 'students_attendance_management'],
+                [
+                    'name' => 'Gestión de ausencia',
+                    'frontend_route' => '/students/attendance-management',
+                    'icon' => null,
+                    'sort_order' => 9,
+                    'active' => true,
+                    'parent_id' => $studentsModule->id,
+                ],
+            );
         }
 
         Role::query()
             ->whereIn('slug', ['super_admin', 'administrador'])
             ->get()
-            ->each(fn (Role $role) => $role->permissions()->syncWithoutDetaching($permissions->pluck('id')));
+            ->each(function (Role $role) use ($permissions, $managementModule): void {
+                $role->permissions()->syncWithoutDetaching($permissions->pluck('id'));
+                if ($managementModule) {
+                    $role->modules()->syncWithoutDetaching([$managementModule->id]);
+                }
+            });
+
+        if ($managementModule) {
+            Role::query()->whereHas('permissions', fn ($query) => $query->whereIn('slug', [
+                'attendance_management.view', 'attendance_statistics.view', 'attendance_statistics.view_student', 'attendance_statistics.view_course',
+            ]))->get()->each(fn (Role $role) => $role->modules()->syncWithoutDetaching([$managementModule->id]));
+        }
 
         $this->seedStatisticsConfiguration();
     }
@@ -57,6 +81,7 @@ class AttendancePermissionSeeder extends Seeder
         return [
             ['slug' => 'ver_asistencia', 'name' => 'Ver asistencia', 'description' => 'Permite consultar estadísticas, calendarios y detalle de asistencia.'],
             ['slug' => 'importar_asistencia', 'name' => 'Importar asistencia', 'description' => 'Permite previsualizar y confirmar importaciones mensuales de asistencia.'],
+            ['slug' => 'importar_calificaciones', 'name' => 'Importar calificaciones', 'description' => 'Permite importar calificaciones anuales, conciliar estudiantes y reintentar registros pendientes.'],
             ['slug' => 'editar_asistencia', 'name' => 'Editar asistencia', 'description' => 'Permite corregir registros de asistencia con trazabilidad.'],
             ['slug' => 'gestionar_alertas_asistencia', 'name' => 'Gestionar alertas de asistencia', 'description' => 'Permite reconocer, asignar, resolver y registrar seguimientos.'],
             ['slug' => 'proyectar_ingresos_asistencia', 'name' => 'Proyectar ingresos por asistencia', 'description' => 'Permite consultar y configurar escenarios financieros de asistencia.'],
@@ -73,6 +98,15 @@ class AttendancePermissionSeeder extends Seeder
             ['slug' => 'attendance_statistics.manage_interventions', 'name' => 'Gestionar intervenciones de asistencia', 'description' => 'Permite crear y cerrar intervenciones.'],
             ['slug' => 'attendance_statistics.manage_reports', 'name' => 'Gestionar reportes de asistencia', 'description' => 'Permite programar y administrar reportes.'],
             ['slug' => 'attendance_statistics.view_audit', 'name' => 'Ver auditoría de asistencia', 'description' => 'Permite consultar trazabilidad y accesos sensibles.'],
+            ['slug' => 'attendance_management.view', 'name' => 'Ver gestión de ausencia', 'description' => 'Permite acceder al dashboard preventivo y a los estudiantes de cursos autorizados.'],
+            ['slug' => 'attendance_management.view_all', 'name' => 'Ver gestión institucional de ausencia', 'description' => 'Permite consultar todos los cursos y expedientes institucionales.'],
+            ['slug' => 'attendance_management.manage_cases', 'name' => 'Gestionar expedientes de asistencia', 'description' => 'Permite abrir, actualizar, cerrar y reabrir expedientes con trazabilidad.'],
+            ['slug' => 'attendance_management.manage_interventions', 'name' => 'Gestionar intervenciones de ausencia', 'description' => 'Permite registrar contactos e intervenciones de apoyo.'],
+            ['slug' => 'attendance_management.manage_causes', 'name' => 'Gestionar causas de ausencia', 'description' => 'Permite identificar causas y mantener su catálogo.'],
+            ['slug' => 'attendance_management.manage_action_plans', 'name' => 'Gestionar planes de acción de asistencia', 'description' => 'Permite crear, ejecutar y evaluar planes de acompañamiento.'],
+            ['slug' => 'attendance_management.export', 'name' => 'Exportar gestión de ausencia', 'description' => 'Permite generar reportes institucionales, de curso, individuales y familiares.'],
+            ['slug' => 'attendance_management.view_sensitive', 'name' => 'Ver información sensible de ausencia', 'description' => 'Permite consultar observaciones confidenciales y causas sensibles autorizadas.'],
+            ['slug' => 'attendance_management.configure', 'name' => 'Configurar gestión de ausencia', 'description' => 'Permite administrar umbrales, ponderaciones, alertas y catálogos.'],
         ];
     }
 
@@ -83,18 +117,21 @@ class AttendancePermissionSeeder extends Seeder
         }
 
         $reasons = [
-            ['illness', 'Enfermedad', 'salud'], ['medical_care', 'Atención médica', 'salud'],
-            ['mental_health', 'Salud mental', 'salud'], ['family_problem', 'Problema familiar', 'familia'],
-            ['transport', 'Transporte', 'logística'], ['weather', 'Condición climática', 'entorno'],
-            ['economic_difficulty', 'Dificultad económica', 'socioeconómica'], ['motivation', 'Desmotivación', 'educativa'],
-            ['school_climate', 'Convivencia escolar', 'convivencia'], ['bullying', 'Bullying', 'convivencia'],
-            ['care_responsibilities', 'Responsabilidades de cuidado', 'familia'], ['travel', 'Viaje', 'personal'],
-            ['procedure', 'Trámite', 'personal'], ['suspension', 'Suspensión', 'institucional'],
-            ['institutional_activity', 'Actividad institucional', 'institucional'], ['registration_error', 'Error de registro', 'datos'],
-            ['unknown', 'Sin información', 'sin_información'], ['other', 'Otro', 'otro'],
+            ['illness', 'Enfermedad', 'salud', false], ['medical_care', 'Atención médica', 'salud', false],
+            ['mental_health', 'Salud mental', 'salud', true], ['family_problem', 'Problema familiar', 'familia', true],
+            ['sleep_routine', 'Sueño o dificultades de rutina', 'bienestar', false], ['academic_difficulty', 'Dificultad académica', 'educativa', false],
+            ['transport', 'Transporte', 'logística', false], ['weather', 'Condición climática', 'entorno', false],
+            ['economic_difficulty', 'Dificultad económica', 'socioeconómica', true], ['motivation', 'Desmotivación', 'educativa', false],
+            ['school_climate', 'Convivencia escolar', 'convivencia', true], ['bullying', 'Acoso escolar', 'convivencia', true],
+            ['care_responsibilities', 'Responsabilidades de cuidado', 'familia', true], ['family_health', 'Salud de un familiar', 'familia', true],
+            ['judicial_situation', 'Situación judicial', 'protección', true], ['address_change', 'Cambio de domicilio', 'familia', false],
+            ['travel', 'Viaje', 'personal', false], ['procedure', 'Trámite', 'personal', false],
+            ['suspension', 'Suspensión', 'institucional', false], ['institutional_activity', 'Actividad institucional', 'institucional', false],
+            ['registration_error', 'Error de registro', 'datos', false], ['no_family_contact', 'Sin contacto familiar', 'gestión', true],
+            ['unknown', 'Sin información', 'sin_información', false], ['other', 'Otro', 'otro', false],
         ];
-        foreach ($reasons as $index => [$code, $name, $category]) {
-            AttendanceAbsenceReason::query()->updateOrCreate(['code' => $code], ['name' => $name, 'category' => $category, 'active' => true, 'sort_order' => $index + 1]);
+        foreach ($reasons as $index => [$code, $name, $category, $sensitive]) {
+            AttendanceAbsenceReason::query()->updateOrCreate(['code' => $code], ['name' => $name, 'category' => $category, 'is_sensitive' => $sensitive, 'active' => true, 'sort_order' => $index + 1]);
         }
 
         $levels = [
@@ -123,6 +160,28 @@ class AttendancePermissionSeeder extends Seeder
                 ['academic_year_id' => null, 'code' => $code],
                 ['name' => $name, 'metric' => $metric, 'operator' => $operator, 'threshold' => $threshold, 'severity' => $severity, 'evaluation_period' => 'academic_year', 'cooldown_days' => 7, 'response_due_days' => 5, 'active' => true],
             );
+        }
+
+        if (Schema::hasTable('attendance_intervention_types')) {
+            $types = [
+                ['phone_contact', 'Llamada telefónica', 'contacto_familiar', true, false],
+                ['whatsapp_contact', 'Contacto por WhatsApp', 'contacto_familiar', true, false],
+                ['family_interview', 'Entrevista con familia', 'contacto_familiar', true, true],
+                ['student_interview', 'Entrevista con estudiante', 'acompañamiento', false, true],
+                ['teacher_coordination', 'Coordinación con profesor/a jefe', 'coordinación', false, false],
+                ['inspectoria_coordination', 'Coordinación con inspectoría', 'coordinación', false, false],
+                ['social_work_referral', 'Derivación a trabajo social', 'derivación', false, true],
+                ['psychology_referral', 'Derivación a psicología', 'derivación', false, true],
+                ['home_visit', 'Visita domiciliaria', 'acompañamiento', true, true],
+                ['monitoring', 'Monitoreo de asistencia', 'seguimiento', false, false],
+                ['recognition', 'Reconocimiento de mejora', 'refuerzo_positivo', false, false],
+            ];
+            foreach ($types as $index => [$code, $name, $category, $familyContact, $sensitive]) {
+                AttendanceInterventionType::query()->updateOrCreate(
+                    ['code' => $code],
+                    ['name' => $name, 'category' => $category, 'family_contact' => $familyContact, 'sensitive' => $sensitive, 'active' => true, 'sort_order' => $index + 1],
+                );
+            }
         }
     }
 }

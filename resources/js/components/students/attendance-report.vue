@@ -1,6 +1,8 @@
 <script>
 import axios from "axios";
 import LoadingState from "../ui/loading-state.vue";
+import MonthlyAttendanceImport from "./monthly-attendance-import.vue";
+import AnnualGradeImport from "./annual-grade-import.vue";
 import { downloadStudentReportExcel, downloadStudentReportPdf } from "./report-export";
 
 const emptyData = () => ({
@@ -17,7 +19,7 @@ const emptyData = () => ({
 });
 
 export default {
-  components: { LoadingState },
+  components: { LoadingState, MonthlyAttendanceImport, AnnualGradeImport },
   props: {
     initialYearId: { type: [Number, String], default: null },
     initialCourseId: { type: [Number, String], default: null },
@@ -542,7 +544,9 @@ export default {
         <p>Indicadores consolidados, riesgo de inasistencia y trazabilidad mensual.</p>
       </div>
       <div class="attendance-actions">
-        <button v-if="capabilities.can_import" type="button" class="btn btn-primary" @click="openImport"><i class="bx bx-upload"></i>Importar PDF</button>
+        <MonthlyAttendanceImport v-if="capabilities.can_import" :academic-years="report.catalogs.academic_years" :initial-year-id="filters.academic_year_id" @completed="loadReport" />
+        <AnnualGradeImport v-if="capabilities.can_import_grades" :academic-years="report.catalogs.academic_years" :initial-year-id="filters.academic_year_id" @completed="loadReport" />
+        <button v-if="capabilities.can_import" type="button" class="btn btn-primary" @click="openImport"><i class="bx bx-upload"></i>PDF por curso</button>
         <button type="button" class="btn btn-outline-success" :disabled="loading || !!exporting" @click="exportReport('excel')"><i class="bx bx-spreadsheet"></i>Excel</button>
         <button type="button" class="btn btn-danger" :disabled="loading || !!exporting" @click="exportReport('pdf')"><i class="bx bxs-file-pdf"></i>PDF</button>
       </div>

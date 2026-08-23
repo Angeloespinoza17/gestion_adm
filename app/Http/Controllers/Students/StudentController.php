@@ -18,6 +18,7 @@ use App\Services\Students\StudentAccountService;
 use App\Services\Students\StudentDeletionService;
 use App\Services\Students\StudentPdfChunkUploadService;
 use App\Services\Students\StudentPdfImportService;
+use App\Services\Attendance\StudentMonthlyAttendanceContextService;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\JsonResponse;
@@ -31,6 +32,7 @@ class StudentController extends Controller
     public function __construct(
         private readonly StudentAccountService $studentAccountService,
         private readonly StudentDeletionService $studentDeletionService,
+        private readonly StudentMonthlyAttendanceContextService $monthlyAttendanceContext,
     ) {}
 
     public function catalogs(): JsonResponse
@@ -262,6 +264,7 @@ class StudentController extends Controller
 
         $student->setAttribute('current_enrollment', $student->preferredEnrollment($activeYear));
         $student->setAttribute('latest_enrollment', $student->latestEnrollment());
+        $student->setAttribute('attendance_profile', $this->monthlyAttendanceContext->forStudent($student, $activeYear?->id));
 
         return $student;
     }

@@ -9,6 +9,7 @@ use App\Models\LibroDigital\ReportExport;
 use App\Models\LibroDigital\School;
 use App\Models\User;
 use App\Services\Attendance\AttendancePdfBuilder;
+use App\Services\LibroDigital\Curriculum\CurriculumImportPdfExporter;
 use Illuminate\Contracts\Filesystem\Filesystem;
 use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\DB;
@@ -24,6 +25,7 @@ class LibroDigitalReportService
         private readonly XlsxReportBuilder $xlsx,
         private readonly AuditEventWriter $audit,
         private readonly CurriculumObjectiveReportService $curriculumObjectives,
+        private readonly CurriculumImportPdfExporter $curriculumPrograms,
     ) {}
 
     /** @param array<string, mixed> $filters */
@@ -86,7 +88,12 @@ class LibroDigitalReportService
             after: $export->only(['public_id', 'report_type', 'format', 'filters_snapshot', 'source_snapshot_hash']),
         );
 
-        GenerateLibroDigitalReport::dispatch($export->id);
+        if ($type === 'curriculum_program'
+            && (bool) config('libro_digital.reports.sync_curriculum_program_exports', false)) {
+            GenerateLibroDigitalReport::dispatchSync($export->id);
+        } else {
+            GenerateLibroDigitalReport::dispatch($export->id);
+        }
 
         return $export->fresh();
     }
@@ -98,7 +105,9 @@ class LibroDigitalReportService
         try {
             $export->loadMissing(['school', 'academicYear', 'book.courseSection', 'book.academicYear', 'requester']);
             $snapshot = $this->loadSnapshot($export);
-            if ($export->report_type === 'curriculum_objectives') {
+            if ($export->report_type === 'curriculum_program') {
+                [$contents, $extension, $mime] = $this->curriculumPrograms->generate($export, $snapshot);
+            } elseif ($export->report_type === 'curriculum_objectives') {
                 [$contents, $extension, $mime] = $this->curriculumObjectives->generate($export, $snapshot);
             } else {
                 $metadata = $snapshot['metadata'];
@@ -319,6 +328,9 @@ class LibroDigitalReportService
         if ($export->report_type === 'curriculum_objectives') {
             return $this->curriculumObjectives->snapshot($export);
         }
+        if ($export->report_type === 'curriculum_program') {
+            return $this->curriculumPrograms->snapshot($export);
+        }
 
         [$metadata, $sections] = $this->dataset($export);
 
@@ -359,6 +371,7 @@ class LibroDigitalReportService
             'assessments' => 'Informe de evaluaciones y resultados',
             'audit' => 'Informe de trazabilidad y auditoría',
             'curriculum_objectives' => 'Catálogo de objetivos curriculares',
+            'curriculum_program' => 'Ficha curricular ministerial',
             default => 'Informe ejecutivo del Libro Digital',
         };
     }

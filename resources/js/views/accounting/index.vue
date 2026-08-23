@@ -24,11 +24,22 @@ const subsidyMonths = [
   { value: "12", text: "Diciembre" },
 ];
 const toMonthKey = (date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+const compactMoney = (value) => {
+  const amount = Number(value || 0);
+  const absolute = Math.abs(amount);
+  const format = (divisor, suffix) => `$${(amount / divisor).toLocaleString("es-CL", { maximumFractionDigits: 1 })} ${suffix}`;
+
+  if (absolute >= 1_000_000_000) return format(1_000_000_000, "mil MM");
+  if (absolute >= 1_000_000) return format(1_000_000, "MM");
+  if (absolute >= 1_000) return format(1_000, "mil");
+  return money(amount);
+};
 
 const navItems = [
   { route: "/contabilidad", key: "dashboard", label: "Dashboard", group: "Resumen", icon: "bx-grid-alt", permission: "contabilidad.dashboard" },
   { route: "/contabilidad/rendiciones", key: "renderings", label: "Rendiciones", permission: "contabilidad.fondos_rendir.gestionar" },
   { route: "/contabilidad/presupuesto", key: "budget-lines", label: "Presupuesto", permission: "contabilidad.presupuesto.ver" },
+  { route: "/contabilidad/ejecucion-presupuestaria", key: "budget-execution", label: "Ejecución", permission: "contabilidad.ejecucion_presupuestaria.ver" },
   { route: "/contabilidad/centros-costo", key: "cost-centers", label: "Centros de costo", permission: "contabilidad.centros_costo.gestionar" },
   { route: "/contabilidad/manual-cuentas", key: "manual-accounts", label: "Manual de cuentas", permission: "contabilidad.manual_cuentas.gestionar" },
   { route: "/contabilidad/ingresos", key: "incomes", label: "Ingresos", permission: "contabilidad.ingresos.gestionar" },
@@ -36,7 +47,7 @@ const navItems = [
   { route: "/contabilidad/caja-chica", key: "cash-funds", label: "Caja chica", permission: "contabilidad.caja_chica.gestionar" },
   { route: "/contabilidad/fondos-rendir", key: "funds-to-render", label: "Fondos por rendir", permission: "contabilidad.fondos_rendir.gestionar" },
   { route: "/contabilidad/conciliacion", key: "bank-movements", label: "Conciliación", permission: "contabilidad.conciliacion.gestionar" },
-  { route: "/contabilidad/subvenciones", key: "funding-sources", label: "Subvenciones", permission: "contabilidad.subvenciones.ver" },
+  { route: "/contabilidad/subvenciones", key: "funding-sources", label: "Subvención y asistencia", permission: "contabilidad.subvenciones.ver" },
   { route: "/contabilidad/cheques", key: "cheques", label: "Cheques", permission: "contabilidad.cheques.gestionar" },
   { route: "/contabilidad/facturas", key: "invoices", label: "Facturas", permission: "contabilidad.facturas.gestionar" },
   { route: "/contabilidad/boletas-honorarios", key: "honoraries", label: "Boletas", permission: "contabilidad.boletas.gestionar" },
@@ -53,7 +64,7 @@ const navItems = [
 const navGroups = [
   { label: "Resumen", icon: "bx-grid-alt", keys: ["dashboard", "cashflow", "reports"] },
   { label: "Operaciones", icon: "bx-transfer-alt", keys: ["incomes", "expenses", "invoices", "honoraries", "payables", "cheques"] },
-  { label: "Presupuesto y fondos", icon: "bx-wallet", keys: ["budget-lines", "cost-centers", "funding-sources", "cash-funds", "funds-to-render", "renderings"] },
+  { label: "Presupuesto y fondos", icon: "bx-wallet", keys: ["budget-lines", "budget-execution", "cost-centers", "funding-sources", "cash-funds", "funds-to-render", "renderings"] },
   { label: "Tesorería", icon: "bx-building-house", keys: ["bank-movements"] },
   { label: "Contabilidad", icon: "bx-book-open", keys: ["manual-accounts", "balance"] },
   { label: "Tributario", icon: "bx-receipt", keys: ["f29", "dj-income", "dj-rental", "income-tax"] },
@@ -118,6 +129,13 @@ const panelDefinitions = {
       { key: "planned_amount", label: "Plan", format: "currency" },
       { key: "executed_amount", label: "Ejecutado", format: "currency" },
     ],
+  },
+  "budget-execution": {
+    route: "/contabilidad/ejecucion-presupuestaria",
+    kind: "budget-execution",
+    title: "Ejecución Presupuestaria",
+    subtitle: "Seguimiento anual por cuenta y subvención, con lectura mensual, proyección y alertas de desviación.",
+    help: "Carga un libro Excel con hojas GENERAL, MANTENCION, SEP y PIE. Cada nueva carga reemplaza de forma atómica la versión del año seleccionado y deja trazabilidad de importación.",
   },
   "cost-centers": {
     route: "/contabilidad/centros-costo",
@@ -329,9 +347,9 @@ const panelDefinitions = {
   "funding-sources": {
     route: "/contabilidad/subvenciones",
     kind: "subsidies",
-    title: "Panel de Subvenciones",
-    subtitle: "Importación MINEDUC, liquidación, distribución por nivel educativo y conciliación del ingreso.",
-    help: "La liquidación explica el cálculo; el ingreso representa una única transferencia bancaria. PIE se conserva como desglose informativo para evitar duplicidad.",
+    title: "Subvención, asistencia e ingresos",
+    subtitle: "Estimación reglamentaria, merma por inasistencia y conciliación con liquidaciones MINEDUC e ingresos contabilizados.",
+    help: "La estimación usa la asistencia promedio de la ventana legal previa al pago. La merma compara contra 100% de asistencia; la liquidación oficial y el ingreso contable se mantienen separados para auditoría.",
   },
   cheques: {
     route: "/contabilidad/cheques",
@@ -683,6 +701,23 @@ export default {
         },
         annual: [],
         available_years: [],
+        attendance_reconciliation: {
+          available: false,
+          status: "sin_asistencia",
+          metrics: {},
+          window: { required_periods: [], found_periods: [], missing_periods: [], source_imports: [] },
+          assumptions: {},
+          by_level: [],
+          by_subsidy: [],
+          warnings: [],
+          sources: [],
+        },
+      },
+      subsidyCalculationOptions: {
+        jec: "1",
+        sep_category: "autonomo",
+        include_gratuity: "1",
+        concentration_band: "auto",
       },
       subsidyFiles: [],
       importingSubsidies: false,
@@ -710,6 +745,24 @@ export default {
         document_reference: "",
         notes: "",
       },
+      budgetExecutionYear: currentSubsidyDate.getFullYear(),
+      budgetExecution: {
+        year: currentSubsidyDate.getFullYear(),
+        available_years: [],
+        has_data: false,
+        import: null,
+        metrics: {},
+        alerts: {},
+        monthly: [],
+        subsidies: [],
+        categories: [],
+        accounts: [],
+      },
+      importingBudgetExecution: false,
+      downloadingBudgetExecutionPdf: false,
+      budgetExecutionSearch: "",
+      budgetExecutionFlow: "expense",
+      budgetExecutionSubsidy: "all",
     };
   },
   computed: {
@@ -730,6 +783,9 @@ export default {
     },
     isSubsidies() {
       return this.activePanel.kind === "subsidies";
+    },
+    isBudgetExecution() {
+      return this.activePanel.kind === "budget-execution";
     },
     activeItems() {
       return this.resourceItems(this.activePanel.resource);
@@ -814,6 +870,151 @@ export default {
         ? { label: "CUADRADO", className: "text-success" }
         : { label: "REVISAR", className: "text-danger" };
     },
+    attendanceReconciliation() {
+      return this.subsidyDashboard.attendance_reconciliation || {
+        available: false,
+        metrics: {},
+        window: {},
+        assumptions: {},
+        by_level: [],
+        by_subsidy: [],
+        warnings: [],
+        sources: [],
+      };
+    },
+    attendanceReconciliationStatus() {
+      const status = this.attendanceReconciliation.status;
+      if (status === "cuadrado") return { label: "DENTRO DE TOLERANCIA", className: "success", icon: "bx-check-shield" };
+      if (status === "diferencia") return { label: "CON DIFERENCIA", className: "danger", icon: "bx-error-circle" };
+      if (status === "incompleto") return { label: "CÁLCULO PROVISIONAL", className: "warning", icon: "bx-time-five" };
+      if (status === "sin_ingreso") return { label: "SIN INGRESO REGISTRADO", className: "warning", icon: "bx-receipt" };
+      if (status === "sin_parametros") return { label: "SIN TARIFA VIGENTE", className: "neutral", icon: "bx-calendar-x" };
+      return { label: "SIN ASISTENCIA", className: "neutral", icon: "bx-cloud-upload" };
+    },
+    attendanceComparisonMax() {
+      const metrics = this.attendanceReconciliation.metrics || {};
+      return Math.max(
+        1,
+        Number(metrics.full_attendance_total || 0),
+        Number(metrics.expected_total || 0),
+        Number(metrics.liquidated_gross_total || 0),
+        Number(metrics.liquidated_total || 0),
+        Number(metrics.registered_comparable_income_total || 0),
+      );
+    },
+    budgetExecutionYearOptions() {
+      const currentYear = currentSubsidyDate.getFullYear();
+      const years = [...(this.budgetExecution.available_years || []), this.budgetExecutionYear, currentYear];
+      for (let offset = -5; offset <= 2; offset += 1) years.push(currentYear + offset);
+      return [...new Set(years.map(Number))].sort((a, b) => b - a);
+    },
+    canImportBudgetExecution() {
+      const permissions = this.catalogs.permissions || [];
+      return permissions.includes("__superadmin__") || permissions.includes("contabilidad.admin") || permissions.includes("contabilidad.ejecucion_presupuestaria.importar");
+    },
+    canExportBudgetExecution() {
+      const permissions = this.catalogs.permissions || [];
+      return permissions.includes("__superadmin__") || permissions.includes("contabilidad.admin") || permissions.includes("contabilidad.ejecucion_presupuestaria.exportar");
+    },
+    budgetExecutionMonthlyMax() {
+      return Math.max(0, ...(this.budgetExecution.monthly || []).flatMap((item) => [Number(item.income || 0), Number(item.expense || 0)]));
+    },
+    budgetExecutionCategoryMax() {
+      return Math.max(1, ...(this.budgetExecution.categories || []).map((item) => Math.max(Number(item.budget || 0), Number(item.executed || 0))));
+    },
+    budgetExecutionCumulativeChart() {
+      let cumulativeIncome = 0;
+      let cumulativeExpense = 0;
+      const rows = (this.budgetExecution.monthly || []).map((month, index) => {
+        cumulativeIncome += Number(month.income || 0);
+        cumulativeExpense += Number(month.expense || 0);
+        return {
+          ...month,
+          index,
+          cumulativeIncome,
+          cumulativeExpense,
+          cumulativeBalance: cumulativeIncome - cumulativeExpense,
+        };
+      });
+      const values = rows.flatMap((item) => [item.cumulativeIncome, item.cumulativeExpense, item.cumulativeBalance]);
+      const rawMin = Math.min(0, ...values);
+      const rawMax = Math.max(0, ...values);
+      const span = Math.max(1, rawMax - rawMin);
+      const min = rawMin < 0 ? rawMin - (span * 0.08) : 0;
+      const max = rawMax > 0 ? rawMax + (span * 0.08) : 1;
+      const x = (index) => 54 + ((630 / Math.max(1, rows.length - 1)) * index);
+      const y = (value) => 210 - (((value - min) / Math.max(1, max - min)) * 160);
+      const pointRows = rows.map((item) => ({
+        ...item,
+        x: x(item.index),
+        incomeY: y(item.cumulativeIncome),
+        expenseY: y(item.cumulativeExpense),
+        balanceY: y(item.cumulativeBalance),
+      }));
+      const points = (key) => pointRows.map((item) => `${item.x},${item[key]}`).join(" ");
+      const grid = Array.from({ length: 5 }, (_, index) => {
+        const value = max - (((max - min) / 4) * index);
+        return { y: 50 + (index * 40), value };
+      });
+
+      return {
+        rows: pointRows,
+        incomePoints: points("incomeY"),
+        expensePoints: points("expenseY"),
+        balancePoints: points("balanceY"),
+        incomeArea: pointRows.length ? `54,${y(0)} ${points("incomeY")} 684,${y(0)}` : "",
+        zeroY: y(0),
+        grid,
+      };
+    },
+    budgetExecutionSubsidyMix() {
+      const colors = ["#405189", "#2f9e78", "#d49a3a", "#8765ad", "#c65a68", "#4a91b8"];
+      const total = (this.budgetExecution.subsidies || []).reduce((sum, item) => sum + Number(item.expense_budget || 0), 0);
+      let offset = 0;
+      const items = (this.budgetExecution.subsidies || []).map((item, index) => {
+        const share = total > 0 ? (Number(item.expense_budget || 0) / total) * 100 : 0;
+        const result = {
+          ...item,
+          share,
+          color: colors[index % colors.length],
+          dasharray: `${share} ${100 - share}`,
+          dashoffset: -offset,
+        };
+        offset += share;
+        return result;
+      });
+
+      return { total, items };
+    },
+    budgetExecutionTopAccountsChart() {
+      const accounts = (this.budgetExecution.accounts || []).filter((item) => (
+        item.flow_type === "expense"
+        && (Number(item.annual_budget || 0) > 0 || Number(item.executed || 0) > 0)
+      ));
+      const hasExecution = accounts.some((item) => Number(item.executed || 0) > 0);
+      const ranked = [...accounts]
+        .sort((a, b) => Number(hasExecution ? b.executed : b.annual_budget) - Number(hasExecution ? a.executed : a.annual_budget))
+        .slice(0, 8);
+      const max = Math.max(1, ...ranked.flatMap((item) => [Number(item.annual_budget || 0), Number(item.executed || 0)]));
+
+      return {
+        hasExecution,
+        items: ranked.map((item) => ({
+          ...item,
+          budgetWidth: `${Math.min(100, (Number(item.annual_budget || 0) / max) * 100)}%`,
+          executedWidth: `${Math.min(100, (Number(item.executed || 0) / max) * 100)}%`,
+          chartValue: Number(hasExecution ? item.executed : item.annual_budget),
+        })),
+      };
+    },
+    budgetExecutionAccounts() {
+      const search = this.budgetExecutionSearch.trim().toLocaleLowerCase("es-CL");
+      return (this.budgetExecution.accounts || []).filter((account) => (
+        account.flow_type === this.budgetExecutionFlow
+        && (this.budgetExecutionSubsidy === "all" || account.subsidy_code === this.budgetExecutionSubsidy)
+        && (!search || `${account.account_name} ${account.category} ${account.subsidy_name}`.toLocaleLowerCase("es-CL").includes(search))
+      ));
+    },
   },
   watch: {
     "$route.path"() {
@@ -831,6 +1032,7 @@ export default {
   },
   methods: {
     money,
+    compactMoney,
     shortDate,
     isNavActive(route) {
       return this.$route.path === route;
@@ -885,6 +1087,8 @@ export default {
           await this.loadDashboard();
         } else if (this.isSubsidies) {
           await this.loadSubsidies();
+        } else if (this.isBudgetExecution) {
+          await this.loadBudgetExecution();
         } else if (this.isReports || this.isBalance) {
           await this.loadReports();
           if (this.isBalance) {
@@ -922,13 +1126,302 @@ export default {
         params: {
           period: this.subsidyPeriod,
           compare_period: this.subsidyComparePeriod,
+          jec: this.subsidyCalculationOptions.jec,
+          sep_category: this.subsidyCalculationOptions.sep_category,
+          include_gratuity: this.subsidyCalculationOptions.include_gratuity,
+          concentration_band: this.subsidyCalculationOptions.concentration_band,
         },
       });
       this.subsidyDashboard = response.data || this.subsidyDashboard;
     },
+    async loadBudgetExecution() {
+      const response = await axios.get("/api/contabilidad/ejecucion-presupuestaria", {
+        params: { year: this.budgetExecutionYear },
+      });
+      this.budgetExecution = response.data || this.budgetExecution;
+    },
+    async changeBudgetExecutionYear() {
+      await this.loadBudgetExecution();
+    },
+    openBudgetExecutionFilePicker() {
+      this.$refs.budgetExecutionFile?.click();
+    },
+    async uploadBudgetExecution(event) {
+      const file = event.target.files?.[0];
+      event.target.value = "";
+      if (!file) return;
+
+      if (this.budgetExecution.has_data) {
+        const confirmation = await Swal.fire({
+          title: `Reemplazar ejecución ${this.budgetExecutionYear}`,
+          html: `La carga vigente <strong>${this.budgetExecution.import?.original_filename || "del año"}</strong> será reemplazada por <strong>${file.name}</strong>.`,
+          icon: "warning",
+          showCancelButton: true,
+          confirmButtonText: "Sí, reemplazar",
+          cancelButtonText: "Cancelar",
+          confirmButtonColor: "#405189",
+        });
+        if (!confirmation.isConfirmed) return;
+      }
+
+      this.importingBudgetExecution = true;
+      try {
+        const payload = new FormData();
+        payload.append("year", String(this.budgetExecutionYear));
+        payload.append("file", file);
+        const response = await axios.post("/api/contabilidad/ejecucion-presupuestaria/importar", payload, {
+          headers: { "Content-Type": "multipart/form-data" },
+        });
+        this.budgetExecution = response.data.data || this.budgetExecution;
+        await Swal.fire({
+          title: response.data.replaced ? "Año actualizado" : "Ejecución importada",
+          text: response.data.message,
+          icon: "success",
+          confirmButtonColor: "#405189",
+        });
+      } catch (error) {
+        await Swal.fire("No se pudo importar", formatAccountingError(error, "Revisa el año y la estructura del archivo Excel."), "error");
+      } finally {
+        this.importingBudgetExecution = false;
+      }
+    },
+    budgetExecutionBarHeight(value) {
+      const scale = Math.max(1, this.budgetExecutionMonthlyMax);
+      return `${Math.max(0, Math.min(100, (Number(value || 0) / scale) * 100))}%`;
+    },
+    budgetExecutionHeatColor(month) {
+      const intensity = Math.min(1, Number(month.expense || 0) / Math.max(1, this.budgetExecutionMonthlyMax));
+      const alpha = 0.09 + (intensity * 0.72);
+      if (Number(month.balance || 0) < 0) return `rgba(194,65,79,${alpha})`;
+      if (Number(month.balance || 0) > 0) return `rgba(47,158,120,${alpha})`;
+      return `rgba(64,81,137,${alpha})`;
+    },
+    budgetExecutionCategoryWidth(value) {
+      return `${Math.max(0, Math.min(100, (Number(value || 0) / this.budgetExecutionCategoryMax) * 100))}%`;
+    },
+    budgetExecutionProgress(value) {
+      return `${Math.max(0, Math.min(100, Number(value || 0)))}%`;
+    },
+    budgetExecutionStatus(percentage) {
+      const value = Number(percentage || 0);
+      if (value > 100) return { label: "Sobre ejecutada", className: "danger" };
+      if (value >= 85) return { label: "Atención", className: "warning" };
+      return { label: "En rango", className: "success" };
+    },
+    budgetExecutionChartSvg() {
+      const months = this.budgetExecution.monthly || [];
+      const max = Math.max(1, ...months.flatMap((item) => [Number(item.income || 0), Number(item.expense || 0)]));
+      const chartHeight = 150;
+      const baseY = 190;
+      const barWidth = 13;
+      const groupWidth = 52;
+      const startX = 55;
+      const bars = months.map((item, index) => {
+        const x = startX + index * groupWidth;
+        const incomeHeight = (Number(item.income || 0) / max) * chartHeight;
+        const expenseHeight = (Number(item.expense || 0) / max) * chartHeight;
+        return `<rect x="${x}" y="${baseY - incomeHeight}" width="${barWidth}" height="${incomeHeight}" rx="3" fill="#2f9e78"/><rect x="${x + 17}" y="${baseY - expenseHeight}" width="${barWidth}" height="${expenseHeight}" rx="3" fill="#405189"/><text x="${x + 15}" y="207" text-anchor="middle" font-size="9" fill="#667085">${item.short_label}</text>`;
+      }).join("");
+      return `<svg width="720" height="225" viewBox="0 0 720 225" xmlns="http://www.w3.org/2000/svg"><rect width="720" height="225" rx="12" fill="#f7f9fc"/><line x1="45" y1="190" x2="690" y2="190" stroke="#d7deea"/>${bars}<circle cx="510" cy="18" r="5" fill="#2f9e78"/><text x="520" y="22" font-size="10" fill="#667085">Ingresos</text><circle cx="585" cy="18" r="5" fill="#405189"/><text x="595" y="22" font-size="10" fill="#667085">Egresos</text></svg>`;
+    },
+    budgetExecutionSvgEscape(value) {
+      return String(value ?? "")
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&apos;");
+    },
+    budgetExecutionCumulativeSvg() {
+      const chart = this.budgetExecutionCumulativeChart;
+      const grid = chart.grid.map((line) => `<line x1="54" y1="${line.y}" x2="684" y2="${line.y}" stroke="#e4e9f0"/><text x="47" y="${line.y + 4}" text-anchor="end" font-size="8" fill="#8792a4">${this.budgetExecutionSvgEscape(compactMoney(line.value))}</text>`).join("");
+      const months = chart.rows.map((point) => `<text x="${point.x}" y="232" text-anchor="middle" font-size="8" fill="#8792a4">${this.budgetExecutionSvgEscape(point.short_label)}</text>`).join("");
+      return `<svg width="720" height="245" viewBox="0 0 720 245" xmlns="http://www.w3.org/2000/svg"><rect width="720" height="245" rx="12" fill="#f7f9fc"/>${grid}<line x1="54" y1="${chart.zeroY}" x2="684" y2="${chart.zeroY}" stroke="#aeb8c8" stroke-dasharray="4 4"/><polyline points="${chart.incomePoints}" fill="none" stroke="#2f9e78" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><polyline points="${chart.expensePoints}" fill="none" stroke="#405189" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><polyline points="${chart.balancePoints}" fill="none" stroke="#c2414f" stroke-width="2" stroke-dasharray="5 4" stroke-linecap="round" stroke-linejoin="round"/>${months}<circle cx="472" cy="18" r="4" fill="#2f9e78"/><text x="481" y="22" font-size="9" fill="#667085">Ingresos</text><circle cx="548" cy="18" r="4" fill="#405189"/><text x="557" y="22" font-size="9" fill="#667085">Egresos</text><circle cx="625" cy="18" r="4" fill="#c2414f"/><text x="634" y="22" font-size="9" fill="#667085">Balance</text></svg>`;
+    },
+    budgetExecutionSubsidyMixSvg() {
+      const mix = this.budgetExecutionSubsidyMix;
+      const circumference = 2 * Math.PI * 72;
+      const segments = mix.items.map((item) => {
+        const length = (item.share / 100) * circumference;
+        const offset = (item.dashoffset / 100) * circumference;
+        return `<circle cx="120" cy="115" r="72" fill="none" stroke="${item.color}" stroke-width="24" stroke-dasharray="${length} ${circumference - length}" stroke-dashoffset="${offset}" transform="rotate(-90 120 115)"/>`;
+      }).join("");
+      const legend = mix.items.map((item, index) => {
+        const y = 62 + (index * 34);
+        return `<circle cx="285" cy="${y - 3}" r="5" fill="${item.color}"/><text x="299" y="${y}" font-size="10" font-weight="700" fill="#344054">${this.budgetExecutionSvgEscape(item.code.toUpperCase())}</text><text x="410" y="${y}" font-size="10" fill="#667085">${this.budgetExecutionSvgEscape(money(item.expense_budget))}</text><text x="665" y="${y}" text-anchor="end" font-size="10" font-weight="700" fill="#344054">${item.share.toLocaleString("es-CL", { maximumFractionDigits: 1 })}%</text>`;
+      }).join("");
+      return `<svg width="720" height="230" viewBox="0 0 720 230" xmlns="http://www.w3.org/2000/svg"><rect width="720" height="230" rx="12" fill="#f7f9fc"/><circle cx="120" cy="115" r="72" fill="none" stroke="#e5eaf1" stroke-width="24"/>${segments}<text x="120" y="111" text-anchor="middle" font-size="22" font-weight="700" fill="#263043">${mix.items.length}</text><text x="120" y="129" text-anchor="middle" font-size="9" fill="#8792a4">FUENTES</text>${legend}<text x="285" y="205" font-size="9" fill="#8792a4">Presupuesto consolidado</text><text x="665" y="205" text-anchor="end" font-size="11" font-weight="700" fill="#405189">${this.budgetExecutionSvgEscape(money(mix.total))}</text></svg>`;
+    },
+    budgetExecutionTopAccountsSvg() {
+      const chart = this.budgetExecutionTopAccountsChart;
+      const max = Math.max(1, ...chart.items.flatMap((item) => [Number(item.annual_budget || 0), Number(item.executed || 0)]));
+      const rows = chart.items.map((item, index) => {
+        const y = 48 + (index * 36);
+        const budgetWidth = Math.max(1, (Number(item.annual_budget || 0) / max) * 300);
+        const executedWidth = Math.max(0, (Number(item.executed || 0) / max) * 300);
+        const account = item.account_name.length > 42 ? `${item.account_name.slice(0, 39)}…` : item.account_name;
+        return `<text x="24" y="${y + 3}" font-size="9" font-weight="700" fill="#465366">${index + 1}. ${this.budgetExecutionSvgEscape(account)}</text><rect x="305" y="${y - 8}" width="300" height="12" rx="6" fill="#edf0f4"/><rect x="305" y="${y - 8}" width="${budgetWidth}" height="12" rx="6" fill="#d7dde8"/><rect x="305" y="${y - 4}" width="${executedWidth}" height="4" rx="2" fill="#405189"/><text x="690" y="${y + 3}" text-anchor="end" font-size="9" font-weight="700" fill="#344054">${this.budgetExecutionSvgEscape(money(item.chartValue))}</text>`;
+      }).join("");
+      return `<svg width="720" height="345" viewBox="0 0 720 345" xmlns="http://www.w3.org/2000/svg"><rect width="720" height="345" rx="12" fill="#f7f9fc"/><circle cx="520" cy="20" r="4" fill="#d7dde8"/><text x="529" y="24" font-size="9" fill="#667085">Presupuesto</text><circle cx="606" cy="20" r="4" fill="#405189"/><text x="615" y="24" font-size="9" fill="#667085">Ejecutado</text>${rows}</svg>`;
+    },
+    async downloadBudgetExecutionPdf() {
+      if (!this.budgetExecution.has_data) return;
+      this.downloadingBudgetExecutionPdf = true;
+      try {
+        const pdfMake = await getPdfMake();
+        const data = this.budgetExecution;
+        const metrics = data.metrics || {};
+        const importedAt = data.import?.imported_at ? new Date(data.import.imported_at).toLocaleString("es-CL") : "-";
+        const kpiCell = (label, value, note, color = "#405189") => ({
+          margin: [0, 0, 8, 8],
+          table: {
+            widths: ["*"],
+            body: [[{
+              stack: [
+                { text: label.toUpperCase(), style: "kpiLabel" },
+                { text: value, style: "kpiValue", color },
+                { text: note, style: "kpiNote" },
+              ],
+              margin: [12, 10, 12, 10],
+              fillColor: "#f7f9fc",
+            }]],
+          },
+          layout: { hLineColor: () => "#e1e6ee", vLineColor: () => "#e1e6ee" },
+        });
+        const subsidyRows = (data.subsidies || []).map((item) => [
+          item.name,
+          money(item.expense_budget),
+          money(item.expense_executed),
+          money(item.available),
+          `${Number(item.execution_percentage || 0).toLocaleString("es-CL")}%`,
+        ]);
+        const categoryRows = (data.categories || []).slice(0, 16).map((item) => [
+          item.category,
+          item.subsidy_name,
+          money(item.budget),
+          money(item.executed),
+          `${Number(item.execution_percentage || 0).toLocaleString("es-CL")}%`,
+        ]);
+        const accountRows = (data.accounts || []).map((item) => [
+          item.account_name,
+          item.subsidy_name,
+          item.flow_type === "income" ? "Ingreso" : "Egreso",
+          money(item.annual_budget),
+          money(item.executed),
+          money(item.variance),
+          `${Number(item.execution_percentage || 0).toLocaleString("es-CL")}%`,
+        ]);
+        const tableHeader = (labels) => labels.map((label) => ({ text: label, color: "#ffffff", bold: true }));
+        const tableLayout = {
+          fillColor: (rowIndex) => rowIndex === 0 ? "#405189" : rowIndex % 2 === 0 ? "#f7f9fc" : null,
+          hLineColor: () => "#e4e8ef",
+          vLineColor: () => "#e4e8ef",
+          paddingLeft: () => 6,
+          paddingRight: () => 6,
+          paddingTop: () => 5,
+          paddingBottom: () => 5,
+        };
+        const accountPages = [];
+        const accountPageSize = 12;
+        const accountPageCount = Math.max(1, Math.ceil(accountRows.length / accountPageSize));
+        for (let pageIndex = 0; pageIndex < accountPageCount; pageIndex += 1) {
+          const rows = accountRows.slice(pageIndex * accountPageSize, (pageIndex + 1) * accountPageSize);
+          accountPages.push(
+            { text: "ANEXO DE CUENTAS", style: "sectionEyebrow", pageBreak: "before" },
+            { text: "Detalle completo importado", style: "sectionTitle" },
+            { text: `${accountRows.length} cuentas normalizadas desde ${data.import?.source_sheets?.join(", ") || "el libro fuente"} · página ${pageIndex + 1} de ${accountPageCount}.`, color: "#667085", margin: [0, 0, 0, 10] },
+            { table: { headerRows: 1, dontBreakRows: true, widths: ["*", 54, 38, 62, 62, 62, 30], body: [tableHeader(["Cuenta", "Fuente", "Tipo", "Presupuesto", "Ejecutado", "Diferencia", "%"]), ...rows] }, layout: tableLayout },
+          );
+        }
+        const documentDefinition = {
+          pageSize: "A4",
+          pageMargins: [38, 52, 38, 42],
+          defaultStyle: { fontSize: 8, color: "#344054" },
+          header: (page) => page > 1 ? ({
+            margin: [38, 18, 38, 0],
+            columns: [
+              { text: "EJECUCIÓN PRESUPUESTARIA", color: "#405189", bold: true, fontSize: 8 },
+              { text: `${data.year} · ${data.import?.school_name || "Establecimiento"}`, alignment: "right", color: "#7b8494", fontSize: 8 },
+            ],
+          }) : null,
+          footer: (currentPage, pageCount) => ({
+            margin: [38, 10, 38, 0],
+            columns: [
+              { text: "Informe de control interno", color: "#98a2b3", fontSize: 7 },
+              { text: `${currentPage} / ${pageCount}`, alignment: "right", color: "#98a2b3", fontSize: 7 },
+            ],
+          }),
+          content: [
+            { canvas: [{ type: "rect", x: 0, y: 0, w: 519, h: 9, r: 4, color: "#405189" }], margin: [0, 0, 0, 28] },
+            { text: "INFORME EJECUTIVO", color: "#2f9e78", bold: true, fontSize: 9, characterSpacing: 1.6 },
+            { text: "Ejecución\npresupuestaria", fontSize: 30, bold: true, color: "#1d2939", lineHeight: 1.02, margin: [0, 7, 0, 8] },
+            { text: `${data.year} · ${data.import?.school_name || "Establecimiento"}`, fontSize: 13, color: "#667085", margin: [0, 0, 0, 24] },
+            {
+              columns: [
+                { width: "*", stack: [{ text: "CORTE INFORMADO", style: "metaLabel" }, { text: data.import?.reported_through_label || "Sin movimientos", style: "metaValue" }] },
+                { width: "*", stack: [{ text: "ARCHIVO FUENTE", style: "metaLabel" }, { text: data.import?.original_filename || "-", style: "metaValue" }] },
+                { width: "*", stack: [{ text: "ACTUALIZADO", style: "metaLabel" }, { text: importedAt, style: "metaValue" }] },
+              ],
+              columnGap: 14,
+              margin: [0, 0, 0, 28],
+            },
+            { text: "PANORAMA GENERAL", style: "sectionEyebrow" },
+            { text: "Indicadores de control", style: "sectionTitle" },
+            {
+              columns: [
+                kpiCell("Presupuesto de egresos", money(metrics.expense_budget), "Base anual aprobada"),
+                kpiCell("Egresos ejecutados", money(metrics.expense_executed), `${metrics.expense_execution_percentage || 0}% de ejecución`, "#c2414f"),
+              ],
+            },
+            {
+              columns: [
+                kpiCell("Disponible", money(metrics.available_budget), "Presupuesto aún no ejecutado", "#2f9e78"),
+                kpiCell("Resultado ejecutado", money(metrics.net_result), "Ingresos menos egresos", Number(metrics.net_result || 0) < 0 ? "#c2414f" : "#2f9e78"),
+              ],
+              margin: [0, 0, 0, 14],
+            },
+            { text: "EVOLUCIÓN MENSUAL", style: "sectionEyebrow", pageBreak: "before" },
+            { text: "Ingresos y egresos ejecutados", style: "sectionTitle" },
+            { svg: this.budgetExecutionChartSvg(), width: 519, margin: [0, 5, 0, 18] },
+            { text: "TRAYECTORIA ACUMULADA", style: "sectionEyebrow" },
+            { text: "Ingresos, egresos y balance progresivo", style: "sectionTitle" },
+            { svg: this.budgetExecutionCumulativeSvg(), width: 519, margin: [0, 5, 0, 18] },
+            { text: "LECTURA POR FUENTE", style: "sectionEyebrow", pageBreak: "before" },
+            { text: "Composición del presupuesto por subvención", style: "sectionTitle" },
+            { svg: this.budgetExecutionSubsidyMixSvg(), width: 519, margin: [0, 5, 0, 18] },
+            { text: "Ejecución de egresos por subvención", style: "sectionTitle" },
+            { table: { headerRows: 1, widths: ["*", 82, 82, 82, 50], body: [tableHeader(["Subvención", "Presupuesto", "Ejecutado", "Disponible", "%"]), ...subsidyRows] }, layout: tableLayout, margin: [0, 5, 0, 18], pageBreak: "after" },
+            { text: "CONCENTRACIÓN DE CUENTAS", style: "sectionEyebrow" },
+            { text: this.budgetExecutionTopAccountsChart.hasExecution ? "Cuentas con mayor ejecución" : "Cuentas con mayor peso presupuestario", style: "sectionTitle" },
+            { svg: this.budgetExecutionTopAccountsSvg(), width: 519, margin: [0, 5, 0, 18] },
+            { text: "FOCOS DE GESTIÓN", style: "sectionEyebrow" },
+            { text: "Principales categorías de egreso", style: "sectionTitle" },
+            { table: { headerRows: 1, widths: ["*", 78, 76, 76, 42], body: [tableHeader(["Categoría", "Subvención", "Presupuesto", "Ejecutado", "%"]), ...categoryRows] }, layout: tableLayout, margin: [0, 5, 0, 18] },
+            ...accountPages,
+          ],
+          styles: {
+            sectionEyebrow: { color: "#405189", bold: true, fontSize: 8, characterSpacing: 1.1, margin: [0, 0, 0, 3] },
+            sectionTitle: { color: "#1d2939", bold: true, fontSize: 17, margin: [0, 0, 0, 10] },
+            metaLabel: { color: "#98a2b3", bold: true, fontSize: 7, characterSpacing: 0.8 },
+            metaValue: { color: "#344054", bold: true, fontSize: 9, margin: [0, 4, 0, 0] },
+            kpiLabel: { color: "#7b8494", bold: true, fontSize: 7, characterSpacing: 0.6 },
+            kpiValue: { bold: true, fontSize: 16, margin: [0, 5, 0, 3] },
+            kpiNote: { color: "#98a2b3", fontSize: 7 },
+          },
+        };
+        pdfMake.createPdf(documentDefinition).download(`ejecucion-presupuestaria-${data.year}.pdf`);
+      } catch (error) {
+        await Swal.fire("Error", "No se pudo generar el informe PDF.", "error");
+      } finally {
+        this.downloadingBudgetExecutionPdf = false;
+      }
+    },
     async changeSubsidyPeriod() {
       const selected = new Date(Number(this.subsidyYear), Number(this.subsidyMonth) - 1, 1);
       this.subsidyComparePeriod = toMonthKey(new Date(selected.getFullYear(), selected.getMonth() - 1, 1));
+      await this.loadSubsidies();
+    },
+    async changeSubsidyCalculationOptions() {
       await this.loadSubsidies();
     },
     async selectSubsidyAnnualMonth(item) {
@@ -962,11 +1455,162 @@ export default {
     perStudentAverage(item) {
       return item?.average_per_student == null ? "Sin matrícula" : money(item.average_per_student);
     },
+    attendancePeriodList(periods) {
+      return (periods || []).map((period) => this.subsidyPeriodLabel(period)).join(" · ") || "Sin períodos";
+    },
+    attendanceDifferenceClass(value) {
+      const amount = Number(value || 0);
+      return amount > 0 ? "positive" : amount < 0 ? "negative" : "neutral";
+    },
+    attendanceGapReading(actual, expected) {
+      if (expected == null) {
+        return {
+          label: "No calculable por asistencia",
+          detail: "Requiere antecedentes adicionales",
+          className: "pending",
+        };
+      }
+
+      const actualAmount = Number(actual || 0);
+      const expectedAmount = Number(expected || 0);
+      const gap = actualAmount - expectedAmount;
+      const tolerance = Math.max(1, Math.abs(expectedAmount) * 0.01);
+
+      if (Math.abs(gap) <= tolerance) {
+        return {
+          label: "Dentro de tolerancia",
+          detail: `Brecha de ${money(Math.abs(gap))}`,
+          className: "matched",
+        };
+      }
+
+      return gap < 0
+        ? {
+            label: `Faltaron ${money(Math.abs(gap))}`,
+            detail: "Frente a lo debido por asistencia",
+            className: "negative",
+          }
+        : {
+            label: `Registrado sobre estimación: ${money(gap)}`,
+            detail: "Revisar clasificación, reliquidaciones o glosas",
+            className: "positive",
+          };
+    },
+    attendanceLiquidationReading(actual, fullAttendance, scope = "total", requiresReview = false) {
+      if (fullAttendance == null) {
+        return {
+          label: "No comparable con asistencia",
+          detail: "Requiere antecedentes adicionales",
+          className: "pending",
+        };
+      }
+
+      const metrics = this.attendanceReconciliation.metrics || {};
+      if (!Number(metrics.settlement_count || 0)) {
+        return {
+          label: "Sin liquidación MINEDUC",
+          detail: `Máximo teórico ${money(fullAttendance || 0)}`,
+          className: "pending",
+        };
+      }
+
+      if (scope === "level" && Number(actual || 0) === 0 && Number(metrics.liquidated_total || 0) > 0) {
+        return {
+          label: "Sin desglose por nivel",
+          detail: "La liquidación no asignó monto al nivel",
+          className: "pending",
+        };
+      }
+
+      if (requiresReview) {
+        return {
+          label: "Base SEP incompleta",
+          detail: "La pérdida mínima aún no puede proyectarse",
+          className: "pending",
+        };
+      }
+
+      const actualAmount = Number(actual || 0);
+      const fullAmount = Number(fullAttendance || 0);
+      const loss = fullAmount - actualAmount;
+      const tolerance = Math.max(1, Math.abs(fullAmount) * 0.01);
+
+      if (Math.abs(loss) <= tolerance) {
+        return {
+          label: "Sin pérdida relevante",
+          detail: `Brecha frente al 100%: ${money(Math.abs(loss))}`,
+          className: "matched",
+        };
+      }
+
+      if (loss > 0) {
+        return {
+          label: `Pérdida ${money(loss)}`,
+          detail: "Diferencia entre el máximo al 100% y lo liquidado",
+          className: "negative",
+        };
+      }
+
+      return {
+        label: "Base de cálculo por revisar",
+        detail: "La liquidación supera la nómina teórica disponible",
+        className: "pending",
+      };
+    },
+    attendanceIncomeReading(actual, reference) {
+      if (!Number(this.attendanceReconciliation.metrics?.income_records_count || 0)) {
+        return {
+          label: "Sin ingreso contabilizado",
+          detail: Number(reference || 0)
+            ? `Liquidación comparable pendiente: ${money(reference || 0)}`
+            : "Aún no existe liquidación de referencia",
+          className: "pending",
+        };
+      }
+
+      const actualAmount = Number(actual || 0);
+      const referenceAmount = Number(reference || 0);
+      const gap = actualAmount - referenceAmount;
+      const tolerance = Math.max(1, Math.abs(referenceAmount) * 0.01);
+
+      if (Math.abs(gap) <= tolerance) {
+        return {
+          label: "Ingreso conciliado",
+          detail: `Brecha frente a la liquidación: ${money(Math.abs(gap))}`,
+          className: "matched",
+        };
+      }
+
+      return gap < 0
+        ? {
+            label: `Falta contabilizar ${money(Math.abs(gap))}`,
+            detail: "Frente a la liquidación comparable MINEDUC",
+            className: "negative",
+          }
+        : {
+            label: `Ingreso excede liquidación en ${money(gap)}`,
+            detail: "Revisar glosas no comparables o clasificación contable",
+            className: "pending",
+          };
+    },
+    attendanceComparisonWidth(value) {
+      return `${Math.max(0, Math.min(100, (Number(value || 0) / this.attendanceComparisonMax) * 100))}%`;
+    },
+    attendanceConcentrationLabel(value) {
+      return {
+        none: "sin concentración",
+        "15_30": "15% a menos de 30%",
+        "30_45": "30% a menos de 45%",
+        "45_60": "45% a menos de 60%",
+        "60_plus": "60% o más",
+      }[value] || value || "sin banda";
+    },
     async downloadSubsidyComparisonPdf() {
       this.downloadingSubsidyPdf = true;
       try {
         const pdfMake = await getPdfMake();
         const comparison = this.subsidyDashboard.comparison || {};
+        const attendance = this.attendanceReconciliation || {};
         const currentPeriodLabel = this.subsidyPeriodLabel(this.subsidyPeriod);
         const comparisonPeriodLabel = this.subsidyPeriodLabel(comparison.period || this.subsidyComparePeriod);
         const rbd = this.subsidyDashboard.settlements?.[0]?.rbd || this.manualSubsidyForm.rbd || "-";
@@ -1112,6 +1756,36 @@ export default {
           money(this.subsidyAnnualTotals.income_total),
           money(this.subsidyAnnualTotals.pie_total),
         ]);
+        const attendanceLevelRows = (attendance.by_level || []).map((item) => [
+          item.label,
+          item.attendance_rate == null ? "-" : `${Number(item.attendance_rate).toLocaleString("es-CL")}%`,
+          money(item.full_attendance_amount || 0),
+          money(item.attendance_loss_amount || 0),
+          money(item.expected_amount || 0),
+          money(item.liquidated_amount ?? 0),
+          this.attendanceLiquidationReading(item.liquidated_amount, item.full_attendance_amount, "level", Boolean(item.baseline_review_families?.length)).label,
+        ]);
+        if (!attendanceLevelRows.length) attendanceLevelRows.push(["Sin asistencia disponible", "-", "-", "-", "-", "-", "-"]);
+        const attendanceSubsidyRows = (attendance.by_subsidy || []).map((item) => [
+          item.label,
+          item.full_attendance_amount == null ? "-" : money(item.full_attendance_amount),
+          item.attendance_loss_amount == null ? "-" : money(item.attendance_loss_amount),
+          item.expected_amount == null ? "No calculable" : money(item.expected_amount),
+          money(item.liquidated_amount ?? 0),
+          this.attendanceLiquidationReading(item.liquidated_amount, item.full_attendance_amount, "subsidy", item.baseline_requires_review).label,
+        ]);
+        if (!attendanceSubsidyRows.length) attendanceSubsidyRows.push(["Sin liquidaciones ni cálculo", "-", "-", "-", "-", "-"]);
+        const attendanceIncomeRows = (attendance.income_records || []).map((item) => [
+          item.code,
+          shortDate(item.received_at),
+          item.family_label,
+          item.status,
+          item.matched_to_settlement ? "Vinculado" : "Sin vínculo",
+          money(item.amount || 0),
+        ]);
+        if (!attendanceIncomeRows.length) attendanceIncomeRows.push(["Sin ingresos de subvención en el mes", "-", "-", "-", "-", "-"]);
+        const attendanceWindow = this.attendancePeriodList(attendance.window?.found_periods);
+        const attendanceRequiredWindow = this.attendancePeriodList(attendance.window?.required_periods);
         const tableLayout = {
           hLineColor: () => "#dce3ec",
           vLineColor: () => "#dce3ec",
@@ -1140,7 +1814,7 @@ export default {
 
         const documentDefinition = {
           pageSize: "A4",
-          pageMargins: [36, 42, 36, 42],
+          pageMargins: [36, 42, 36, 62],
           defaultStyle: { fontSize: 9, color: "#344054" },
           header: {
             margin: [36, 18, 36, 0],
@@ -1157,11 +1831,11 @@ export default {
             ],
           }),
           content: [
-            { text: "Informe comparativo de subvenciones", fontSize: 19, bold: true, color: "#25324b" },
+            { text: "Informe de conciliación de subvenciones", fontSize: 19, bold: true, color: "#25324b" },
             {
               margin: [0, 5, 0, 18],
               columns: [
-                { text: `${currentPeriodLabel} versus ${comparisonPeriodLabel}`, color: "#667085", fontSize: 10 },
+                { text: `${currentPeriodLabel} · asistencia, liquidación MINEDUC e ingreso contable`, color: "#667085", fontSize: 10 },
                 { text: `Emitido: ${new Date().toLocaleDateString("es-CL")}`, alignment: "right", color: "#667085", fontSize: 8 },
               ],
             },
@@ -1170,32 +1844,97 @@ export default {
                 {
                   width: "*",
                   stack: [
-                    { text: "Líquido actual", color: "#667085", fontSize: 8 },
-                    { text: money(this.subsidyDashboard.metrics?.net_liquidated || 0), color: "#25324b", bold: true, fontSize: 14, margin: [0, 3, 0, 0] },
+                    { text: "Línea base 100%", color: "#667085", fontSize: 8 },
+                    { text: attendance.available ? money(attendance.metrics?.full_attendance_total || 0) : "Sin cálculo", color: "#405189", bold: true, fontSize: 13, margin: [0, 3, 0, 0] },
                   ],
-                  margin: [10, 10, 10, 10],
+                  margin: [8, 10, 8, 10],
                 },
                 {
                   width: "*",
                   stack: [
-                    { text: "Ingreso contabilizado", color: "#667085", fontSize: 8 },
-                    { text: money(this.subsidyDashboard.metrics?.income_total || 0), color: "#25324b", bold: true, fontSize: 14, margin: [0, 3, 0, 0] },
+                    { text: "Merma por inasistencia", color: "#667085", fontSize: 8 },
+                    { text: attendance.available ? money(attendance.metrics?.attendance_loss_total || 0) : "Sin cálculo", color: "#b75c32", bold: true, fontSize: 13, margin: [0, 3, 0, 0] },
                   ],
-                  margin: [10, 10, 10, 10],
+                  margin: [8, 10, 8, 10],
                 },
                 {
                   width: "*",
                   stack: [
-                    { text: "Sin asignar", color: "#667085", fontSize: 8 },
-                    { text: money(this.subsidyDashboard.metrics?.unallocated_total || 0), color: "#25324b", bold: true, fontSize: 14, margin: [0, 3, 0, 0] },
+                    { text: "Modelo con asistencia local", color: "#667085", fontSize: 8 },
+                    { text: attendance.available ? money(attendance.metrics?.expected_total || 0) : "Sin cálculo", color: "#25324b", bold: true, fontSize: 13, margin: [0, 3, 0, 0] },
                   ],
-                  margin: [10, 10, 10, 10],
+                  margin: [8, 10, 8, 10],
+                },
+                {
+                  width: "*",
+                  stack: [
+                    { text: "Ingreso registrado", color: "#667085", fontSize: 8 },
+                    { text: money(attendance.metrics?.registered_comparable_income_total || 0), color: "#237b5b", bold: true, fontSize: 13, margin: [0, 3, 0, 0] },
+                  ],
+                  margin: [8, 10, 8, 10],
                 },
               ],
               columnGap: 8,
               margin: [0, 0, 0, 18],
             },
-            { text: "Comparación general", style: "sectionTitle" },
+            { text: "Base de cálculo", style: "sectionTitle" },
+            {
+              margin: [0, 0, 0, 8],
+              table: {
+                widths: ["*"],
+                body: [[{
+                  stack: [
+                    { text: `Ventana legal previa al pago: ${attendanceRequiredWindow}`, bold: true, color: "#344054", fontSize: 8 },
+                    { text: `Meses disponibles: ${attendanceWindow} · Cobertura ${Number(attendance.metrics?.coverage_percentage || 0).toLocaleString("es-CL")}%`, margin: [0, 3, 0, 0], color: "#667085", fontSize: 8 },
+                    { text: `Supuestos: ${attendance.assumptions?.jec ? "con JEC" : "sin JEC"}; SEP ${attendance.assumptions?.sep_category || "-"}; ${this.attendanceConcentrationLabel(attendance.assumptions?.concentration_band)}; USE ${attendance.assumptions?.use_value ? money(attendance.assumptions.use_value) : "sin parámetro"}.`, margin: [0, 3, 0, 0], color: "#667085", fontSize: 8 },
+                    { text: `Liquidado comparable MINEDUC ${money(attendance.metrics?.liquidated_total || 0)}; total del documento ${money(attendance.metrics?.liquidated_gross_total || 0)} · ${this.attendanceLiquidationReading(attendance.metrics?.liquidated_total, attendance.metrics?.full_attendance_total).label} · ${this.attendanceIncomeReading(attendance.metrics?.registered_comparable_income_total, attendance.metrics?.liquidated_total).label}.`, margin: [0, 3, 0, 0], color: "#667085", fontSize: 8 },
+                  ],
+                  fillColor: "#f3f6fa",
+                  margin: [8, 7, 8, 7],
+                }]],
+              },
+              layout: "noBorders",
+            },
+            { text: "Desglose por nivel", style: "sectionTitle" },
+            table(["Nivel", "% asist.", "Pudo llegar", "Pérdida", "Modelo local", "Liquidado comparable", "Lectura"], ["*", 38, 61, 61, 61, 61, 98], attendanceLevelRows),
+            { text: "Desglose por subvención", style: "sectionTitle", pageBreak: "before" },
+            table(["Subvención", "Pudo llegar", "Pérdida", "Modelo local", "Liquidado comparable", "Lectura"], ["*", 68, 68, 68, 68, 112], attendanceSubsidyRows),
+            { text: "Ingresos contabilizados del mes", style: "sectionTitle" },
+            table(["Código", "Fecha", "Clasificación", "Estado", "Vínculo", "Monto"], [80, 55, "*", 55, 55, 75], attendanceIncomeRows),
+            ...(attendance.warnings?.length ? [{
+              text: [{ text: "Controles: ", bold: true }, attendance.warnings.join(" · ")],
+              margin: [0, 14, 0, 0],
+              color: "#806326",
+              fillColor: "#fff7e6",
+              fontSize: 7,
+            }] : []),
+            ...(attendance.sources?.length ? [{
+              margin: [0, 12, 0, 0],
+              stack: [
+                { text: "Fuentes normativas oficiales", bold: true, color: "#344054", fontSize: 8 },
+                ...attendance.sources.map((source) => ({ text: source.label, link: source.url, color: "#405189", decoration: "underline", fontSize: 7, margin: [0, 3, 0, 0] })),
+              ],
+            }] : []),
+            {
+              margin: [0, 18, 0, 0],
+              stack: [
+                { text: "Método y alcance", bold: true, color: "#25324b", fontSize: 10 },
+                { text: "La subvención general se estima multiplicando la asistencia media promedio de los tres meses inmediatamente anteriores al pago por el factor USE del nivel y el valor USE vigente. El artículo 13 contempla excepciones y reliquidaciones para los primeros meses del año escolar. SEP prioritaria y preferente aplican el mismo criterio sobre la asistencia equivalente de las alumnas clasificadas.", margin: [0, 6, 0, 0], color: "#667085", fontSize: 8, lineHeight: 1.25 },
+                { text: "La merma por inasistencia es la diferencia contra un escenario teórico de 100% de asistencia; sirve como indicador de gestión y no constituye por sí sola un monto exigible al MINEDUC.", margin: [0, 6, 0, 0], color: "#667085", fontSize: 8, lineHeight: 1.25 },
+                { text: "PIE, zona, ruralidad, reliquidaciones, topes, Pro-Retención y bonos se excluyen del esperado cuando requieren antecedentes adicionales; sus montos efectivos permanecen visibles en la liquidación. Este documento es un control interno y no reemplaza la liquidación oficial MINEDUC.", margin: [0, 6, 0, 0], color: "#667085", fontSize: 8, lineHeight: 1.25 },
+              ],
+            },
+            { text: "Liquidaciones y comparación mensual", style: "sectionTitle", pageBreak: "before" },
+            {
+              columns: [
+                { width: "*", stack: [{ text: "Líquido actual", color: "#667085", fontSize: 8 }, { text: money(this.subsidyDashboard.metrics?.net_liquidated || 0), color: "#25324b", bold: true, fontSize: 14, margin: [0, 3, 0, 0] }], margin: [10, 10, 10, 10] },
+                { width: "*", stack: [{ text: "Ingreso contabilizado", color: "#667085", fontSize: 8 }, { text: money(this.subsidyDashboard.metrics?.income_total || 0), color: "#25324b", bold: true, fontSize: 14, margin: [0, 3, 0, 0] }], margin: [10, 10, 10, 10] },
+                { width: "*", stack: [{ text: "Sin asignar", color: "#667085", fontSize: 8 }, { text: money(this.subsidyDashboard.metrics?.unallocated_total || 0), color: "#25324b", bold: true, fontSize: 14, margin: [0, 3, 0, 0] }], margin: [10, 10, 10, 10] },
+              ],
+              columnGap: 8,
+              margin: [0, 0, 0, 12],
+            },
+            { text: `Comparación ${currentPeriodLabel} versus ${comparisonPeriodLabel}`, style: "sectionTitle" },
             table(["Indicador", currentPeriodLabel, comparisonPeriodLabel, "Variación", "%"], ["*", 82, 82, 82, 44], metricRows),
             { text: "Aporte por nivel educativo", style: "sectionTitle" },
             table(["Nivel", currentPeriodLabel, comparisonPeriodLabel, "Variación"], ["*", 95, 95, 95], levelRows),
@@ -1260,12 +1999,6 @@ export default {
               ["*", 55, 88, 88, 88],
               pieCourseRows,
             ),
-            {
-              text: "Cada curso consolida sus distintas glosas PIE. La matrícula y los montos corresponden a la suma de las filas de detalle del anexo.",
-              margin: [0, 12, 0, 0],
-              color: "#667085",
-              fontSize: 8,
-            },
             { text: `Resumen mensual ${this.subsidyYear}`, style: "sectionTitle", pageBreak: "before" },
             table(["Mes", "Liq.", "Líquido", "Transferido", "Contabilizado", "PIE info."], ["*", 35, 74, 74, 74, 68], annualRows),
             {
@@ -1280,7 +2013,7 @@ export default {
           },
         };
 
-        pdfMake.createPdf(documentDefinition).download(`informe-subvenciones-${this.subsidyPeriod}-vs-${comparison.period || this.subsidyComparePeriod}.pdf`);
+        pdfMake.createPdf(documentDefinition).download(`conciliacion-subvenciones-asistencia-${this.subsidyPeriod}.pdf`);
       } catch (error) {
         await Swal.fire("No se pudo generar el PDF", formatAccountingError(error, "Intenta nuevamente."), "error");
       } finally {
@@ -1747,6 +2480,276 @@ export default {
         </div>
       </template>
 
+      <template v-else-if="isBudgetExecution">
+        <section class="content-card be-command-bar">
+          <div class="be-year-control">
+            <span class="toolbar-kicker">PERÍODO DE ANÁLISIS</span>
+            <div>
+              <BFormSelect v-model="budgetExecutionYear" class="be-year-select" @change="changeBudgetExecutionYear">
+                <option v-for="year in budgetExecutionYearOptions" :key="year" :value="year">Año {{ year }}</option>
+              </BFormSelect>
+              <span v-if="budgetExecution.has_data" class="be-current-badge"><i class="bx bx-check-circle"></i> Versión vigente</span>
+              <span v-else class="be-current-badge empty"><i class="bx bx-cloud-upload"></i> Pendiente de carga</span>
+            </div>
+          </div>
+          <div class="be-command-actions">
+            <input ref="budgetExecutionFile" type="file" class="d-none" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" @change="uploadBudgetExecution" />
+            <BButton v-if="canExportBudgetExecution" variant="outline-secondary" :disabled="!budgetExecution.has_data || downloadingBudgetExecutionPdf" @click="downloadBudgetExecutionPdf">
+              <span v-if="downloadingBudgetExecutionPdf" class="spinner-border spinner-border-sm"></span>
+              <i v-else class="bx bxs-file-pdf"></i> Informe PDF
+            </BButton>
+            <BButton v-if="canImportBudgetExecution" variant="primary" :disabled="importingBudgetExecution" @click="openBudgetExecutionFilePicker">
+              <span v-if="importingBudgetExecution" class="spinner-border spinner-border-sm"></span>
+              <i v-else class="bx bx-upload"></i> {{ budgetExecution.has_data ? 'Reemplazar Excel' : 'Cargar Excel' }}
+            </BButton>
+          </div>
+          <div v-if="budgetExecution.has_data" class="be-version-strip">
+            <span><i class="bx bx-spreadsheet"></i>{{ budgetExecution.import.original_filename }}</span>
+            <span><i class="bx bx-calendar-check"></i>Corte: {{ budgetExecution.import.reported_through_label }}</span>
+            <span><i class="bx bx-layer"></i>{{ budgetExecution.import.line_count }} cuentas · {{ budgetExecution.import.source_sheets.join(', ') }}</span>
+            <span><i class="bx bx-user"></i>{{ budgetExecution.import.imported_by || 'Usuario autorizado' }} · {{ shortDate(budgetExecution.import.imported_at) }}</span>
+          </div>
+        </section>
+
+        <section v-if="!budgetExecution.has_data" class="content-card be-empty-state">
+          <div class="be-empty-illustration">
+            <span class="be-sheet sheet-back"></span><span class="be-sheet sheet-front"><i class="bx bx-bar-chart-alt-2"></i></span>
+          </div>
+          <span class="toolbar-kicker">EJECUCIÓN {{ budgetExecutionYear }}</span>
+          <h2>Convierte el presupuesto mensual en decisiones claras</h2>
+          <p>Carga el archivo Excel del establecimiento. El sistema reconocerá cuentas, categorías y subvenciones para construir el tablero y el informe ejecutivo.</p>
+          <div class="be-empty-features">
+            <span><i class="bx bx-check"></i> General, Mantención, SEP y PIE</span>
+            <span><i class="bx bx-check"></i> Reemplazo controlado por año</span>
+            <span><i class="bx bx-check"></i> Informe PDF de alta presentación</span>
+          </div>
+          <BButton v-if="canImportBudgetExecution" variant="primary" size="lg" @click="openBudgetExecutionFilePicker"><i class="bx bx-upload"></i> Seleccionar archivo .xlsx</BButton>
+        </section>
+
+        <template v-else>
+          <div class="be-kpi-grid">
+            <article class="be-kpi-card primary">
+              <div class="be-kpi-icon"><i class="bx bx-target-lock"></i></div>
+              <div><span>Presupuesto de egresos</span><strong>{{ money(budgetExecution.metrics.expense_budget) }}</strong><small>Base anual consolidada</small></div>
+            </article>
+            <article class="be-kpi-card">
+              <div class="be-kpi-icon coral"><i class="bx bx-trending-up"></i></div>
+              <div><span>Egresos ejecutados</span><strong>{{ money(budgetExecution.metrics.expense_executed) }}</strong><small>{{ budgetExecution.metrics.expense_execution_percentage || 0 }}% consumido</small></div>
+            </article>
+            <article class="be-kpi-card">
+              <div class="be-kpi-icon green"><i class="bx bx-wallet"></i></div>
+              <div><span>Saldo disponible</span><strong>{{ money(budgetExecution.metrics.available_budget) }}</strong><small>Presupuesto por ejecutar</small></div>
+            </article>
+            <article class="be-kpi-card" :class="{ negative: Number(budgetExecution.metrics.net_result || 0) < 0 }">
+              <div class="be-kpi-icon ink"><i class="bx bx-line-chart"></i></div>
+              <div><span>Resultado ejecutado</span><strong>{{ money(budgetExecution.metrics.net_result) }}</strong><small>Ingresos menos egresos</small></div>
+            </article>
+          </div>
+
+          <div class="be-analysis-grid">
+            <section class="content-card be-monthly-card">
+              <div class="card-heading be-card-heading">
+                <div><span>RITMO DEL AÑO</span><h2>Movimiento mensual</h2></div>
+                <div class="be-chart-legend"><span class="income"><i></i>Ingresos</span><span class="expense"><i></i>Egresos</span></div>
+              </div>
+              <div class="be-month-chart">
+                <div class="be-chart-axis"><span>{{ money(budgetExecutionMonthlyMax) }}</span><span>{{ money(budgetExecutionMonthlyMax / 2) }}</span><span>$0</span></div>
+                <div v-for="month in budgetExecution.monthly" :key="month.month" class="be-month-column">
+                  <div class="be-bars">
+                    <span class="income" :style="{ height: budgetExecutionBarHeight(month.income) }" :title="`${month.label}: ${money(month.income)} en ingresos`"></span>
+                    <span class="expense" :style="{ height: budgetExecutionBarHeight(month.expense) }" :title="`${month.label}: ${money(month.expense)} en egresos`"></span>
+                  </div>
+                  <strong>{{ month.short_label }}</strong>
+                </div>
+              </div>
+              <div class="be-chart-summary">
+                <div><span>Ingresos ejecutados</span><strong>{{ money(budgetExecution.metrics.income_executed) }}</strong></div>
+                <div><span>Proyección anual de egresos</span><strong>{{ money(budgetExecution.metrics.projected_expenses) }}</strong></div>
+                <div><span>Holgura proyectada</span><strong :class="{ 'text-danger': Number(budgetExecution.metrics.projected_variance || 0) < 0 }">{{ money(budgetExecution.metrics.projected_variance) }}</strong></div>
+              </div>
+            </section>
+
+            <section class="content-card be-health-card">
+              <div class="card-heading be-card-heading"><div><span>CONTROL DE DESVIACIONES</span><h2>Salud presupuestaria</h2></div><i class="bx bx-pulse"></i></div>
+              <div class="be-health-score">
+                <div class="be-ring" :style="{ '--progress': budgetExecutionProgress(budgetExecution.metrics.expense_execution_percentage) }">
+                  <div><strong>{{ budgetExecution.metrics.expense_execution_percentage || 0 }}%</strong><span>ejecutado</span></div>
+                </div>
+                <div>
+                  <span class="be-status-pill" :class="budgetExecutionStatus(budgetExecution.metrics.expense_execution_percentage).className">{{ budgetExecutionStatus(budgetExecution.metrics.expense_execution_percentage).label }}</span>
+                  <p>Avance consolidado respecto del presupuesto anual de egresos.</p>
+                </div>
+              </div>
+              <div class="be-alert-list">
+                <div :class="{ danger: budgetExecution.alerts.over_executed_accounts > 0 }"><i class="bx bx-error-circle"></i><span>Cuentas sobre ejecutadas</span><strong>{{ budgetExecution.alerts.over_executed_accounts || 0 }}</strong></div>
+                <div :class="{ warning: budgetExecution.alerts.unbudgeted_movements > 0 }"><i class="bx bx-question-mark"></i><span>Movimientos sin presupuesto</span><strong>{{ budgetExecution.alerts.unbudgeted_movements || 0 }}</strong></div>
+              </div>
+            </section>
+          </div>
+
+          <div class="be-visual-grid">
+            <section class="content-card be-cumulative-card">
+              <div class="card-heading be-card-heading">
+                <div><span>TRAYECTORIA FINANCIERA</span><h2>Curva acumulada del año</h2></div>
+                <div class="be-chart-legend be-line-legend">
+                  <span class="income"><i></i>Ingresos</span>
+                  <span class="expense"><i></i>Egresos</span>
+                  <span class="balance"><i></i>Balance</span>
+                </div>
+              </div>
+              <div class="be-cumulative-chart">
+                <svg viewBox="0 0 720 245" role="img" aria-label="Ingresos, egresos y balance acumulados por mes">
+                  <defs>
+                    <linearGradient id="be-income-area" x1="0" x2="0" y1="0" y2="1">
+                      <stop offset="0" stop-color="#2f9e78" stop-opacity=".22" />
+                      <stop offset="1" stop-color="#2f9e78" stop-opacity="0" />
+                    </linearGradient>
+                  </defs>
+                  <g v-for="line in budgetExecutionCumulativeChart.grid" :key="line.y">
+                    <line x1="54" :y1="line.y" x2="684" :y2="line.y" class="be-svg-grid" />
+                    <text x="46" :y="line.y + 4" text-anchor="end" class="be-svg-axis-label">{{ compactMoney(line.value) }}</text>
+                  </g>
+                  <line x1="54" :y1="budgetExecutionCumulativeChart.zeroY" x2="684" :y2="budgetExecutionCumulativeChart.zeroY" class="be-svg-zero" />
+                  <polygon v-if="budgetExecutionCumulativeChart.incomeArea" :points="budgetExecutionCumulativeChart.incomeArea" fill="url(#be-income-area)" />
+                  <polyline :points="budgetExecutionCumulativeChart.incomePoints" class="be-svg-line income" />
+                  <polyline :points="budgetExecutionCumulativeChart.expensePoints" class="be-svg-line expense" />
+                  <polyline :points="budgetExecutionCumulativeChart.balancePoints" class="be-svg-line balance" />
+                  <g v-for="point in budgetExecutionCumulativeChart.rows" :key="point.month">
+                    <circle :cx="point.x" :cy="point.incomeY" r="3" class="be-svg-dot income"><title>{{ point.label }} · Ingresos acumulados {{ money(point.cumulativeIncome) }}</title></circle>
+                    <circle :cx="point.x" :cy="point.expenseY" r="3" class="be-svg-dot expense"><title>{{ point.label }} · Egresos acumulados {{ money(point.cumulativeExpense) }}</title></circle>
+                    <circle :cx="point.x" :cy="point.balanceY" r="3" class="be-svg-dot balance"><title>{{ point.label }} · Balance acumulado {{ money(point.cumulativeBalance) }}</title></circle>
+                    <text :x="point.x" y="232" text-anchor="middle" class="be-svg-month">{{ point.short_label }}</text>
+                  </g>
+                </svg>
+              </div>
+            </section>
+
+            <section class="content-card be-mix-card">
+              <div class="card-heading be-card-heading"><div><span>ESTRUCTURA DEL PRESUPUESTO</span><h2>Distribución por subvención</h2></div></div>
+              <div class="be-mix-body">
+                <div class="be-donut-wrap">
+                  <svg viewBox="0 0 180 180" role="img" aria-label="Distribución del presupuesto de egresos por subvención">
+                    <circle cx="90" cy="90" r="64" pathLength="100" class="be-donut-base" />
+                    <circle
+                      v-for="item in budgetExecutionSubsidyMix.items"
+                      :key="item.code"
+                      cx="90"
+                      cy="90"
+                      r="64"
+                      pathLength="100"
+                      class="be-donut-segment"
+                      :stroke="item.color"
+                      :stroke-dasharray="item.dasharray"
+                      :stroke-dashoffset="item.dashoffset"
+                    ><title>{{ item.name }} · {{ item.share.toLocaleString('es-CL', { maximumFractionDigits: 1 }) }}%</title></circle>
+                    <text x="90" y="86" text-anchor="middle" class="be-donut-value">{{ budgetExecutionSubsidyMix.items.length }}</text>
+                    <text x="90" y="103" text-anchor="middle" class="be-donut-label">fuentes</text>
+                  </svg>
+                </div>
+                <div class="be-mix-legend">
+                  <div v-for="item in budgetExecutionSubsidyMix.items" :key="item.code">
+                    <i :style="{ background: item.color }"></i>
+                    <span><strong>{{ item.code.toUpperCase() }}</strong><small>{{ money(item.expense_budget) }}</small></span>
+                    <b>{{ item.share.toLocaleString('es-CL', { maximumFractionDigits: 1 }) }}%</b>
+                  </div>
+                </div>
+              </div>
+              <footer class="be-chart-note">Presupuesto consolidado: <strong>{{ money(budgetExecutionSubsidyMix.total) }}</strong></footer>
+            </section>
+
+            <section class="content-card be-ranking-card">
+              <div class="card-heading be-card-heading">
+                <div><span>CONCENTRACIÓN DEL GASTO</span><h2>{{ budgetExecutionTopAccountsChart.hasExecution ? 'Cuentas con mayor ejecución' : 'Cuentas con mayor peso presupuestario' }}</h2></div>
+                <div class="be-chart-legend"><span class="budget"><i></i>Presupuesto</span><span class="expense"><i></i>Ejecutado</span></div>
+              </div>
+              <div class="be-ranking-list">
+                <div v-for="(item, index) in budgetExecutionTopAccountsChart.items" :key="item.id" class="be-ranking-row">
+                  <span class="be-rank-number">{{ index + 1 }}</span>
+                  <div class="be-rank-copy"><strong>{{ item.account_name }}</strong><small>{{ item.subsidy_name }} · {{ item.category }}</small></div>
+                  <div class="be-rank-bars">
+                    <i class="budget" :style="{ width: item.budgetWidth }"></i>
+                    <i class="executed" :style="{ width: item.executedWidth }"></i>
+                  </div>
+                  <strong>{{ money(item.chartValue) }}</strong>
+                </div>
+              </div>
+            </section>
+
+            <section class="content-card be-heatmap-card">
+              <div class="card-heading be-card-heading"><div><span>ESTACIONALIDAD</span><h2>Mapa mensual de intensidad</h2></div><small>Color por egreso · signo por balance</small></div>
+              <div class="be-heatmap">
+                <article v-for="month in budgetExecution.monthly" :key="month.month" :style="{ background: budgetExecutionHeatColor(month) }">
+                  <span>{{ month.short_label }}</span>
+                  <strong>{{ money(month.expense) }}</strong>
+                  <small :class="{ positive: month.balance > 0, negative: month.balance < 0 }">{{ month.balance > 0 ? '+' : '' }}{{ money(month.balance) }}</small>
+                </article>
+              </div>
+              <div class="be-heat-legend"><span><i class="low"></i>Baja intensidad</span><span><i class="high"></i>Alta intensidad</span><span><b>±</b>Balance mensual</span></div>
+            </section>
+          </div>
+
+          <section class="content-card be-subsidy-section">
+            <div class="card-heading be-card-heading"><div><span>FUENTES DE FINANCIAMIENTO</span><h2>Lectura por subvención</h2></div><small>Presupuesto y ejecución de egresos</small></div>
+            <div class="be-subsidy-grid">
+              <article v-for="item in budgetExecution.subsidies" :key="item.code" class="be-subsidy-card" :class="`source-${item.code}`">
+                <header><span class="be-source-mark">{{ item.code.toUpperCase() }}</span><span class="be-status-pill" :class="budgetExecutionStatus(item.execution_percentage).className">{{ budgetExecutionStatus(item.execution_percentage).label }}</span></header>
+                <h3>{{ item.name }}</h3>
+                <strong>{{ money(item.expense_executed) }}</strong>
+                <span>de {{ money(item.expense_budget) }}</span>
+                <div class="be-progress"><i :style="{ width: budgetExecutionProgress(item.execution_percentage) }"></i></div>
+                <footer><span>{{ item.execution_percentage || 0 }}% ejecutado</span><strong>{{ money(item.available) }} disponible</strong></footer>
+              </article>
+            </div>
+          </section>
+
+          <div class="be-detail-grid">
+            <section class="content-card be-category-card">
+              <div class="card-heading be-card-heading"><div><span>COMPOSICIÓN DEL GASTO</span><h2>Categorías con mayor ejecución</h2></div></div>
+              <div class="be-category-list">
+                <div v-for="item in budgetExecution.categories.slice(0, 10)" :key="`${item.subsidy_code}-${item.category}`" class="be-category-row">
+                  <div class="be-category-meta"><div><strong>{{ item.category }}</strong><span>{{ item.subsidy_name }}</span></div><strong>{{ money(item.executed) }}</strong></div>
+                  <div class="be-category-track"><i class="budget" :style="{ width: budgetExecutionCategoryWidth(item.budget) }"></i><i class="executed" :style="{ width: budgetExecutionCategoryWidth(item.executed) }"></i></div>
+                  <div class="be-category-foot"><span>{{ item.execution_percentage || 0 }}% del presupuesto</span><span>{{ money(item.variance) }} disponible</span></div>
+                </div>
+              </div>
+            </section>
+
+            <section class="content-card be-insight-card">
+              <div class="card-heading be-card-heading"><div><span>LECTURA EJECUTIVA</span><h2>Señales para la gestión</h2></div><i class="bx bx-bulb"></i></div>
+              <div class="be-insights">
+                <article><i class="bx bx-calendar"></i><div><strong>Corte del archivo</strong><span>{{ budgetExecution.import.reported_through_label }}</span></div></article>
+                <article><i class="bx bx-line-chart-down"></i><div><strong>Proyección de egresos</strong><span>{{ money(budgetExecution.metrics.projected_expenses) }} al cierre</span></div></article>
+                <article><i class="bx bx-shield-quarter"></i><div><strong>Margen presupuestario</strong><span>{{ money(budgetExecution.metrics.available_budget) }} aún disponible</span></div></article>
+                <article><i class="bx bx-data"></i><div><strong>Trazabilidad</strong><span>{{ budgetExecution.import.line_count }} cuentas desde {{ budgetExecution.import.source_sheets.length }} hojas</span></div></article>
+              </div>
+            </section>
+          </div>
+
+          <section class="content-card be-account-card">
+            <div class="records-toolbar be-account-toolbar">
+              <div><span class="toolbar-kicker">DETALLE AUDITABLE</span><h2>Cuentas importadas <span class="record-count">{{ budgetExecutionAccounts.length }}</span></h2></div>
+              <div class="be-account-filters">
+                <div class="be-segmented"><button type="button" :class="{ active: budgetExecutionFlow === 'expense' }" @click="budgetExecutionFlow = 'expense'">Egresos</button><button type="button" :class="{ active: budgetExecutionFlow === 'income' }" @click="budgetExecutionFlow = 'income'">Ingresos</button></div>
+                <BFormSelect v-model="budgetExecutionSubsidy" class="be-filter-select"><option value="all">Todas las subvenciones</option><option v-for="item in budgetExecution.subsidies" :key="item.code" :value="item.code">{{ item.name }}</option></BFormSelect>
+                <div class="search-box"><i class="bx bx-search"></i><input v-model="budgetExecutionSearch" type="search" placeholder="Buscar cuenta..." /></div>
+              </div>
+            </div>
+            <div class="table-responsive be-account-table-wrap">
+              <table class="table accounting-table be-account-table align-middle mb-0">
+                <thead><tr><th>Cuenta</th><th>Subvención</th><th>Categoría</th><th class="text-end">Presupuesto</th><th class="text-end">Ejecutado</th><th class="text-end">Disponible</th><th>Avance</th></tr></thead>
+                <tbody>
+                  <tr v-for="account in budgetExecutionAccounts" :key="account.id" :class="{ 'be-overrun-row': account.execution_percentage > 100 }">
+                    <td><strong>{{ account.account_name }}</strong></td><td><span class="be-table-source" :class="`source-${account.subsidy_code}`">{{ account.subsidy_code.toUpperCase() }}</span></td><td>{{ account.category }}</td><td class="text-end">{{ money(account.annual_budget) }}</td><td class="text-end fw-semibold">{{ money(account.executed) }}</td><td class="text-end" :class="{ 'text-danger fw-semibold': account.variance < 0 }">{{ money(account.variance) }}</td>
+                    <td><div class="be-table-progress"><i :style="{ width: budgetExecutionProgress(account.execution_percentage) }"></i><span>{{ account.execution_percentage || 0 }}%</span></div></td>
+                  </tr>
+                  <tr v-if="!budgetExecutionAccounts.length"><td colspan="7"><div class="empty-state"><i class="bx bx-search-alt"></i><strong>Sin cuentas para estos filtros</strong><span>Prueba otra subvención o término de búsqueda.</span></div></td></tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+        </template>
+      </template>
+
       <template v-else-if="isSubsidies">
         <section class="content-card subsidy-toolbar subsidy-command-card">
           <div class="subsidy-period-filters">
@@ -1775,7 +2778,7 @@ export default {
               @click="downloadSubsidyComparisonPdf"
             >
               <span v-if="downloadingSubsidyPdf" class="spinner-border spinner-border-sm"></span>
-              <i v-else class="bx bxs-file-pdf"></i> Informe PDF
+              <i v-else class="bx bxs-file-pdf"></i> Conciliación PDF
             </BButton>
             <BButton
               v-if="hasAccountingPermission('contabilidad.subvenciones.importar')"
@@ -1835,6 +2838,240 @@ export default {
             </div>
           </article>
         </div>
+
+        <section class="content-card attendance-reconciliation-card">
+          <header class="attendance-reconciliation-header">
+            <div class="attendance-reconciliation-title">
+              <span class="attendance-reconciliation-icon"><i class="bx bx-calculator"></i></span>
+              <div>
+                <span class="toolbar-kicker">CONCILIACIÓN DESDE ASISTENCIA</span>
+                <h2>Asistencia, liquidación MINEDUC e ingreso contable</h2>
+                <p>Conciliación para {{ subsidyPeriodLabel(subsidyPeriod) }}: cuánto correspondía por asistencia, qué se liquidó y qué quedó registrado en Ingresos.</p>
+              </div>
+            </div>
+            <span class="attendance-status" :class="attendanceReconciliationStatus.className">
+              <i class="bx" :class="attendanceReconciliationStatus.icon"></i>{{ attendanceReconciliationStatus.label }}
+            </span>
+          </header>
+
+          <div class="attendance-assumptions">
+            <label>
+              <span>Jornada</span>
+              <BFormSelect v-model="subsidyCalculationOptions.jec" @change="changeSubsidyCalculationOptions">
+                <option value="1">Con JEC</option>
+                <option value="0">Sin JEC</option>
+              </BFormSelect>
+            </label>
+            <label>
+              <span>Categoría SEP</span>
+              <BFormSelect v-model="subsidyCalculationOptions.sep_category" @change="changeSubsidyCalculationOptions">
+                <option value="autonomo">Autónomo</option>
+                <option value="emergente">Emergente</option>
+              </BFormSelect>
+            </label>
+            <label>
+              <span>Gratuidad</span>
+              <BFormSelect v-model="subsidyCalculationOptions.include_gratuity" @change="changeSubsidyCalculationOptions">
+                <option value="1">Incluir</option>
+                <option value="0">No incluir</option>
+              </BFormSelect>
+            </label>
+            <label>
+              <span>Concentración SEP</span>
+              <BFormSelect v-model="subsidyCalculationOptions.concentration_band" @change="changeSubsidyCalculationOptions">
+                <option value="auto">Estimar automáticamente</option>
+                <option value="none">Sin concentración</option>
+                <option value="15_30">15% a menos de 30%</option>
+                <option value="30_45">30% a menos de 45%</option>
+                <option value="45_60">45% a menos de 60%</option>
+                <option value="60_plus">60% o más</option>
+              </BFormSelect>
+            </label>
+          </div>
+
+          <div class="attendance-window-strip">
+            <div>
+              <i class="bx bx-calendar"></i>
+              <span>Ventana usada</span>
+              <strong>{{ attendancePeriodList(attendanceReconciliation.window?.found_periods) }}</strong>
+            </div>
+            <div>
+              <span>Cobertura</span>
+              <strong>{{ Number(attendanceReconciliation.metrics?.coverage_percentage || 0).toLocaleString('es-CL') }}%</strong>
+              <span class="attendance-coverage-track"><i :style="{ width: `${attendanceReconciliation.metrics?.coverage_percentage || 0}%` }"></i></span>
+            </div>
+            <div>
+              <span>USE aplicada</span>
+              <strong>{{ attendanceReconciliation.assumptions?.use_value ? money(attendanceReconciliation.assumptions.use_value) : '-' }}</strong>
+              <small>{{ attendanceReconciliation.assumptions?.rate_label || 'Sin tabla parametrizada' }}</small>
+            </div>
+          </div>
+          <div class="attendance-rule-note">
+            <i class="bx bx-check-shield"></i>
+            <div>
+              <strong>Regla oficial verificada</strong>
+              <span>El pago de {{ subsidyPeriodLabel(subsidyPeriod) }} usa la asistencia media promedio de {{ attendancePeriodList(attendanceReconciliation.window?.required_periods) }}. Al inicio del año escolar se aplican las excepciones y reliquidaciones del artículo 13.</span>
+            </div>
+          </div>
+
+          <template v-if="attendanceReconciliation.available">
+            <div class="attendance-kpi-grid">
+              <article class="attendance-kpi baseline">
+                <span>Máximo comparable a 100% asistencia</span>
+                <strong>{{ money(attendanceReconciliation.metrics?.full_attendance_total) }}</strong>
+                <small>Modelo normativo; ajustado con la liquidación si la nómina SEP está incompleta</small>
+              </article>
+              <article class="attendance-kpi loss">
+                <span>Pérdida frente al máximo verificable</span>
+                <strong>{{ money(attendanceReconciliation.metrics?.attendance_loss_total) }}</strong>
+                <small>{{ attendanceReconciliation.metrics?.attendance_loss_percentage == null ? 'Sin base' : `${Number(attendanceReconciliation.metrics.attendance_loss_percentage).toLocaleString('es-CL')}% de la línea base` }}</small>
+              </article>
+              <article class="attendance-kpi primary">
+                <span>Modelo con asistencia local</span>
+                <strong>{{ money(attendanceReconciliation.metrics?.expected_total) }}</strong>
+                <small>General + SEP calculable</small>
+              </article>
+              <article class="attendance-kpi">
+                <span>Asistencia promedio</span>
+                <strong>{{ attendanceReconciliation.metrics?.attendance_rate == null ? '-' : `${Number(attendanceReconciliation.metrics.attendance_rate).toLocaleString('es-CL')}%` }}</strong>
+                <small>{{ Number(attendanceReconciliation.metrics?.attendance_equivalent || 0).toLocaleString('es-CL') }} alumnas equivalentes de {{ Number(attendanceReconciliation.metrics?.enrollment_average || 0).toLocaleString('es-CL') }}</small>
+              </article>
+              <article class="attendance-kpi">
+                <span>Liquidado comparable por MINEDUC</span>
+                <strong>{{ money(attendanceReconciliation.metrics?.liquidated_total) }}</strong>
+                <small>Documento total {{ money(attendanceReconciliation.metrics?.liquidated_gross_total) }} · {{ attendanceReconciliation.metrics?.excluded_liquidated_total ? `${money(attendanceReconciliation.metrics.excluded_liquidated_total)} en otras glosas` : 'sin otras glosas' }}</small>
+              </article>
+              <article class="attendance-kpi" :class="attendanceLiquidationReading(attendanceReconciliation.metrics?.liquidated_total, attendanceReconciliation.metrics?.full_attendance_total).className">
+                <span>Impacto frente al 100%</span>
+                <strong>{{ attendanceLiquidationReading(attendanceReconciliation.metrics?.liquidated_total, attendanceReconciliation.metrics?.full_attendance_total).label }}</strong>
+                <small>{{ attendanceLiquidationReading(attendanceReconciliation.metrics?.liquidated_total, attendanceReconciliation.metrics?.full_attendance_total).detail }}</small>
+              </article>
+              <article class="attendance-kpi income">
+                <span>Registrado en Ingresos</span>
+                <strong>{{ money(attendanceReconciliation.metrics?.registered_comparable_income_total) }}</strong>
+                <small>{{ attendanceReconciliation.metrics?.income_records_count || 0 }} registros · {{ attendanceReconciliation.metrics?.registered_income_unallocated_total ? `${money(attendanceReconciliation.metrics.registered_income_unallocated_total)} SEP sin desglose` : 'clasificación trazable' }}</small>
+              </article>
+              <article class="attendance-kpi" :class="attendanceIncomeReading(attendanceReconciliation.metrics?.registered_comparable_income_total, attendanceReconciliation.metrics?.liquidated_total).className">
+                <span>Brecha del módulo de Ingresos</span>
+                <strong>{{ attendanceIncomeReading(attendanceReconciliation.metrics?.registered_comparable_income_total, attendanceReconciliation.metrics?.liquidated_total).label }}</strong>
+                <small>{{ attendanceIncomeReading(attendanceReconciliation.metrics?.registered_comparable_income_total, attendanceReconciliation.metrics?.liquidated_total).detail }}</small>
+              </article>
+            </div>
+
+            <div class="attendance-contrast-band">
+              <div class="attendance-contrast-copy">
+                <span>LECTURA EJECUTIVA</span>
+                <strong>{{ attendanceIncomeReading(attendanceReconciliation.metrics?.registered_comparable_income_total, attendanceReconciliation.metrics?.liquidated_total).label }}</strong>
+                <small>El contraste usa sólo familias calculables desde asistencia y conserva aparte las demás glosas.</small>
+              </div>
+              <div class="attendance-contrast-bars">
+                <div><span>Pudo llegar</span><i class="baseline" :style="{ width: attendanceComparisonWidth(attendanceReconciliation.metrics?.full_attendance_total) }"></i><strong>{{ money(attendanceReconciliation.metrics?.full_attendance_total) }}</strong></div>
+                <div><span>Modelo local</span><i class="expected" :style="{ width: attendanceComparisonWidth(attendanceReconciliation.metrics?.expected_total) }"></i><strong>{{ money(attendanceReconciliation.metrics?.expected_total) }}</strong></div>
+                <div><span>Liquidado comparable</span><i class="actual" :style="{ width: attendanceComparisonWidth(attendanceReconciliation.metrics?.liquidated_total) }"></i><strong>{{ money(attendanceReconciliation.metrics?.liquidated_total) }}</strong></div>
+                <div><span>Contabilizado</span><i class="income" :style="{ width: attendanceComparisonWidth(attendanceReconciliation.metrics?.registered_comparable_income_total) }"></i><strong>{{ money(attendanceReconciliation.metrics?.registered_comparable_income_total) }}</strong></div>
+              </div>
+            </div>
+
+            <div class="attendance-meaning-strip">
+              <div><i class="bx bx-target-lock"></i><span><strong>Pudo llegar</strong>Escenario teórico con 100% de asistencia.</span></div>
+              <div><i class="bx bx-trending-down"></i><span><strong>Pérdida verificable</strong>Diferencia entre el máximo al 100% y la parte comparable liquidada.</span></div>
+              <div><i class="bx bx-calculator"></i><span><strong>Modelo local</strong>Cálculo reglamentario con la asistencia y clasificación disponibles; es un control, no la liquidación.</span></div>
+              <div><i class="bx bx-receipt"></i><span><strong>Liquidado MINEDUC</strong>No equivale a ingreso bancario; las otras glosas se muestran aparte.</span></div>
+            </div>
+
+            <div class="attendance-detail-stack">
+              <section class="attendance-detail-panel subsidy-breakdown-panel">
+                <div class="attendance-detail-heading"><div><span>POR SUBVENCIÓN</span><h3>Máximo a 100%, pérdida y liquidación oficial comparable</h3></div><small>{{ attendanceReconciliation.by_subsidy?.length || 0 }} subvenciones</small></div>
+                <div class="table-responsive">
+                  <table class="table accounting-table attendance-table attendance-table-wide align-middle mb-0">
+                    <thead><tr><th>Subvención</th><th class="text-end">Pudo llegar<br><small>100% asistencia</small></th><th class="text-end">Pérdida frente<br><small>al 100%</small></th><th class="text-end">Modelo local<br><small>según asistencia</small></th><th class="text-end">Liquidado<br><small>parte comparable</small></th><th>Lectura</th></tr></thead>
+                    <tbody>
+                      <tr v-for="item in attendanceReconciliation.by_subsidy || []" :key="item.key">
+                        <td><strong>{{ item.label }}</strong><small v-if="item.note">{{ item.note }}</small><small v-else-if="!item.calculable_from_attendance">No calculable sólo con asistencia</small></td>
+                        <td class="text-end">{{ item.full_attendance_amount == null ? '-' : money(item.full_attendance_amount) }}</td>
+                        <td class="text-end"><span v-if="item.attendance_loss_amount != null" class="attendance-loss-chip">{{ money(item.attendance_loss_amount) }}</span><span v-else>-</span></td>
+                        <td class="text-end fw-semibold">{{ item.expected_amount == null ? '-' : money(item.expected_amount) }}</td>
+                        <td class="text-end attendance-liquidated-cell"><strong>{{ money(item.liquidated_amount) }}</strong><small v-if="Number(item.excluded_liquidated_amount || 0)">Documento total {{ money(item.liquidated_total_amount) }}</small></td>
+                        <td><span class="attendance-payment-reading" :class="attendanceLiquidationReading(item.liquidated_amount, item.full_attendance_amount, 'subsidy', item.baseline_requires_review).className"><strong>{{ attendanceLiquidationReading(item.liquidated_amount, item.full_attendance_amount, 'subsidy', item.baseline_requires_review).label }}</strong><small>{{ attendanceLiquidationReading(item.liquidated_amount, item.full_attendance_amount, 'subsidy', item.baseline_requires_review).detail }}</small></span></td>
+                      </tr>
+                    </tbody>
+                    <tfoot><tr><th>Total comparable</th><th class="text-end">{{ money(attendanceReconciliation.metrics?.full_attendance_total) }}</th><th class="text-end">{{ money(attendanceReconciliation.metrics?.attendance_loss_total) }}</th><th class="text-end">{{ money(attendanceReconciliation.metrics?.expected_total) }}</th><th class="text-end">{{ money(attendanceReconciliation.metrics?.liquidated_total) }}</th><th>{{ attendanceLiquidationReading(attendanceReconciliation.metrics?.liquidated_total, attendanceReconciliation.metrics?.full_attendance_total).label }}</th></tr></tfoot>
+                  </table>
+                </div>
+              </section>
+
+              <section class="attendance-detail-panel">
+                <div class="attendance-detail-heading"><div><span>POR NIVEL</span><h3>Detalle del impacto de la asistencia en cada nivel</h3></div><small>{{ attendanceReconciliation.by_level?.length || 0 }} niveles</small></div>
+                <div class="table-responsive">
+                  <table class="table accounting-table attendance-table attendance-table-wide align-middle mb-0">
+                    <thead><tr><th>Nivel</th><th class="text-end">Asistencia</th><th class="text-end">Pudo llegar<br><small>100% asistencia</small></th><th class="text-end">Pérdida frente<br><small>al 100%</small></th><th class="text-end">Modelo local<br><small>según asistencia</small></th><th class="text-end">Liquidado asignado<br><small>parte comparable</small></th><th>Lectura</th></tr></thead>
+                    <tbody>
+                      <tr v-for="item in attendanceReconciliation.by_level || []" :key="item.key">
+                        <td><strong>{{ item.label }}</strong><small>{{ Number(item.enrollment_average || 0).toLocaleString('es-CL') }} matrícula prom.</small></td>
+                        <td class="text-end">{{ item.attendance_rate == null ? '-' : `${Number(item.attendance_rate).toLocaleString('es-CL')}%` }}</td>
+                        <td class="text-end">{{ money(item.full_attendance_amount) }}</td>
+                        <td class="text-end"><span class="attendance-loss-chip">{{ money(item.attendance_loss_amount) }}</span></td>
+                        <td class="text-end fw-semibold">{{ money(item.expected_amount) }}</td>
+                        <td class="text-end attendance-liquidated-cell"><strong>{{ money(item.liquidated_amount) }}</strong><small v-if="Number(item.excluded_liquidated_amount || 0)">Total asignado {{ money(item.liquidated_total_amount) }}</small></td>
+                        <td><span class="attendance-payment-reading" :class="attendanceLiquidationReading(item.liquidated_amount, item.full_attendance_amount, 'level', Boolean(item.baseline_review_families?.length)).className"><strong>{{ attendanceLiquidationReading(item.liquidated_amount, item.full_attendance_amount, 'level', Boolean(item.baseline_review_families?.length)).label }}</strong><small>{{ attendanceLiquidationReading(item.liquidated_amount, item.full_attendance_amount, 'level', Boolean(item.baseline_review_families?.length)).detail }}</small></span></td>
+                      </tr>
+                    </tbody>
+                    <tfoot><tr><th>Total comparable</th><th class="text-end">{{ attendanceReconciliation.metrics?.attendance_rate == null ? '-' : `${Number(attendanceReconciliation.metrics.attendance_rate).toLocaleString('es-CL')}%` }}</th><th class="text-end">{{ money(attendanceReconciliation.metrics?.full_attendance_total) }}</th><th class="text-end">{{ money(attendanceReconciliation.metrics?.attendance_loss_total) }}</th><th class="text-end">{{ money(attendanceReconciliation.metrics?.expected_total) }}</th><th class="text-end">{{ money(attendanceReconciliation.metrics?.liquidated_total) }}</th><th>{{ attendanceLiquidationReading(attendanceReconciliation.metrics?.liquidated_total, attendanceReconciliation.metrics?.full_attendance_total).label }}</th></tr></tfoot>
+                  </table>
+                </div>
+              </section>
+            </div>
+
+            <section class="attendance-income-panel">
+              <div class="attendance-income-heading">
+                <div>
+                  <span>MÓDULO DE INGRESOS</span>
+                  <h3>Trazabilidad de lo contabilizado en {{ subsidyPeriodLabel(subsidyPeriod) }}</h3>
+                  <small>Sólo se consideran registros no anulados cuyo tipo comienza con “subvencion_”.</small>
+                </div>
+                <router-link v-if="canAccessNavigation('contabilidad.ingresos.gestionar')" to="/contabilidad/ingresos" class="btn btn-sm btn-outline-primary"><i class="bx bx-link-external"></i> Revisar ingresos</router-link>
+              </div>
+              <div v-if="attendanceReconciliation.income_records?.length" class="table-responsive">
+                <table class="table accounting-table attendance-income-table align-middle mb-0">
+                  <thead><tr><th>Código</th><th>Fecha</th><th>Clasificación</th><th>Fuente</th><th>Estado</th><th>Conciliación</th><th class="text-end">Monto</th></tr></thead>
+                  <tbody>
+                    <tr v-for="income in attendanceReconciliation.income_records" :key="income.id">
+                      <td><strong>{{ income.code }}</strong><small>{{ income.document_reference || 'Sin referencia documental' }}</small></td>
+                      <td>{{ shortDate(income.received_at) }}</td>
+                      <td><strong>{{ income.family_label }}</strong><small>{{ income.income_type }}</small></td>
+                      <td>{{ income.funding_source?.name || 'Sin fuente asignada' }}</td>
+                      <td><span class="status-pill">{{ income.status }}</span></td>
+                      <td><span class="income-match" :class="income.matched_to_settlement ? 'matched' : 'pending'"><i class="bx" :class="income.matched_to_settlement ? 'bx-link' : 'bx-unlink'"></i>{{ income.matched_to_settlement ? 'Vinculado' : 'Sin vínculo' }}</span></td>
+                      <td class="text-end fw-semibold">{{ money(income.amount) }}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+              <div v-else class="attendance-income-empty">
+                <i class="bx bx-receipt"></i>
+                <div><strong>No hay ingresos de subvención registrados para este mes</strong><span>La estimación y la liquidación quedan visibles; registra o corrige el ingreso cuando se reciba la transferencia.</span></div>
+              </div>
+            </section>
+          </template>
+
+          <div v-else class="attendance-empty-state">
+            <span class="attendance-empty-icon"><i class="bx bx-spreadsheet"></i></span>
+            <div>
+              <strong>Faltan cargas para calcular este mes</strong>
+              <p>Se requieren: {{ attendancePeriodList(attendanceReconciliation.window?.required_periods) }}.</p>
+              <small>La liquidación existente se conserva visible y el cálculo aparecerá automáticamente al cargar la asistencia mensual.</small>
+            </div>
+          </div>
+
+          <div v-if="attendanceReconciliation.warnings?.length" class="attendance-warning-panel">
+            <div class="attendance-warning-heading"><i class="bx bx-info-circle"></i><strong>Alcance y controles antes del cierre</strong></div>
+            <ul><li v-for="warning in attendanceReconciliation.warnings" :key="warning">{{ warning }}</li></ul>
+          </div>
+          <footer class="attendance-methodology">
+            <div><i class="bx bx-shield-quarter"></i><span>{{ attendanceReconciliation.disclaimer }}</span></div>
+            <div class="attendance-sources"><span>Fuentes oficiales:</span><a v-for="source in attendanceReconciliation.sources || []" :key="source.url" :href="source.url" target="_blank" rel="noopener noreferrer">{{ source.label }}</a></div>
+          </footer>
+        </section>
 
         <section class="content-card subsidy-comparison-card">
           <div class="card-heading">
@@ -2674,6 +3911,24 @@ export default {
 .subsidy-annual-row small{text-align:right;color:#8c96a6;font-size:.57rem}
 .subsidy-annual-master{border-top:1px solid #dfe5ed}
 .subsidy-annual-master tbody tr{cursor:pointer}
-@media(max-width:1100px){.metric-grid{grid-template-columns:repeat(2,1fr)}.dashboard-grid{grid-template-columns:1fr 1fr}.alert-panel{grid-column:1/-1}.accounting-nav{padding:.45rem}.nav-group{min-width:auto}.nav-group-title{display:none}.subsidy-pie-consolidations{grid-template-columns:1fr}.subsidy-pie-consolidated+ .subsidy-pie-consolidated{border-top:1px solid #e7ebf0;border-left:0}.subsidy-cycle-grid{grid-template-columns:1fr}}
-@media(max-width:720px){.accounting-hero{align-items:flex-start;padding:1rem}.accounting-hero,.records-toolbar{flex-direction:column}.hero-actions,.toolbar-actions{width:100%}.hero-actions .btn{flex:1}.accounting-hero h1{font-size:1.25rem}.metric-grid,.dashboard-grid{grid-template-columns:1fr}.alert-panel{grid-column:auto}.records-toolbar{align-items:stretch}.toolbar-actions{flex-wrap:wrap}.search-box{flex:1;min-width:200px}.accounting-form-grid{grid-template-columns:1fr}.accounting-form-grid .full{grid-column:auto}.accounting-nav{display:block}.nav-group{padding:.3rem;border-right:0;border-bottom:1px solid #edf0f4}.nav-group-links{flex-wrap:nowrap;overflow-x:auto}.scope-notice{align-items:flex-start}.subsidy-command-card{align-items:stretch}.subsidy-command-card,.subsidy-period-filters{flex-direction:column}.subsidy-period-filters{align-items:stretch}.subsidy-period-select,.subsidy-month-select,.subsidy-compare-select{width:100%}.subsidy-period-note{position:static;margin:1rem -1.1rem -2.9rem}.subsidy-pie-overview{grid-template-columns:1fr 1fr}.subsidy-pie-overview>div:nth-child(2){border-right:0}.subsidy-pie-overview>div{border-bottom:1px solid #edf0f4}.subsidy-annual-grid{grid-template-columns:1fr}.subsidy-annual-row{grid-template-columns:40px minmax(70px,1fr) 100px}.subsidy-annual-row:nth-child(n){border-right:0}.subsidy-annual-row small{display:none}.subsidy-cycle-card>div{align-items:flex-start;flex-direction:column}}
+.attendance-reconciliation-card{overflow:hidden;border-color:#d9e2ee;background:linear-gradient(145deg,#fff 0%,#fbfcff 100%);box-shadow:0 10px 30px rgba(43,57,85,.07)}
+.attendance-reconciliation-header{display:flex;align-items:center;justify-content:space-between;gap:1rem;padding:1.15rem 1.25rem;border-bottom:1px solid #e4e9f1;background:linear-gradient(120deg,#f8faff 0%,#eef3fb 100%)}
+.attendance-reconciliation-title{display:flex;align-items:center;gap:.8rem}.attendance-reconciliation-icon{display:grid;place-items:center;flex:0 0 46px;width:46px;height:46px;border-radius:12px;background:linear-gradient(135deg,#405189,#667bb3);box-shadow:0 8px 18px rgba(64,81,137,.22);color:#fff;font-size:1.45rem}.attendance-reconciliation-title h2{margin:.16rem 0;color:#263043;font-size:1rem}.attendance-reconciliation-title p{margin:0;color:#738096;font-size:.63rem}.attendance-status{display:inline-flex;align-items:center;gap:.35rem;padding:.38rem .6rem;border-radius:16px;background:#eef1f5;color:#667085;font-size:.58rem;font-weight:800;letter-spacing:.035em;white-space:nowrap}.attendance-status.success{background:#e7f6ef;color:#1f7a59}.attendance-status.warning{background:#fff3dc;color:#95640f}.attendance-status.danger{background:#fdecef;color:#b83b4c}.attendance-status i{font-size:.9rem}
+.attendance-assumptions{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:.7rem;padding:.9rem 1.25rem;border-bottom:1px solid #e8ecf2;background:#fff}.attendance-assumptions label{margin:0}.attendance-assumptions label>span{display:block;margin-bottom:.28rem;color:#69768a;font-size:.58rem;font-weight:700;letter-spacing:.025em;text-transform:uppercase}.attendance-assumptions .form-select{min-height:36px;border-color:#d8e0ea;background-color:#fafbfd;color:#3d4a60;font-size:.67rem}
+.attendance-window-strip{display:grid;grid-template-columns:1.45fr .8fr 1fr;border-bottom:1px solid #e7ebf1;background:#f8fafc}.attendance-window-strip>div{min-height:68px;padding:.78rem 1.25rem;border-right:1px solid #e5eaf1}.attendance-window-strip>div:last-child{border-right:0}.attendance-window-strip span,.attendance-window-strip strong,.attendance-window-strip small{display:block}.attendance-window-strip span{color:#8792a3;font-size:.55rem;text-transform:uppercase}.attendance-window-strip strong{margin-top:.18rem;color:#344054;font-size:.68rem}.attendance-window-strip small{margin-top:.12rem;color:#98a2b3;font-size:.51rem}.attendance-window-strip>div:first-child{display:grid;grid-template-columns:24px 1fr;align-items:center}.attendance-window-strip>div:first-child i{grid-row:1/3;color:#405189;font-size:1.15rem}.attendance-window-strip>div:first-child strong{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.attendance-coverage-track{height:4px;margin-top:.35rem;border-radius:3px;background:#e2e7ef;overflow:hidden}.attendance-coverage-track i{display:block;height:100%;border-radius:3px;background:#2f9e78}
+.attendance-rule-note{display:flex;align-items:flex-start;gap:.65rem;padding:.72rem 1.25rem;border-bottom:1px solid #d8ebe4;background:#f3fbf8;color:#376b5b}.attendance-rule-note>i{margin-top:.05rem;color:#238262;font-size:1.1rem}.attendance-rule-note strong,.attendance-rule-note span{display:block}.attendance-rule-note strong{font-size:.63rem}.attendance-rule-note span{margin-top:.16rem;color:#628275;font-size:.55rem;line-height:1.45}
+.attendance-kpi-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:.75rem;padding:1rem 1.25rem}.attendance-kpi{min-height:93px;padding:.85rem;border:1px solid #e0e6ee;border-radius:10px;background:#fff}.attendance-kpi span,.attendance-kpi strong,.attendance-kpi small{display:block}.attendance-kpi span{color:#758095;font-size:.59rem}.attendance-kpi strong{margin:.27rem 0;color:#263043;font-size:1.05rem}.attendance-kpi small{color:#98a2b3;font-size:.52rem;line-height:1.35}.attendance-kpi.primary{border-color:transparent;background:linear-gradient(135deg,#344575,#5368a1);box-shadow:0 8px 20px rgba(64,81,137,.18)}.attendance-kpi.primary span,.attendance-kpi.primary strong,.attendance-kpi.primary small{color:#fff}.attendance-kpi.negative{border-color:#efc8ce;background:#fff9fa}.attendance-kpi.negative strong{color:#b83b4c}.attendance-kpi.positive{border-color:#bee3d3;background:#f9fdfb}.attendance-kpi.positive strong{color:#237b5b}.attendance-kpi.pending{border-color:#e6d6ad;background:#fffdf7}.attendance-kpi.pending strong{color:#8a681c;font-size:.87rem}
+.attendance-kpi.baseline{border-color:#d7deeb;background:linear-gradient(145deg,#f8faff,#eef2f8)}.attendance-kpi.baseline strong{color:#405189}.attendance-kpi.loss{border-color:#f0d1c2;background:#fff9f4}.attendance-kpi.loss strong{color:#b75c32}.attendance-kpi.income{border-color:#c7e5d9;background:#f6fcf9}.attendance-kpi.income strong{color:#237b5b}
+.attendance-contrast-band{display:grid;grid-template-columns:.8fr 1.5fr;align-items:center;gap:1rem;margin:0 1.25rem 1rem;padding:.8rem 1rem;border:1px solid #dfe5ed;border-radius:10px;background:#f8fafc}.attendance-contrast-copy span,.attendance-contrast-copy strong,.attendance-contrast-copy small{display:block}.attendance-contrast-copy span{color:#8a95a5;font-size:.52rem;font-weight:800;letter-spacing:.05em}.attendance-contrast-copy strong{margin:.22rem 0;color:#344054;font-size:.72rem}.attendance-contrast-copy small{color:#8a95a5;font-size:.52rem}.attendance-contrast-bars{display:flex;flex-direction:column;gap:.43rem}.attendance-contrast-bars>div{display:grid;grid-template-columns:60px minmax(90px,1fr) 110px;align-items:center;gap:.55rem}.attendance-contrast-bars span{color:#667085;font-size:.55rem}.attendance-contrast-bars>div:before{grid-column:2;grid-row:1;height:8px;border-radius:5px;background:#e5eaf1;content:""}.attendance-contrast-bars i{grid-column:2;grid-row:1;z-index:1;display:block;height:8px;border-radius:5px;background:#667bb3}.attendance-contrast-bars i.actual{background:#2f9e78}.attendance-contrast-bars strong{text-align:right;color:#344054;font-size:.62rem}
+.attendance-contrast-bars i.baseline{background:#aab4c6}.attendance-contrast-bars i.income{background:#d99b36}.attendance-loss-chip{display:inline-flex;padding:.18rem .34rem;border-radius:11px;background:#fff0e6;color:#a8512b;font-size:.55rem;font-weight:750;white-space:nowrap}
+.attendance-meaning-strip{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border-top:1px solid #e3e8ef;border-bottom:1px solid #e3e8ef;background:linear-gradient(110deg,#fbfcfe,#f5f8fc)}.attendance-meaning-strip>div{display:flex;align-items:flex-start;gap:.48rem;padding:.75rem .9rem;border-right:1px solid #e4e9f0}.attendance-meaning-strip>div:last-child{border-right:0}.attendance-meaning-strip i{display:grid;place-items:center;flex:0 0 27px;width:27px;height:27px;border-radius:8px;background:#e9eef8;color:#405189;font-size:.9rem}.attendance-meaning-strip span,.attendance-meaning-strip strong{display:block}.attendance-meaning-strip span{color:#7b8495;font-size:.52rem;line-height:1.35}.attendance-meaning-strip strong{margin-bottom:.08rem;color:#344054;font-size:.58rem}.attendance-detail-stack{display:flex;flex-direction:column}.attendance-detail-panel{min-width:0;overflow:hidden}.attendance-detail-panel+ .attendance-detail-panel{border-top:1px solid #dce3ec}.attendance-detail-heading{display:flex;align-items:center;justify-content:space-between;padding:.85rem 1rem;border-bottom:1px solid #e8ecf2;background:#fafbfd}.attendance-detail-heading span{color:#8b95a5;font-size:.52rem;font-weight:800;letter-spacing:.055em}.attendance-detail-heading h3{margin:.14rem 0 0;color:#344054;font-size:.79rem}.attendance-detail-heading small{color:#8b95a5;font-size:.54rem}.attendance-table-wide{min-width:1040px}.attendance-table thead th{font-size:.51rem;vertical-align:bottom}.attendance-table thead th small{display:block;margin-top:.12rem;color:#8c96a7;font-size:.47rem;font-weight:600;letter-spacing:0;text-transform:none}.attendance-table tbody td{font-size:.61rem}.attendance-table td:first-child strong,.attendance-table td:first-child small{display:block;white-space:nowrap}.attendance-table td:first-child small{margin-top:.12rem;color:#98a2b3;font-size:.5rem}.attendance-liquidated-cell strong,.attendance-liquidated-cell small{display:block;white-space:nowrap}.attendance-liquidated-cell small{margin-top:.12rem;color:#8a94a4;font-size:.48rem}.attendance-table tfoot th{border-top:2px solid #d9e0ea;background:#f3f6fa;color:#344054;font-size:.56rem;white-space:nowrap}.attendance-payment-reading{display:flex;flex-direction:column;align-items:flex-start;min-width:155px;padding:.32rem .48rem;border-radius:8px;background:#eef1f5;color:#667085}.attendance-payment-reading strong,.attendance-payment-reading small{display:block}.attendance-payment-reading strong{font-size:.57rem;line-height:1.25}.attendance-payment-reading small{margin-top:.1rem;color:inherit;font-size:.48rem;line-height:1.25;opacity:.84}.attendance-payment-reading.positive,.attendance-payment-reading.matched{background:#e7f6ef;color:#237b5b}.attendance-payment-reading.negative{background:#fdecef;color:#b83b4c}.attendance-payment-reading.pending{background:#fff4dc;color:#8a681c}
+.attendance-income-panel{border-top:1px solid #dfe6ee;background:#fff}.attendance-income-heading{display:flex;align-items:center;justify-content:space-between;gap:1rem;padding:.85rem 1.25rem;border-bottom:1px solid #e7ebf1;background:linear-gradient(110deg,#fbfcfe,#f4faf7)}.attendance-income-heading span,.attendance-income-heading h3,.attendance-income-heading small{display:block}.attendance-income-heading span{color:#2a8767;font-size:.52rem;font-weight:800;letter-spacing:.06em}.attendance-income-heading h3{margin:.15rem 0;color:#344054;font-size:.76rem}.attendance-income-heading small{color:#8a95a5;font-size:.53rem}.attendance-income-heading .btn{display:inline-flex;align-items:center;gap:.3rem;white-space:nowrap}.attendance-income-table thead th{font-size:.52rem}.attendance-income-table tbody td{font-size:.6rem}.attendance-income-table td strong,.attendance-income-table td small{display:block}.attendance-income-table td small{margin-top:.12rem;color:#98a2b3;font-size:.49rem}.income-match{display:inline-flex;align-items:center;gap:.25rem;padding:.2rem .38rem;border-radius:12px;font-size:.52rem;font-weight:700;white-space:nowrap}.income-match.matched{background:#e7f6ef;color:#237b5b}.income-match.pending{background:#fff3dc;color:#95640f}.attendance-income-empty{display:flex;align-items:center;gap:.7rem;padding:1.1rem 1.25rem;color:#667085}.attendance-income-empty>i{display:grid;place-items:center;width:38px;height:38px;border-radius:10px;background:#fff3dc;color:#95640f;font-size:1.25rem}.attendance-income-empty strong,.attendance-income-empty span{display:block}.attendance-income-empty strong{color:#344054;font-size:.67rem}.attendance-income-empty span{margin-top:.18rem;font-size:.54rem}
+.attendance-empty-state{display:flex;align-items:center;gap:1rem;padding:1.6rem 1.25rem;background:radial-gradient(circle at 8% 50%,#eef3fb,transparent 28%),#fff}.attendance-empty-icon{display:grid;place-items:center;flex:0 0 58px;width:58px;height:58px;border:1px solid #d7e0ec;border-radius:15px;background:#fff;color:#405189;font-size:1.8rem;box-shadow:0 8px 20px rgba(43,57,85,.08)}.attendance-empty-state strong{display:block;color:#344054;font-size:.78rem}.attendance-empty-state p{margin:.25rem 0;color:#667085;font-size:.63rem}.attendance-empty-state small{color:#98a2b3;font-size:.55rem}
+.attendance-warning-panel{padding:.8rem 1.25rem;border-top:1px solid #eadbbd;background:#fffaf0}.attendance-warning-heading{display:flex;align-items:center;gap:.4rem;color:#8a641e;font-size:.62rem}.attendance-warning-heading i{font-size:1rem}.attendance-warning-panel ul{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.3rem 1.5rem;margin:.55rem 0 0;padding-left:1.1rem;color:#7a6846;font-size:.55rem;line-height:1.45}.attendance-methodology{display:flex;align-items:flex-start;justify-content:space-between;gap:1rem;padding:.75rem 1.25rem;border-top:1px solid #e5eaf1;background:#f7f9fc;color:#758095;font-size:.53rem}.attendance-methodology>div:first-child{display:flex;align-items:flex-start;gap:.35rem;max-width:58%}.attendance-methodology i{color:#405189;font-size:.9rem}.attendance-sources{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:.28rem .55rem}.attendance-sources a{color:#405189;text-decoration:underline;text-underline-offset:2px}
+.be-command-bar{position:relative;display:flex;align-items:center;justify-content:space-between;gap:1rem;padding:1rem 1.15rem 2.9rem;background:linear-gradient(120deg,#fff 0%,#f7f9fd 62%,#eef3fb 100%);overflow:hidden}.be-year-control>.toolbar-kicker{display:block;margin-bottom:.35rem}.be-year-control>div,.be-command-actions{display:flex;align-items:center;gap:.55rem}.be-year-select{width:145px;min-height:38px;border-color:#d6deea;font-size:.75rem;font-weight:700;color:#344054}.be-current-badge,.be-status-pill{display:inline-flex;align-items:center;gap:.3rem;padding:.24rem .48rem;border-radius:14px;background:#e8f6ef;color:#1f7a59;font-size:.59rem;font-weight:750}.be-current-badge.empty{background:#eef1f5;color:#667085}.be-version-strip{position:absolute;right:0;bottom:0;left:0;display:flex;align-items:center;gap:1.1rem;padding:.55rem 1.15rem;border-top:1px solid #e3e8f0;background:rgba(247,249,252,.94);color:#667085;font-size:.61rem;white-space:nowrap;overflow-x:auto}.be-version-strip span{display:inline-flex;align-items:center;gap:.32rem}.be-version-strip i{color:#405189;font-size:.9rem}.be-empty-state{display:flex;flex-direction:column;align-items:center;min-height:470px;padding:3.5rem 1.5rem;text-align:center;background:radial-gradient(circle at 50% 15%,#f0f4fb,transparent 42%),#fff}.be-empty-state h2{max-width:620px;margin:.55rem 0 .65rem;color:#1d2939;font-size:1.7rem}.be-empty-state p{max-width:650px;margin:0;color:#667085;font-size:.78rem;line-height:1.65}.be-empty-illustration{position:relative;width:105px;height:105px;margin-bottom:1.5rem}.be-sheet{position:absolute;display:grid;place-items:center;width:72px;height:88px;border:1px solid #cfd8e6;border-radius:10px;background:#fff;box-shadow:0 12px 28px rgba(51,65,85,.12)}.be-sheet.sheet-back{top:0;left:7px;transform:rotate(-9deg);background:#edf2fa}.be-sheet.sheet-front{right:5px;bottom:0;transform:rotate(5deg);color:#405189;font-size:2.1rem}.be-empty-features{display:flex;gap:1.2rem;margin:1.5rem 0;color:#536075;font-size:.67rem}.be-empty-features span{display:flex;align-items:center;gap:.3rem}.be-empty-features i{display:grid;place-items:center;width:18px;height:18px;border-radius:50%;background:#e8f6ef;color:#25845f}.be-empty-state .btn{display:inline-flex;align-items:center;gap:.4rem}.be-kpi-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:.8rem}.be-kpi-card{display:flex;align-items:center;gap:.75rem;min-height:112px;padding:1rem;border:1px solid #e0e6ee;border-radius:12px;background:#fff;box-shadow:0 5px 17px rgba(39,50,72,.045)}.be-kpi-card.primary{border:0;background:linear-gradient(135deg,#344575,#4d6199);box-shadow:0 10px 24px rgba(64,81,137,.2)}.be-kpi-card.primary span,.be-kpi-card.primary strong,.be-kpi-card.primary small{color:#fff}.be-kpi-card.negative{border-color:#efcbd0;background:#fffafb}.be-kpi-icon{display:grid;place-items:center;flex:0 0 43px;width:43px;height:43px;border-radius:11px;background:rgba(255,255,255,.13);color:#fff;font-size:1.35rem}.be-kpi-icon.coral{background:#fdecef;color:#c2414f}.be-kpi-icon.green{background:#e8f6ef;color:#25845f}.be-kpi-icon.ink{background:#edf1f8;color:#405189}.be-kpi-card span,.be-kpi-card strong,.be-kpi-card small{display:block}.be-kpi-card span{color:#758095;font-size:.64rem}.be-kpi-card strong{margin:.24rem 0;color:#263043;font-size:1.08rem}.be-kpi-card small{color:#98a2b3;font-size:.56rem}.be-analysis-grid{display:grid;grid-template-columns:minmax(0,1.7fr) minmax(280px,.72fr);gap:.8rem}.be-card-heading small{color:#8b95a5;font-size:.62rem}.be-chart-legend{display:flex;gap:.75rem}.be-chart-legend span{display:flex;align-items:center;gap:.3rem;color:#667085;font-size:.59rem;letter-spacing:0}.be-chart-legend i{width:8px;height:8px;border-radius:2px;background:#405189}.be-chart-legend .income i{background:#2f9e78}.be-month-chart{position:relative;display:grid;grid-template-columns:repeat(12,1fr);align-items:end;height:245px;padding:28px 18px 24px 70px;background:repeating-linear-gradient(to bottom,transparent 0,transparent 72px,#edf0f4 73px);border-bottom:1px solid #edf0f4}.be-chart-axis{position:absolute;top:26px;bottom:25px;left:12px;display:flex;flex-direction:column;justify-content:space-between;color:#98a2b3;font-size:.52rem}.be-month-column{display:flex;flex-direction:column;align-items:center;height:100%;min-width:0}.be-bars{display:flex;align-items:flex-end;justify-content:center;gap:3px;width:100%;height:100%}.be-bars span{width:10px;min-height:0;border-radius:4px 4px 1px 1px;background:linear-gradient(180deg,#6176ad,#405189);transition:.25s ease}.be-bars .income{background:linear-gradient(180deg,#54b995,#2f9e78)}.be-month-column>strong{margin-top:.4rem;color:#7b8494;font-size:.54rem;text-transform:uppercase}.be-chart-summary{display:grid;grid-template-columns:repeat(3,1fr);padding:.75rem 1rem}.be-chart-summary>div{padding:0 .8rem;border-right:1px solid #e6eaf0}.be-chart-summary>div:last-child{border-right:0}.be-chart-summary span,.be-chart-summary strong{display:block}.be-chart-summary span{color:#8a94a4;font-size:.56rem}.be-chart-summary strong{margin-top:.25rem;color:#344054;font-size:.78rem}.be-health-card{overflow:hidden}.be-health-score{display:grid;grid-template-columns:116px 1fr;align-items:center;gap:.65rem;padding:1.2rem 1rem;border-bottom:1px solid #edf0f4}.be-ring{display:grid;place-items:center;width:105px;height:105px;border-radius:50%;background:conic-gradient(#405189 var(--progress),#e7ebf1 0)}.be-ring:before{position:absolute;width:78px;height:78px;border-radius:50%;background:#fff;content:""}.be-ring>div{position:relative;text-align:center}.be-ring strong,.be-ring span{display:block}.be-ring strong{color:#2c3950;font-size:1.15rem}.be-ring span{color:#8a94a4;font-size:.52rem}.be-health-score p{margin:.55rem 0 0;color:#7b8494;font-size:.62rem;line-height:1.45}.be-status-pill.warning{background:#fff3dc;color:#9a6814}.be-status-pill.danger{background:#fdecef;color:#bd4252}.be-status-pill.success{background:#e8f6ef;color:#1f7a59}.be-alert-list>div{display:grid;grid-template-columns:28px 1fr auto;align-items:center;gap:.5rem;padding:.75rem 1rem;border-bottom:1px solid #edf0f4;color:#667085;font-size:.63rem}.be-alert-list>div:last-child{border-bottom:0}.be-alert-list i{display:grid;place-items:center;width:27px;height:27px;border-radius:7px;background:#eef2f7;color:#667085;font-size:1rem}.be-alert-list strong{font-size:.78rem}.be-alert-list .danger i{background:#fdecef;color:#bd4252}.be-alert-list .warning i{background:#fff3dc;color:#9a6814}.be-subsidy-section{overflow:hidden}.be-subsidy-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:.8rem;padding:1rem}.be-subsidy-card{padding:1rem;border:1px solid #e0e6ee;border-radius:10px;background:linear-gradient(145deg,#fff,#f9fafd)}.be-subsidy-card header,.be-subsidy-card footer{display:flex;align-items:center;justify-content:space-between;gap:.5rem}.be-source-mark{display:grid;place-items:center;min-width:38px;height:24px;padding:0 .35rem;border-radius:6px;background:#e9edf7;color:#405189;font-size:.58rem;font-weight:800;letter-spacing:.05em}.be-subsidy-card h3{min-height:32px;margin:.8rem 0 .25rem;color:#465366;font-size:.68rem}.be-subsidy-card>strong{display:block;color:#263043;font-size:1.05rem}.be-subsidy-card>span{color:#8a94a4;font-size:.56rem}.be-progress{height:6px;margin:.75rem 0 .55rem;border-radius:4px;background:#e9edf2;overflow:hidden}.be-progress i{display:block;height:100%;border-radius:4px;background:linear-gradient(90deg,#405189,#788bc1)}.be-subsidy-card footer{color:#7b8494;font-size:.55rem}.be-subsidy-card footer strong{color:#465366;font-size:.58rem}.be-subsidy-card.source-mantencion .be-source-mark,.be-table-source.source-mantencion{background:#fff1db;color:#9b6812}.be-subsidy-card.source-sep .be-source-mark,.be-table-source.source-sep{background:#e9f7f1;color:#237b5b}.be-subsidy-card.source-pie .be-source-mark,.be-table-source.source-pie{background:#f3eefa;color:#7751a4}.be-detail-grid{display:grid;grid-template-columns:minmax(0,1.55fr) minmax(275px,.7fr);gap:.8rem}.be-category-list{padding:.15rem 1rem .6rem}.be-category-row{padding:.72rem 0;border-bottom:1px solid #edf0f4}.be-category-row:last-child{border-bottom:0}.be-category-meta,.be-category-foot{display:flex;align-items:center;justify-content:space-between;gap:1rem}.be-category-meta>div strong,.be-category-meta>div span{display:block}.be-category-meta>div strong{color:#465366;font-size:.64rem}.be-category-meta>div span{margin-top:.15rem;color:#98a2b3;font-size:.53rem}.be-category-meta>strong{color:#344054;font-size:.67rem}.be-category-track{position:relative;height:7px;margin:.45rem 0;border-radius:5px;background:#edf0f4;overflow:hidden}.be-category-track i{position:absolute;top:0;left:0;height:100%;border-radius:5px}.be-category-track .budget{background:#dfe4ed}.be-category-track .executed{height:3px;top:2px;background:#405189}.be-category-foot{color:#8a94a4;font-size:.52rem}.be-insights{padding:.35rem 1rem}.be-insights article{display:flex;align-items:center;gap:.7rem;padding:.75rem 0;border-bottom:1px solid #edf0f4}.be-insights article:last-child{border-bottom:0}.be-insights article>i{display:grid;place-items:center;flex:0 0 34px;width:34px;height:34px;border-radius:9px;background:#edf1f8;color:#405189;font-size:1.1rem}.be-insights strong,.be-insights span{display:block}.be-insights strong{color:#465366;font-size:.63rem}.be-insights span{margin-top:.18rem;color:#8a94a4;font-size:.56rem}.be-account-card{overflow:hidden}.be-account-toolbar{align-items:flex-end}.be-account-filters{display:flex;align-items:center;gap:.45rem}.be-segmented{display:flex;padding:3px;border:1px solid #dce2e9;border-radius:7px;background:#f4f6f9}.be-segmented button{padding:.38rem .58rem;border:0;border-radius:5px;background:transparent;color:#778295;font-size:.62rem}.be-segmented button.active{background:#fff;color:#405189;font-weight:700;box-shadow:0 1px 4px rgba(44,57,80,.12)}.be-filter-select{width:170px;min-height:35px;border-color:#dce2e9;font-size:.65rem}.be-account-table-wrap{max-height:620px}.be-account-table thead{position:sticky;top:0;z-index:2}.be-account-table td:first-child{min-width:210px}.be-account-table td:nth-child(3){min-width:170px}.be-account-table td strong{color:#465366}.be-table-source{display:inline-grid;place-items:center;min-width:42px;padding:.22rem .36rem;border-radius:5px;background:#e9edf7;color:#405189;font-size:.52rem;font-weight:800}.be-table-progress{display:grid;grid-template-columns:70px 38px;align-items:center;gap:.4rem}.be-table-progress:before{grid-column:1;grid-row:1;width:70px;height:5px;border-radius:4px;background:#e8ebf0;content:""}.be-table-progress i{grid-column:1;grid-row:1;display:block;height:5px;max-width:70px;border-radius:4px;background:#405189}.be-table-progress span{grid-column:2;grid-row:1;color:#667085;font-size:.56rem}.be-overrun-row{background:#fff9fa}.be-overrun-row .be-table-progress i{background:#c2414f}
+.be-visual-grid{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:.8rem}.be-cumulative-card{grid-column:span 8;overflow:hidden}.be-mix-card{grid-column:span 4;overflow:hidden}.be-ranking-card{grid-column:span 7;overflow:hidden}.be-heatmap-card{grid-column:span 5;overflow:hidden}.be-line-legend .balance i{border-radius:50%;background:#c2414f}.be-chart-legend .budget i{background:#d7dde8}.be-cumulative-chart{padding:.4rem .8rem .1rem}.be-cumulative-chart svg{display:block;width:100%;height:auto;min-height:250px}.be-svg-grid{stroke:#e8ecf2;stroke-width:1}.be-svg-zero{stroke:#aeb8c8;stroke-width:1.2;stroke-dasharray:4 4}.be-svg-axis-label,.be-svg-month{fill:#8994a6;font-size:9px}.be-svg-line{fill:none;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}.be-svg-line.income{stroke:#2f9e78}.be-svg-line.expense{stroke:#405189}.be-svg-line.balance{stroke:#c2414f;stroke-width:2;stroke-dasharray:5 4}.be-svg-dot{stroke:#fff;stroke-width:1.5}.be-svg-dot.income{fill:#2f9e78}.be-svg-dot.expense{fill:#405189}.be-svg-dot.balance{fill:#c2414f}.be-mix-body{display:grid;grid-template-columns:145px 1fr;align-items:center;gap:.35rem;padding:.8rem 1rem .55rem}.be-donut-wrap svg{display:block;width:100%;height:auto}.be-donut-base,.be-donut-segment{fill:none;stroke-width:20;transform:rotate(-90deg);transform-origin:90px 90px}.be-donut-base{stroke:#edf0f4}.be-donut-segment{stroke-linecap:butt}.be-donut-value{fill:#28364c;font-size:25px;font-weight:800}.be-donut-label{fill:#8994a6;font-size:9px}.be-mix-legend>div{display:grid;grid-template-columns:8px 1fr auto;align-items:center;gap:.45rem;padding:.47rem 0;border-bottom:1px solid #edf0f4}.be-mix-legend>div:last-child{border-bottom:0}.be-mix-legend i{width:8px;height:8px;border-radius:50%}.be-mix-legend strong,.be-mix-legend small{display:block}.be-mix-legend strong{color:#465366;font-size:.59rem}.be-mix-legend small{margin-top:.08rem;color:#8b95a5;font-size:.51rem}.be-mix-legend b{color:#344054;font-size:.58rem}.be-chart-note{padding:.65rem 1rem;border-top:1px solid #edf0f4;background:#fafbfd;color:#7b8494;font-size:.56rem}.be-chart-note strong{color:#344054}.be-ranking-list{padding:.25rem 1rem .65rem}.be-ranking-row{display:grid;grid-template-columns:24px minmax(150px,1.2fr) minmax(120px,1fr) 95px;align-items:center;gap:.65rem;padding:.57rem 0;border-bottom:1px solid #edf0f4}.be-ranking-row:last-child{border-bottom:0}.be-rank-number{display:grid;place-items:center;width:22px;height:22px;border-radius:6px;background:#eef1f7;color:#405189;font-size:.56rem;font-weight:800}.be-rank-copy strong,.be-rank-copy small{display:block}.be-rank-copy strong{overflow:hidden;color:#465366;font-size:.59rem;text-overflow:ellipsis;white-space:nowrap}.be-rank-copy small{margin-top:.12rem;overflow:hidden;color:#98a2b3;font-size:.49rem;text-overflow:ellipsis;white-space:nowrap}.be-rank-bars{position:relative;height:10px;border-radius:6px;background:#f0f2f6;overflow:hidden}.be-rank-bars i{position:absolute;top:0;left:0;height:100%;border-radius:6px}.be-rank-bars .budget{background:#d7dde8}.be-rank-bars .executed{top:3px;height:4px;background:#405189}.be-ranking-row>strong{text-align:right;color:#344054;font-size:.59rem}.be-heatmap{display:grid;grid-template-columns:repeat(3,1fr);gap:5px;padding:.8rem 1rem}.be-heatmap article{min-height:72px;padding:.62rem;border:1px solid rgba(64,81,137,.08);border-radius:8px}.be-heatmap span,.be-heatmap strong,.be-heatmap small{display:block}.be-heatmap span{color:#3e4b60;font-size:.52rem;font-weight:800;text-transform:uppercase}.be-heatmap strong{margin:.28rem 0;color:#263043;font-size:.64rem}.be-heatmap small{color:#58667b;font-size:.5rem}.be-heatmap small.positive{color:#1b6e51}.be-heatmap small.negative{color:#a73545}.be-heat-legend{display:flex;flex-wrap:wrap;gap:.8rem;padding:.62rem 1rem;border-top:1px solid #edf0f4;color:#7b8494;font-size:.51rem}.be-heat-legend span{display:flex;align-items:center;gap:.3rem}.be-heat-legend i{width:18px;height:6px;border-radius:4px;background:rgba(64,81,137,.12)}.be-heat-legend i.high{background:rgba(64,81,137,.76)}.be-heat-legend b{color:#c2414f}
+@media(max-width:1100px){.metric-grid{grid-template-columns:repeat(2,1fr)}.dashboard-grid{grid-template-columns:1fr 1fr}.alert-panel{grid-column:1/-1}.accounting-nav{padding:.45rem}.nav-group{min-width:auto}.nav-group-title{display:none}.subsidy-pie-consolidations{grid-template-columns:1fr}.subsidy-pie-consolidated+ .subsidy-pie-consolidated{border-top:1px solid #e7ebf0;border-left:0}.subsidy-cycle-grid{grid-template-columns:1fr}.attendance-assumptions,.attendance-kpi-grid{grid-template-columns:repeat(2,1fr)}.attendance-meaning-strip{grid-template-columns:repeat(2,1fr)}.attendance-meaning-strip>div:nth-child(2){border-right:0}.attendance-meaning-strip>div:nth-child(-n+2){border-bottom:1px solid #e4e9f0}.attendance-methodology{flex-direction:column}.attendance-methodology>div:first-child{max-width:none}.attendance-sources{justify-content:flex-start}}
+@media(max-width:720px){.accounting-hero{align-items:flex-start;padding:1rem}.accounting-hero,.records-toolbar{flex-direction:column}.hero-actions,.toolbar-actions{width:100%}.hero-actions .btn{flex:1}.accounting-hero h1{font-size:1.25rem}.metric-grid,.dashboard-grid{grid-template-columns:1fr}.alert-panel{grid-column:auto}.records-toolbar{align-items:stretch}.toolbar-actions{flex-wrap:wrap}.search-box{flex:1;min-width:200px}.accounting-form-grid{grid-template-columns:1fr}.accounting-form-grid .full{grid-column:auto}.accounting-nav{display:block}.nav-group{padding:.3rem;border-right:0;border-bottom:1px solid #edf0f4}.nav-group-title{display:none}.nav-group-links{flex-wrap:nowrap;overflow-x:auto}.scope-notice{align-items:flex-start}.subsidy-command-card{align-items:stretch}.subsidy-command-card,.subsidy-period-filters{flex-direction:column}.subsidy-period-filters{align-items:stretch}.subsidy-period-select,.subsidy-month-select,.subsidy-compare-select{width:100%}.subsidy-period-note{position:static;margin:1rem -1.1rem -2.9rem}.subsidy-pie-overview{grid-template-columns:1fr 1fr}.subsidy-pie-overview>div:nth-child(2){border-right:0}.subsidy-pie-overview>div{border-bottom:1px solid #edf0f4}.subsidy-annual-grid{grid-template-columns:1fr}.subsidy-annual-row{grid-template-columns:40px minmax(70px,1fr) 100px}.subsidy-annual-row:nth-child(n){border-right:0}.subsidy-annual-row small{display:none}.subsidy-cycle-card>div{align-items:flex-start;flex-direction:column}.attendance-reconciliation-header{align-items:flex-start;flex-direction:column}.attendance-assumptions,.attendance-kpi-grid,.attendance-window-strip,.attendance-meaning-strip{grid-template-columns:1fr}.attendance-meaning-strip>div{border-right:0;border-bottom:1px solid #e4e9f0}.attendance-meaning-strip>div:last-child{border-bottom:0}.attendance-window-strip>div{border-right:0;border-bottom:1px solid #e5eaf1}.attendance-window-strip>div:last-child{border-bottom:0}.attendance-contrast-band{grid-template-columns:1fr}.attendance-contrast-bars>div{grid-template-columns:54px minmax(75px,1fr) 95px}.attendance-warning-panel ul{grid-template-columns:1fr}.attendance-empty-state{align-items:flex-start;flex-direction:column}.attendance-reconciliation-title{align-items:flex-start}.attendance-table,.attendance-income-table{min-width:760px}.attendance-income-heading{align-items:flex-start;flex-direction:column}.attendance-income-heading .btn{width:100%;justify-content:center}}
+@media(max-width:1100px){.be-kpi-grid,.be-subsidy-grid{grid-template-columns:repeat(2,1fr)}.be-analysis-grid,.be-detail-grid{grid-template-columns:1fr}.be-cumulative-card,.be-mix-card,.be-ranking-card,.be-heatmap-card{grid-column:span 12}.be-account-toolbar{align-items:stretch}.be-account-filters{flex-wrap:wrap}.be-account-filters .search-box{flex:1}}
+@media(max-width:720px){.be-command-bar{align-items:stretch;flex-direction:column;padding-bottom:1rem}.be-year-control>div,.be-command-actions{align-items:stretch;flex-direction:column}.be-year-select{width:100%}.be-version-strip{position:static;align-items:flex-start;flex-direction:column;margin:1rem -1.15rem -1rem;white-space:normal}.be-empty-state{min-height:420px;padding:2.5rem 1rem}.be-empty-state h2{font-size:1.35rem}.be-empty-features{align-items:flex-start;flex-direction:column;gap:.65rem}.be-kpi-grid,.be-subsidy-grid{grid-template-columns:1fr}.be-monthly-card{overflow-x:auto}.be-month-chart{min-width:720px}.be-chart-summary{min-width:720px}.be-cumulative-card{overflow-x:auto}.be-cumulative-chart{min-width:700px}.be-mix-body{grid-template-columns:120px 1fr}.be-ranking-card{overflow-x:auto}.be-ranking-list{min-width:650px}.be-heatmap{grid-template-columns:repeat(2,1fr)}.be-subsidy-grid{padding:.75rem}.be-account-filters{align-items:stretch;flex-direction:column}.be-filter-select{width:100%;min-width:0}.be-account-filters .search-box{width:100%;min-width:0}.be-health-score{grid-template-columns:105px 1fr}}
 </style>

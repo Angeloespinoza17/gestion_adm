@@ -62,6 +62,92 @@ restore_access_on_failure() {
 
 trap restore_access_on_failure EXIT
 
+create_and_verify_remote_backup() {
+  "${SSH_COMMAND[@]}" "${REMOTE}" bash -s -- "${DEPLOY_REMOTE_PATH}" "${DEPLOY_PHP_BIN}" <<'REMOTE'
+set -Eeuo pipefail
+
+APP_DIR="$1"
+PHP_BIN="$2"
+
+export HOME="$(getent passwd "$(id -u)" | cut -d: -f6)"
+cd "${APP_DIR}"
+
+"${PHP_BIN}" artisan env --no-ansi \
+  | grep -Eq 'environment([[:space:]]+is|:)[[:space:]]*\[?production\]?[[:space:].]*$'
+
+"${PHP_BIN}" artisan migrate:status --no-ansi
+
+"${PHP_BIN}" artisan tinker --execute='$tables = ["users", "roles", "staff", "student_profiles", "maintenance_work_orders", "biblioteca_obras", "biblioteca_ejemplares", "psychology_cases", "attendance_records", "system_modules", "permissions"]; foreach ($tables as $table) { if (Illuminate\Support\Facades\Schema::hasTable($table)) { echo "COUNT ".$table."=".Illuminate\Support\Facades\DB::table($table)->count().PHP_EOL; } }'
+
+BACKUP_OUTPUT="$("${PHP_BIN}" artisan backup:database --no-prune --no-ansi)"
+printf '%s\n' "${BACKUP_OUTPUT}"
+
+BACKUP_RELATIVE_PATH="$(printf '%s\n' "${BACKUP_OUTPUT}" | sed -n 's/^Respaldo creado: //p' | tail -n 1)"
+test -n "${BACKUP_RELATIVE_PATH}"
+
+BACKUP_DISK="$("${PHP_BIN}" artisan tinker --execute='echo config("backup.disk");')"
+test "${BACKUP_DISK}" = 'local'
+
+BACKUP_PATH="${APP_DIR}/storage/app/${BACKUP_RELATIVE_PATH}"
+test -s "${BACKUP_PATH}"
+
+case "${BACKUP_PATH}" in
+  *.sql.gz)
+    gzip -t "${BACKUP_PATH}"
+    ;;
+  *.sqlite)
+    sqlite3 "${BACKUP_PATH}" 'PRAGMA integrity_check;' | grep -Fxq 'ok'
+    ;;
+  *)
+    echo "Formato de respaldo no verificable: ${BACKUP_PATH}" >&2
+    exit 1
+    ;;
+esac
+
+sha256sum "${BACKUP_PATH}"
+stat -c 'BACKUP_VERIFIED %n | %s bytes | %y' "${BACKUP_PATH}"
+REMOTE
+}
+
+remote_core_counts() {
+  "${SSH_COMMAND[@]}" "${REMOTE}" bash -s -- "${DEPLOY_REMOTE_PATH}" "${DEPLOY_PHP_BIN}" <<'REMOTE'
+set -Eeuo pipefail
+
+APP_DIR="$1"
+PHP_BIN="$2"
+
+export HOME="$(getent passwd "$(id -u)" | cut -d: -f6)"
+cd "${APP_DIR}"
+
+"${PHP_BIN}" artisan tinker --execute='$tables = ["users", "roles", "staff", "student_profiles", "maintenance_work_orders", "biblioteca_obras", "biblioteca_ejemplares", "psychology_cases", "attendance_records", "system_modules", "permissions"]; foreach ($tables as $table) { if (Illuminate\Support\Facades\Schema::hasTable($table)) { echo "COUNT ".$table."=".Illuminate\Support\Facades\DB::table($table)->count().PHP_EOL; } }'
+REMOTE
+}
+
+verify_no_core_count_decrease() {
+  local baseline_counts="$1"
+  local final_counts="$2"
+  local count_line table_name baseline_value final_value
+
+  while IFS= read -r count_line; do
+    [[ "${count_line}" == COUNT\ * ]] || continue
+
+    table_name="${count_line#COUNT }"
+    table_name="${table_name%%=*}"
+    baseline_value="${count_line##*=}"
+    final_value="$(printf '%s\n' "${final_counts}" | sed -n "s/^COUNT ${table_name}=//p" | tail -n 1)"
+
+    if [[ ! "${baseline_value}" =~ ^[0-9]+$ || ! "${final_value}" =~ ^[0-9]+$ ]]; then
+      echo "No se pudo comparar el conteo de ${table_name}." >&2
+      exit 1
+    fi
+
+    if (( final_value < baseline_value )); then
+      echo "El deploy redujo ${table_name}: ${baseline_value} -> ${final_value}." >&2
+      exit 1
+    fi
+  done <<< "${baseline_counts}"
+}
+
 cd "${ROOT_DIR}"
 
 if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
@@ -77,6 +163,12 @@ fi
 echo "==> Build local"
 npm run prod
 
+echo "==> Creando y verificando respaldo previo en producción"
+BACKUP_RESULT="$(create_and_verify_remote_backup)"
+printf '%s\n' "${BACKUP_RESULT}"
+BASELINE_COUNTS="$(printf '%s\n' "${BACKUP_RESULT}" | grep '^COUNT ')"
+test -n "${BASELINE_COUNTS}"
+
 echo "==> Verificando acceso al document root"
 restore_remote_document_root_access
 
@@ -90,6 +182,7 @@ rsync -az --delete --no-owner --no-group --chmod='Du=rwx,Dgo=rx' \
   --exclude='storage' \
   --exclude='output' \
   --exclude='outputs' \
+  --exclude='tmp' \
   --exclude='public/hot' \
   "${ROOT_DIR}/" "${REMOTE}:${DEPLOY_REMOTE_PATH}/"
 
@@ -107,7 +200,6 @@ if [ ! -L public/storage ]; then ${DEPLOY_PHP_BIN} artisan storage:link --no-ans
 ${DEPLOY_PHP_BIN} artisan config:clear && \
 ${DEPLOY_PHP_BIN} artisan env --no-ansi | grep -Eq 'environment([[:space:]]+is|:)[[:space:]]*\[?production\]?[[:space:].]*$' && \
 ${DEPLOY_PHP_BIN} artisan migrate:status --no-ansi && \
-${DEPLOY_PHP_BIN} artisan backup:database --no-prune && \
 ${DEPLOY_PHP_BIN} artisan migrate --force --no-interaction && \
 if [ '${DEPLOY_RBAC_RECONCILE}' = 'true' ]; then \
   ${DEPLOY_PHP_BIN} artisan rbac:reconcile --no-ansi && \
@@ -126,6 +218,11 @@ if [ -n "${DEPLOY_REMOTE_OWNER}" ]; then
   echo "==> Ajustando permisos"
   "${SSH_COMMAND[@]}" "${REMOTE}" "chown -R '${DEPLOY_REMOTE_OWNER}' '${DEPLOY_REMOTE_PATH}'"
 fi
+
+echo "==> Verificando conservación de registros"
+FINAL_COUNTS="$(remote_core_counts)"
+printf '%s\n' "${FINAL_COUNTS}"
+verify_no_core_count_decrease "${BASELINE_COUNTS}" "${FINAL_COUNTS}"
 
 trap - EXIT
 echo "==> Deploy completado"

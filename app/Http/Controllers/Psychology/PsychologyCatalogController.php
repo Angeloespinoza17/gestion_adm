@@ -4,9 +4,7 @@ namespace App\Http\Controllers\Psychology;
 
 use App\Http\Controllers\Controller;
 use App\Models\AcademicYear;
-use App\Models\Psychology\PsychologyCase;
 use App\Models\Psychology\PsychologyCatalogItem;
-use App\Models\Psychology\PsychologyReferral;
 use App\Models\StudentProfile;
 use App\Models\User;
 use App\Services\Psychology\PsychologyAccessService;
@@ -20,27 +18,48 @@ class PsychologyCatalogController extends Controller
     public function __invoke(Request $request): JsonResponse
     {
         $user = $request->user();
+        $user->loadMissing('roles.permissions');
         $access = app(PsychologyAccessService::class);
         $nominalAccess = $access->canAccessNominalDomain($user);
         $catalogs = PsychologyCatalogItem::query()->where('active', true)->orderBy('sort_order')->get()->groupBy('type');
         $professionals = $nominalAccess
-            ? User::query()->where('active', true)->whereHas('roles.permissions', fn (Builder $q) => $q->whereIn('slug', ['psychology.cases.view_assigned', 'psychology.cases.view_all', 'psychology.sessions.create']))
+            ? User::query()->where('active', true)->where(function (Builder $query) {
+                $query->whereHas('roles.permissions', fn (Builder $q) => $q->where('active', true)->whereIn('slug', ['psychology.cases.view_assigned', 'psychology.cases.view_all', 'psychology.sessions.create']))
+                    ->orWhereHas('roles', fn (Builder $q) => $q->where('slug', 'super_admin')->where('active', true));
+            })
                 ->with('staff:id,full_name')->orderBy('name')->get(['id', 'name', 'staff_id'])->map(fn (User $professional) => ['id' => $professional->id, 'name' => $professional->staff?->full_name ?: $professional->name])
+            : collect();
+        $coordinationRecipients = $nominalAccess
+            ? User::query()
+                ->where('active', true)
+                ->where('users.id', '!=', $user->id)
+                ->where(fn (Builder $query) => $query->whereNotNull('staff_id')->orWhere('user_type', 'staff'))
+                ->with(['staff:id,full_name,cargo_id', 'staff.cargo:id,name', 'cargo:id,name'])
+                ->orderBy('name')
+                ->get(['id', 'name', 'staff_id', 'cargo_id'])
+                ->map(fn (User $recipient) => [
+                    'id' => $recipient->id,
+                    'name' => $recipient->staff?->full_name ?: $recipient->name,
+                    'position' => $recipient->staff?->cargo?->name ?: $recipient->cargo?->name,
+                ])
             : collect();
         $settings = DB::table('psychology_settings')->pluck('value', 'key');
 
-        return response()->json(['catalogs' => $catalogs, 'professionals' => $professionals, 'settings' => $settings, 'capabilities' => [
+        return response()->json(['catalogs' => $catalogs, 'professionals' => $professionals, 'coordination_recipients' => $coordinationRecipients, 'settings' => $settings, 'capabilities' => [
             'create_referral' => $nominalAccess && $user->hasPermission('psychology.referrals.create'), 'view_all_referrals' => $nominalAccess && $user->hasPermission('psychology.referrals.view_all'),
             'manage_referrals' => $nominalAccess && $user->hasPermission('psychology.referrals.update'),
             'view_referrals' => $nominalAccess && ($user->hasPermission('psychology.referrals.view_own') || $user->hasPermission('psychology.referrals.view_all')),
             'view_cases' => $nominalAccess && ($user->hasPermission('psychology.cases.view_assigned') || $user->hasPermission('psychology.cases.view_all')),
             'assign' => $nominalAccess && $user->hasPermission('psychology.referrals.assign'), 'create_case' => $nominalAccess && $user->hasPermission('psychology.cases.create'),
             'reassign_case' => $nominalAccess && $user->hasPermission('psychology.cases.reassign'), 'close_case' => $nominalAccess && $user->hasPermission('psychology.cases.close'),
+            'reopen_case' => $nominalAccess && $user->hasPermission('psychology.cases.reopen'),
             'create_activity' => $nominalAccess && $user->hasPermission('psychology.sessions.create'), 'view_private' => $access->hasExplicitPermission($user, 'psychology.sessions.view_private'),
             'risk' => $nominalAccess && $user->hasPermission('psychology.risk.view'), 'reports_aggregate' => $user->hasPermission('psychology.reports.aggregate'),
             'reports_nominal' => $access->hasExplicitPermission($user, 'psychology.reports.nominal') || $access->hasExplicitPermission($user, 'psychology.sensitive.override'),
             'documents_upload' => $nominalAccess && $user->hasPermission('psychology.documents.upload'), 'documents_download' => $nominalAccess && $user->hasPermission('psychology.documents.download'),
             'config' => $user->hasPermission('psychology.config.manage'), 'audit' => $user->hasPermission('psychology.audit.view'),
+            'full_domain' => $user->isSuperAdmin(),
+            'personal_scope' => $access->isScopedPsychologist($user),
         ]]);
     }
 
@@ -55,6 +74,8 @@ class PsychologyCatalogController extends Controller
             })
             ->when($validated['course_section_id'] ?? null, fn (Builder $q, $course) => $q->whereHas('enrollments', fn (Builder $e) => $e->where('course_section_id', $course)))
             ->with(['enrollments' => fn ($q) => $q->when($year, fn ($e) => $e->where('academic_year_id', $year->id))->with('courseSection.educationLevel')])
+            ->withExists(['psychologyCases as active_case' => fn (Builder $q) => $q->where('status', '!=', 'closed')])
+            ->withCount(['psychologyReferrals as pending_referrals' => fn (Builder $q) => $q->whereIn('status', ['submitted', 'under_review', 'information_requested', 'accepted'])])
             ->orderBy('last_name')->limit(20)->get();
         $data = $students->map(function (StudentProfile $student) use ($year) {
             $enrollment = $year ? $student->preferredEnrollment($year) : $student->enrollments->first();
@@ -63,8 +84,8 @@ class PsychologyCatalogController extends Controller
                 'course_section_id' => $enrollment?->course_section_id, 'course' => $enrollment?->snapshot_course_display_name,
                 'cycle' => $enrollment?->courseSection?->educationLevel?->type, 'enrollment_status' => $enrollment?->enrollment_status,
                 'guardian_name' => $student->guardian_name, 'guardian_phone' => $student->guardian_phone,
-                'active_case' => PsychologyCase::query()->where('student_profile_id', $student->id)->whereNotIn('status', ['closed'])->exists(),
-                'pending_referrals' => PsychologyReferral::query()->where('student_profile_id', $student->id)->whereIn('status', ['submitted', 'under_review', 'information_requested', 'accepted'])->count()];
+                'active_case' => (bool) $student->active_case,
+                'pending_referrals' => (int) $student->pending_referrals];
         });
 
         return response()->json(['data' => $data]);

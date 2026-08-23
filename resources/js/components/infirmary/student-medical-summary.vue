@@ -14,6 +14,9 @@ export default {
     guardianContacts() {
       return this.context?.emergency_contacts || [];
     },
+    protectionRestrictions() {
+      return this.context?.guardian_restrictions || [];
+    },
   },
   methods: {
     value(value, fallback = "Sin información") {
@@ -42,9 +45,9 @@ export default {
           <strong>{{ context.full_name }}</strong>
           <small>{{ context.rut || "Sin RUT" }} · {{ context.course || "Sin curso" }} · {{ context.age ?? "-" }} años</small>
         </div>
-        <div class="medical-summary__status" :class="{ 'has-alerts': alerts.length }">
-          <i :class="alerts.length ? 'bx bxs-error-circle' : 'bx bxs-check-shield'"></i>
-          {{ alerts.length ? `${alerts.length} alerta${alerts.length === 1 ? '' : 's'}` : "Sin alertas registradas" }}
+        <div class="medical-summary__status" :class="{ 'has-alerts': alerts.length || protectionRestrictions.length }">
+          <i :class="alerts.length || protectionRestrictions.length ? 'bx bxs-error-circle' : 'bx bxs-check-shield'"></i>
+          {{ alerts.length || protectionRestrictions.length ? `${alerts.length + protectionRestrictions.length} alerta${alerts.length + protectionRestrictions.length === 1 ? '' : 's'}` : "Sin alertas registradas" }}
         </div>
       </header>
 
@@ -53,6 +56,14 @@ export default {
           <i class="bx bxs-error-alt"></i>
           <div><strong>{{ alert.label }}</strong><span>{{ value(alert.detail, "Revisar ficha médica") }}</span></div>
         </article>
+      </div>
+
+      <div v-if="protectionRestrictions.length" class="medical-protection-alert" role="alert">
+        <i class="bx bxs-shield-x"></i>
+        <div>
+          <strong>Restricción de contacto configurada por Trabajo Social</strong>
+          <span>Revisa las alertas antes de seleccionar a qué apoderado llamar.</span>
+        </div>
       </div>
 
       <div class="medical-summary__grid">
@@ -65,10 +76,17 @@ export default {
       <div class="medical-summary__guardians">
         <span>Contactos de apoderados</span>
         <div v-if="guardianContacts.length" class="medical-summary__guardian-grid">
-          <div v-for="contact in guardianContacts" :key="contact.type || contact.label || contact.name">
+          <div v-for="contact in guardianContacts" :key="contact.type || contact.label || contact.name" :class="{ 'is-restricted': contact.has_active_restriction }">
             <small>{{ contact.label || (contact.type === "backup" ? "Apoderado suplente" : "Apoderado principal") }}</small>
             <strong>{{ value(contact.name, "Sin nombre registrado") }}</strong>
             <p><i class="bx bx-phone"></i> {{ value(contact.phone, "Sin teléfono registrado") }}</p>
+            <div v-if="contact.has_active_restriction" class="medical-summary__restriction">
+              <b><i class="bx bxs-error-alt"></i> No contactar sin validar</b>
+              <template v-for="restriction in contact.restrictions" :key="restriction.id">
+                <strong>{{ restriction.restriction_type_label }}</strong>
+                <span>{{ restriction.reason }}</span>
+              </template>
+            </div>
           </div>
         </div>
         <p v-else class="medical-summary__guardian-empty">Sin apoderados registrados.</p>
@@ -101,15 +119,26 @@ export default {
 .medical-alert--info { border-color: #3a75ca; background: #edf5ff; color: #28568f; }
 .medical-alert strong, .medical-alert span { display: block; }
 .medical-alert span { margin-top: 2px; font-size: 12px; }
+.medical-protection-alert { align-items: flex-start; display: flex; gap: 9px; margin: 12px 16px 0; padding: 10px 12px; border: 1px solid #e4aaa5; border-left: 4px solid #bf3b33; border-radius: 6px; background: #fff0ef; color: #842b26; }
+.medical-protection-alert > i { font-size: 20px; }
+.medical-protection-alert strong, .medical-protection-alert span { display: block; }
+.medical-protection-alert strong { font-size: 12px; text-transform: uppercase; }
+.medical-protection-alert span { margin-top: 2px; font-size: 11px; }
 .medical-summary__grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 1px; margin: 12px 16px; background: #dfe6ef; border: 1px solid #dfe6ef; }
 .medical-summary__grid > div { padding: 10px; background: #fff; }
 .medical-summary__grid strong { display: block; margin-top: 3px; font-size: 13px; }
 .medical-summary__guardians, .medical-summary__medications, .medical-summary__observations { margin: 0 16px 12px; padding: 11px; border-radius: 5px; background: #fff; border: 1px solid #e1e7ef; }
 .medical-summary__guardian-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-top: 7px; }
 .medical-summary__guardian-grid > div { min-width: 0; padding: 9px 10px; border: 1px solid #e1e7ef; border-radius: 5px; background: #f8fafc; }
+.medical-summary__guardian-grid > div.is-restricted { border-color: #e4aaa5; background: #fff8f7; }
 .medical-summary__guardian-grid small { display: block; color: #687386; font-size: 10px; font-weight: 700; text-transform: uppercase; }
 .medical-summary__guardian-grid strong { display: block; margin-top: 2px; overflow-wrap: anywhere; font-size: 13px; }
 .medical-summary__guardian-grid p, .medical-summary__guardian-empty { margin: 4px 0 0; color: #526078; font-size: 12px; }
+.medical-summary__restriction { margin-top: 7px; padding: 7px; border-radius: 5px; background: #fff0ef; color: #842b26; }
+.medical-summary__restriction b, .medical-summary__restriction strong, .medical-summary__restriction span { display: block; }
+.medical-summary__restriction b { font-size: 10px; text-transform: uppercase; }
+.medical-summary__restriction strong { margin-top: 4px; font-size: 12px; }
+.medical-summary__restriction span { margin-top: 2px; font-size: 11px; }
 .medical-summary__medications ul { margin: 6px 0 0; padding-left: 18px; font-size: 12px; }
 .medical-summary__observations p { margin: 5px 0 0; font-size: 12px; white-space: pre-wrap; }
 @media (max-width: 767px) { .medical-summary__header { flex-direction: column; } .medical-summary__status { align-self: flex-start; } .medical-summary__grid { grid-template-columns: repeat(2, 1fr); } .medical-summary__guardian-grid { grid-template-columns: 1fr; } }

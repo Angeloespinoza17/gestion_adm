@@ -24,6 +24,8 @@ class StoreAssessmentRequest extends FormRequest
             'grading_scale' => ['required', Rule::in(['1_to_7'])],
             'curriculum_objective_ids' => ['sometimes', 'array'],
             'curriculum_objective_ids.*' => ['integer', 'distinct', 'exists:lcd_learning_objectives,id'],
+            'curriculum_program_id' => ['nullable', 'string', 'max:40', 'regex:/^(?:[0-9]+|[0-9A-HJKMNP-TV-Z]{26})$/i'],
+            'curriculum_unit_id' => ['nullable', 'string', 'max:40', 'regex:/^(?:[0-9]+|[0-9A-HJKMNP-TV-Z]{26})$/i'],
         ];
     }
 }

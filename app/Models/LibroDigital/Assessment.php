@@ -56,6 +56,16 @@ class Assessment extends LibroDigitalModel
         return $this->belongsTo(ScheduleSubject::class, 'schedule_subject_id');
     }
 
+    public function curriculumProgram(): BelongsTo
+    {
+        return $this->belongsTo(CurriculumProgram::class, 'curriculum_program_id');
+    }
+
+    public function curriculumUnit(): BelongsTo
+    {
+        return $this->belongsTo(CurriculumUnit::class, 'curriculum_unit_id');
+    }
+
     public function teacherAssignment(): BelongsTo
     {
         return $this->belongsTo(TeacherAssignment::class);

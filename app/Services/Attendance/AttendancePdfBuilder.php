@@ -32,6 +32,8 @@ class AttendancePdfBuilder
 
     private string $watermark = '';
 
+    private string $reportLabel = 'REPORTE INSTITUCIONAL';
+
     public function build(string $title, array $metadata, array $sections, array $dashboard = []): string
     {
         $this->pages = [];
@@ -43,6 +45,9 @@ class AttendancePdfBuilder
         $this->reportTrace = $this->cell($branding['report_trace'] ?? '');
         $this->sourceLabel = $this->cell($branding['source_label'] ?? 'registros de asistencia del sistema');
         $this->watermark = $this->cell($branding['watermark'] ?? '');
+        $this->reportLabel = mb_strtoupper($this->cell(
+            $branding['report_label'] ?? $metadata['tipo de reporte'] ?? 'Reporte institucional'
+        ));
         $this->startPage(true);
         $this->renderMetadata($metadata);
 
@@ -59,8 +64,28 @@ class AttendancePdfBuilder
             if ($sectionTitle === 'Resumen ejecutivo') {
                 continue;
             }
+            if (($section['layout'] ?? null) === 'curriculum_program_summary') {
+                $this->renderCurriculumProgramSummary($section);
+
+                continue;
+            }
+            if (($section['layout'] ?? null) === 'curriculum_program_dashboard') {
+                $this->renderCurriculumProgramDashboard($section);
+
+                continue;
+            }
             if (($section['layout'] ?? null) === 'curriculum_objectives') {
                 $this->renderCurriculumObjectives($section);
+
+                continue;
+            }
+            if (($section['layout'] ?? null) === 'curriculum_unit_detail') {
+                $this->renderCurriculumUnitDetail($section);
+
+                continue;
+            }
+            if (($section['layout'] ?? null) === 'curriculum_sources') {
+                $this->renderCurriculumSources($section);
 
                 continue;
             }
@@ -80,6 +105,85 @@ class AttendancePdfBuilder
         return $this->document();
     }
 
+    private function renderCurriculumProgramDashboard(array $section): void
+    {
+        $this->ensureSpace(235);
+        $this->sectionHeading('Distribución curricular', (string) ($section['subtitle'] ?? 'Cobertura del programa curricular'));
+        $top = $this->cursorY;
+        $panelWidth = (self::CONTENT_WIDTH - 12) / 2;
+        $this->curriculumBars(self::MARGIN, $top, $panelWidth, 'Horas por unidad', (array) ($section['hours'] ?? []), [0.18, 0.51, 0.77]);
+        $this->curriculumBars(self::MARGIN + $panelWidth + 12, $top, $panelWidth, 'OA por eje', (array) ($section['axes'] ?? []), [0.16, 0.55, 0.40]);
+        $this->cursorY = $top - 190;
+    }
+
+    private function renderCurriculumProgramSummary(array $section): void
+    {
+        $this->ensureSpace(230);
+        $this->sectionHeading((string) ($section['title'] ?? 'Síntesis curricular'), implode(' · ', array_filter([
+            $this->cell($section['subtitle'] ?? ''),
+            $this->cell($section['status'] ?? ''),
+        ])));
+
+        $metrics = array_slice(array_values((array) ($section['metrics'] ?? [])), 0, 6);
+        $colors = [
+            [0.25, 0.32, 0.54], [0.18, 0.51, 0.77], [0.16, 0.55, 0.40],
+            [0.48, 0.38, 0.66], [0.83, 0.57, 0.13], [0.18, 0.45, 0.55],
+        ];
+        $gap = 8.0;
+        $width = (self::CONTENT_WIDTH - ($gap * 2)) / 3;
+        $height = 52.0;
+        $top = $this->cursorY;
+        foreach ($metrics as $index => $metric) {
+            $metric = (array) $metric;
+            $row = intdiv($index, 3);
+            $column = $index % 3;
+            $bottom = $top - (($height + $gap) * $row) - $height;
+            $x = self::MARGIN + (($width + $gap) * $column);
+            $color = $colors[$index] ?? $colors[0];
+            $this->fillRect($x, $bottom, $width, $height, [0.975, 0.98, 0.988], [0.87, 0.90, 0.94]);
+            $this->fillRect($x, $bottom, 4, $height, $color);
+            $this->text($x + 13, $bottom + 35, $metric['label'] ?? '-', 6.5, 'F2', [0.43, 0.48, 0.56], 28);
+            $this->text($x + 13, $bottom + 16, $metric['value'] ?? '-', 14, 'F2', $color, 14);
+            $this->text($x + 66, $bottom + 17, $metric['detail'] ?? '', 6.5, 'F1', [0.43, 0.48, 0.56], 31);
+        }
+        $rows = max(1, (int) ceil(count($metrics) / 3));
+        $this->cursorY = $top - (($height + $gap) * $rows) - 2;
+
+        $description = $this->cell($section['description'] ?? '');
+        if ($description !== '') {
+            $this->renderCurriculumText('ALCANCE DEL PROGRAMA', $description, 7.5, [0.24, 0.29, 0.36], 150);
+        }
+        $source = $this->cell($section['source'] ?? '');
+        if ($source !== '') {
+            $this->renderCurriculumText('RESPALDO MINISTERIAL', $source, 7, [0.33, 0.39, 0.47], 150);
+        }
+    }
+
+    private function curriculumBars(float $x, float $top, float $width, string $title, array $dataset, array $color): void
+    {
+        $labels = array_values((array) ($dataset['labels'] ?? []));
+        $series = array_values((array) ($dataset['series'] ?? []));
+        $height = 176.0;
+        $this->fillRect($x, $top - $height, $width, $height, [0.985, 0.988, 0.994], [0.88, 0.90, 0.93]);
+        $this->text($x + 12, $top - 20, $title, 8.5, 'F2', [0.16, 0.20, 0.27], 42);
+        $maximum = max(1.0, (float) max([1, ...array_map(fn ($value): float => (float) $value, $series)]));
+        $count = max(1, min(6, count($labels)));
+        $barTop = $top - 43;
+        foreach (array_slice($labels, 0, 6) as $index => $label) {
+            $value = (float) ($series[$index] ?? 0);
+            $y = $barTop - ($index * (116 / $count));
+            $this->text($x + 12, $y, $this->cell($label), 6.1, 'F1', [0.38, 0.43, 0.51], 34);
+            $barX = $x + 158;
+            $barWidth = max(2.0, ($width - 200) * ($value / $maximum));
+            $this->fillRect($barX, $y - 1, $width - 200, 8, [0.91, 0.93, 0.95]);
+            $this->fillRect($barX, $y - 1, $barWidth, 8, $color);
+            $this->text($x + $width - 33, $y, number_format($value, 0, ',', '.'), 6.5, 'F2', $color, 8);
+        }
+        if ($labels === []) {
+            $this->text($x + 12, $top - 65, 'Sin datos informados', 7, 'F1', [0.48, 0.52, 0.59]);
+        }
+    }
+
     private function startPage(bool $first = false): void
     {
         $this->pages[] = [];
@@ -95,7 +199,7 @@ class AttendancePdfBuilder
             $this->fillRect(0, 519, self::PAGE_WIDTH, 3, [0.16, 0.55, 0.40]);
             $this->text(32, 570, $this->organizationName, 8, 'F2', [0.72, 0.82, 0.94], 72);
             $this->text(32, 541, $this->title, 20, 'F2', [1, 1, 1], 86);
-            $this->text(690, 570, 'REPORTE INSTITUCIONAL', 7, 'F2', [0.72, 0.82, 0.94]);
+            $this->text(675, 570, $this->reportLabel, 7, 'F2', [0.72, 0.82, 0.94], 32);
             $this->cursorY = 505;
 
             return;
@@ -150,14 +254,23 @@ class AttendancePdfBuilder
         $values = collect($section['rows'] ?? [])->mapWithKeys(fn (array $row) => [(string) ($row[0] ?? '') => $row[1] ?? '-'])->all();
         $this->sectionHeading('Resumen ejecutivo', 'Indicadores principales del periodo seleccionado');
 
-        $cards = [
-            ['Asistencia', $values['Asistencia'] ?? '-', [0.16, 0.55, 0.40]],
-            ['Meta institucional', $values['Meta'] ?? '-', [0.25, 0.32, 0.54]],
-            ['Presentes', $values['Presentes'] ?? 0, [0.18, 0.51, 0.77]],
-            ['Ausentes', $values['Ausentes'] ?? 0, [0.76, 0.24, 0.29]],
-            ['Estudiantes en riesgo', $values['Estudiantes en riesgo'] ?? 0, [0.83, 0.57, 0.13]],
-            ['Alertas abiertas', $values['Alertas abiertas'] ?? 0, [0.48, 0.38, 0.66]],
-        ];
+        $cards = isset($values['Días lectivos registrados'])
+            ? [
+                ['Asistencia', $values['Asistencia'] ?? '-', [0.16, 0.55, 0.40]],
+                ['Días lectivos registrados', $values['Días lectivos registrados'], [0.25, 0.32, 0.54]],
+                ['Días presentes', $values['Días presentes'] ?? 0, [0.18, 0.51, 0.77]],
+                ['Días perdidos', $values['Días perdidos'] ?? 0, [0.76, 0.24, 0.29]],
+                ['Ausencias injustificadas', $values['Ausencias injustificadas'] ?? 0, [0.83, 0.57, 0.13]],
+                ['Atrasos', $values['Atrasos'] ?? 0, [0.48, 0.38, 0.66]],
+            ]
+            : [
+                ['Asistencia', $values['Asistencia'] ?? '-', [0.16, 0.55, 0.40]],
+                ['Meta institucional', $values['Meta'] ?? '-', [0.25, 0.32, 0.54]],
+                ['Presentes', $values['Presentes'] ?? 0, [0.18, 0.51, 0.77]],
+                ['Ausentes', $values['Ausentes'] ?? 0, [0.76, 0.24, 0.29]],
+                ['Estudiantes en riesgo', $values['Estudiantes en riesgo'] ?? 0, [0.83, 0.57, 0.13]],
+                ['Alertas abiertas', $values['Alertas abiertas'] ?? 0, [0.48, 0.38, 0.66]],
+            ];
         $gap = 8.0;
         $width = (self::CONTENT_WIDTH - ($gap * 2)) / 3;
         $height = 47.0;
@@ -181,10 +294,10 @@ class AttendancePdfBuilder
     private function renderCompositionBar(array $values): void
     {
         $this->ensureSpace(76);
-        $present = $this->numeric($values['Presentes'] ?? 0);
-        $absent = $this->numeric($values['Ausentes'] ?? 0);
-        $justified = min($absent, $this->numeric($values['Justificadas'] ?? 0));
-        $unjustified = min(max(0, $absent - $justified), $this->numeric($values['Injustificadas'] ?? 0));
+        $present = $this->numeric($values['Presentes'] ?? $values['Días presentes'] ?? 0);
+        $absent = $this->numeric($values['Ausentes'] ?? $values['Días perdidos'] ?? 0);
+        $justified = min($absent, $this->numeric($values['Justificadas'] ?? $values['Ausencias justificadas'] ?? 0));
+        $unjustified = min(max(0, $absent - $justified), $this->numeric($values['Injustificadas'] ?? $values['Ausencias injustificadas'] ?? 0));
         $otherAbsent = max(0, $absent - $justified - $unjustified);
         $segments = [
             ['Presentes', $present, [0.16, 0.55, 0.40]],
@@ -328,6 +441,7 @@ class AttendancePdfBuilder
             return;
         }
 
+        $this->ensureSpace(120);
         $this->sectionHeading((string) ($section['title'] ?? 'Objetivos curriculares'), 'Texto oficial y trazabilidad de fuentes');
         $currentGroup = null;
         foreach ($rows as $row) {
@@ -345,11 +459,93 @@ class AttendancePdfBuilder
         }
     }
 
+    private function renderCurriculumUnitDetail(array $section): void
+    {
+        $blocks = [
+            ['PROPÓSITO', array_filter([$this->cell($section['purpose'] ?? '')])],
+            ['OBJETIVOS DE APRENDIZAJE', (array) ($section['objectives'] ?? [])],
+            ['CONOCIMIENTOS PREVIOS', (array) ($section['prior_knowledge'] ?? [])],
+            ['CONOCIMIENTOS', (array) ($section['knowledge'] ?? [])],
+            ['HABILIDADES', (array) ($section['skills'] ?? [])],
+            ['ACTITUDES', (array) ($section['attitudes'] ?? [])],
+        ];
+        $estimatedHeight = 62;
+        foreach ($blocks as [, $values]) {
+            if ($values === []) {
+                continue;
+            }
+            $estimatedHeight += 17 + collect($values)->sum(fn ($value): int => count($this->wrapComplete('• '.$this->cell($value), 145)) * 10 + 3);
+        }
+        $estimatedHeight += 34;
+        $this->ensureSpace(min(455, $estimatedHeight));
+
+        $subtitle = implode(' · ', array_filter([
+            filled($section['semester'] ?? null) ? 'Semestre '.$section['semester'] : null,
+            filled($section['hours'] ?? null) ? $section['hours'].' horas pedagógicas' : null,
+            ($section['page_range'] ?? 'Sin localizar') !== 'Sin localizar' ? 'páginas '.$section['page_range'] : null,
+        ]));
+        $this->sectionHeading($this->cell($section['title'] ?? 'Unidad curricular'), $subtitle);
+        foreach ($blocks as [$label, $values]) {
+            $values = array_values(array_filter(array_map(fn ($value): string => $this->cell($value), $values)));
+            if ($values === []) {
+                continue;
+            }
+            $this->renderCurriculumLabel($label);
+            foreach ($values as $value) {
+                $this->renderCurriculumText('', '• '.$value, 7.1, [0.27, 0.32, 0.40], 145);
+            }
+        }
+
+        $keywords = array_values(array_filter(array_map(fn ($value): string => $this->cell($value), (array) ($section['keywords'] ?? []))));
+        if ($keywords !== []) {
+            $this->ensureSpace(32);
+            $this->fillRect(self::MARGIN, $this->cursorY - 25, self::CONTENT_WIDTH, 25, [0.93, 0.97, 0.96], [0.80, 0.89, 0.86]);
+            $this->text(self::MARGIN + 11, $this->cursorY - 16, 'PALABRAS CLAVE', 6.2, 'F2', [0.16, 0.45, 0.39]);
+            $this->text(self::MARGIN + 105, $this->cursorY - 16, implode(', ', $keywords), 7, 'F1', [0.27, 0.36, 0.34], 135);
+            $this->cursorY -= 37;
+        }
+    }
+
+    private function renderCurriculumSources(array $section): void
+    {
+        $rows = array_values((array) ($section['rows'] ?? []));
+        $this->ensureSpace(145);
+        $this->sectionHeading((string) ($section['title'] ?? 'Fuentes ministeriales'), count($rows).' documento(s) de respaldo');
+        foreach ($rows as $row) {
+            $row = (array) $row;
+            $this->ensureSpace(125);
+            $this->fillRect(self::MARGIN, $this->cursorY - 30, self::CONTENT_WIDTH, 30, [0.975, 0.98, 0.99], [0.86, 0.89, 0.93]);
+            $this->fillRect(self::MARGIN, $this->cursorY - 30, 4, 30, [0.16, 0.55, 0.40]);
+            $this->text(self::MARGIN + 13, $this->cursorY - 19, $row['title'] ?? 'Documento ministerial', 9, 'F2', [0.16, 0.20, 0.27], 116);
+            $this->cursorY -= 40;
+            $details = implode(' · ', array_filter([
+                $this->cell($row['edition'] ?? ''),
+                $this->cell($row['decree'] ?? ''),
+                filled($row['page_count'] ?? null) ? $row['page_count'].' páginas' : null,
+            ]));
+            $this->renderCurriculumText('IDENTIFICACIÓN', $details, 7.1, [0.31, 0.36, 0.44], 145);
+            $this->renderCurriculumText('SHA-256', $this->cell($row['sha256'] ?? '-'), 6.8, [0.31, 0.36, 0.44], 106);
+            if (filled($row['official_url'] ?? null)) {
+                $this->renderCurriculumText('REFERENCIA OFICIAL', $this->cell($row['official_url']), 6.8, [0.25, 0.32, 0.54], 118);
+            }
+        }
+    }
+
     /** @param array<string, mixed> $row */
     private function renderCurriculumObjective(array $row): void
     {
-        $this->ensureSpace(65);
         $code = $this->cell($row['code'] ?? '-');
+        $description = $this->cell($row['description'] ?? '-');
+        $indicators = $this->cell($row['indicators'] ?? '');
+        $sources = array_values((array) ($row['sources'] ?? []));
+        $estimatedHeight = 74
+            + (count($this->wrapComplete($description, 154)) * 10)
+            + ($indicators !== '' ? 15 + (count($this->wrapComplete($indicators, 154)) * 10) : 0)
+            + collect($sources)->sum(fn ($source): int => 14 + (count($this->wrapComplete('• '.$this->cell($source), 143)) * 10));
+        // Evita encabezados o una única línea huérfana en la página siguiente.
+        // Los OA excepcionalmente extensos siguen pudiendo paginarse dentro de
+        // renderCurriculumText, sin truncar contenido.
+        $this->ensureSpace(min(460, $estimatedHeight));
         $badges = implode(' · ', array_filter([
             $this->cell($row['type'] ?? ''),
             $this->cell($row['status'] ?? ''),
@@ -364,19 +560,17 @@ class AttendancePdfBuilder
         $scope = implode(' · ', array_filter([
             filled($row['axis'] ?? null) ? 'Eje: '.$this->cell($row['axis']) : null,
             filled($row['unit'] ?? null) ? 'Unidad: '.$this->cell($row['unit']) : null,
-            filled($row['source_page'] ?? null) ? 'Página/localizador: '.$this->cell($row['source_page']) : null,
+            filled($row['source_page'] ?? null) ? 'Ubicación en fuente: '.$this->cell($row['source_page']) : null,
         ]));
         if ($scope !== '') {
             $this->renderCurriculumText('', $scope, 7, [0.43, 0.48, 0.56]);
         }
-        $this->renderCurriculumText('DESCRIPCIÓN OFICIAL', $this->cell($row['description'] ?? '-'), 7.7, [0.18, 0.22, 0.29]);
+        $this->renderCurriculumText('DESCRIPCIÓN OFICIAL', $description, 7.7, [0.18, 0.22, 0.29]);
 
-        $indicators = $this->cell($row['indicators'] ?? '');
         if ($indicators !== '') {
             $this->renderCurriculumText('INDICADORES', $indicators, 7.2, [0.31, 0.36, 0.44]);
         }
 
-        $sources = array_values((array) ($row['sources'] ?? []));
         if ($sources !== []) {
             $this->renderCurriculumLabel('FUENTES Y TRAZABILIDAD');
             foreach ($sources as $source) {

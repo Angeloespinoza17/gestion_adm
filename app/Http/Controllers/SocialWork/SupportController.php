@@ -16,6 +16,7 @@ use App\Models\SocialWork\TransportPass;
 use App\Models\StudentProfile;
 use App\Services\SocialWork\AuditService;
 use App\Services\SocialWork\JunaebService;
+use App\Services\Attendance\StudentMonthlyAttendanceContextService;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\JsonResponse;
@@ -24,7 +25,7 @@ use Illuminate\Support\Facades\DB;
 
 class SupportController extends Controller
 {
-    public function supportMatrix(Request $request): JsonResponse
+    public function supportMatrix(Request $request, StudentMonthlyAttendanceContextService $attendanceContext): JsonResponse
     {
         $activeYear = AcademicYear::query()->where('is_active', true)->first();
         $schoolYear = $request->integer('school_year') ?: (int) ($activeYear?->year ?: now()->year);
@@ -107,7 +108,8 @@ class SupportController extends Controller
             ->orderBy('first_name');
 
         $page = $query->paginate($this->perPage($request, 20, 100));
-        $page->getCollection()->transform(function (StudentProfile $student) {
+        $attendanceProfiles = $attendanceContext->forStudents($page->getCollection()->pluck('id'), $activeYearId);
+        $page->getCollection()->transform(function (StudentProfile $student) use ($attendanceProfiles) {
             $programs = $student->socialPrograms;
             $programCodes = $programs->pluck('programType.code')->filter();
             $externalPrograms = $programs
@@ -130,6 +132,7 @@ class SupportController extends Controller
                 'external' => $externalPrograms,
             ]);
             $student->setAttribute('sep_classification', $student->sepClassifications->first()?->classification);
+            $student->setAttribute('attendance_profile', $attendanceProfiles->get($student->id));
             $student->setAttribute('medical_alert', $hasMedicalAlert);
             $student->setAttribute('protection_summary', [
                 'has_measure' => $student->protectionMeasures->isNotEmpty(),

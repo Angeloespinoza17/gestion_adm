@@ -18,13 +18,20 @@ class PsychologyDashboardController extends Controller
 
     public function __invoke(Request $request): JsonResponse
     {
-        $superAdminAggregateOnly = $request->user()->isSuperAdmin() && ! $this->access->hasExplicitPermission($request->user(), 'psychology.sensitive.override');
-        $aggregateOnly = $superAdminAggregateOnly || ($request->user()->hasPermission('psychology.reports.aggregate') && ! $request->user()->hasPermission('psychology.referrals.view_all') && ! $request->user()->hasPermission('psychology.cases.view_all'));
+        $aggregateOnly = ! $request->user()->isSuperAdmin()
+            && ! $this->access->isScopedPsychologist($request->user())
+            && $request->user()->hasPermission('psychology.reports.aggregate')
+            && ! $request->user()->hasPermission('psychology.referrals.view_all')
+            && ! $request->user()->hasPermission('psychology.cases.view_all');
         $referrals = PsychologyReferral::query();
         $this->access->applyReferralVisibility($referrals, $request->user(), true);
         $cases = PsychologyCase::query();
         $this->access->applyCaseVisibility($cases, $request->user(), true);
         $caseIds = (clone $cases)->pluck('id');
+        $scheduledActivities = PsychologyActivity::query()->whereIn('case_id', $caseIds)->where('activity_on', '>', now()->toDateString());
+        $this->access->applyActivityVisibility($scheduledActivities, $request->user());
+        $visibleTasks = PsychologyTask::query()->whereIn('case_id', $caseIds);
+        $this->access->applyTaskVisibility($visibleTasks, $request->user());
         $inactiveSince = now()->subDays((int) config('psychology.inactive_days', 14));
         $metrics = [
             'referrals_received' => (clone $referrals)->whereNotNull('referred_at')->count(),
@@ -33,9 +40,9 @@ class PsychologyDashboardController extends Controller
             'active_cases' => (clone $cases)->whereNotIn('status', ['closed'])->count(),
             'high_priority_cases' => (clone $cases)->whereIn('priority', ['high', 'critical'])->where('status', '!=', 'closed')->count(),
             'inactive_cases' => (clone $cases)->where('status', '!=', 'closed')->where(fn ($q) => $q->whereNull('last_activity_at')->orWhere('last_activity_at', '<', $inactiveSince))->count(),
-            'overdue_tasks' => PsychologyTask::query()->whereIn('case_id', $caseIds)->whereIn('status', ['pending', 'in_progress'])->where('due_at', '<', now())->count(),
-            'upcoming_followups' => PsychologyTask::query()->whereIn('case_id', $caseIds)->where('type', 'follow_up')->whereIn('status', ['pending', 'in_progress'])->whereBetween('due_at', [now(), now()->addDays(7)])->count(),
-            'scheduled_sessions' => PsychologyActivity::query()->whereIn('case_id', $caseIds)->where('activity_on', '>', now()->toDateString())->count(),
+            'overdue_tasks' => (clone $visibleTasks)->whereIn('status', ['pending', 'in_progress'])->where('due_at', '<', now())->count(),
+            'upcoming_followups' => PsychologyActivity::query()->whereIn('case_id', $caseIds)->whereBetween('next_action_on', [now()->toDateString(), now()->addDays(7)->toDateString()])->tap(fn ($query) => $this->access->applyActivityVisibility($query, $request->user()))->count(),
+            'scheduled_sessions' => $scheduledActivities->count(),
             'closed_period' => (clone $cases)->whereBetween('closed_at', [now()->startOfMonth(), now()->endOfMonth()])->count(),
             'avg_first_response_hours' => 0,
         ];
@@ -46,6 +53,6 @@ class PsychologyDashboardController extends Controller
         $monthly = (clone $referrals)->where('created_at', '>=', now()->subMonths(11)->startOfMonth())->get(['created_at'])->groupBy(fn ($r) => $r->created_at->format('Y-m'))->map->count()->map(fn ($total, $month) => ['month' => $month, 'total' => $total])->values();
         $workload = (clone $cases)->where('status', '!=', 'closed')->join('users', 'users.id', '=', 'psychology_cases.responsible_user_id')->select('users.name', DB::raw('COUNT(*) as total'))->groupBy('users.id', 'users.name')->orderByDesc('total')->get();
 
-        return response()->json(['metrics' => $metrics, 'charts' => ['by_status' => $byStatus, 'by_urgency' => $byUrgency, 'monthly' => $monthly, 'workload' => $workload], 'recent' => ['referrals' => $aggregateOnly ? [] : (clone $referrals)->with(['student:id,first_name,last_name,registered_name', 'assignedUser:id,name'])->latest()->limit(8)->get(), 'tasks' => $aggregateOnly ? [] : PsychologyTask::query()->whereIn('case_id', $caseIds)->with('case:id,code')->whereIn('status', ['pending', 'in_progress'])->orderBy('due_at')->limit(8)->get()]]);
+        return response()->json(['metrics' => $metrics, 'charts' => ['by_status' => $byStatus, 'by_urgency' => $byUrgency, 'monthly' => $monthly, 'workload' => $workload], 'recent' => ['referrals' => $aggregateOnly ? [] : (clone $referrals)->with(['student:id,first_name,last_name,registered_name', 'assignedUser:id,name'])->latest()->limit(8)->get(), 'tasks' => $aggregateOnly ? [] : (clone $visibleTasks)->with('case:id,code')->whereIn('status', ['pending', 'in_progress'])->orderBy('due_at')->limit(8)->get()]]);
     }
 }

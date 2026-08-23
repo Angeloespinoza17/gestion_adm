@@ -76,6 +76,13 @@ return [
 
     'reports' => [
         'expires_days' => (int) env('LCD_REPORT_EXPIRES_DAYS', 7),
+        // En desarrollo local no siempre existe un worker de cola. La ficha
+        // curricular es acotada y se genera en la misma solicitud para evitar
+        // exportaciones detenidas en "en cola". Producción conserva la cola.
+        'sync_curriculum_program_exports' => env(
+            'LCD_CURRICULUM_PROGRAM_PDF_SYNC',
+            env('APP_ENV') === 'local',
+        ),
         // El XLSX curricular se genera por streaming; este límite sigue siendo
         // deliberado para evitar consultas/exportaciones institucionales sin cota.
         // El servicio lo limita además a un máximo absoluto de 10.000 filas.
@@ -88,6 +95,18 @@ return [
         'cache_ttl_seconds' => (int) env('LCD_CURRICULUM_VISUALIZATION_CACHE_TTL', 600),
         'leaf_threshold' => (int) env('LCD_CURRICULUM_VISUALIZATION_LEAF_THRESHOLD', 500),
         'graph_node_limit' => (int) env('LCD_CURRICULUM_VISUALIZATION_GRAPH_NODE_LIMIT', 300),
+    ],
+
+    'curriculum_import' => [
+        // Los PDF se conservan cifrados en almacenamiento privado. El proceso
+        // trabaja sobre una copia temporal y nunca publica candidatos directo.
+        'max_pdf_kb' => (int) env('LCD_CURRICULUM_PDF_MAX_KB', 40960),
+        'ocr_min_text_chars' => (int) env('LCD_CURRICULUM_OCR_MIN_TEXT_CHARS', 40),
+        'ocr_driver' => env('LCD_CURRICULUM_OCR_DRIVER', 'disabled'),
+        'queue' => env('LCD_CURRICULUM_IMPORT_QUEUE', 'curriculum-imports'),
+        // smalot conserva el árbol PDF completo durante la extracción. Este
+        // límite solo lo aplica el job dedicado y se valida entre 256 y 2048 MB.
+        'worker_memory_limit' => env('LCD_CURRICULUM_IMPORT_MEMORY_LIMIT', '512M'),
     ],
 
     'attachments' => [

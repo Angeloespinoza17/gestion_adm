@@ -50,4 +50,14 @@ class StudentResult extends LibroDigitalModel
     {
         return $this->belongsTo(User::class, 'recorded_by');
     }
+
+    public function annualGradeImport(): BelongsTo
+    {
+        return $this->belongsTo(\App\Models\Grades\AnnualGradeImport::class);
+    }
+
+    public function annualGradeImportCell(): BelongsTo
+    {
+        return $this->belongsTo(\App\Models\Grades\AnnualGradeImportCell::class);
+    }
 }

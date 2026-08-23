@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Infirmary;
 
+use App\Models\Infirmary\InfirmaryAttentionTreatment;
 use App\Models\Role;
 use App\Models\StudentProfile;
 use App\Models\User;
@@ -81,5 +82,57 @@ class InfirmaryStudentAttentionContactTest extends TestCase
             ->assertJsonPath('data.student.guardian_backup_relationship', 'Abuelo')
             ->assertJsonPath('data.student.guardian_backup_phone', '+56 9 3333 4444')
             ->assertJsonPath('data.student.guardian_backup_email', 'luis@example.test');
+    }
+
+    public function test_quick_attention_stores_minor_care_actions_in_the_regular_clinical_record(): void
+    {
+        $student = StudentProfile::query()->create([
+            'first_name' => 'Martina',
+            'last_name' => 'Silva',
+            'rut' => '27111222-4',
+        ]);
+
+        $attendedAt = now()->subMinute()->format('Y-m-d H:i:s');
+
+        $response = $this->postJson('/api/infirmary/attentions', [
+            'student_profile_id' => $student->id,
+            'attention_category' => 'dolor_cabeza',
+            'occurred_at' => $attendedAt,
+            'attended_at' => $attendedAt,
+            'accompanied_by_type' => 'sin_acompanante',
+            'consultation_reason' => 'Dolor de cabeza',
+            'logbook' => 'Atención rápida: Dar agua, Reposo breve · Resultado: Vuelve a sala',
+            'attention_duration_minutes' => 5,
+            'priority' => 'baja',
+            'status' => 'finalizada',
+            'treatments' => [[
+                'treatment_categories' => ['fisico'],
+                'treatment_types' => ['hidratacion_oral', 'reposo', 'observacion_breve'],
+                'emotional_support_required' => false,
+                'notes' => 'Atención rápida · Vuelve a sala',
+            ]],
+        ])->assertCreated();
+
+        $attentionId = $response->json('data.id');
+
+        $response
+            ->assertJsonPath('data.status', 'finalizada')
+            ->assertJsonPath('data.priority', 'baja')
+            ->assertJsonPath('data.attention_duration_minutes', 5)
+            ->assertJsonPath('data.treatments.0.treatment_types.0', 'hidratacion_oral')
+            ->assertJsonPath('data.treatments.0.treatment_types.1', 'reposo')
+            ->assertJsonPath('data.treatments.0.treatment_types.2', 'observacion_breve');
+
+        $treatment = InfirmaryAttentionTreatment::query()
+            ->where('attention_id', $attentionId)
+            ->firstOrFail();
+
+        $this->assertSame(['hidratacion_oral', 'reposo', 'observacion_breve'], $treatment->treatment_types);
+        $this->assertDatabaseHas('infirmary_attentions', [
+            'id' => $attentionId,
+            'student_profile_id' => $student->id,
+            'status' => 'finalizada',
+            'attention_duration_minutes' => 5,
+        ]);
     }
 }

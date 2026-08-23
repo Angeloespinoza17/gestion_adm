@@ -21,7 +21,7 @@ class SavePsychologyActivityRequest extends FormRequest
             'interview_number' => ['nullable', 'integer', 'between:1,9999'],
             'activity_on' => ['required', 'date'],
             'starts_at' => ['nullable', 'date_format:H:i'],
-            'ends_at' => ['nullable', 'date_format:H:i', 'after:starts_at'],
+            'ends_at' => ['nullable', 'date_format:H:i', 'after_or_equal:starts_at'],
             'modality' => ['nullable', 'string', 'max:40'],
             'location' => ['nullable', 'string', 'max:160'],
             'participants' => ['nullable', 'string', 'max:4000'],
@@ -37,9 +37,9 @@ class SavePsychologyActivityRequest extends FormRequest
             'general_background' => ['nullable', 'string', 'max:20000'],
             'result' => ['nullable', 'string', 'max:6000'],
             'agreements' => ['nullable', 'string', 'max:6000'],
+            'follow_up_type' => ['nullable', 'required_with:next_action_on', Rule::in(['phone_call', 'new_interview', 'guardian_contact', 'student_check_in', 'teacher_coordination', 'external_coordination', 'case_review', 'other'])],
             'next_steps' => ['nullable', 'string', 'max:6000'],
-            'next_action_on' => ['nullable', 'date'],
-            'next_interview_at' => ['nullable', 'date'],
+            'next_action_on' => ['nullable', 'required_with:follow_up_type,next_steps', 'date', 'after_or_equal:activity_on'],
             'acknowledgement_status' => ['nullable', Rule::in(['not_requested', 'pending', 'acknowledged', 'declined'])],
             'acknowledged_name' => ['required_if:acknowledgement_status,acknowledged', 'nullable', 'string', 'max:191'],
             'acknowledged_rut' => ['nullable', 'string', 'max:30'],
@@ -49,6 +49,30 @@ class SavePsychologyActivityRequest extends FormRequest
             'visibility' => ['required', Rule::in(['private_psychology', 'psychology_team', 'interdisciplinary_team', 'referral_feedback'])],
             'referral_feedback' => ['nullable', 'string', 'max:6000'],
             'status' => ['sometimes', Rule::in(['draft', 'finalized'])],
+            'coordination' => ['nullable', 'array'],
+            'coordination.recipient_user_id' => ['required_with:coordination', 'integer', 'exists:users,id'],
+            'coordination.coordination_type' => ['required_with:coordination', Rule::in(['meeting', 'information_request', 'case_review', 'classroom_support', 'family_support', 'protocol_coordination', 'other'])],
+            'coordination.subject' => ['required_with:coordination', 'string', 'max:191'],
+            'coordination.request_message' => ['required_with:coordination', 'string', 'max:4000'],
+            'coordination.requested_for' => ['nullable', 'date', 'after_or_equal:activity_on'],
+        ];
+    }
+
+    public function messages(): array
+    {
+        return [
+            'participant_types.required' => 'Selecciona al menos una persona participante.',
+            'participant_types.min' => 'Selecciona al menos una persona participante.',
+            'interviewee_type.required' => 'Selecciona el tipo de persona entrevistada.',
+            'interviewee_name.required' => 'Indica el nombre de la persona entrevistada.',
+            'ends_at.after_or_equal' => 'La hora de término no puede ser anterior a la hora de inicio.',
+            'follow_up_type.required_with' => 'Selecciona el tipo de seguimiento.',
+            'next_action_on.required_with' => 'Indica la fecha del seguimiento.',
+            'next_action_on.after_or_equal' => 'La fecha de seguimiento no puede ser anterior a la atención.',
+            'coordination.recipient_user_id.required_with' => 'Selecciona el funcionario destinatario.',
+            'coordination.coordination_type.required_with' => 'Selecciona el tipo de coordinación.',
+            'coordination.subject.required_with' => 'Indica el asunto de la coordinación.',
+            'coordination.request_message.required_with' => 'Describe el requerimiento de coordinación.',
         ];
     }
 }

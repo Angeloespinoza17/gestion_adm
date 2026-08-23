@@ -61,11 +61,7 @@ class CourseSectionControllerTest extends TestCase
             'is_active' => true,
             'is_closed' => false,
         ]);
-        $level = EducationLevel::query()->create([
-            'name' => '1° Básico',
-            'order' => 1,
-            'type' => 'basica',
-        ]);
+        $level = EducationLevel::query()->where('order', 3)->firstOrFail();
         $course = CourseSection::query()->create([
             'academic_year_id' => $year->id,
             'education_level_id' => $level->id,

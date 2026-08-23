@@ -3,12 +3,15 @@ import Swal from "sweetalert2";
 
 export function formatRiskError(error, fallback = "No se pudo completar la operación.") {
   const errors = error?.response?.data?.errors || null;
-  return (
+  const message = (
     (errors ? errors[Object.keys(errors)[0]]?.[0] : null) ||
     error?.response?.data?.message ||
     error?.message ||
     fallback
   );
+  const exposesInternals = /(SQLSTATE|Connection:\s*mysql|Database:\s*[^,]+|insert\s+into|select\s+.+\s+from|stack trace|vendor\/laravel)/i.test(String(message));
+
+  return exposesInternals ? fallback : message;
 }
 
 export function showRiskSuccess(text, title = "Operación realizada") {

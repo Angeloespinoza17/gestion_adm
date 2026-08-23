@@ -7,6 +7,12 @@ import InfirmaryHelpButton from "../../components/infirmary/help-button.vue";
 import InfirmaryStudentSearch from "../../components/infirmary/student-search.vue";
 import InfirmaryStudentMedicalSummary from "../../components/infirmary/student-medical-summary.vue";
 import {
+  buildQuickAttentionPayload,
+  QUICK_ATTENTION_ACTIONS,
+  QUICK_ATTENTION_REASONS,
+  QUICK_ATTENTION_RESULTS,
+} from "../../components/infirmary/quick-attention";
+import {
   confirmInfirmaryAction,
   confirmInfirmaryCancel,
   formatInfirmaryDateTime,
@@ -356,6 +362,12 @@ export default {
       ].filter(Boolean).join(" · ");
     },
     guardianContacts(attention) {
+      const contextContacts = attention?.student_context?.emergency_contacts;
+
+      if (Array.isArray(contextContacts) && contextContacts.length) {
+        return contextContacts;
+      }
+
       const student = attention?.student || {};
 
       return [
@@ -363,6 +375,7 @@ export default {
           type: "primary",
           label: "Apoderado principal",
           name: student.guardian_name,
+          rut: student.guardian_rut,
           relationship: student.guardian_relationship || student.guardian_role,
           phone: student.guardian_phone,
           email: student.guardian_email,
@@ -371,11 +384,23 @@ export default {
           type: "backup",
           label: "Apoderado suplente",
           name: student.guardian_backup_name,
+          rut: student.guardian_backup_rut,
           relationship: student.guardian_backup_relationship || student.guardian_backup_role,
           phone: student.guardian_backup_phone,
           email: student.guardian_backup_email,
         },
       ];
+    },
+    primaryGuardianRestriction(contact) {
+      return (contact?.restrictions || [])[0] || null;
+    },
+    guardianRestrictionValidity(restriction) {
+      if (!restriction) return "";
+
+      const from = restriction.starts_on ? this.formatDateOnly(`${restriction.starts_on}T12:00:00`) : null;
+      const to = restriction.ends_on ? this.formatDateOnly(`${restriction.ends_on}T12:00:00`) : "sin fecha de término";
+
+      return [from ? `Desde ${from}` : null, `hasta ${to}`].filter(Boolean).join(" ");
     },
     optionLabel(options, value) {
       return (options || []).find((option) => String(option.value) === String(value))?.text || humanizeInfirmaryStatus(value);
@@ -945,6 +970,8 @@ export default {
     swalMedicalContextHtml(student) {
       const context = student?.medical_context || {};
       const alerts = context.medical_alerts || [];
+      const guardianRestrictions = context.guardian_restrictions || [];
+      const totalAlerts = alerts.length + guardianRestrictions.length;
       const alertHtml = alerts.length
         ? alerts.map((alert) => `
             <div class="swal-medical-alert swal-medical-alert--${this.escapeHtml(alert.level || "info")}">
@@ -956,21 +983,42 @@ export default {
       const medications = (context.permanent_medications || [])
         .map((item) => [item.medication_name, [item.dose_amount, item.dose_unit].filter(Boolean).join(" ") || item.dose, item.frequency || item.schedule_text].filter(Boolean).join(" · "));
       const guardianContacts = (context.emergency_contacts || [])
-        .map((contact) => `
-          <div class="swal-guardian-contact">
+        .map((contact) => {
+          const restriction = this.primaryGuardianRestriction(contact);
+          const restrictionHtml = restriction ? `
+            <div class="swal-guardian-contact__restriction">
+              <b><i class="bx bxs-error-shield"></i> NO CONTACTAR SIN VALIDAR</b>
+              <strong>${this.escapeHtml(restriction.restriction_type_label || "Restricción vigente")}</strong>
+              <small>${this.escapeHtml(restriction.reason || contact.contact_guidance || "Validar protocolo con Trabajo Social.")}</small>
+            </div>
+          ` : "";
+
+          return `
+          <div class="swal-guardian-contact${restriction ? " swal-guardian-contact--restricted" : ""}">
             <span>${this.escapeHtml(contact.label || (contact.type === "backup" ? "Apoderado suplente" : "Apoderado principal"))}</span>
             <strong>${this.escapeHtml(contact.name || "Sin nombre registrado")}</strong>
             <small><i class="bx bx-phone"></i> ${this.escapeHtml(contact.phone || "Sin teléfono registrado")}</small>
             <small><i class="bx bx-envelope"></i> ${this.escapeHtml(contact.email || "Sin correo registrado")}</small>
+            ${restrictionHtml}
           </div>
-        `)
+        `;
+        })
         .join("");
+      const protectionAlert = guardianRestrictions.length ? `
+        <div class="swal-protection-alert">
+          <i class="bx bxs-shield-x"></i>
+          <div>
+            <strong>Alerta configurada por Trabajo Social</strong>
+            <span>Hay ${guardianRestrictions.length} medida${guardianRestrictions.length === 1 ? "" : "s"} vigente${guardianRestrictions.length === 1 ? "" : "s"}. Revisa el contacto antes de llamar.</span>
+          </div>
+        </div>
+      ` : "";
 
       return `
         <div class="swal-medical-context">
           <div class="swal-medical-context__head">
             <div><strong>${this.escapeHtml(student.full_name)}</strong><span>${this.escapeHtml(student.rut || "Sin RUT")} · ${this.escapeHtml(student.course || "Sin curso")} · ${this.escapeHtml(student.age ?? "-")} años</span></div>
-            <b>${alerts.length ? `${alerts.length} alerta${alerts.length === 1 ? "" : "s"}` : "Ficha revisada"}</b>
+            <b>${totalAlerts ? `${totalAlerts} alerta${totalAlerts === 1 ? "" : "s"}` : "Ficha revisada"}</b>
           </div>
           <div class="swal-medical-alerts">${alertHtml}</div>
           <div class="swal-medical-facts">
@@ -978,6 +1026,7 @@ export default {
             <div><span>Previsión</span><strong>${this.escapeHtml(context.health_insurance || "Sin información")}</strong></div>
             <div><span>Educación Física</span><strong>${context.fit_for_physical_education === false ? "No apta" : context.fit_for_physical_education === true ? "Apta" : "Sin información"}</strong></div>
           </div>
+          ${protectionAlert}
           <div class="swal-guardian-contacts">
             <div class="swal-guardian-contacts__title"><i class="bx bx-phone-call"></i> Contactos de apoderados</div>
             <div class="swal-guardian-contacts__grid">
@@ -1049,6 +1098,41 @@ export default {
     },
     async openCreate() {
       let selectedStudent = null;
+      let attentionMode = "full";
+      const quickReasonOptions = QUICK_ATTENTION_REASONS.map((option) => `
+        <label class="infirmary-quick-choice">
+          <input class="infirmary-quick-choice__input swal-quick-reason" type="radio" name="swal-quick-reason" value="${this.escapeHtml(option.value)}" />
+          <span class="infirmary-quick-choice__content">
+            <i class="bx ${this.escapeHtml(option.icon)}"></i>
+            <strong>${this.escapeHtml(option.label)}</strong>
+          </span>
+        </label>
+      `).join("");
+      const quickActionOptions = QUICK_ATTENTION_ACTIONS.map((option) => `
+        <label class="infirmary-quick-action">
+          <input class="infirmary-quick-action__input swal-quick-action" type="checkbox" value="${this.escapeHtml(option.value)}" />
+          <span class="infirmary-quick-action__content">
+            <span class="infirmary-quick-action__icon"><i class="bx ${this.escapeHtml(option.icon)}"></i></span>
+            <span>
+              <strong>${this.escapeHtml(option.label)}</strong>
+              <small>${this.escapeHtml(option.description)}</small>
+            </span>
+            <i class="bx bx-check infirmary-quick-action__check"></i>
+          </span>
+        </label>
+      `).join("");
+      const quickResultOptions = QUICK_ATTENTION_RESULTS.map((option, index) => `
+        <label class="infirmary-quick-result">
+          <input class="infirmary-quick-result__input swal-quick-result" type="radio" name="swal-quick-result" value="${this.escapeHtml(option.value)}"${index === 0 ? " checked" : ""} />
+          <span class="infirmary-quick-result__content">
+            <i class="bx ${this.escapeHtml(option.icon)}"></i>
+            <span>
+              <strong>${this.escapeHtml(option.label)}</strong>
+              <small>${this.escapeHtml(option.description)}</small>
+            </span>
+          </span>
+        </label>
+      `).join("");
       const result = await Swal.fire({
         title: "Nueva ficha de atención",
         width: "72rem",
@@ -1066,7 +1150,23 @@ export default {
               <div id="swal-student-selected" class="small text-muted mt-2">Sin estudiante seleccionada.</div>
               <div id="swal-student-results" class="list-group mt-2"></div>
             </div>
-            <div class="row g-3">
+            <div class="infirmary-attention-mode-tabs" role="tablist" aria-label="Tipo de registro de atención">
+              <button id="swal-mode-full" class="infirmary-attention-mode-tab is-active" type="button" role="tab" aria-selected="true" aria-controls="swal-full-form" data-attention-mode="full">
+                <span class="infirmary-attention-mode-tab__icon"><i class="bx bx-clipboard"></i></span>
+                <span>
+                  <strong>Ficha completa</strong>
+                  <small>Evaluación, llamados, tratamientos y derivaciones</small>
+                </span>
+              </button>
+              <button id="swal-mode-quick" class="infirmary-attention-mode-tab infirmary-attention-mode-tab--quick" type="button" role="tab" aria-selected="false" aria-controls="swal-quick-form" data-attention-mode="quick">
+                <span class="infirmary-attention-mode-tab__icon"><i class="bx bx-bolt-circle"></i></span>
+                <span>
+                  <strong>Atención rápida</strong>
+                  <small>Medidas menores con selección por clic</small>
+                </span>
+              </button>
+            </div>
+            <div id="swal-full-form" class="row g-3" role="tabpanel" aria-labelledby="swal-mode-full">
               <div class="col-md-4">
                 <label class="form-label">Fecha de accidente</label>
                 <input id="swal-occurred-at" type="datetime-local" class="form-control" value="${this.escapeHtml(toInputDateTime(new Date().toISOString()))}" />
@@ -1145,6 +1245,9 @@ export default {
                       <label class="form-label">Resultado de la llamada</label>
                       <select id="swal-call-status" class="form-select">${this.swalSelectOptions(this.catalogs.call_status_options, "contesto")}</select>
                     </div>
+                    <div class="col-12">
+                      <div id="swal-call-restriction-alert" class="swal-call-restriction-alert d-none" role="alert"></div>
+                    </div>
                     <div class="col-md-4">
                       <label class="form-label">Persona contactada</label>
                       <input id="swal-call-person" class="form-control" placeholder="Nombre del apoderado" />
@@ -1222,6 +1325,73 @@ export default {
                 </div>
               </div>
             </div>
+            <div id="swal-quick-form" class="infirmary-quick-form d-none" role="tabpanel" aria-labelledby="swal-mode-quick">
+              <div class="infirmary-quick-intro">
+                <span class="infirmary-quick-intro__icon"><i class="bx bx-bolt-circle"></i></span>
+                <div>
+                  <strong>Registro breve para cuidados menores</strong>
+                  <span>Selecciona el motivo, una o más medidas y el resultado. Todo quedará en la ficha clínica de la estudiante.</span>
+                </div>
+              </div>
+
+              <section class="infirmary-quick-section">
+                <div class="infirmary-quick-section__heading">
+                  <span>1</span>
+                  <div>
+                    <strong>¿Qué presenta?</strong>
+                    <small>Selecciona el motivo principal</small>
+                  </div>
+                </div>
+                <div class="infirmary-quick-choice-grid">${quickReasonOptions}</div>
+              </section>
+
+              <section class="infirmary-quick-section">
+                <div class="infirmary-quick-section__heading">
+                  <span>2</span>
+                  <div>
+                    <strong>¿Qué medida aplicaste?</strong>
+                    <small>Puedes seleccionar varias</small>
+                  </div>
+                </div>
+                <div class="infirmary-quick-action-grid">${quickActionOptions}</div>
+              </section>
+
+              <div class="infirmary-quick-bottom-grid">
+                <section class="infirmary-quick-section">
+                  <div class="infirmary-quick-section__heading">
+                    <span>3</span>
+                    <div>
+                      <strong>Resultado</strong>
+                      <small>Estado al cerrar este registro</small>
+                    </div>
+                  </div>
+                  <div class="infirmary-quick-result-grid">${quickResultOptions}</div>
+                </section>
+
+                <section class="infirmary-quick-section">
+                  <div class="infirmary-quick-section__heading">
+                    <span>4</span>
+                    <div>
+                      <strong>Tiempo y observación</strong>
+                      <small>Agrega contexto solo si hace falta</small>
+                    </div>
+                  </div>
+                  <label class="form-label d-block">Duración aproximada</label>
+                  <div class="infirmary-quick-duration" role="radiogroup" aria-label="Duración aproximada">
+                    <label><input class="swal-quick-duration" type="radio" name="swal-quick-duration" value="5" checked /><span>5 min</span></label>
+                    <label><input class="swal-quick-duration" type="radio" name="swal-quick-duration" value="10" /><span>10 min</span></label>
+                    <label><input class="swal-quick-duration" type="radio" name="swal-quick-duration" value="15" /><span>15 min</span></label>
+                  </div>
+                  <label class="form-label mt-3" for="swal-quick-notes">Observación opcional</label>
+                  <textarea id="swal-quick-notes" class="form-control" rows="3" placeholder="Ej: tolera agua, disminuye el malestar y vuelve a clases"></textarea>
+                </section>
+              </div>
+
+              <div class="infirmary-quick-safety-note" role="note">
+                <i class="bx bx-shield-quarter"></i>
+                <span><strong>Usa la ficha completa</strong> si necesitas administrar medicamentos, registrar signos vitales completos, llamar a un apoderado o realizar una derivación.</span>
+              </div>
+            </div>
           </div>
         `,
         showCancelButton: true,
@@ -1235,6 +1405,9 @@ export default {
           const searchButton = popup.querySelector("#swal-student-search-button");
           const resultsContainer = popup.querySelector("#swal-student-results");
           const selectedContainer = popup.querySelector("#swal-student-selected");
+          const modeButtons = popup.querySelectorAll("[data-attention-mode]");
+          const fullForm = popup.querySelector("#swal-full-form");
+          const quickForm = popup.querySelector("#swal-quick-form");
           const occurredAtInput = popup.querySelector("#swal-occurred-at");
           const attendedAtInput = popup.querySelector("#swal-attended-at");
           const categorySelect = popup.querySelector("#swal-attention-category");
@@ -1263,9 +1436,29 @@ export default {
           const registerCallInput = popup.querySelector("#swal-register-call");
           const callWrapper = popup.querySelector("#swal-call-wrapper");
           const callContactSelect = popup.querySelector("#swal-call-contact");
+          const callRestrictionAlert = popup.querySelector("#swal-call-restriction-alert");
           const callPersonInput = popup.querySelector("#swal-call-person");
           const callRelationshipInput = popup.querySelector("#swal-call-relationship");
           const callPhoneInput = popup.querySelector("#swal-call-phone");
+
+          const setAttentionMode = (mode) => {
+            attentionMode = mode === "quick" ? "quick" : "full";
+            fullForm.classList.toggle("d-none", attentionMode !== "full");
+            quickForm.classList.toggle("d-none", attentionMode !== "quick");
+            modeButtons.forEach((button) => {
+              const isActive = button.dataset.attentionMode === attentionMode;
+              button.classList.toggle("is-active", isActive);
+              button.setAttribute("aria-selected", String(isActive));
+            });
+
+            const confirmButton = Swal.getConfirmButton();
+            if (confirmButton) {
+              confirmButton.textContent = attentionMode === "quick"
+                ? "Guardar atención rápida"
+                : "Registrar atención";
+              confirmButton.classList.toggle("infirmary-quick-confirm", attentionMode === "quick");
+            }
+          };
 
           const syncAccidentFields = () => {
             const isAccident = this.isAccidentCategory(categorySelect.value);
@@ -1361,6 +1554,16 @@ export default {
 
           const applySelectedCallContact = () => {
             const contact = selectedGuardianContacts().find((item) => item.type === callContactSelect.value);
+            const restriction = this.primaryGuardianRestriction(contact);
+
+            callRestrictionAlert.classList.toggle("d-none", !restriction);
+            callRestrictionAlert.innerHTML = restriction ? `
+              <i class="bx bxs-error-shield"></i>
+              <div>
+                <strong>No contactar sin validar el protocolo</strong>
+                <span>${this.escapeHtml(contact.name)} tiene una medida vigente: ${this.escapeHtml(restriction.restriction_type_label || "Restricción")}. ${this.escapeHtml(restriction.reason || "Consulta con Trabajo Social antes de continuar.")}</span>
+              </div>
+            ` : "";
 
             if (contact) {
               callPersonInput.value = contact.name || "";
@@ -1379,7 +1582,7 @@ export default {
           const syncCallContacts = () => {
             const contacts = selectedGuardianContacts();
             const options = contacts.map((contact) => {
-              const label = [contact.label, contact.name, contact.phone].filter(Boolean).join(" · ");
+              const label = [contact.has_active_restriction ? "⚠ NO CONTACTAR" : null, contact.label, contact.name, contact.phone].filter(Boolean).join(" · ");
               return `<option value="${this.escapeHtml(contact.type)}">${this.escapeHtml(label)}</option>`;
             });
 
@@ -1390,8 +1593,11 @@ export default {
             ].join("");
 
             if (contacts.length) {
-              callContactSelect.value = contacts[0].type;
+              callContactSelect.value = (contacts.find((contact) => !contact.has_active_restriction) || contacts[0]).type;
               applySelectedCallContact();
+            } else {
+              callRestrictionAlert.classList.add("d-none");
+              callRestrictionAlert.innerHTML = "";
             }
           };
 
@@ -1438,6 +1644,7 @@ export default {
                   selectedContainer.innerHTML = this.swalMedicalContextHtml(selectedStudent);
                   resultsContainer.innerHTML = "";
                   searchInput.value = selectedStudent.full_name;
+                  Swal.resetValidationMessage();
                   syncCallContacts();
                 });
               });
@@ -1448,6 +1655,15 @@ export default {
           };
 
           searchButton.addEventListener("click", searchStudents);
+          modeButtons.forEach((button) => {
+            button.addEventListener("click", () => {
+              Swal.resetValidationMessage();
+              setAttentionMode(button.dataset.attentionMode);
+            });
+          });
+          popup.querySelectorAll(".swal-quick-reason, .swal-quick-action, .swal-quick-result, .swal-quick-duration").forEach((input) => {
+            input.addEventListener("change", () => Swal.resetValidationMessage());
+          });
           let searchDebounce = null;
           searchInput.addEventListener("input", () => {
             selectedStudent = null;
@@ -1484,6 +1700,7 @@ export default {
           syncCallContacts();
           syncCallFields();
           syncTreatmentFields();
+          setAttentionMode("full");
         },
         preConfirm: () => {
           const popup = Swal.getPopup();
@@ -1499,6 +1716,38 @@ export default {
           if (!selectedStudent?.id) {
             Swal.showValidationMessage("Selecciona una estudiante.");
             return false;
+          }
+
+          if (attentionMode === "quick") {
+            const quickReason = popup.querySelector(".swal-quick-reason:checked")?.value || "";
+            const quickActions = checkedValues(".swal-quick-action");
+            const quickResult = popup.querySelector(".swal-quick-result:checked")?.value || "";
+            const quickDuration = popup.querySelector(".swal-quick-duration:checked")?.value || "5";
+
+            if (!quickReason) {
+              Swal.showValidationMessage("Selecciona qué presenta la estudiante.");
+              return false;
+            }
+
+            if (!quickActions.length) {
+              Swal.showValidationMessage("Selecciona al menos una medida aplicada.");
+              return false;
+            }
+
+            if (!quickResult) {
+              Swal.showValidationMessage("Selecciona el resultado de la atención.");
+              return false;
+            }
+
+            return buildQuickAttentionPayload({
+              studentId: selectedStudent.id,
+              reason: quickReason,
+              actions: quickActions,
+              result: quickResult,
+              duration: quickDuration,
+              notes: value("swal-quick-notes"),
+              attendedAt: value("swal-attended-at") || toInputDateTime(new Date().toISOString()),
+            });
           }
 
           if (!value("swal-consultation-reason")) {
@@ -2088,22 +2337,32 @@ export default {
               v-for="contact in guardianContacts(selectedAttention)"
               :key="`guardian-${contact.type}`"
               class="infirmary-guardian-card"
+              :class="{ 'infirmary-guardian-card--restricted': contact.has_active_restriction }"
             >
               <div class="infirmary-guardian-card__heading">
                 <span>{{ contact.label }}</span>
-                <i :class="contact.type === 'backup' ? 'bx bx-user-plus' : 'bx bx-user-check'"></i>
+                <i :class="contact.has_active_restriction ? 'bx bxs-error-shield' : contact.type === 'backup' ? 'bx bx-user-plus' : 'bx bx-user-check'"></i>
               </div>
               <strong>{{ contact.name || "Sin nombre registrado" }}</strong>
               <small>{{ contact.relationship || "Relación no informada" }}</small>
               <div class="infirmary-guardian-card__contact">
-                <a v-if="contact.phone" :href="`tel:${contact.phone}`">
+                <a v-if="contact.phone && !contact.has_active_restriction" :href="`tel:${contact.phone}`">
                   <i class="bx bx-phone"></i>{{ contact.phone }}
                 </a>
+                <span v-else-if="contact.phone"><i class="bx bx-phone-off"></i>{{ contact.phone }}</span>
                 <span v-else><i class="bx bx-phone"></i>Sin teléfono registrado</span>
                 <a v-if="contact.email" :href="`mailto:${contact.email}`">
                   <i class="bx bx-envelope"></i>{{ contact.email }}
                 </a>
                 <span v-else><i class="bx bx-envelope"></i>Sin correo registrado</span>
+              </div>
+              <div v-if="contact.has_active_restriction" class="infirmary-guardian-restriction" role="alert">
+                <strong><i class="bx bxs-error-alt"></i> No contactar sin validar protocolo</strong>
+                <template v-for="restriction in contact.restrictions" :key="restriction.id">
+                  <b>{{ restriction.restriction_type_label }}</b>
+                  <span>{{ restriction.reason }}</span>
+                  <small>{{ guardianRestrictionValidity(restriction) }} · Configurado por {{ restriction.source_label }}</small>
+                </template>
               </div>
             </div>
           </div>
@@ -3044,6 +3303,40 @@ export default {
   font-size: 1.15rem;
 }
 
+.infirmary-guardian-card--restricted {
+  background: #fff8f7;
+  border-color: #e8a7a2;
+  box-shadow: 0 8px 22px rgba(155, 45, 38, 0.08);
+}
+
+.infirmary-guardian-card--restricted .infirmary-guardian-card__heading,
+.infirmary-guardian-card--restricted .infirmary-guardian-card__heading i {
+  color: #a52f29;
+}
+
+.infirmary-guardian-restriction {
+  background: #fff0ef;
+  border: 1px solid #e5aaa5;
+  border-radius: 6px;
+  color: #842b26;
+  display: grid;
+  gap: 0.25rem;
+  margin-top: 0.55rem;
+  padding: 0.65rem;
+}
+
+.infirmary-guardian-restriction strong,
+.infirmary-guardian-restriction b,
+.infirmary-guardian-restriction span,
+.infirmary-guardian-restriction small {
+  display: block;
+}
+
+.infirmary-guardian-restriction strong { font-size: 0.76rem; text-transform: uppercase; }
+.infirmary-guardian-restriction b { font-size: 0.82rem; }
+.infirmary-guardian-restriction span,
+.infirmary-guardian-restriction small { font-size: 0.72rem; }
+
 .infirmary-guardian-card > strong {
   color: #303846;
   font-size: 0.95rem;
@@ -3245,6 +3538,390 @@ export default {
   padding-right: 1rem;
 }
 
+.infirmary-attention-mode-tabs {
+  background: #f3f6fa;
+  border: 1px solid #e1e7f0;
+  border-radius: 14px;
+  display: grid;
+  gap: 0.55rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin: 0 0 1.25rem;
+  padding: 0.45rem;
+}
+
+.infirmary-attention-mode-tab {
+  align-items: center;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  color: #637087;
+  display: flex;
+  gap: 0.75rem;
+  min-width: 0;
+  padding: 0.75rem 0.85rem;
+  text-align: left;
+  transition: background 160ms ease, border-color 160ms ease, box-shadow 160ms ease, color 160ms ease;
+}
+
+.infirmary-attention-mode-tab:hover {
+  background: rgba(255, 255, 255, 0.75);
+  color: #38445a;
+}
+
+.infirmary-attention-mode-tab.is-active {
+  background: #fff;
+  border-color: #cddafb;
+  box-shadow: 0 6px 18px rgba(44, 73, 145, 0.1);
+  color: #3756b5;
+}
+
+.infirmary-attention-mode-tab--quick.is-active {
+  border-color: #a9dfcb;
+  box-shadow: 0 6px 18px rgba(31, 139, 102, 0.12);
+  color: #147253;
+}
+
+.infirmary-attention-mode-tab__icon {
+  align-items: center;
+  background: #e9efff;
+  border-radius: 9px;
+  display: inline-flex;
+  flex: 0 0 2.5rem;
+  font-size: 1.35rem;
+  height: 2.5rem;
+  justify-content: center;
+}
+
+.infirmary-attention-mode-tab--quick .infirmary-attention-mode-tab__icon {
+  background: #e4f7ef;
+  color: #16825d;
+}
+
+.infirmary-attention-mode-tab strong,
+.infirmary-attention-mode-tab small {
+  display: block;
+}
+
+.infirmary-attention-mode-tab strong {
+  font-size: 0.93rem;
+}
+
+.infirmary-attention-mode-tab small {
+  color: #778297;
+  font-size: 0.72rem;
+  line-height: 1.25;
+  margin-top: 0.15rem;
+}
+
+.infirmary-quick-form {
+  display: grid;
+  gap: 1rem;
+}
+
+.infirmary-quick-intro {
+  align-items: center;
+  background: linear-gradient(135deg, #e5f8f1 0%, #f3fbf8 100%);
+  border: 1px solid #b9e5d5;
+  border-radius: 12px;
+  color: #175f49;
+  display: flex;
+  gap: 0.8rem;
+  padding: 0.85rem 1rem;
+}
+
+.infirmary-quick-intro__icon {
+  align-items: center;
+  background: #fff;
+  border-radius: 50%;
+  box-shadow: 0 4px 12px rgba(18, 111, 78, 0.12);
+  display: inline-flex;
+  flex: 0 0 2.7rem;
+  font-size: 1.4rem;
+  height: 2.7rem;
+  justify-content: center;
+}
+
+.infirmary-quick-intro strong,
+.infirmary-quick-intro span {
+  display: block;
+}
+
+.infirmary-quick-intro strong {
+  font-size: 0.93rem;
+}
+
+.infirmary-quick-intro span {
+  font-size: 0.76rem;
+  line-height: 1.35;
+  margin-top: 0.12rem;
+}
+
+.infirmary-quick-section {
+  background: #fff;
+  border: 1px solid #e2e8f1;
+  border-radius: 12px;
+  padding: 1rem;
+}
+
+.infirmary-quick-section__heading {
+  align-items: center;
+  display: flex;
+  gap: 0.65rem;
+  margin-bottom: 0.8rem;
+}
+
+.infirmary-quick-section__heading > span {
+  align-items: center;
+  background: #e5f8f1;
+  border-radius: 50%;
+  color: #147253;
+  display: inline-flex;
+  flex: 0 0 1.8rem;
+  font-size: 0.78rem;
+  font-weight: 800;
+  height: 1.8rem;
+  justify-content: center;
+}
+
+.infirmary-quick-section__heading strong,
+.infirmary-quick-section__heading small {
+  display: block;
+}
+
+.infirmary-quick-section__heading strong {
+  color: #2f394a;
+  font-size: 0.9rem;
+}
+
+.infirmary-quick-section__heading small {
+  color: #7b8799;
+  font-size: 0.7rem;
+  margin-top: 0.08rem;
+}
+
+.infirmary-quick-choice-grid,
+.infirmary-quick-action-grid,
+.infirmary-quick-result-grid {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.infirmary-quick-choice-grid {
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+}
+
+.infirmary-quick-action-grid {
+  grid-template-columns: repeat(auto-fit, minmax(165px, 1fr));
+}
+
+.infirmary-quick-result-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.infirmary-quick-choice,
+.infirmary-quick-action,
+.infirmary-quick-result {
+  cursor: pointer;
+  margin: 0;
+  min-width: 0;
+  position: relative;
+}
+
+.infirmary-quick-choice__input,
+.infirmary-quick-action__input,
+.infirmary-quick-result__input,
+.infirmary-quick-duration input {
+  opacity: 0;
+  pointer-events: none;
+  position: absolute;
+}
+
+.infirmary-quick-choice__content,
+.infirmary-quick-action__content,
+.infirmary-quick-result__content {
+  border: 1px solid #dfe6ef;
+  border-radius: 9px;
+  display: flex;
+  height: 100%;
+  transition: border-color 150ms ease, background 150ms ease, box-shadow 150ms ease, transform 150ms ease;
+}
+
+.infirmary-quick-choice__content {
+  align-items: center;
+  color: #4d596c;
+  flex-direction: column;
+  gap: 0.4rem;
+  justify-content: center;
+  min-height: 76px;
+  padding: 0.65rem 0.5rem;
+  text-align: center;
+}
+
+.infirmary-quick-choice__content > i {
+  color: #6d7b91;
+  font-size: 1.45rem;
+}
+
+.infirmary-quick-choice__content strong {
+  font-size: 0.76rem;
+  line-height: 1.25;
+}
+
+.infirmary-quick-action__content {
+  align-items: center;
+  color: #425066;
+  gap: 0.65rem;
+  min-height: 70px;
+  padding: 0.65rem;
+  position: relative;
+}
+
+.infirmary-quick-action__icon {
+  align-items: center;
+  background: #f0f4f9;
+  border-radius: 8px;
+  color: #607087;
+  display: inline-flex;
+  flex: 0 0 2.2rem;
+  font-size: 1.2rem;
+  height: 2.2rem;
+  justify-content: center;
+}
+
+.infirmary-quick-action__content strong,
+.infirmary-quick-action__content small,
+.infirmary-quick-result__content strong,
+.infirmary-quick-result__content small {
+  display: block;
+}
+
+.infirmary-quick-action__content strong,
+.infirmary-quick-result__content strong {
+  font-size: 0.78rem;
+}
+
+.infirmary-quick-action__content small,
+.infirmary-quick-result__content small {
+  color: #7b8799;
+  font-size: 0.67rem;
+  line-height: 1.2;
+  margin-top: 0.15rem;
+}
+
+.infirmary-quick-action__check {
+  color: transparent;
+  font-size: 1rem;
+  margin-left: auto;
+}
+
+.infirmary-quick-result__content {
+  align-items: center;
+  gap: 0.55rem;
+  min-height: 62px;
+  padding: 0.6rem;
+}
+
+.infirmary-quick-result__content > i {
+  color: #718096;
+  font-size: 1.25rem;
+}
+
+.infirmary-quick-choice:hover .infirmary-quick-choice__content,
+.infirmary-quick-action:hover .infirmary-quick-action__content,
+.infirmary-quick-result:hover .infirmary-quick-result__content {
+  border-color: #a9cdbc;
+  transform: translateY(-1px);
+}
+
+.infirmary-quick-choice__input:checked + .infirmary-quick-choice__content,
+.infirmary-quick-action__input:checked + .infirmary-quick-action__content,
+.infirmary-quick-result__input:checked + .infirmary-quick-result__content {
+  background: #eaf8f3;
+  border-color: #42a882;
+  box-shadow: 0 0 0 2px rgba(66, 168, 130, 0.12);
+  color: #146f51;
+}
+
+.infirmary-quick-choice__input:checked + .infirmary-quick-choice__content > i,
+.infirmary-quick-result__input:checked + .infirmary-quick-result__content > i {
+  color: #16825d;
+}
+
+.infirmary-quick-action__input:checked + .infirmary-quick-action__content .infirmary-quick-action__icon {
+  background: #d7f2e8;
+  color: #147253;
+}
+
+.infirmary-quick-action__input:checked + .infirmary-quick-action__content .infirmary-quick-action__check {
+  color: #16825d;
+}
+
+.infirmary-quick-choice__input:focus-visible + .infirmary-quick-choice__content,
+.infirmary-quick-action__input:focus-visible + .infirmary-quick-action__content,
+.infirmary-quick-result__input:focus-visible + .infirmary-quick-result__content,
+.infirmary-quick-duration input:focus-visible + span {
+  outline: 3px solid rgba(66, 168, 130, 0.25);
+  outline-offset: 2px;
+}
+
+.infirmary-quick-bottom-grid {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: minmax(0, 1.35fr) minmax(300px, 1fr);
+}
+
+.infirmary-quick-duration {
+  display: grid;
+  gap: 0.45rem;
+  grid-template-columns: repeat(3, 1fr);
+}
+
+.infirmary-quick-duration label {
+  cursor: pointer;
+  margin: 0;
+  position: relative;
+}
+
+.infirmary-quick-duration span {
+  background: #f6f8fb;
+  border: 1px solid #dfe6ef;
+  border-radius: 8px;
+  color: #5a6679;
+  display: block;
+  font-size: 0.76rem;
+  font-weight: 700;
+  padding: 0.55rem;
+  text-align: center;
+}
+
+.infirmary-quick-duration input:checked + span {
+  background: #eaf8f3;
+  border-color: #42a882;
+  color: #146f51;
+}
+
+.infirmary-quick-safety-note {
+  align-items: flex-start;
+  background: #fff8e7;
+  border: 1px solid #efd79b;
+  border-radius: 10px;
+  color: #6f571c;
+  display: flex;
+  font-size: 0.76rem;
+  gap: 0.6rem;
+  line-height: 1.4;
+  padding: 0.75rem 0.85rem;
+}
+
+.infirmary-quick-safety-note > i {
+  flex: 0 0 auto;
+  font-size: 1.2rem;
+}
+
+.infirmary-attention-swal .infirmary-quick-confirm {
+  background-color: #16825d !important;
+}
+
 .infirmary-attention-swal .swal-medical-context {
   margin-top: 0.65rem;
   overflow: hidden;
@@ -3411,6 +4088,49 @@ export default {
   font-size: 0.75rem;
 }
 
+.infirmary-attention-swal .swal-protection-alert,
+.infirmary-attention-swal .swal-call-restriction-alert {
+  align-items: flex-start;
+  background: #fff0ef;
+  border: 1px solid #e3a39e;
+  border-left: 5px solid #bf3b33;
+  border-radius: 7px;
+  color: #842b26;
+  display: flex;
+  gap: 0.65rem;
+  padding: 0.75rem 0.85rem;
+}
+
+.infirmary-attention-swal .swal-protection-alert { margin: 0 0.9rem 0.7rem; }
+.infirmary-attention-swal .swal-protection-alert > i,
+.infirmary-attention-swal .swal-call-restriction-alert > i { font-size: 1.35rem; }
+.infirmary-attention-swal .swal-protection-alert strong,
+.infirmary-attention-swal .swal-protection-alert span,
+.infirmary-attention-swal .swal-call-restriction-alert strong,
+.infirmary-attention-swal .swal-call-restriction-alert span { display: block; }
+.infirmary-attention-swal .swal-protection-alert strong,
+.infirmary-attention-swal .swal-call-restriction-alert strong { font-size: 0.78rem; text-transform: uppercase; }
+.infirmary-attention-swal .swal-protection-alert span,
+.infirmary-attention-swal .swal-call-restriction-alert span { font-size: 0.74rem; margin-top: 0.15rem; }
+
+.infirmary-attention-swal .swal-guardian-contact--restricted {
+  background: #fff8f7;
+  border-color: #e4aaa5;
+}
+
+.infirmary-attention-swal .swal-guardian-contact__restriction {
+  background: #fff0ef;
+  border-radius: 5px;
+  color: #842b26;
+  margin-top: 0.5rem;
+  padding: 0.5rem;
+}
+
+.infirmary-attention-swal .swal-guardian-contact__restriction b,
+.infirmary-attention-swal .swal-guardian-contact__restriction strong,
+.infirmary-attention-swal .swal-guardian-contact__restriction small { display: block; }
+.infirmary-attention-swal .swal-guardian-contact__restriction b { font-size: 0.68rem; }
+
 .infirmary-attention-swal .swal-medical-detail {
   margin: 0 0.9rem 0.7rem;
   padding: 0.6rem;
@@ -3434,6 +4154,31 @@ export default {
 
   .infirmary-attention-swal .swal-guardian-contacts__grid {
     grid-template-columns: 1fr;
+  }
+
+  .infirmary-attention-mode-tabs,
+  .infirmary-quick-bottom-grid,
+  .infirmary-quick-result-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .infirmary-attention-mode-tab {
+    padding: 0.65rem;
+  }
+
+  .infirmary-quick-action-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .infirmary-quick-action__content {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .infirmary-quick-action__check {
+    position: absolute;
+    right: 0.55rem;
+    top: 0.55rem;
   }
 
   .infirmary-guardian-grid {

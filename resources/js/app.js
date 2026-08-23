@@ -8,7 +8,6 @@ import './bootstrap';
 import { createApp, defineAsyncComponent } from 'vue';
 import routes from './router/index'
 import App from '../js/App.vue'
-import helper from "./mixins/layouts.mixin";
 import { vMaska } from "maska";
 import { installTableActionNormalizer } from "./utils/table-actions";
 
@@ -34,7 +33,6 @@ app.component("apexchart", AsyncApexChart);
 app.use(routes);
 app.use(i18n);
 app.directive("maska", vMaska)
-app.mixin(helper);
 app.use(BootstrapVueNext);
 installTableActionNormalizer(routes);
 

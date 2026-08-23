@@ -21,6 +21,11 @@ class SensitiveModuleAccessService
             AccountingAccessService::BUDGET_CREATE_PERMISSION,
             AccountingAccessService::BUDGET_APPROVE_PERMISSION,
         ],
+        'accounting_budget_execution' => [
+            AccountingAccessService::BUDGET_EXECUTION_VIEW_PERMISSION,
+            AccountingAccessService::BUDGET_EXECUTION_IMPORT_PERMISSION,
+            AccountingAccessService::BUDGET_EXECUTION_EXPORT_PERMISSION,
+        ],
         'accounting_cost_centers' => [AccountingAccessService::COST_CENTER_PERMISSION],
         'accounting_manual' => [AccountingAccessService::MANUAL_PERMISSION],
         'accounting_incomes' => [AccountingAccessService::INCOMES_PERMISSION],
@@ -92,6 +97,21 @@ class SensitiveModuleAccessService
     ];
 
     /**
+     * @var array<string, array<int, string>>
+     */
+    private const PSYCHOLOGY_MODULE_PERMISSIONS = [
+        'psychology_dashboard' => ['psychology.access'],
+        'psychology_referrals' => ['psychology.referrals.view_own', 'psychology.referrals.view_all'],
+        'psychology_cases' => ['psychology.cases.view_assigned', 'psychology.cases.view_all'],
+        'psychology_calendar' => ['psychology.sessions.create'],
+        'psychology_tasks' => ['psychology.sessions.create'],
+        'psychology_alerts' => ['psychology.risk.view'],
+        'psychology_reports' => ['psychology.reports.aggregate'],
+        'psychology_configuration' => ['psychology.config.manage'],
+        'psychology_audit' => ['psychology.audit.view'],
+    ];
+
+    /**
      * @param  Collection<int, SystemModule>  $modules
      * @return Collection<int, SystemModule>
      */
@@ -134,6 +154,15 @@ class SensitiveModuleAccessService
                 && $this->hasAny($user, self::REMUNERATION_MODULE_PERMISSIONS[$slug] ?? []);
         }
 
+        if ($slug === 'psychology') {
+            return $user->hasPermission('psychology.access');
+        }
+
+        if (str_starts_with($slug, 'psychology_')) {
+            return $user->hasPermission('psychology.access')
+                && $this->hasAnyExact($user, self::PSYCHOLOGY_MODULE_PERMISSIONS[$slug] ?? []);
+        }
+
         return true;
     }
 
@@ -162,6 +191,20 @@ class SensitiveModuleAccessService
             ? AccountingAccessService::ADMIN_PERMISSION
             : RemunerationAccessService::ADMIN_PERMISSION;
 
+        foreach ($permissions as $permission) {
+            if ($user->hasPermission($permission)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * @param  array<int, string>  $permissions
+     */
+    private function hasAnyExact(User $user, array $permissions): bool
+    {
         foreach ($permissions as $permission) {
             if ($user->hasPermission($permission)) {
                 return true;

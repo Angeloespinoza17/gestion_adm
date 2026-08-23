@@ -15,6 +15,7 @@ use App\Services\Psychology\PsychologyAuditService;
 use App\Services\Psychology\PsychologyWorkflowService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Validation\ValidationException;
 
 class PsychologyReferralController extends Controller
 {
@@ -68,6 +69,9 @@ class PsychologyReferralController extends Controller
     {
         $this->authorize('assign', $referral);
         $professional = User::query()->where('active', true)->findOrFail($request->integer('user_id'));
+        if (! $this->access->canBeAssignedToPsychology($professional)) {
+            throw ValidationException::withMessages(['user_id' => 'La persona seleccionada no tiene un rol profesional habilitado para Psicología.']);
+        }
 
         return new PsychologyReferralResource($this->workflow->assignReferral($referral, $professional, $request->user(), $request->validated())->load(['student', 'course', 'referredBy', 'assignedUser']));
     }

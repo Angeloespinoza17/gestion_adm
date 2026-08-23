@@ -13,6 +13,7 @@ use App\Services\Attendance\AttendanceAggregationService;
 use App\Services\Attendance\AttendanceCalculationService;
 use App\Services\Attendance\AttendanceDataQualityService;
 use App\Services\Attendance\AttendanceFinancialImpactService;
+use App\Services\Attendance\AttendanceManagementAccessService;
 use App\Services\Attendance\AttendanceStatisticsAuditService;
 use App\Services\Attendance\AttendanceStatisticsCache;
 use Illuminate\Http\JsonResponse;
@@ -23,6 +24,7 @@ class AttendanceStatisticsController extends Controller
     public function __construct(
         private readonly AttendanceAggregationService $aggregation,
         private readonly AttendanceStatisticsCache $cache,
+        private readonly AttendanceManagementAccessService $access,
     ) {}
 
     public function dashboard(AttendanceStatisticsFilterRequest $request): JsonResponse
@@ -50,7 +52,7 @@ class AttendanceStatisticsController extends Controller
 
     public function students(AttendanceStatisticsFilterRequest $request): JsonResponse
     {
-        return response()->json($this->aggregation->students($request->validated()));
+        return response()->json($this->aggregation->students($request->validated(), $request->user()));
     }
 
     public function student(
@@ -58,14 +60,16 @@ class AttendanceStatisticsController extends Controller
         StudentProfile $studentProfile,
         AttendanceStatisticsAuditService $audit,
     ): JsonResponse {
+        $yearId = (int) ($request->validated('academic_year_id') ?: 0);
+        abort_unless($this->access->canViewStudent($request->user(), $studentProfile->id, $yearId ?: null), 403);
         $audit->log('student_sensitive_view', $studentProfile, $request->user(), metadata: ['filters' => $request->validated()], request: $request);
 
-        return response()->json($this->aggregation->student($request->validated(), $studentProfile));
+        return response()->json($this->aggregation->student($request->validated(), $studentProfile, $request->user()));
     }
 
     public function heatmap(AttendanceStatisticsFilterRequest $request): JsonResponse
     {
-        return response()->json($this->aggregation->heatmap($request->validated()));
+        return response()->json($this->aggregation->heatmap($request->validated(), $request->user()));
     }
 
     public function risk(AttendanceStatisticsFilterRequest $request): JsonResponse
@@ -88,6 +92,7 @@ class AttendanceStatisticsController extends Controller
             ->when($yearId, fn ($query) => $query->where('academic_year_id', $yearId))
             ->when($filters['course_section_id'] ?? null, fn ($query, $id) => $query->where('course_section_id', (int) $id))
             ->when($filters['student_profile_id'] ?? null, fn ($query, $id) => $query->where('student_profile_id', (int) $id));
+        $this->access->applyCourseScope($baseQuery, $request->user(), 'course_section_id', $yearId ?: null);
         $groups = (clone $baseQuery)
             ->select('course_section_id')
             ->selectRaw('COUNT(*) as total')

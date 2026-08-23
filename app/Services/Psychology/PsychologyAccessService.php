@@ -2,6 +2,7 @@
 
 namespace App\Services\Psychology;
 
+use App\Models\Psychology\PsychologyActivity;
 use App\Models\Psychology\PsychologyCase;
 use App\Models\Psychology\PsychologyReferral;
 use App\Models\User;
@@ -11,8 +12,15 @@ class PsychologyAccessService
 {
     public function applyReferralVisibility(Builder $query, User $user, bool $aggregate = false): Builder
     {
-        if ($this->isUnprivilegedSuperAdmin($user)) {
-            return $aggregate ? $query : $query->whereRaw('1 = 0');
+        if ($user->isSuperAdmin()) {
+            return $query;
+        }
+        if ($this->isScopedPsychologist($user)) {
+            return $query->where(function (Builder $visible) use ($user) {
+                $visible->where('referred_by_user_id', $user->id)
+                    ->orWhere('assigned_user_id', $user->id)
+                    ->orWhereHas('assignments', fn (Builder $assignment) => $assignment->where('user_id', $user->id)->whereNull('ended_at'));
+            });
         }
         if ($aggregate && $this->canSeeAllAggregates($user)) {
             return $query;
@@ -28,6 +36,18 @@ class PsychologyAccessService
         });
     }
 
+    public function applyReferralReportScope(Builder $query, User $user): Builder
+    {
+        if ($this->isScopedPsychologist($user)) {
+            return $query->where(function (Builder $visible) use ($user) {
+                $visible->where('assigned_user_id', $user->id)
+                    ->orWhereHas('assignments', fn (Builder $assignment) => $assignment->where('user_id', $user->id)->whereNull('ended_at'));
+            });
+        }
+
+        return $this->applyReferralVisibility($query, $user, true);
+    }
+
     public function canViewReferral(User $user, PsychologyReferral $referral): bool
     {
         if (! $user->hasPermission('psychology.access')) {
@@ -39,8 +59,14 @@ class PsychologyAccessService
 
     public function applyCaseVisibility(Builder $query, User $user, bool $aggregate = false): Builder
     {
-        if ($this->isUnprivilegedSuperAdmin($user)) {
-            return $aggregate ? $query : $query->whereRaw('1 = 0');
+        if ($user->isSuperAdmin()) {
+            return $query;
+        }
+        if ($this->isScopedPsychologist($user)) {
+            return $query->where(function (Builder $visible) use ($user) {
+                $visible->where('responsible_user_id', $user->id)
+                    ->orWhereHas('assignments', fn (Builder $assignment) => $assignment->where('user_id', $user->id)->whereNull('ended_at'));
+            });
         }
         if ($aggregate && $this->canSeeAllAggregates($user)) {
             return $query;
@@ -81,6 +107,42 @@ class PsychologyAccessService
             && ($user->hasPermission('psychology.risk.view') || $user->hasPermission('psychology.risk.create'));
     }
 
+    public function applyActivityVisibility(Builder $query, User $user): Builder
+    {
+        if ($this->isScopedPsychologist($user)) {
+            return $query->where('responsible_user_id', $user->id);
+        }
+
+        return $query;
+    }
+
+    public function applyTaskVisibility(Builder $query, User $user): Builder
+    {
+        if ($this->isScopedPsychologist($user)) {
+            return $query->where('responsible_user_id', $user->id);
+        }
+
+        return $query;
+    }
+
+    public function applyCoordinationVisibility(Builder $query, User $user): Builder
+    {
+        if ($this->isScopedPsychologist($user)) {
+            return $query->where(function (Builder $visible) use ($user) {
+                $visible->where('requester_user_id', $user->id)
+                    ->orWhere('recipient_user_id', $user->id);
+            });
+        }
+
+        return $query;
+    }
+
+    public function canManageActivity(User $user, PsychologyActivity $activity): bool
+    {
+        return ! $this->isScopedPsychologist($user)
+            || (int) $activity->responsible_user_id === (int) $user->id;
+    }
+
     public function hasExplicitPermission(User $user, string $slug): bool
     {
         if ($user->isSuperAdmin()) {
@@ -92,12 +154,29 @@ class PsychologyAccessService
 
     public function canAccessNominalDomain(User $user): bool
     {
-        return ! $this->isUnprivilegedSuperAdmin($user);
+        return $user->isSuperAdmin() || $user->hasPermission('psychology.access');
     }
 
-    private function isUnprivilegedSuperAdmin(User $user): bool
+    public function canBeAssignedToPsychology(User $user): bool
     {
-        return $user->isSuperAdmin() && ! $this->hasExplicitPermission($user, 'psychology.sensitive.override');
+        return $user->active && (
+            $user->hasPermission('psychology.cases.view_assigned')
+            || $user->hasPermission('psychology.cases.view_all')
+            || $user->hasPermission('psychology.sessions.create')
+        );
+    }
+
+    public function isScopedPsychologist(User $user): bool
+    {
+        if ($user->isSuperAdmin()) {
+            return false;
+        }
+
+        $roles = $user->relationLoaded('roles')
+            ? $user->roles->pluck('slug')
+            : $user->roles()->pluck('slug');
+
+        return $roles->contains('psicologo') && ! $roles->contains('coordinador_psicologia');
     }
 
     private function canSeeAllAggregates(User $user): bool

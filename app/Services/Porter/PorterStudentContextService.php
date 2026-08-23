@@ -4,14 +4,16 @@ namespace App\Services\Porter;
 
 use App\Models\AcademicYear;
 use App\Models\Inspectoria\InspectoriaCourseAssignment;
-use App\Models\Inspectoria\InspectoriaPickupRestriction;
 use App\Models\Staff;
 use App\Models\StudentEnrollment;
 use App\Models\StudentProfile;
+use App\Services\StudentProtection\GuardianRestrictionService;
 use App\Support\Rut;
 
 class PorterStudentContextService
 {
+    public function __construct(private readonly GuardianRestrictionService $guardianRestrictions) {}
+
     public function activeAcademicYear(): ?AcademicYear
     {
         return AcademicYear::query()->where('is_active', true)->first();
@@ -167,26 +169,7 @@ class PorterStudentContextService
 
     public function activePickupRestrictions(StudentProfile $student): array
     {
-        return InspectoriaPickupRestriction::query()
-            ->where('student_profile_id', $student->id)
-            ->activeOn()
-            ->latest('starts_on')
-            ->latest('id')
-            ->get()
-            ->map(fn (InspectoriaPickupRestriction $restriction) => [
-                'id' => $restriction->id,
-                'restriction_code' => $restriction->restriction_code,
-                'restricted_person_name' => $restriction->restricted_person_name,
-                'restricted_person_rut' => $restriction->restricted_person_rut,
-                'restricted_person_relationship' => $restriction->restricted_person_relationship,
-                'restriction_type' => $restriction->restriction_type,
-                'restriction_type_label' => $restriction->restriction_type_label,
-                'reason' => $restriction->reason,
-                'legal_reference' => $restriction->legal_reference,
-                'starts_on' => $restriction->starts_on?->format('Y-m-d'),
-                'ends_on' => $restriction->ends_on?->format('Y-m-d'),
-            ])
-            ->all();
+        return $this->guardianRestrictions->activePayload($student);
     }
 
     public function resolvePickupRestriction(StudentProfile $student, array $person): array

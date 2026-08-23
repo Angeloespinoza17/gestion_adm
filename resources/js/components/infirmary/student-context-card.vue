@@ -80,11 +80,17 @@ export default {
         <div class="fw-semibold mb-2">Contactos de emergencia</div>
         <div v-if="!(student.emergency_contacts || []).length" class="text-muted small">Sin contactos registrados.</div>
         <div v-else class="d-grid gap-2">
-          <div v-for="(contact, index) in student.emergency_contacts" :key="index" class="border rounded p-2">
+          <div v-for="(contact, index) in student.emergency_contacts" :key="index" class="border rounded p-2" :class="{ 'border-danger bg-danger-subtle': contact.has_active_restriction }">
             <div class="fw-semibold">{{ contact.name }}</div>
             <div class="small text-muted">{{ contact.relationship || "-" }}</div>
             <div class="small">{{ contact.phone || "Sin teléfono" }}</div>
             <div class="small text-muted">{{ contact.email || "Sin correo" }}</div>
+            <div v-if="contact.has_active_restriction" class="alert alert-danger py-2 px-2 mt-2 mb-0 small" role="alert">
+              <strong class="d-block"><i class="bx bxs-error-shield me-1"></i>No contactar sin validar protocolo</strong>
+              <span v-for="restriction in contact.restrictions" :key="restriction.id" class="d-block mt-1">
+                {{ restriction.restriction_type_label }} · {{ restriction.reason }}
+              </span>
+            </div>
           </div>
         </div>
       </div>
