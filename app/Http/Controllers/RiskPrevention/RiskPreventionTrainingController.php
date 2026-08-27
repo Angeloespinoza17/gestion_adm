@@ -24,9 +24,10 @@ class RiskPreventionTrainingController extends Controller
         $search = trim((string) $request->query('search'));
         $type = trim((string) $request->query('training_type'));
         $status = trim((string) $request->query('compliance_status'));
+        $committeeId = $request->query('joint_committee_id');
 
         $trainings = RiskPreventionTraining::query()
-            ->with(['participants.staff:id,full_name,rut', 'requirement'])
+            ->with(['participants.staff:id,full_name,rut', 'requirement', 'jointCommittee:id,name,active'])
             ->when($search !== '', function ($query) use ($search) {
                 $query->where(function ($query) use ($search) {
                     $query
@@ -37,6 +38,7 @@ class RiskPreventionTrainingController extends Controller
             })
             ->when($type !== '', fn ($query) => $query->where('training_type', $type))
             ->when($status !== '', fn ($query) => $query->whereHas('participants', fn ($query) => $query->where('compliance_status', $status)))
+            ->when(filled($committeeId), fn ($query) => $query->where('joint_committee_id', $committeeId))
             ->orderByDesc('training_date')
             ->paginate((int) $request->query('per_page', 10));
 
@@ -68,7 +70,7 @@ class RiskPreventionTrainingController extends Controller
 
         return response()->json([
             'message' => 'Capacitación registrada correctamente.',
-            'data' => $training->fresh()->load(['participants.staff', 'requirement']),
+            'data' => $training->fresh()->load(['participants.staff', 'requirement', 'jointCommittee']),
         ], 201);
     }
 
@@ -97,7 +99,7 @@ class RiskPreventionTrainingController extends Controller
 
         return response()->json([
             'message' => 'Capacitación actualizada correctamente.',
-            'data' => $training->fresh()->load(['participants.staff', 'requirement']),
+            'data' => $training->fresh()->load(['participants.staff', 'requirement', 'jointCommittee']),
         ]);
     }
 

@@ -85,7 +85,8 @@ export default {
       return normalizeOptions(this.catalogs.attention_categories, true, "Todas");
     },
     formCategoryOptions() {
-      return normalizeOptions(this.catalogs.attention_categories);
+      return normalizeOptions(this.catalogs.attention_categories)
+        .filter((option) => option.value !== "salud_mental");
     },
     priorityOptions() {
       return normalizeOptions(this.catalogs.priority_options);

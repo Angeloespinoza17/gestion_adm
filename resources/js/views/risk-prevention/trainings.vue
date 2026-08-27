@@ -26,6 +26,7 @@ const emptyParticipant = () => ({
 const emptyTraining = () => ({
   id: null,
   name: "",
+  joint_committee_id: null,
   training_type: "induccion",
   training_date: "",
   modality: "Presencial",
@@ -42,7 +43,7 @@ export default {
       loading: false,
       saving: false,
       error: null,
-      catalogs: { employees: [], training_modalities: [] },
+      catalogs: { employees: [], training_modalities: [], joint_committees: [] },
       filters: { search: "", training_type: "", compliance_status: "" },
       items: [],
       showModal: false,
@@ -60,9 +61,11 @@ export default {
       )).length;
     },
   },
-  mounted() {
-    this.loadCatalogs();
-    this.loadItems();
+  async mounted() {
+    await Promise.all([this.loadCatalogs(), this.loadItems()]);
+    if (this.$route.query.action === "new") {
+      this.openCreate();
+    }
   },
   methods: {
     formatRiskDate,
@@ -87,6 +90,7 @@ export default {
     openCreate() {
       this.form = {
         ...emptyTraining(),
+        joint_committee_id: this.$route.query.committee_id || null,
         training_date: new Date().toISOString().slice(0, 10),
       };
       this.selectedDepartmentId = "";
@@ -96,6 +100,7 @@ export default {
       this.form = {
         id: item.id,
         name: item.name || "",
+        joint_committee_id: item.joint_committee_id || null,
         training_type: item.training_type || "induccion",
         training_date: item.training_date || "",
         modality: item.modality || "Presencial",
@@ -175,6 +180,7 @@ export default {
     buildFormData() {
       const formData = new FormData();
       formData.append("name", this.form.name);
+      formData.append("joint_committee_id", this.form.joint_committee_id || "");
       formData.append("training_type", this.form.training_type);
       formData.append("training_date", this.form.training_date);
       formData.append("modality", this.form.modality);
@@ -329,6 +335,9 @@ export default {
               <BBadge :variant="item.is_requirement ? 'primary' : 'secondary'" class="mt-2">
                 {{ item.is_requirement ? "Es requisito" : "No es requisito" }}
               </BBadge>
+              <BBadge v-if="item.joint_committee" variant="info" class="mt-2 ms-2">
+                Comité Paritario · {{ item.joint_committee.name }}
+              </BBadge>
             </div>
             <div class="d-flex flex-wrap gap-2">
               <BBadge variant="success">Cumplidos: {{ completedCount(item) }}</BBadge>
@@ -410,6 +419,19 @@ export default {
         <div class="col-md-9">
           <label class="form-label">Evidencia documental</label>
           <BFormFile @change="form.evidence = $event.target.files[0] || null" />
+        </div>
+        <div class="col-12">
+          <label class="form-label">Vincular al Comité Paritario</label>
+          <BFormSelect
+            v-model="form.joint_committee_id"
+            :options="[
+              { value: null, text: 'Capacitación general (sin comité)' },
+              ...(catalogs.joint_committees || []).map((item) => ({ value: item.id, text: item.name })),
+            ]"
+          />
+          <div class="small text-muted mt-1">
+            Si seleccionas un comité, esta capacitación seguirá administrándose aquí y aparecerá automáticamente en la ficha del Comité Paritario.
+          </div>
         </div>
         <div class="col-12">
           <label class="form-label">Observaciones</label>

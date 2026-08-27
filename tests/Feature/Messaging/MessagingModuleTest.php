@@ -18,6 +18,19 @@ class MessagingModuleTest extends TestCase
 {
     use RefreshDatabase;
 
+    public function test_messaging_uses_http_polling_without_websocket_runtime(): void
+    {
+        $user = User::factory()->create(['active' => true]);
+        Sanctum::actingAs($user);
+
+        $this->getJson('/api/messaging/config')
+            ->assertOk()
+            ->assertJsonMissingPath('realtime')
+            ->assertJsonPath('polling.enabled', true)
+            ->assertJsonPath('polling.interval_ms', 15000)
+            ->assertJsonPath('polling.active_interval_ms', 8000);
+    }
+
     public function test_authenticated_active_users_create_one_direct_conversation_and_third_parties_cannot_view_it(): void
     {
         [$one, $two, $third] = User::factory()->count(3)->create(['active' => true]);
@@ -230,21 +243,18 @@ class MessagingModuleTest extends TestCase
         $this->assertCount(45, $ids->unique());
     }
 
-    public function test_creating_a_message_dispatches_small_realtime_events(): void
+    public function test_creating_a_message_does_not_dispatch_websocket_events(): void
     {
         [$sender, $recipient] = User::factory()->count(2)->create(['active' => true]);
         Sanctum::actingAs($sender);
         $conversation = $this->postJson('/api/messaging/conversations/direct', ['user_id' => $recipient->id])->json('data.public_id');
         Event::fake([MessageCreated::class, ConversationChanged::class]);
 
-        $message = $this->postJson("/api/messaging/conversations/{$conversation}/messages", [
-            'body' => 'Mensaje en tiempo real',
-        ])->assertCreated()->json('data.public_id');
+        $this->postJson("/api/messaging/conversations/{$conversation}/messages", [
+            'body' => 'Mensaje actualizado por HTTP',
+        ])->assertCreated();
 
-        Event::assertDispatched(MessageCreated::class, fn (MessageCreated $event) => $event->conversationId === $conversation
-            && $event->message['public_id'] === $message
-            && ! array_key_exists('recipients', $event->message));
-        Event::assertDispatched(ConversationChanged::class, fn (ConversationChanged $event) => $event->change['action'] === 'message_created'
-            && $event->change['conversation_id'] === $conversation);
+        Event::assertNotDispatched(MessageCreated::class);
+        Event::assertNotDispatched(ConversationChanged::class);
     }
 }

@@ -11,7 +11,7 @@ const emptyForm = () => ({
   dependency_component: "",
   reported_at: new Date().toISOString().slice(0, 10),
   requested_by: "",
-  assigned_to: [],
+  assigned_user_ids: [],
   priority: "Media",
   status: "Sin comenzar",
   due_date: "",
@@ -32,6 +32,7 @@ export default {
     return {
       debugModals: false,
       loading: false,
+      catalogsLoading: false,
       saving: false,
       closing: false,
       search: "",
@@ -44,7 +45,8 @@ export default {
       showModalDetalleOT: false,
       showModalTomarFoto: false,
       showModalCerrarOT: false,
-      dependencySearch: "",
+      catalogsError: null,
+      dependencyOptionsError: null,
       selectedPhoto: null,
       activeWorkOrder: null,
       cameraStream: null,
@@ -66,6 +68,7 @@ export default {
         dependency_components: [],
         assignees: [],
         maintenance_assignees: [],
+        current_user: null,
         requesters: ["Pedro Nahuelpan", "Angelo Espinoza", "Laura Davinson", "Jeaqueline Sandoval"],
         summary: {
           total: 0,
@@ -144,16 +147,25 @@ export default {
     assigneeOptions() {
       const catalog = this.catalogs.maintenance_assignees || [];
 
-      if (catalog.length) {
-        return catalog.map((assignee) => ({
-          value: assignee.value || assignee.full_name,
+      return catalog
+        .filter((assignee) => Number(assignee.user_id || assignee.id) > 0)
+        .map((assignee) => ({
+          value: Number(assignee.user_id || assignee.id),
           label: assignee.label || assignee.full_name,
+          name: assignee.full_name || assignee.value,
         }));
-      }
-
-      return (this.catalogs.assignees || []).map((assignee) => ({
-        value: assignee,
-        label: assignee,
+    },
+    currentUserName() {
+      return String(this.catalogs.current_user?.name || "").trim();
+    },
+    dependencySelectOptions() {
+      return (this.catalogs.dependencies || []).map((dependency) => ({
+        value: dependency.id,
+        label: `${dependency.code} · ${dependency.name}`,
+        code: dependency.code,
+        name: dependency.name,
+        context: this.dependencyOptionContext(dependency),
+        usage: String(dependency.usage || "").trim(),
       }));
     },
     filteredInventoryItems() {
@@ -226,9 +238,66 @@ export default {
     onModalEvent(modal, eventName) {
       this.debugLog("modal-event", modal, eventName);
     },
+    onCreateModalShown() {
+      this.onModalEvent("crearOT", "shown");
+      const select = this.$refs.dependencySelect;
+
+      if (!select) return;
+
+      if (select.search) {
+        select.clearSearch?.();
+        return;
+      }
+
+      select.refreshOptions?.();
+    },
     async loadCatalogs() {
-      const response = await axios.get("/api/maintenance/work-orders/catalogs");
-      this.catalogs = response.data;
+      this.catalogsLoading = true;
+      this.catalogsError = null;
+
+      try {
+        const response = await axios.get("/api/maintenance/work-orders/catalogs", {
+          params: { include_dependencies: 0 },
+        });
+        const loadedDependencies = this.catalogs.dependencies || [];
+
+        this.catalogs = {
+          ...this.catalogs,
+          ...response.data,
+          dependencies: loadedDependencies,
+        };
+      } catch (error) {
+        this.catalogsError = this.formatError(error);
+      } finally {
+        this.catalogsLoading = false;
+      }
+    },
+    async fetchDependencyOptions(search = "") {
+      this.dependencyOptionsError = null;
+      const normalizedSearch = String(search || "").trim();
+
+      try {
+        const response = await axios.get("/api/maintenance/work-orders/dependency-options", {
+          params: {
+            search: normalizedSearch,
+            selected_id: normalizedSearch === "" ? this.form.maintenance_dependency_id || undefined : undefined,
+          },
+        });
+
+        this.catalogs.dependencies = response.data.data || [];
+
+        return this.dependencySelectOptions;
+      } catch (error) {
+        this.dependencyOptionsError = this.formatError(error);
+
+        // Conserva opciones ya cargadas si hubo un corte de red momentáneo.
+        return this.dependencySelectOptions;
+      }
+    },
+    refreshDependencyOptions() {
+      this.$nextTick(() => {
+        this.$refs.dependencySelect?.refreshOptions?.();
+      });
     },
     async loadWorkOrders(page = 1) {
       this.loading = true;
@@ -276,13 +345,11 @@ export default {
           payload.append("reported_at", this.form.reported_at);
         }
 
-        if (this.form.requested_by) {
-          payload.append("requested_by", this.form.requested_by);
-        }
+        payload.append("sync_assignees", "1");
 
-        if (Array.isArray(this.form.assigned_to)) {
-          this.form.assigned_to.forEach((assignee) => {
-            payload.append("assigned_to[]", assignee);
+        if (Array.isArray(this.form.assigned_user_ids)) {
+          this.form.assigned_user_ids.forEach((userId) => {
+            payload.append("assigned_user_ids[]", userId);
           });
         }
 
@@ -327,7 +394,7 @@ export default {
       this.debugLog("editWorkOrder(click)", { id: workOrder?.id });
       this.error = null;
       this.success = null;
-      const assigned = this.parseAssignees(workOrder.assigned_to);
+      const assignedUserIds = this.workOrderAssigneeUserIds(workOrder);
 
       this.showModalDetalleOT = false;
 
@@ -338,13 +405,12 @@ export default {
         technical_area_id: workOrder.technical_area_id || workOrder.technical_area?.id || "",
         inventory_item_id: workOrder.inventory_item_id || workOrder.inventory_item?.id || "",
         dependency_component: workOrder.dependency_component || "",
-        assigned_to: assigned,
+        assigned_user_ids: assignedUserIds,
         reported_at: this.formatInputDate(workOrder.reported_at),
         due_date: this.formatInputDate(workOrder.due_date),
         description: this.workOrderDescription(workOrder),
       };
 
-      this.dependencySearch = workOrder.dependency ? this.dependencyLabel(workOrder.dependency) : "";
       this.selectedPhoto = null;
       this.showModalCrearOT = true;
       this.debugLog("showModalCrearOT=true (edit)");
@@ -451,7 +517,7 @@ export default {
     },
     resetForm() {
       this.form = emptyForm();
-      this.dependencySearch = "";
+      this.dependencyOptionsError = null;
       this.selectedPhoto = null;
     },
     formatInputDate(value) {
@@ -486,6 +552,14 @@ export default {
 
       return `${dependency.code} · ${dependency.name}${usage ? ` · Uso: ${usage}` : ""}`;
     },
+    dependencyOptionContext(dependency) {
+      if (!dependency) return "";
+
+      return [dependency.distribution, dependency.sector, dependency.zone]
+        .map((value) => String(value || "").trim())
+        .filter((value, index, values) => value && values.indexOf(value) === index)
+        .join(" · ");
+    },
     inventoryItemLabel(item) {
       if (!item) return "Sin bien inventariado asociado";
 
@@ -502,12 +576,8 @@ export default {
 
       return `${area.code} · ${area.name}${parent}${sector}`;
     },
-    syncDependencySelection() {
-      const match = this.catalogs.dependencies.find(
-        (dependency) => this.dependencyLabel(dependency) === this.dependencySearch
-      );
-
-      this.form.maintenance_dependency_id = match ? match.id : "";
+    syncDependencySelection(value) {
+      this.form.maintenance_dependency_id = value || "";
       this.clearIncompatibleTechnicalArea();
       this.clearIncompatibleInventoryItem();
     },
@@ -523,7 +593,7 @@ export default {
         const dependency = (this.catalogs.dependencies || []).find(
           (catalogDependency) => Number(catalogDependency.id) === Number(area.parent_dependency_id)
         );
-        this.dependencySearch = dependency ? this.dependencyLabel(dependency) : this.dependencySearch;
+        if (!dependency) this.refreshDependencyOptions();
       }
 
       this.clearIncompatibleInventoryItem();
@@ -540,7 +610,7 @@ export default {
         const dependency = (this.catalogs.dependencies || []).find(
           (catalogDependency) => Number(catalogDependency.id) === Number(item.dependency_id)
         );
-        this.dependencySearch = dependency ? this.dependencyLabel(dependency) : this.dependencySearch;
+        if (!dependency) this.refreshDependencyOptions();
       }
 
       this.clearIncompatibleTechnicalArea();
@@ -683,6 +753,19 @@ export default {
     },
     workOrderAssigneeList(workOrder) {
       return this.parseAssignees(workOrder?.assigned_to);
+    },
+    workOrderAssigneeUserIds(workOrder) {
+      const relatedIds = (workOrder?.assignee_users || [])
+        .map((user) => Number(user.id))
+        .filter((id) => id > 0);
+
+      if (relatedIds.length) {
+        return [...new Set(relatedIds)];
+      }
+
+      return this.parseAssignees(workOrder?.assigned_to)
+        .map((name) => this.assigneeOptions.find((option) => option.name === name)?.value)
+        .filter((id) => id > 0);
     },
     workOrderDescription(workOrder) {
       const description = String(workOrder?.description || "").trim();
@@ -1014,7 +1097,7 @@ export default {
       lazy
       no-fade
       @show="onModalEvent('crearOT', 'show')"
-      @shown="onModalEvent('crearOT', 'shown')"
+      @shown="onCreateModalShown"
       @hide="onModalEvent('crearOT', 'hide')"
       @hidden="onModalEvent('crearOT', 'hidden')"
     >
@@ -1022,6 +1105,12 @@ export default {
         <div class="work-order-modal-scroll">
           <BAlert v-if="error" show variant="danger" class="mb-3">{{ error }}</BAlert>
           <BAlert v-if="success" show variant="success" class="mb-3">{{ success }}</BAlert>
+          <BAlert v-if="catalogsError" show variant="warning" class="work-order-catalog-alert mb-3">
+            <span>No se pudieron completar los catálogos del formulario. {{ catalogsError }}</span>
+            <button type="button" :disabled="catalogsLoading" @click="loadCatalogs">
+              {{ catalogsLoading ? "Reintentando..." : "Reintentar" }}
+            </button>
+          </BAlert>
 
           <section class="work-order-form-section">
             <div class="work-order-form-section-head">
@@ -1035,16 +1124,59 @@ export default {
             <div class="work-order-form-grid work-order-form-grid--two">
               <label class="work-order-form-field work-order-form-field--wide">
                 <span>Dependencia</span>
-                <input
-                  v-model="dependencySearch"
-                  type="text"
-                  list="dependency-options"
-                  class="work-order-form-control"
+                <Multiselect
+                  ref="dependencySelect"
+                  v-model="form.maintenance_dependency_id"
+                  class="work-order-dependency-select"
+                  :options="fetchDependencyOptions"
+                  value-prop="value"
+                  label="label"
+                  :track-by="['label', 'context', 'usage']"
+                  :searchable="true"
+                  :filter-results="false"
+                  :resolve-on-load="false"
+                  :delay="280"
+                  :min-chars="0"
+                  :clear-on-search="true"
+                  :can-clear="true"
+                  :can-deselect="true"
+                  :close-on-select="true"
+                  :append-to-body="false"
+                  :allow-absent="true"
+                  input-type="search"
+                  autocomplete="off"
+                  placeholder="Buscar por nombre, código, sector o uso..."
+                  no-options-text="No hay dependencias habilitadas para mantención"
+                  no-results-text="No encontramos una dependencia con ese criterio"
+                  aria-label="Buscar dependencia para la orden de trabajo"
+                  :style="{ '--ms-max-height': 'min(320px, 44vh)' }"
                   @change="syncDependencySelection"
-                />
-                <datalist id="dependency-options">
-                  <option v-for="dependency in catalogs.dependencies" :key="dependency.id" :value="dependencyLabel(dependency)" />
-                </datalist>
+                >
+                  <template #singlelabel="{ value }">
+                    <div class="work-order-dependency-selected">
+                      <b>{{ value.code }}</b>
+                      <strong>{{ value.name }}</strong>
+                    </div>
+                  </template>
+                  <template #option="{ option }">
+                    <div class="work-order-dependency-option">
+                      <b>{{ option.code }}</b>
+                      <div>
+                        <strong>{{ option.name }}</strong>
+                        <small v-if="option.context">{{ option.context }}</small>
+                        <small v-if="option.usage">Uso: {{ option.usage }}</small>
+                      </div>
+                    </div>
+                  </template>
+                </Multiselect>
+                <div v-if="dependencyOptionsError" class="work-order-field-feedback work-order-field-feedback--error">
+                  <i class="mdi mdi-alert-circle-outline"></i>
+                  <span>No se pudo cargar la búsqueda.</span>
+                  <button type="button" @click="refreshDependencyOptions">Reintentar</button>
+                </div>
+                <small v-else class="work-order-field-help">
+                  Escribe una parte del nombre, código, sector o uso. Se muestran hasta 40 coincidencias para mantener la carga rápida.
+                </small>
               </label>
 
               <label class="work-order-form-field">
@@ -1129,17 +1261,21 @@ export default {
 
               <label class="work-order-form-field">
                 <span>Quién asigna</span>
-                <select v-model="form.requested_by" class="work-order-form-control" required>
-                  <option value="">Selecciona...</option>
-                  <option v-for="requester in catalogs.requesters" :key="requester" :value="requester">{{ requester }}</option>
-                </select>
+                <input
+                  :value="form.requested_by || currentUserName"
+                  class="work-order-form-control work-order-form-control--readonly"
+                  type="text"
+                  readonly
+                  aria-label="Usuario que crea y asigna la orden de trabajo"
+                />
+                <small class="work-order-field-help">Se registra automáticamente con el usuario creador.</small>
               </label>
 
               <label class="work-order-form-field">
-                <span>Asignación</span>
+                <span>Asignados</span>
                 <Multiselect
                   class="work-order-multiselect"
-                  v-model="form.assigned_to"
+                  v-model="form.assigned_user_ids"
                   :options="assigneeOptions"
                   mode="multiple"
                   :multiple-label="selectedAssigneesLabel"
@@ -1907,6 +2043,13 @@ export default {
 
 .work-order-form-control {
   min-height: 46px;
+}
+
+.work-order-form-control--readonly {
+  border-color: #d7e1f1;
+  color: #53607a;
+  background: #f4f7fb;
+  cursor: default;
 }
 
 textarea.work-order-form-control {
@@ -2690,6 +2833,171 @@ textarea.work-order-form-control {
   background: #fff;
 }
 
+.work-order-catalog-alert {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.work-order-catalog-alert button,
+.work-order-field-feedback button {
+  flex: 0 0 auto;
+  border: 0;
+  background: transparent;
+  color: #3152c9;
+  padding: 2px 0;
+  font-weight: 700;
+  text-decoration: underline;
+}
+
+.work-order-field-help {
+  color: #778199;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.work-order-field-feedback {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.work-order-field-feedback--error,
+.work-order-field-feedback--error span {
+  color: #b42318;
+}
+
+:deep(.work-order-dependency-select) {
+  min-height: 52px;
+  margin: 0;
+  border-radius: 10px;
+  --ms-border-color: #d7e1f1;
+  --ms-border-color-active: #8fa7f5;
+  --ms-ring-color: rgba(91, 116, 223, 0.14);
+  --ms-radius: 10px;
+  --ms-bg: #fff;
+  --ms-placeholder-color: #8791a7;
+  --ms-option-bg-pointed: #f2f6ff;
+  --ms-option-color-pointed: #263a77;
+  --ms-option-bg-selected: #e9f0ff;
+  --ms-option-color-selected: #2445b5;
+  --ms-option-bg-selected-pointed: #dde8ff;
+  --ms-option-color-selected-pointed: #1f3d9f;
+  --ms-spinner-color: #5b74df;
+}
+
+:deep(.work-order-dependency-select .multiselect-wrapper) {
+  min-height: 50px;
+}
+
+:deep(.work-order-dependency-select .multiselect-search) {
+  border-radius: 10px;
+  color: #303848;
+  font-size: 15px;
+  padding-left: 14px;
+}
+
+:deep(.work-order-dependency-select .multiselect-placeholder),
+:deep(.work-order-dependency-select .multiselect-single-label) {
+  padding-left: 14px;
+}
+
+:deep(.work-order-dependency-select .multiselect-dropdown) {
+  z-index: 2100;
+  border-color: #cdd9ed;
+  box-shadow: 0 18px 40px rgba(30, 49, 91, 0.16);
+  overscroll-behavior: contain;
+}
+
+:deep(.work-order-dependency-select .multiselect-option) {
+  min-height: 66px;
+  padding: 10px 12px;
+  border-bottom: 1px solid #edf2fa;
+  white-space: normal;
+}
+
+:deep(.work-order-dependency-select .multiselect-option.is-selected) {
+  background: #e9f0ff;
+  color: #2445b5;
+}
+
+:deep(.work-order-dependency-select .multiselect-option.is-selected.is-pointed) {
+  background: #dce8ff;
+  color: #1f3d9f;
+}
+
+.work-order-dependency-selected {
+  position: absolute;
+  z-index: 2;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  padding: 0 76px 0 14px;
+  pointer-events: none;
+  color: #303848;
+}
+
+.work-order-dependency-selected b,
+.work-order-dependency-option > b {
+  flex: 0 0 auto;
+  border-radius: 6px;
+  background: #e9f0ff;
+  color: #3152c9;
+  padding: 4px 7px;
+  font-size: 11px;
+  line-height: 1.2;
+  letter-spacing: 0.02em;
+}
+
+.work-order-dependency-selected strong {
+  overflow: hidden;
+  color: #303848;
+  font-size: 14px;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.work-order-dependency-option {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  gap: 10px;
+  width: 100%;
+}
+
+.work-order-dependency-option > div {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.work-order-dependency-option strong {
+  color: currentColor;
+  font-size: 14px;
+  line-height: 1.3;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.work-order-dependency-option small {
+  color: #70809a;
+  font-size: 12px;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+
+:deep(.work-order-dependency-select .multiselect-option.is-selected) .work-order-dependency-option small {
+  color: #4962ac;
+}
+
 :deep(.work-order-multiselect) {
   min-height: 46px;
   border-radius: 8px;
@@ -2739,6 +3047,22 @@ textarea.work-order-form-control {
 }
 
 @media (max-width: 768px) {
+  :deep(.work-order-modal .modal-dialog) {
+    width: calc(100vw - 16px);
+    max-width: calc(100vw - 16px);
+    margin: 8px auto;
+  }
+
+  :deep(.work-order-modal .modal-content) {
+    max-height: calc(100dvh - 16px);
+    border-radius: 12px;
+  }
+
+  .work-order-form,
+  .work-order-detail {
+    max-height: calc(100dvh - 84px);
+  }
+
   .work-orders-header,
   .work-order-panel-head,
   .work-order-pagination {
@@ -2781,6 +3105,35 @@ textarea.work-order-form-control {
 
   .work-order-panel {
     padding: 16px;
+  }
+
+  .work-order-form-section {
+    padding: 14px;
+  }
+
+  .work-order-catalog-alert {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  :deep(.work-order-dependency-select),
+  :deep(.work-order-dependency-select .multiselect-wrapper) {
+    min-height: 56px;
+  }
+
+  :deep(.work-order-dependency-select .multiselect-search) {
+    font-size: 16px;
+  }
+
+  :deep(.work-order-dependency-select .multiselect-option) {
+    min-height: 70px;
+    padding: 12px;
+  }
+
+  .work-order-modal-footer button,
+  .work-order-detail-footer button {
+    flex: 1 1 140px;
+    min-height: 48px;
   }
 
   .work-order-detail-scroll,

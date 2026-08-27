@@ -1,7 +1,12 @@
 <script>
 import axios from "axios";
 import Layout from "../../layouts/main.vue";
+import MaintenanceVisitPlanningModal from "../../components/maintenance/MaintenanceVisitPlanningModal.vue";
 import { getPdfMake } from "../../utils/pdfmake";
+import {
+  buildMaintenanceVisitsCalendarPdf,
+  maintenanceCalendarPdfFilename,
+} from "../../utils/maintenance-visits-calendar-pdf";
 
 const pad = (value) => String(value).padStart(2, "0");
 const localYMD = (date = new Date()) => `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
@@ -19,7 +24,7 @@ const emptyForm = () => ({
 });
 
 export default {
-  components: { Layout },
+  components: { Layout, MaintenanceVisitPlanningModal },
   data() {
     return {
       debugModals: false,
@@ -29,6 +34,9 @@ export default {
       error: null,
       success: null,
       showModalVisit: false,
+      showPlanningModal: false,
+      showExportModal: false,
+      mobileFiltersOpen: false,
       viewMode: "table",
       calendarMonth: localYM(),
       search: "",
@@ -36,9 +44,14 @@ export default {
         from: "",
         to: "",
         dependency_id: "",
-        responsible: "",
+        responsible_staff_id: "",
         status: "",
         visit_type: "",
+      },
+      exportForm: {
+        month: localYM(),
+        responsible_staff_id: "",
+        format: "calendar",
       },
       catalogs: {
         visit_types: ["Inspección", "Mantención", "Reunión", "Otro"],
@@ -49,11 +62,22 @@ export default {
         dependencies: [],
       },
       visits: [],
+      statusTotals: {},
       pagination: { current_page: 1, last_page: 1, total: 0 },
       form: emptyForm(),
     };
   },
   computed: {
+    permissions() {
+      try {
+        return JSON.parse(localStorage.getItem("permissions") || "[]");
+      } catch (error) {
+        return [];
+      }
+    },
+    isSuperAdmin() {
+      return this.permissions.includes("__superadmin__");
+    },
     isEditing() {
       return Boolean(this.form.id);
     },
@@ -63,7 +87,7 @@ export default {
         this.filters.from,
         this.filters.to,
         this.filters.dependency_id,
-        this.filters.responsible,
+        this.filters.responsible_staff_id,
         this.filters.status,
         this.filters.visit_type,
       ].filter(Boolean).length;
@@ -86,8 +110,22 @@ export default {
 
       return options;
     },
+    personFilterOptions() {
+      return (this.catalogs.maintenance_assignees || []).map((person) => ({
+        value: String(person.id),
+        label: person.label || person.full_name,
+        fullName: person.full_name,
+      }));
+    },
+    exportResponsibleLabel() {
+      if (!this.exportForm.responsible_staff_id) return "Todas las personas";
+
+      return this.personFilterOptions.find(
+        (person) => person.value === String(this.exportForm.responsible_staff_id)
+      )?.label || "Persona seleccionada";
+    },
     summaryCards() {
-      const byStatus = (status) => this.visits.filter((visit) => visit.status === status).length;
+      const byStatus = (status) => Number(this.statusTotals[status] || 0);
 
       return [
         {
@@ -147,6 +185,28 @@ export default {
         };
       });
     },
+    mobileAgendaGroups() {
+      const groups = new Map();
+      this.visits
+        .filter((visit) => this.viewMode !== "calendar" || String(visit.visit_date || "").slice(0, 7) === this.calendarMonth)
+        .forEach((visit) => {
+          const date = String(visit.visit_date || "").slice(0, 10);
+          if (!groups.has(date)) groups.set(date, []);
+          groups.get(date).push(visit);
+        });
+
+      return [...groups.entries()]
+        .sort(([left], [right]) => left.localeCompare(right))
+        .map(([date, visits]) => ({
+          date,
+          day: String(Number(date.slice(8, 10))),
+          weekday: this.formatWeekday(date),
+          month: this.formatShortMonth(date),
+          visits: visits.sort((left, right) =>
+            String(left.visit_time || "").localeCompare(String(right.visit_time || ""))
+          ),
+        }));
+    },
   },
   mounted() {
     try {
@@ -186,6 +246,7 @@ export default {
         });
 
         this.visits = response.data.data;
+        this.statusTotals = response.data.status_totals || {};
         this.pagination = {
           current_page: response.data.current_page,
           last_page: response.data.last_page,
@@ -235,15 +296,23 @@ export default {
         from: "",
         to: "",
         dependency_id: "",
-        responsible: "",
+        responsible_staff_id: "",
         status: "",
         visit_type: "",
       };
       this.loadVisits(1);
     },
-    exportFilters() {
-      const filters = { ...this.filters };
-      const range = this.calendarRange();
+    monthRange(monthValue = this.calendarMonth) {
+      const [year, month] = String(monthValue).split("-").map(Number);
+      return {
+        from: this.formatYMD(new Date(year, month - 1, 1, 12)),
+        to: this.formatYMD(new Date(year, month, 0, 12)),
+      };
+    },
+    exportFilters(overrides = {}) {
+      const filters = { ...this.filters, ...overrides };
+      const range = this.monthRange(overrides.month || this.calendarMonth);
+      delete filters.month;
 
       filters.from = filters.from || range.from;
       filters.to = filters.to || range.to;
@@ -257,7 +326,7 @@ export default {
       if (filters.from) labels.push(`Desde: ${this.formatDMY(filters.from)}`);
       if (filters.to) labels.push(`Hasta: ${this.formatDMY(filters.to)}`);
       if (filters.dependency_id) labels.push(`Dependencia: ${this.selectedDependencyLabel(filters.dependency_id)}`);
-      if (filters.responsible) labels.push(`Responsable: ${this.responsibleLabel(filters.responsible)}`);
+      if (filters.responsible_staff_id) labels.push(`Responsable: ${this.personFilterLabel(filters.responsible_staff_id)}`);
       if (filters.visit_type) labels.push(`Tipo: ${filters.visit_type}`);
       if (filters.status) labels.push(`Estado: ${filters.status}`);
 
@@ -268,18 +337,18 @@ export default {
 
       return dependency ? `${dependency.code} - ${dependency.name}` : "Seleccionada";
     },
-    responsibleLabel(value) {
-      const responsible = this.responsibleOptions.find((item) => item.value === value);
+    personFilterLabel(value) {
+      const responsible = this.personFilterOptions.find((item) => item.value === String(value));
 
       return responsible?.label || value;
     },
-    async fetchExportVisits() {
+    async fetchExportVisits(filters = this.exportFilters()) {
       const response = await axios.get("/api/maintenance/visits", {
         params: {
           page: 1,
           per_page: 1000,
           search: this.search,
-          ...this.exportFilters(),
+          ...filters,
         },
       });
 
@@ -381,14 +450,13 @@ export default {
         filterLine: { fontSize: 9, color: "#53607a" },
       };
     },
-    async exportVisitsTablePdf() {
+    async exportVisitsTablePdf(filters = this.exportFilters(), month = this.calendarMonth, responsibleLabel = "Todas las personas") {
       this.exporting = "table";
       this.error = null;
 
       try {
         const pdfMake = await getPdfMake();
-        const visits = await this.fetchExportVisits();
-        const filters = this.exportFilters();
+        const visits = await this.fetchExportVisits(filters);
         const filterLabels = this.exportFilterLabels(filters);
         const header = ["Fecha", "Hora", "Dependencia", "Responsable", "Tipo", "Estado", "Notas"].map((text) => ({
           text,
@@ -436,127 +504,73 @@ export default {
           defaultStyle: { fontSize: 8.5, color: "#364154" },
         };
 
-        pdfMake.createPdf(docDefinition).download(`visitas-tabla-${this.calendarMonth}.pdf`);
+        pdfMake.createPdf(docDefinition).download(
+          maintenanceCalendarPdfFilename(month, responsibleLabel).replace("calendario-visitas", "listado-visitas")
+        );
+        this.showExportModal = false;
       } catch (error) {
         this.error = error.response?.data?.message || error.message || "Error generando PDF de visitas";
       } finally {
         this.exporting = "";
       }
     },
-    calendarDaysFromVisits(visits) {
-      const [year, month] = this.calendarMonth.split("-").map(Number);
-      const firstDay = new Date(year, month - 1, 1, 12);
-      const firstWeekday = (firstDay.getDay() + 6) % 7;
-      const gridStart = new Date(firstDay);
-      gridStart.setDate(firstDay.getDate() - firstWeekday);
-
-      return Array.from({ length: 42 }, (_, index) => {
-        const date = new Date(gridStart);
-        date.setDate(gridStart.getDate() + index);
-        const iso = this.formatYMD(date);
-
-        return {
-          iso,
-          day: date.getDate(),
-          isCurrentMonth: date.getMonth() === month - 1,
-          visits: this.visitsForDateFrom(visits, iso),
-        };
-      });
-    },
-    calendarCell(day) {
-      const stack = [
-        {
-          text: String(day.day),
-          color: day.isCurrentMonth ? "#243047" : "#94a3b8",
-          bold: true,
-          fontSize: 9,
-          margin: [0, 0, 0, 3],
-        },
-      ];
-
-      if (!day.visits.length) {
-        stack.push({ text: " ", fontSize: 7 });
-      }
-
-      for (const visit of day.visits.slice(0, 4)) {
-        stack.push({
-          text: `${this.formatTime(visit.visit_time)} · ${visit.responsible || "Sin responsable"}\n${visit.dependency?.code || "S/C"} · ${visit.visit_type || "-"}`,
-          color: this.pdfStatusColor(visit.status),
-          fontSize: 6.5,
-          lineHeight: 1.1,
-          margin: [0, 2, 0, 0],
-        });
-      }
-
-      if (day.visits.length > 4) {
-        stack.push({ text: `+${day.visits.length - 4} visitas`, color: "#64748b", fontSize: 6.5, margin: [0, 2, 0, 0] });
-      }
-
-      return {
-        stack,
-        fillColor: day.isCurrentMonth ? "#ffffff" : "#f8fafc",
-        margin: [4, 4, 4, 4],
-      };
-    },
-    async exportVisitsCalendarPdf() {
+    async exportVisitsCalendarPdf(filters = this.exportFilters(), month = this.calendarMonth, responsibleLabel = "Todas las personas") {
       this.exporting = "calendar";
       this.error = null;
 
       try {
         const pdfMake = await getPdfMake();
-        const visits = await this.fetchExportVisits();
-        const filters = this.exportFilters();
+        const visits = await this.fetchExportVisits(filters);
         const filterLabels = this.exportFilterLabels(filters);
-        const days = this.calendarDaysFromVisits(visits);
-        const weekdays = ["Lun", "Mar", "Mie", "Jue", "Vie", "Sab", "Dom"].map((text) => ({
-          text,
-          alignment: "center",
-          bold: true,
-          color: "#ffffff",
-          fillColor: "#334155",
-          margin: [0, 4, 0, 4],
-        }));
-        const weeks = Array.from({ length: 6 }, (_, weekIndex) =>
-          days.slice(weekIndex * 7, weekIndex * 7 + 7).map((day) => this.calendarCell(day))
-        );
+        const calendarTitle = this.monthTitle(month);
+        const docDefinition = buildMaintenanceVisitsCalendarPdf({
+          visits,
+          calendarMonth: month,
+          calendarTitle,
+          responsibleLabel,
+          filterLabels,
+        });
 
-        const docDefinition = {
-          pageOrientation: "landscape",
-          pageMargins: [28, 32, 28, 42],
-          footer: this.pdfFooter(),
-          content: [
-            this.pdfHeader("Calendario de visitas", this.calendarTitle),
-            { canvas: [{ type: "line", x1: 0, y1: 0, x2: 786, y2: 0, lineWidth: 1, lineColor: "#dbe5f4" }], margin: [0, 0, 0, 10] },
-            { text: filterLabels.join(" | ") || "Sin filtros aplicados", style: "filterLine", margin: [0, 0, 0, 10] },
-            this.pdfCardTable(this.visitStats(visits)),
-            {
-              table: {
-                headerRows: 1,
-                widths: ["*", "*", "*", "*", "*", "*", "*"],
-                body: [weekdays, ...weeks],
-              },
-              layout: {
-                hLineColor: () => "#dbe5f4",
-                vLineColor: () => "#dbe5f4",
-                hLineWidth: () => 0.7,
-                vLineWidth: () => 0.7,
-                paddingLeft: () => 0,
-                paddingRight: () => 0,
-                paddingTop: () => 0,
-                paddingBottom: () => 0,
-              },
-            },
-          ],
-          styles: this.pdfStyles(),
-          defaultStyle: { fontSize: 8, color: "#364154" },
-        };
-
-        pdfMake.createPdf(docDefinition).download(`visitas-calendario-${this.calendarMonth}.pdf`);
+        pdfMake.createPdf(docDefinition).download(maintenanceCalendarPdfFilename(month, responsibleLabel));
+        this.showExportModal = false;
       } catch (error) {
         this.error = error.response?.data?.message || error.message || "Error generando PDF de calendario";
       } finally {
         this.exporting = "";
       }
+    },
+    openPdfExport() {
+      this.error = null;
+      this.exportForm = {
+        month: this.calendarMonth,
+        responsible_staff_id: this.filters.responsible_staff_id || "",
+        format: "calendar",
+      };
+      this.showExportModal = true;
+    },
+    confirmPdfExport() {
+      const range = this.monthRange(this.exportForm.month);
+      const filters = this.exportFilters({
+        ...range,
+        responsible_staff_id: this.exportForm.responsible_staff_id || "",
+        month: this.exportForm.month,
+      });
+
+      if (this.exportForm.format === "table") {
+        return this.exportVisitsTablePdf(filters, this.exportForm.month, this.exportResponsibleLabel);
+      }
+
+      return this.exportVisitsCalendarPdf(filters, this.exportForm.month, this.exportResponsibleLabel);
+    },
+    openAutomaticPlanning() {
+      this.error = null;
+      this.success = null;
+      this.showPlanningModal = true;
+    },
+    async onPlanningConfirmed(response) {
+      this.success = response?.message || "Planificación de visitas creada correctamente.";
+      this.viewMode = "calendar";
+      await this.loadVisits(1);
     },
     openCreate() {
       this.debugLog("openCreate(click)");
@@ -622,6 +636,26 @@ export default {
 
       const detail = [dep.distribution, dep.sector, dep.zone].filter(Boolean).join(" · ");
       return `${dep.code} · ${dep.name}${detail ? ` · ${detail}` : ""}`;
+    },
+    monthTitle(monthValue = this.calendarMonth) {
+      const [year, month] = String(monthValue).split("-").map(Number);
+      const label = new Intl.DateTimeFormat("es-CL", { month: "long", year: "numeric" })
+        .format(new Date(year, month - 1, 1, 12));
+      return label.charAt(0).toUpperCase() + label.slice(1);
+    },
+    formatWeekday(value) {
+      const [year, month, day] = String(value).slice(0, 10).split("-").map(Number);
+      const label = new Intl.DateTimeFormat("es-CL", { weekday: "short" })
+        .format(new Date(year, month - 1, day, 12))
+        .replace(".", "");
+      return label.charAt(0).toUpperCase() + label.slice(1);
+    },
+    formatShortMonth(value) {
+      const [year, month, day] = String(value).slice(0, 10).split("-").map(Number);
+      return new Intl.DateTimeFormat("es-CL", { month: "short" })
+        .format(new Date(year, month - 1, day, 12))
+        .replace(".", "")
+        .toUpperCase();
     },
     formatYMD(date) {
       return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
@@ -698,25 +732,17 @@ export default {
               Calendario
             </button>
           </div>
-          <button
-            class="visit-secondary-button visit-secondary-button--red"
-            type="button"
-            :disabled="Boolean(exporting)"
-            title="Exportar calendario como tabla"
-            @click="exportVisitsTablePdf"
-          >
-            <i class="mdi mdi-table"></i>
-            PDF tabla
+          <button class="visit-export-button" type="button" :disabled="Boolean(exporting)" @click="openPdfExport">
+            <span class="visit-export-button__icon"><i class="mdi mdi-file-pdf-box"></i></span>
+            <span>
+              <strong>Exportar agenda</strong>
+              <small>PDF por persona</small>
+            </span>
+            <i class="mdi mdi-chevron-right visit-export-button__arrow"></i>
           </button>
-          <button
-            class="visit-secondary-button visit-secondary-button--red"
-            type="button"
-            :disabled="Boolean(exporting)"
-            title="Exportar calendario visual"
-            @click="exportVisitsCalendarPdf"
-          >
-            <i class="mdi mdi-calendar-month-outline"></i>
-            PDF calendario
+          <button v-if="isSuperAdmin" class="visit-auto-button" type="button" @click="openAutomaticPlanning">
+            <i class="mdi mdi-auto-fix"></i>
+            Planificar automáticamente
           </button>
           <button class="visit-primary-button" type="button" @click="openCreate">
             <i class="mdi mdi-plus"></i>
@@ -749,12 +775,18 @@ export default {
             <span class="visits-eyebrow">Filtros</span>
             <h5>Consulta de visitas</h5>
           </div>
-          <span class="visits-filter-count" :class="{ active: activeFiltersCount > 0 }">
-            {{ activeFiltersCount }} filtros
-          </span>
+          <div class="visits-filter-head-actions">
+            <span class="visits-filter-count" :class="{ active: activeFiltersCount > 0 }">
+              {{ activeFiltersCount }} filtros
+            </span>
+            <button class="visits-filter-toggle" type="button" @click="mobileFiltersOpen = !mobileFiltersOpen">
+              <i :class="`mdi ${mobileFiltersOpen ? 'mdi-chevron-up' : 'mdi-tune-variant'}`"></i>
+              {{ mobileFiltersOpen ? "Ocultar" : "Ajustar" }}
+            </button>
+          </div>
         </div>
 
-        <div class="visits-filters">
+        <div class="visits-filters" :class="{ 'mobile-open': mobileFiltersOpen }">
           <label class="visit-field visit-field--search">
             <span>Búsqueda</span>
             <input v-model="search" type="search" placeholder="Código, dependencia, sector..." @keyup.enter="loadVisits()" />
@@ -776,11 +808,11 @@ export default {
               </option>
             </select>
           </label>
-          <label class="visit-field">
-            <span>Responsable</span>
-            <select v-model="filters.responsible">
-              <option value="">Todos</option>
-              <option v-for="person in responsibleOptions" :key="person.value" :value="person.value">
+          <label class="visit-field visit-field--responsible">
+            <span>Persona responsable</span>
+            <select v-model="filters.responsible_staff_id">
+              <option value="">Todas las personas</option>
+              <option v-for="person in personFilterOptions" :key="person.value" :value="person.value">
                 {{ person.label }}
               </option>
             </select>
@@ -829,7 +861,7 @@ export default {
           </div>
         </div>
 
-        <div v-if="viewMode === 'table'" class="visits-table-wrap">
+        <div v-if="viewMode === 'table'" class="visits-table-wrap visits-desktop-view">
           <table class="visits-table">
             <colgroup>
               <col class="visit-col-date" />
@@ -896,7 +928,7 @@ export default {
           </table>
         </div>
 
-        <div v-else class="visits-calendar">
+        <div v-else class="visits-calendar visits-desktop-view">
           <div class="visits-calendar-weekdays">
             <span>Lun</span>
             <span>Mar</span>
@@ -936,6 +968,47 @@ export default {
           </div>
           <div v-if="!loading && visits.length === 0" class="visits-empty-state visits-empty-state--calendar">
             No hay visitas para el mes o filtros seleccionados.
+          </div>
+        </div>
+
+        <div class="visits-mobile-agenda">
+          <div v-if="loading" class="visits-mobile-loading">
+            <span></span>
+            <p>Cargando agenda...</p>
+          </div>
+          <template v-else-if="mobileAgendaGroups.length">
+            <section v-for="group in mobileAgendaGroups" :key="group.date" class="visits-mobile-day-group">
+              <header class="visits-mobile-date">
+                <strong>{{ group.day }}</strong>
+                <span>{{ group.weekday }}<small>{{ group.month }}</small></span>
+                <em>{{ group.visits.length }} {{ group.visits.length === 1 ? "visita" : "visitas" }}</em>
+              </header>
+              <article v-for="visit in group.visits" :key="visit.id" class="visits-mobile-card">
+                <div class="visits-mobile-card__timeline" :class="statusClass(visit.status)">
+                  <span></span>
+                  <strong>{{ formatTime(visit.visit_time) }}</strong>
+                </div>
+                <div class="visits-mobile-card__content">
+                  <div class="visits-mobile-card__topline">
+                    <span class="visit-type-chip" :class="typeClass(visit.visit_type)">{{ visit.visit_type }}</span>
+                    <span class="visit-pill" :class="statusClass(visit.status)">{{ visit.status }}</span>
+                  </div>
+                  <h6>{{ visit.dependency?.name || "Dependencia sin nombre" }}</h6>
+                  <p><i class="mdi mdi-account-outline"></i>{{ visit.responsible || "Sin responsable" }}</p>
+                  <small><i class="mdi mdi-map-marker-outline"></i>{{ visit.dependency?.code || "Sin código" }}</small>
+                  <div class="visits-mobile-card__actions">
+                    <button type="button" @click="goChecklist(visit)"><i class="mdi mdi-clipboard-check-outline"></i>Checklist</button>
+                    <button type="button" @click="editVisit(visit)"><i class="mdi mdi-pencil-outline"></i>Editar</button>
+                    <button type="button" class="danger" aria-label="Eliminar visita" @click="deleteVisit(visit)"><i class="mdi mdi-trash-can-outline"></i></button>
+                  </div>
+                </div>
+              </article>
+            </section>
+          </template>
+          <div v-else class="visits-mobile-empty">
+            <i class="mdi mdi-calendar-blank-outline"></i>
+            <strong>Sin visitas en este período</strong>
+            <span>Ajusta los filtros o programa una nueva visita.</span>
           </div>
         </div>
 
@@ -1066,6 +1139,103 @@ export default {
         </div>
       </form>
     </BModal>
+
+    <BModal
+      v-model="showExportModal"
+      modal-class="visit-export-modal"
+      dialog-class="visit-export-dialog"
+      body-class="p-0"
+      hide-header
+      hide-footer
+      centered
+      teleport-to="body"
+      lazy
+      no-fade
+    >
+      <div class="visit-export-shell">
+        <header class="visit-export-hero">
+          <div class="visit-export-hero__icon"><i class="mdi mdi-file-pdf-box"></i></div>
+          <div>
+            <span>Agenda operativa</span>
+            <h4>Exportar calendario de visitas</h4>
+            <p>Genera un PDF listo para compartir, filtrado por mes y persona.</p>
+          </div>
+          <button type="button" aria-label="Cerrar exportación" @click="showExportModal = false">
+            <i class="mdi mdi-close"></i>
+          </button>
+        </header>
+
+        <div class="visit-export-body">
+          <div class="visit-export-grid">
+            <label class="visit-field">
+              <span>Mes de la agenda</span>
+              <input v-model="exportForm.month" type="month" required />
+            </label>
+            <label class="visit-field">
+              <span>Persona responsable</span>
+              <select v-model="exportForm.responsible_staff_id">
+                <option value="">Todas las personas</option>
+                <option v-for="person in personFilterOptions" :key="person.value" :value="person.value">
+                  {{ person.label }}
+                </option>
+              </select>
+            </label>
+          </div>
+
+          <section class="visit-export-person">
+            <span class="visit-export-avatar"><i class="mdi mdi-account-outline"></i></span>
+            <div>
+              <small>Agenda seleccionada</small>
+              <strong>{{ exportResponsibleLabel }}</strong>
+              <p>{{ monthTitle(exportForm.month) }}</p>
+            </div>
+            <i class="mdi mdi-check-decagram"></i>
+          </section>
+
+          <fieldset class="visit-export-formats">
+            <legend>Formato del documento</legend>
+            <label :class="{ active: exportForm.format === 'calendar' }">
+              <input v-model="exportForm.format" type="radio" value="calendar" />
+              <span><i class="mdi mdi-calendar-month-outline"></i></span>
+              <div><strong>Calendario visual</strong><small>Distribución mensual lista para imprimir</small></div>
+              <i class="mdi mdi-radiobox-marked"></i>
+            </label>
+            <label :class="{ active: exportForm.format === 'table' }">
+              <input v-model="exportForm.format" type="radio" value="table" />
+              <span><i class="mdi mdi-format-list-bulleted"></i></span>
+              <div><strong>Listado detallado</strong><small>Una fila por visita con observaciones</small></div>
+              <i class="mdi mdi-radiobox-marked"></i>
+            </label>
+          </fieldset>
+
+          <div class="visit-export-context">
+            <i class="mdi mdi-filter-check-outline"></i>
+            <p>
+              Se conservarán los filtros activos de búsqueda, dependencia, tipo y estado.
+              El mes y la persona se tomarán de esta ventana.
+            </p>
+          </div>
+        </div>
+
+        <footer class="visit-export-footer">
+          <button class="visit-secondary-button" type="button" :disabled="Boolean(exporting)" @click="showExportModal = false">
+            Cancelar
+          </button>
+          <button class="visit-export-confirm" type="button" :disabled="Boolean(exporting) || !exportForm.month" @click="confirmPdfExport">
+            <span v-if="exporting" class="spinner-border spinner-border-sm" aria-hidden="true"></span>
+            <i v-else class="mdi mdi-download"></i>
+            {{ exporting ? "Preparando PDF..." : "Descargar PDF" }}
+          </button>
+        </footer>
+      </div>
+    </BModal>
+
+    <MaintenanceVisitPlanningModal
+      v-if="isSuperAdmin"
+      v-model="showPlanningModal"
+      :catalogs="catalogs"
+      @confirmed="onPlanningConfirmed"
+    />
   </Layout>
 </template>
 
@@ -1079,9 +1249,14 @@ export default {
   align-items: flex-start;
   justify-content: space-between;
   gap: 18px;
-  padding: 18px 0 16px;
-  border-bottom: 1px solid #e3ebfb;
+  padding: 26px;
+  border: 1px solid #dbe6fb;
+  border-radius: 18px;
   margin-bottom: 22px;
+  background:
+    radial-gradient(circle at 92% 0%, rgba(123, 151, 241, 0.17), transparent 34%),
+    linear-gradient(135deg, #ffffff 0%, #f7f9ff 100%);
+  box-shadow: 0 18px 50px rgba(54, 76, 132, 0.08);
 }
 
 .visits-eyebrow {
@@ -1100,6 +1275,11 @@ export default {
   color: #303848;
   font-weight: 700;
   letter-spacing: 0;
+}
+
+.visits-header h4 {
+  font-size: clamp(23px, 2vw, 30px);
+  line-height: 1.15;
 }
 
 .visits-header p {
@@ -1133,13 +1313,71 @@ export default {
   gap: 8px;
   min-height: 42px;
   padding: 0 18px;
-  border-radius: 8px;
+  border-radius: 11px;
   border: 1px solid transparent;
   font-size: 14px;
   font-weight: 600;
   line-height: 1;
   cursor: pointer;
   transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.visit-export-button {
+  display: grid;
+  grid-template-columns: 38px minmax(0, 1fr) 18px;
+  align-items: center;
+  gap: 9px;
+  min-height: 52px;
+  padding: 6px 10px 6px 7px;
+  border: 1px solid #f4b9b9;
+  border-radius: 13px;
+  color: #7f1d1d;
+  text-align: left;
+  background: linear-gradient(145deg, #fffafa, #fff1f1);
+  box-shadow: 0 8px 20px rgba(153, 27, 27, 0.08);
+  transition: transform 0.16s ease, box-shadow 0.16s ease, border-color 0.16s ease;
+}
+
+.visit-export-button:hover {
+  color: #7f1d1d;
+  border-color: #ee9b9b;
+  transform: translateY(-1px);
+  box-shadow: 0 12px 26px rgba(153, 27, 27, 0.12);
+}
+
+.visit-export-button:disabled {
+  opacity: 0.62;
+}
+
+.visit-export-button__icon {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  color: #fff;
+  background: linear-gradient(145deg, #c73030, #9f1d1d);
+  font-size: 21px;
+}
+
+.visit-export-button > span:nth-child(2) {
+  display: grid;
+  gap: 2px;
+}
+
+.visit-export-button strong {
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.visit-export-button small {
+  color: #a34a4a;
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.visit-export-button__arrow {
+  color: #c26969;
 }
 
 .visit-primary-button {
@@ -1157,6 +1395,29 @@ export default {
 .visit-primary-button:disabled {
   opacity: 0.7;
   cursor: not-allowed;
+}
+
+.visit-auto-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 42px;
+  padding: 0 17px;
+  border: 1px solid #4160cd;
+  border-radius: 8px;
+  color: #fff;
+  background: linear-gradient(135deg, #334fae, #617be2);
+  box-shadow: 0 5px 14px rgba(55, 79, 174, 0.18);
+  font-size: 13px;
+  font-weight: 650;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.visit-auto-button:hover {
+  color: #fff;
+  transform: translateY(-1px);
+  box-shadow: 0 8px 18px rgba(55, 79, 174, 0.24);
 }
 
 .visit-secondary-button {
@@ -1231,7 +1492,7 @@ export default {
   min-height: 116px;
   padding: 20px;
   border: 1px solid #dfebfb;
-  border-radius: 8px;
+  border-radius: 16px;
   background: rgba(255, 255, 255, 0.78);
   box-shadow: 0 18px 42px rgba(63, 84, 120, 0.06);
 }
@@ -1286,7 +1547,7 @@ export default {
 .visits-panel {
   padding: 22px;
   border: 1px solid #dfebfb;
-  border-radius: 8px;
+  border-radius: 16px;
   background: rgba(255, 255, 255, 0.84);
   box-shadow: 0 18px 44px rgba(63, 84, 120, 0.06);
 }
@@ -1321,6 +1582,24 @@ export default {
   color: #3152c9;
   background: #eef4ff;
   border-color: #c7d7fe;
+}
+
+.visits-filter-head-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.visits-filter-toggle {
+  display: none;
+  min-height: 34px;
+  padding: 0 11px;
+  border: 1px solid #cbd7eb;
+  border-radius: 9px;
+  color: #45516a;
+  background: #fff;
+  font-size: 12px;
+  font-weight: 700;
 }
 
 .visits-filters {
@@ -1771,6 +2050,282 @@ export default {
   background: #fef2f2;
 }
 
+.visits-mobile-agenda {
+  display: none;
+}
+
+:deep(.visit-export-dialog) {
+  width: min(720px, calc(100vw - 32px));
+  max-width: 720px;
+}
+
+:deep(.visit-export-dialog .modal-content) {
+  overflow: hidden;
+  border: 1px solid #d9e2f2;
+  border-radius: 20px;
+  box-shadow: 0 32px 90px rgba(20, 35, 78, 0.24);
+}
+
+.visit-export-shell {
+  color: #263044;
+  background: #f6f8fc;
+}
+
+.visit-export-hero {
+  display: grid;
+  grid-template-columns: 52px minmax(0, 1fr) 34px;
+  align-items: center;
+  gap: 14px;
+  padding: 22px 24px;
+  color: #fff;
+  background:
+    radial-gradient(circle at 82% -20%, rgba(255, 255, 255, 0.22), transparent 36%),
+    linear-gradient(135deg, #1f3785, #3f63d0);
+}
+
+.visit-export-hero__icon {
+  display: grid;
+  place-items: center;
+  width: 52px;
+  height: 52px;
+  border: 1px solid rgba(255, 255, 255, 0.24);
+  border-radius: 15px;
+  background: rgba(255, 255, 255, 0.14);
+  font-size: 28px;
+}
+
+.visit-export-hero span {
+  color: #cbd6ff;
+  font-size: 10px;
+  font-weight: 750;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.visit-export-hero h4 {
+  margin: 3px 0 4px;
+  color: #fff;
+  font-size: 20px;
+  font-weight: 750;
+}
+
+.visit-export-hero p {
+  margin: 0;
+  color: #e2e8ff;
+  font-size: 12px;
+}
+
+.visit-export-hero > button {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border: 0;
+  border-radius: 10px;
+  color: #fff;
+  background: rgba(255, 255, 255, 0.12);
+  font-size: 20px;
+}
+
+.visit-export-body {
+  display: grid;
+  gap: 15px;
+  padding: 20px 24px;
+}
+
+.visit-export-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.45fr);
+  gap: 13px;
+}
+
+.visit-export-grid .visit-field {
+  grid-column: auto;
+}
+
+.visit-export-person {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr) 24px;
+  align-items: center;
+  gap: 12px;
+  padding: 13px 15px;
+  border: 1px solid #cfdbf7;
+  border-radius: 14px;
+  background: linear-gradient(135deg, #f8faff, #eef3ff);
+}
+
+.visit-export-avatar {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 13px;
+  color: #3157c8;
+  background: #fff;
+  box-shadow: 0 6px 16px rgba(49, 87, 200, 0.12);
+  font-size: 23px;
+}
+
+.visit-export-person div {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.visit-export-person small {
+  color: #74809a;
+  font-size: 9px;
+  font-weight: 750;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.visit-export-person strong {
+  overflow: hidden;
+  color: #27344d;
+  font-size: 14px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.visit-export-person p {
+  margin: 0;
+  color: #68758e;
+  font-size: 11px;
+}
+
+.visit-export-person > i {
+  color: #15906a;
+  font-size: 22px;
+}
+
+.visit-export-formats {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  padding: 0;
+  border: 0;
+  margin: 0;
+}
+
+.visit-export-formats legend {
+  grid-column: 1 / -1;
+  margin: 0 0 -1px;
+  color: #4c586e;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.visit-export-formats label {
+  display: grid;
+  grid-template-columns: 38px minmax(0, 1fr) 18px;
+  align-items: center;
+  gap: 10px;
+  min-height: 70px;
+  padding: 11px;
+  border: 1px solid #d9e1ee;
+  border-radius: 13px;
+  background: #fff;
+  cursor: pointer;
+}
+
+.visit-export-formats label.active {
+  border-color: #8da6f2;
+  background: #f5f7ff;
+  box-shadow: 0 0 0 3px rgba(49, 87, 200, 0.08);
+}
+
+.visit-export-formats input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.visit-export-formats label > span {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 11px;
+  color: #3157c8;
+  background: #edf2ff;
+  font-size: 20px;
+}
+
+.visit-export-formats label > div {
+  display: grid;
+  gap: 3px;
+}
+
+.visit-export-formats strong {
+  color: #303b50;
+  font-size: 12px;
+}
+
+.visit-export-formats small {
+  color: #77839a;
+  font-size: 10px;
+  line-height: 1.3;
+}
+
+.visit-export-formats label > i {
+  color: #c0c9d8;
+}
+
+.visit-export-formats label.active > i {
+  color: #3157c8;
+}
+
+.visit-export-context {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  padding: 10px 12px;
+  border-radius: 11px;
+  color: #5f6c83;
+  background: #edf1f7;
+}
+
+.visit-export-context i {
+  color: #526fc8;
+  font-size: 18px;
+}
+
+.visit-export-context p {
+  margin: 1px 0 0;
+  font-size: 10.5px;
+  line-height: 1.45;
+}
+
+.visit-export-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 9px;
+  padding: 14px 24px;
+  border-top: 1px solid #dde4ef;
+  background: #fff;
+}
+
+.visit-export-confirm {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 43px;
+  padding: 0 18px;
+  border: 1px solid #284ebc;
+  border-radius: 11px;
+  color: #fff;
+  background: linear-gradient(135deg, #294bb2, #4a6dde);
+  box-shadow: 0 8px 20px rgba(41, 75, 178, 0.2);
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.visit-export-confirm:disabled {
+  opacity: 0.62;
+}
+
 :deep(.visit-modal .modal-dialog) {
   max-width: min(860px, calc(100vw - 32px));
 }
@@ -1901,6 +2456,10 @@ export default {
 }
 
 @media (max-width: 768px) {
+  .maintenance-visits-page {
+    padding-top: 0;
+  }
+
   .visits-header,
   .visits-panel-head,
   .visits-pagination {
@@ -1908,17 +2467,85 @@ export default {
     align-items: stretch;
   }
 
-  .visits-header-actions,
+  .visits-header {
+    gap: 17px;
+    padding: 20px 17px;
+    border-radius: 16px;
+  }
+
+  .visits-header p {
+    font-size: 13px;
+    line-height: 1.45;
+  }
+
   .visits-filter-actions,
   .visits-calendar-controls,
   .visits-pagination-actions {
     flex-wrap: wrap;
   }
 
-  .visits-summary-grid,
   .visits-filters,
   .visit-form-grid--two {
     grid-template-columns: 1fr;
+  }
+
+  .visits-header-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    width: 100%;
+    max-width: none;
+  }
+
+  .visits-view-toggle,
+  .visit-export-button {
+    grid-column: 1 / -1;
+    width: 100%;
+  }
+
+  .visits-view-toggle {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .visits-view-toggle button {
+    justify-content: center;
+    min-height: 40px;
+  }
+
+  .visit-auto-button,
+  .visits-header-actions > .visit-primary-button {
+    width: 100%;
+    min-height: 46px;
+    padding: 0 10px;
+    font-size: 11px;
+  }
+
+  .visits-summary-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 9px;
+  }
+
+  .visits-summary-card {
+    grid-template-columns: 37px minmax(0, 1fr);
+    gap: 9px;
+    min-height: 91px;
+    padding: 13px 11px;
+    border-radius: 13px;
+  }
+
+  .visits-summary-icon {
+    width: 37px;
+    height: 37px;
+    font-size: 19px;
+  }
+
+  .visits-summary-card span,
+  .visits-summary-card small {
+    font-size: 10px;
+  }
+
+  .visits-summary-card strong {
+    font-size: 22px;
   }
 
   .visit-field,
@@ -1934,13 +2561,346 @@ export default {
   }
 
   .visits-panel {
-    padding: 16px;
+    padding: 15px;
+    border-radius: 14px;
+  }
+
+  .visits-filters-panel .visits-panel-head {
+    flex-direction: row;
+    align-items: center;
+  }
+
+  .visits-filter-toggle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+  }
+
+  .visits-filters-panel .visits-filters {
+    display: none;
+  }
+
+  .visits-filters-panel .visits-filters.mobile-open {
+    display: grid;
+    padding-top: 3px;
+  }
+
+  .visits-desktop-view {
+    display: none;
+  }
+
+  .visits-mobile-agenda {
+    display: grid;
+    gap: 14px;
+  }
+
+  .visits-mobile-day-group {
+    display: grid;
+    gap: 9px;
+  }
+
+  .visits-mobile-date {
+    display: grid;
+    grid-template-columns: 43px minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 9px;
+    padding: 0 2px;
+  }
+
+  .visits-mobile-date > strong {
+    color: #273247;
+    font-size: 30px;
+    line-height: 1;
+    text-align: center;
+  }
+
+  .visits-mobile-date > span {
+    display: grid;
+    color: #33415b;
+    font-size: 12px;
+    font-weight: 750;
+    line-height: 1.15;
+  }
+
+  .visits-mobile-date small {
+    color: #7c879b;
+    font-size: 9px;
+    letter-spacing: 0.07em;
+  }
+
+  .visits-mobile-date em {
+    padding: 5px 8px;
+    border-radius: 999px;
+    color: #4560bd;
+    background: #eef3ff;
+    font-size: 9px;
+    font-style: normal;
+    font-weight: 750;
+  }
+
+  .visits-mobile-card {
+    display: grid;
+    grid-template-columns: 57px minmax(0, 1fr);
+    overflow: hidden;
+    border: 1px solid #dde5f2;
+    border-radius: 15px;
+    background: #fff;
+    box-shadow: 0 10px 28px rgba(46, 65, 105, 0.07);
+  }
+
+  .visits-mobile-card__timeline {
+    position: relative;
+    display: flex;
+    align-items: center;
+    flex-direction: column;
+    padding: 15px 6px;
+    color: #526079;
+    background: #f6f8fc;
+  }
+
+  .visits-mobile-card__timeline span {
+    width: 10px;
+    height: 10px;
+    margin: 2px 0 8px;
+    border: 3px solid #fff;
+    border-radius: 999px;
+    background: #7c879b;
+    box-shadow: 0 0 0 2px #c7d0df;
+  }
+
+  .visits-mobile-card__timeline::after {
+    position: absolute;
+    top: 39px;
+    bottom: 0;
+    left: 50%;
+    width: 1px;
+    content: "";
+    background: #dfe5ef;
+  }
+
+  .visits-mobile-card__timeline strong {
+    z-index: 1;
+    font-size: 11px;
+  }
+
+  .visits-mobile-card__timeline.visit-pill--planned span { background: #d08a1e; box-shadow: 0 0 0 2px #f2d59f; }
+  .visits-mobile-card__timeline.visit-pill--active span { background: #4563cc; box-shadow: 0 0 0 2px #bfcdf8; }
+  .visits-mobile-card__timeline.visit-pill--done span { background: #15906a; box-shadow: 0 0 0 2px #b4e6d6; }
+  .visits-mobile-card__timeline.visit-pill--cancelled span { background: #c23e3e; box-shadow: 0 0 0 2px #f4baba; }
+
+  .visits-mobile-card__content {
+    min-width: 0;
+    padding: 13px 13px 11px;
+  }
+
+  .visits-mobile-card__topline {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 6px;
+  }
+
+  .visits-mobile-card .visit-type-chip,
+  .visits-mobile-card .visit-pill {
+    min-height: 23px;
+    padding: 0 8px;
+    font-size: 8px;
+  }
+
+  .visits-mobile-card h6 {
+    margin: 10px 0 7px;
+    color: #2d374c;
+    font-size: 14px;
+    font-weight: 750;
+    line-height: 1.25;
+  }
+
+  .visits-mobile-card p,
+  .visits-mobile-card small {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    margin: 0;
+    color: #637087;
+    font-size: 10px;
+  }
+
+  .visits-mobile-card small {
+    margin-top: 4px;
+    color: #8490a4;
+  }
+
+  .visits-mobile-card__actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr 36px;
+    gap: 6px;
+    margin-top: 11px;
+    padding-top: 10px;
+    border-top: 1px solid #edf0f5;
+  }
+
+  .visits-mobile-card__actions button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+    min-height: 36px;
+    padding: 0 8px;
+    border: 1px solid #d2dbea;
+    border-radius: 9px;
+    color: #4f5d75;
+    background: #fff;
+    font-size: 9px;
+    font-weight: 700;
+  }
+
+  .visits-mobile-card__actions button.danger {
+    padding: 0;
+    color: #b13b3b;
+    background: #fff6f6;
+    border-color: #f0cccc;
+  }
+
+  .visits-mobile-loading,
+  .visits-mobile-empty {
+    display: grid;
+    place-items: center;
+    min-height: 180px;
+    padding: 24px;
+    border: 1px dashed #d2dcea;
+    border-radius: 14px;
+    color: #7c8799;
+    text-align: center;
+    background: #fafbfe;
+  }
+
+  .visits-mobile-loading span {
+    width: 28px;
+    height: 28px;
+    border: 3px solid #dfe5f2;
+    border-top-color: #4e69cf;
+    border-radius: 999px;
+    animation: visits-spin 0.8s linear infinite;
+  }
+
+  .visits-mobile-loading p {
+    margin: -36px 0 0;
+    font-size: 11px;
+  }
+
+  .visits-mobile-empty {
+    gap: 5px;
+  }
+
+  .visits-mobile-empty i {
+    color: #6e84d3;
+    font-size: 34px;
+  }
+
+  .visits-mobile-empty strong {
+    color: #4a566d;
+    font-size: 13px;
+  }
+
+  .visits-mobile-empty span {
+    font-size: 10px;
   }
 
   .visit-modal-scroll,
   .visit-modal-footer {
     padding-left: 16px;
     padding-right: 16px;
+  }
+
+  :deep(.visit-export-dialog) {
+    width: 100%;
+    max-width: none;
+    height: 100%;
+    margin: 0;
+  }
+
+  :deep(.visit-export-dialog .modal-content) {
+    height: 100%;
+    border: 0;
+    border-radius: 0;
+  }
+
+  .visit-export-shell {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+  }
+
+  .visit-export-hero {
+    grid-template-columns: 43px minmax(0, 1fr) 32px;
+    gap: 10px;
+    padding: 17px 15px;
+  }
+
+  .visit-export-hero__icon {
+    width: 43px;
+    height: 43px;
+    border-radius: 12px;
+    font-size: 23px;
+  }
+
+  .visit-export-hero h4 {
+    font-size: 16px;
+  }
+
+  .visit-export-hero p {
+    font-size: 10px;
+  }
+
+  .visit-export-body {
+    flex: 1 1 auto;
+    align-content: start;
+    overflow-y: auto;
+    padding: 16px 14px;
+  }
+
+  .visit-export-grid,
+  .visit-export-formats {
+    grid-template-columns: 1fr;
+  }
+
+  .visit-export-formats legend {
+    grid-column: auto;
+  }
+
+  .visit-export-footer {
+    display: grid;
+    grid-template-columns: 0.75fr 1.25fr;
+    flex: 0 0 auto;
+    padding: 11px 14px;
+  }
+
+  .visit-export-footer button {
+    width: 100%;
+    padding: 0 10px;
+  }
+}
+
+@keyframes visits-spin {
+  to { transform: rotate(360deg); }
+}
+
+@media (max-width: 420px) {
+  .visits-header-actions {
+    grid-template-columns: 1fr;
+  }
+
+  .visits-header-actions > * {
+    grid-column: 1 / -1;
+  }
+
+  .visits-summary-card {
+    grid-template-columns: 1fr;
+  }
+
+  .visits-summary-icon {
+    display: none;
   }
 }
 </style>

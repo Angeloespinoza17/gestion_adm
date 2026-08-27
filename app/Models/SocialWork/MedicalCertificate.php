@@ -32,4 +32,9 @@ class MedicalCertificate extends SocialWorkModel
     {
         return $this->belongsTo(User::class, 'registered_by');
     }
+
+    public function updatedBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'updated_by');
+    }
 }

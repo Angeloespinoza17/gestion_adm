@@ -44,15 +44,30 @@ class InspectoriaCatalogController extends Controller
             : collect();
 
         $students = StudentProfile::query()
+            ->select([
+                'id', 'first_name', 'last_name', 'registered_name', 'rut', 'general_status',
+                'guardian_name', 'guardian_rut', 'guardian_phone', 'guardian_relationship', 'guardian_role',
+                'guardian_backup_name', 'guardian_backup_rut', 'guardian_backup_phone',
+                'guardian_backup_relationship', 'guardian_backup_role',
+            ])
             ->with(['enrollments' => fn ($query) => $query
+                ->select(['id', 'student_profile_id', 'academic_year_id', 'course_section_id', 'enrollment_status', 'snapshot_course_display_name'])
                 ->when($courseScoped, fn ($inner) => $inner->whereIn('course_section_id', $assignedCourseIds))
                 ->with(['courseSection:id,display_name', 'academicYear:id,name,year,is_active'])])
-            ->when($courseScoped, fn ($query) => $query->whereHas('enrollments', fn ($enrollments) => $enrollments
-                ->whereIn('course_section_id', $assignedCourseIds)
-                ->when($activeYear, fn ($inner) => $inner->where('academic_year_id', $activeYear->id))))
+            ->when($courseScoped, function ($query) use ($assignedCourseIds, $currentAcademicYear) {
+                if (! $currentAcademicYear) {
+                    $query->whereRaw('1 = 0');
+
+                    return;
+                }
+
+                $query->whereHas('enrollments', fn ($enrollments) => $enrollments
+                    ->whereIn('course_section_id', $assignedCourseIds)
+                    ->where('academic_year_id', $currentAcademicYear->id));
+            })
             ->orderBy('last_name')->orderBy('first_name')->limit(1000)->get()
-            ->map(function (StudentProfile $student) use ($activeYear) {
-                $enrollment = $student->preferredEnrollment($activeYear);
+            ->map(function (StudentProfile $student) use ($currentAcademicYear) {
+                $enrollment = $student->preferredEnrollment($currentAcademicYear);
 
                 return [
                     'id' => $student->id,
@@ -108,10 +123,13 @@ class InspectoriaCatalogController extends Controller
             'withdrawal_relationships' => PorterStudentWithdrawal::RELATIONSHIP_OPTIONS,
             'pickup_restriction_types' => $this->options(InspectoriaPickupRestriction::TYPES),
             'capabilities' => [
+                'view_module' => $this->access->can($request->user(), InspectoriaAccessService::VIEW),
+                'view_daily_log' => $this->access->can($request->user(), InspectoriaAccessService::VIEW_DAILY_LOG),
                 'manage_attentions' => $this->access->can($request->user(), InspectoriaAccessService::ATTENTIONS),
                 'manage_assignments' => $this->access->can($request->user(), InspectoriaAccessService::ASSIGNMENTS),
                 'manage_passes' => $this->access->can($request->user(), InspectoriaAccessService::PASSES),
                 'view_students' => $this->access->can($request->user(), InspectoriaAccessService::STUDENTS),
+                'edit_student_profiles' => $this->access->can($request->user(), InspectoriaAccessService::EDIT_STUDENT_PROFILES),
                 'view_withdrawals' => $this->access->can($request->user(), InspectoriaAccessService::WITHDRAWALS),
                 'manage_pickup_restrictions' => $this->access->can($request->user(), InspectoriaAccessService::RESTRICTIONS),
                 'manage_daily_log' => $this->access->can($request->user(), InspectoriaAccessService::DAILY_LOG),

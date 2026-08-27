@@ -5,6 +5,10 @@ import LoadingState from "../../components/ui/loading-state.vue";
 import InfirmaryHelpButton from "../../components/infirmary/help-button.vue";
 import InfirmaryStatusBadge from "../../components/infirmary/status-badge.vue";
 import {
+  buildCareOutcomeItems,
+  buildClinicalDetailItems,
+} from "../../components/infirmary/dashboard-statistics";
+import {
   basicApexOptions,
   downloadPdfReport,
   extractChartLabels,
@@ -23,6 +27,7 @@ const emptyDashboard = () => ({
   metric_comparisons: {},
   insights: {},
   operational: {},
+  record_quality: [],
   health_profile: {
     total_students: 0,
     students_with_health_information: 0,
@@ -48,6 +53,20 @@ const emptyDashboard = () => ({
     medications_administered: [],
     referrals: [],
     administration_outcomes: [],
+    priority_distribution: [],
+    attention_statuses: [],
+    companion_types: [],
+    duration_bands: [],
+    response_time_bands: [],
+    attentions_by_weekday: [],
+    student_recurrence: [],
+    age_groups: [],
+    call_outcomes: [],
+    call_relationships: [],
+    follow_up_statuses: [],
+    professionals: [],
+    referring_staff: [],
+    derivation_support_teams: [],
   },
   recent: {
     attentions: [],
@@ -181,6 +200,18 @@ export default {
           tone: "cyan",
         },
       ];
+    },
+    careOutcomeItems() {
+      return buildCareOutcomeItems(this.dashboard.metrics || {}, this.formatNumber);
+    },
+    clinicalDetailItems() {
+      return buildClinicalDetailItems(this.dashboard.metrics || {}, this.formatNumber);
+    },
+    recordQualityItems() {
+      return (this.dashboard.record_quality || []).map((item) => ({
+        ...item,
+        percentage: Number(item.percentage || 0),
+      }));
     },
     insightItems() {
       const insights = this.dashboard.insights || {};
@@ -366,6 +397,57 @@ export default {
         true
       );
     },
+    priorityChartOptions() {
+      return this.donutOptions(
+        (this.dashboard.charts?.priority_distribution || []).map((item) => humanizeInfirmaryStatus(item.label)),
+        ["#7d8998", "#3568d4", "#e5a13d", "#e56b58"]
+      );
+    },
+    statusChartOptions() {
+      return this.donutOptions(
+        (this.dashboard.charts?.attention_statuses || []).map((item) => humanizeInfirmaryStatus(item.label)),
+        ["#e5a13d", "#4d8fa8", "#27966f"]
+      );
+    },
+    companionChartOptions() {
+      return this.barOptions(this.humanizedItems(this.dashboard.charts?.companion_types), "#735dd0", true);
+    },
+    durationBandChartOptions() {
+      return this.barOptions(this.dashboard.charts?.duration_bands, "#27a59a", false, true);
+    },
+    responseBandChartOptions() {
+      return this.barOptions(this.dashboard.charts?.response_time_bands, "#3568d4", false, true);
+    },
+    weekdayChartOptions() {
+      return this.barOptions(this.dashboard.charts?.attentions_by_weekday, "#4d8fa8", false, true);
+    },
+    recurrenceChartOptions() {
+      return this.donutOptions(
+        (this.dashboard.charts?.student_recurrence || []).map((item) => item.label),
+        ["#27a59a", "#3568d4", "#e5a13d", "#e56b58"]
+      );
+    },
+    ageGroupChartOptions() {
+      return this.barOptions(this.dashboard.charts?.age_groups, "#735dd0", false, true);
+    },
+    callOutcomeChartOptions() {
+      return this.donutOptions(
+        (this.dashboard.charts?.call_outcomes || []).map((item) => humanizeInfirmaryStatus(item.label)),
+        ["#27966f", "#e56b58", "#4d8fa8", "#e5a13d", "#7d8998"]
+      );
+    },
+    followUpChartOptions() {
+      return this.donutOptions(
+        (this.dashboard.charts?.follow_up_statuses || []).map((item) => humanizeInfirmaryStatus(item.label)),
+        ["#e5a13d", "#4d8fa8", "#27966f"]
+      );
+    },
+    professionalChartOptions() {
+      return this.barOptions(this.dashboard.charts?.professionals, "#3568d4", true);
+    },
+    referringStaffChartOptions() {
+      return this.barOptions(this.dashboard.charts?.referring_staff, "#e5a13d", true);
+    },
   },
   mounted() {
     this.loadInitialData();
@@ -503,10 +585,22 @@ export default {
         return { icon: "bx-minus", text: "Sin variación", className: "is-neutral" };
       }
 
+      const higherIsBetter = [
+        "medication_adherence",
+        "completion_rate",
+        "treatment_coverage",
+        "vital_signs_coverage",
+        "call_effectiveness",
+        "follow_up_resolution_rate",
+      ].includes(key);
+      const lowerIsBetter = ["average_response_minutes", "high_priority_rate", "recurrence_rate", "accidents_total"].includes(key);
+      const isGood = (higherIsBetter && value > 0) || (lowerIsBetter && value < 0);
+      const isWarning = (higherIsBetter && value < 0) || (lowerIsBetter && value > 0);
+
       return {
         icon: value > 0 ? "bx-up-arrow-alt" : "bx-down-arrow-alt",
         text: `${Math.abs(value).toLocaleString("es-CL", { maximumFractionDigits: 1 })}% vs. período anterior`,
-        className: value > 0 ? "is-up" : "is-down",
+        className: isGood ? "is-good" : isWarning ? "is-warning" : "is-neutral",
       };
     },
     optionLabel(options, value, fallback = "Sin datos") {
@@ -529,6 +623,12 @@ export default {
     },
     referralLabel(value) {
       return this.optionLabel(this.catalogs.referral_options, value);
+    },
+    humanizedItems(items = []) {
+      return (items || []).map((item) => ({
+        ...item,
+        label: humanizeInfirmaryStatus(item.label),
+      }));
     },
     formatTrendLabel(value, granularity = "daily") {
       if (!value || value === "Sin datos") return "Sin datos";
@@ -721,7 +821,7 @@ export default {
                 return [
                   card.label,
                   card.value,
-                  this.formatNumber(comparison.previous, card.key.includes("minutes") || card.key.includes("adherence") ? 1 : 0),
+                  this.formatNumber(comparison.previous, this.metricDecimals(card.key)),
                   comparison.change === null || comparison.change === undefined
                     ? "Sin base"
                     : `${this.formatNumber(comparison.change, 1)}%`,
@@ -736,7 +836,42 @@ export default {
                 ["Tasa de derivación", `${this.formatNumber(metrics.referral_rate, 1)}%`],
                 ["Cumplimiento de medicación", `${this.formatNumber(metrics.medication_adherence, 1)}%`],
                 ["Dosis no administradas", this.formatNumber(metrics.medications_not_administered_total)],
+                ["Atenciones repetidas", `${this.formatNumber(metrics.recurrence_rate, 1)}%`],
+                ["Atenciones por estudiante", this.formatNumber(metrics.average_attentions_per_student, 1)],
               ],
+            },
+            {
+              title: "Resolución, oportunidad y continuidad",
+              description: "Indicadores obtenidos desde el estado, prioridad, tiempos, llamados y seguimientos de la ficha de atención.",
+              headers: ["Indicador", "Resultado", "Período anterior", "Variación"],
+              rows: this.careOutcomeItems.map((item) => {
+                const comparison = this.dashboard.metric_comparisons?.[item.key] || {};
+                return [
+                  item.label,
+                  item.value,
+                  this.formatNumber(comparison.previous, this.metricDecimals(item.key)),
+                  comparison.change === null || comparison.change === undefined
+                    ? "Sin base"
+                    : `${this.formatNumber(comparison.change, 1)}%`,
+                ];
+              }),
+            },
+            {
+              title: "Detalle clínico registrado",
+              headers: ["Indicador", "Resultado"],
+              rows: this.clinicalDetailItems.map((item) => [item.label, item.value]),
+            },
+            {
+              title: "Calidad y completitud del registro",
+              pageBreakBefore: true,
+              description: "La cobertura se calcula sobre las atenciones elegibles del período. Los signos vitales se muestran como documentación clínica, no como obligación universal.",
+              headers: ["Campo", "Registros", "Elegibles", "Cobertura"],
+              rows: this.recordQualityItems.map((item) => [
+                item.label,
+                this.formatNumber(item.completed),
+                this.formatNumber(item.eligible),
+                `${this.formatNumber(item.percentage, 1)}%`,
+              ]),
             },
             {
               title: "Perfil de salud estudiantil (corte actual)",
@@ -764,8 +899,23 @@ export default {
             this.pdfDistribution("Medicamentos administrados", charts.medications_administered),
             this.pdfDistribution("Resultado de administraciones", charts.administration_outcomes, (value) => humanizeInfirmaryStatus(value)),
             this.pdfDistribution("Derivaciones", charts.referrals, (value) => this.referralLabel(value)),
+            this.pdfDistribution("Prioridad de las atenciones", charts.priority_distribution, (value) => humanizeInfirmaryStatus(value)),
+            this.pdfDistribution("Estado de las atenciones", charts.attention_statuses, (value) => humanizeInfirmaryStatus(value)),
+            this.pdfDistribution("Tipo de acompañante", charts.companion_types, (value) => humanizeInfirmaryStatus(value)),
+            this.pdfDistribution("Duración de la atención", charts.duration_bands),
+            this.pdfDistribution("Tiempo de respuesta", charts.response_time_bands),
+            this.pdfDistribution("Atenciones por día de la semana", charts.attentions_by_weekday),
+            this.pdfDistribution("Recurrencia por estudiante", charts.student_recurrence),
+            this.pdfDistribution("Atenciones por grupo etario", charts.age_groups),
+            this.pdfDistribution("Resultados de llamados", charts.call_outcomes, (value) => humanizeInfirmaryStatus(value)),
+            this.pdfDistribution("Relación del contacto", charts.call_relationships, (value) => humanizeInfirmaryStatus(value)),
+            this.pdfDistribution("Estado de seguimientos", charts.follow_up_statuses, (value) => humanizeInfirmaryStatus(value)),
+            this.pdfDistribution("Carga por profesional", charts.professionals),
+            this.pdfDistribution("Origen de la derivación a Enfermería", charts.referring_staff),
+            this.pdfDistribution("Equipos de apoyo activados", charts.derivation_support_teams, (value) => humanizeInfirmaryStatus(value)),
             {
               title: "Estado operativo actual",
+              pageBreakBefore: true,
               headers: ["Alerta", "Cantidad"],
               rows: this.operationalItems.map((item) => [item.label, operational[this.operationalKey(item.label)] ?? item.value]),
             },
@@ -776,7 +926,6 @@ export default {
                 formatInfirmaryDateTime(item.attended_at), item.student_full_name_snapshot, item.course_name_snapshot || "Sin curso",
                 this.categoryLabel(item.attention_category), item.consultation_reason || "-",
               ]),
-              pageBreakBefore: true,
             },
             {
               title: "Accidentes recientes",
@@ -800,6 +949,11 @@ export default {
             organization: "Colegio Nuestra Señora del Carmen",
             generatedAt: new Date().toLocaleString("es-CL"),
             summary: `El informe consolida ${this.formatNumber(metrics.attentions_total)} atenciones, ${this.formatNumber(metrics.unique_students)} estudiantes atendidos y ${this.formatNumber(metrics.accidents_total)} accidentes. El perfil de salud tiene ${this.formatNumber(this.dashboard.health_profile?.health_information_coverage, 1)}% de cobertura.`,
+            kpis: [
+              ...this.metricCards.slice(0, 4).map((item) => ({ label: item.label, value: item.value })),
+              ...this.careOutcomeItems.slice(0, 4).map((item) => ({ label: item.label, value: item.value })),
+            ],
+            findings: this.insightItems.map((item) => `${item.label}: ${item.value} (${item.detail}).`),
             charts: chartsForPdf,
           }
         );
@@ -820,6 +974,15 @@ export default {
         ["treatmentChart", "Tratamientos aplicados", "Procedimientos más frecuentes."],
         ["medicationChart", "Medicamentos administrados", "Dosis administradas por medicamento."],
         ["referralChart", "Derivaciones", "Destinos registrados desde Enfermería."],
+        ["priorityChart", "Prioridad clínica", "Distribución de prioridades consignadas en la ficha."],
+        ["statusChart", "Resolución de atenciones", "Estado de cierre de las atenciones del período."],
+        ["durationBandChart", "Duración de las atenciones", "Tramos de tiempo clínico registrado."],
+        ["responseBandChart", "Tiempo de respuesta", "Minutos entre el evento y el ingreso a Enfermería."],
+        ["weekdayChart", "Demanda semanal", "Atenciones distribuidas por día de la semana."],
+        ["recurrenceChart", "Recurrencia", "Cantidad de estudiantes según número de atenciones."],
+        ["callOutcomeChart", "Resultados de llamados", "Efectividad del contacto con apoderados u otros responsables."],
+        ["followUpChart", "Seguimientos", "Estado de los seguimientos generados desde la atención."],
+        ["professionalChart", "Carga por profesional", "Atenciones registradas por profesional responsable."],
       ];
 
       await this.$nextTick();
@@ -849,6 +1012,20 @@ export default {
         headers: ["Categoría", "Total"],
         rows: (items || []).map((item) => [labelFormatter(item.label), item.total]),
       };
+    },
+    metricDecimals(key) {
+      return [
+        "average_attention_minutes",
+        "average_response_minutes",
+        "medication_adherence",
+        "completion_rate",
+        "high_priority_rate",
+        "recurrence_rate",
+        "treatment_coverage",
+        "vital_signs_coverage",
+        "call_effectiveness",
+        "follow_up_resolution_rate",
+      ].includes(key) ? 1 : 0;
     },
     operationalKey(label) {
       const mapping = {
@@ -995,6 +1172,158 @@ export default {
             <span>{{ item.label }}</span>
             <strong>{{ item.value }}</strong>
             <small>{{ item.detail }}</small>
+          </div>
+        </section>
+
+        <section class="care-quality-panel mb-3" aria-label="Resolución y calidad de la atención">
+          <div class="section-heading">
+            <div>
+              <h5 class="mb-1">Resolución y calidad de la atención</h5>
+              <p class="text-muted mb-0">Oportunidad, cierre, continuidad y cobertura clínica calculadas desde la ficha de atención.</p>
+            </div>
+            <InfirmaryHelpButton
+              title="Cómo interpretar estos indicadores"
+              text="Tiempo de respuesta compara la hora del evento con el ingreso a Enfermería. Las coberturas muestran cuántas atenciones incluyen el bloque indicado. Contacto efectivo considera llamados contestados y seguimiento resuelto considera estados cerrados."
+            />
+          </div>
+          <div class="care-outcome-grid mt-3">
+            <article v-for="item in careOutcomeItems" :key="item.key" class="care-outcome" :class="`tone-${item.tone}`">
+              <div class="care-outcome-icon"><i :class="`bx ${item.icon}`" aria-hidden="true"></i></div>
+              <div class="care-outcome-content">
+                <span>{{ item.label }}</span>
+                <strong>{{ item.value }}</strong>
+                <small>{{ item.detail }}</small>
+              </div>
+              <div class="metric-comparison" :class="comparisonMeta(item.key).className">
+                <i :class="`bx ${comparisonMeta(item.key).icon}`" aria-hidden="true"></i>
+                <span>{{ comparisonMeta(item.key).text }}</span>
+              </div>
+            </article>
+          </div>
+
+          <div class="clinical-detail-grid mt-3">
+            <article v-for="item in clinicalDetailItems" :key="item.label" class="clinical-detail-item">
+              <i :class="`bx ${item.icon}`" aria-hidden="true"></i>
+              <div><strong>{{ item.value }}</strong><span>{{ item.label }}</span></div>
+            </article>
+          </div>
+
+          <div class="record-quality mt-3">
+            <div class="record-quality-heading">
+              <div>
+                <h6>Calidad del registro</h6>
+                <span>Cobertura de campos y bloques que respaldan el análisis del período.</span>
+              </div>
+              <InfirmaryHelpButton
+                title="Ayuda: calidad del registro"
+                text="Estos porcentajes no califican la atención clínica. Permiten detectar campos sin completar. Signos vitales y tratamientos pueden no corresponder en todos los casos; se muestran como cobertura documental."
+              />
+            </div>
+            <div class="record-quality-grid">
+              <div v-for="item in recordQualityItems" :key="item.key" class="quality-row">
+                <div class="quality-row-label"><span>{{ item.label }}</span><strong>{{ formatNumber(item.percentage, 1) }}%</strong></div>
+                <div class="quality-track" role="progressbar" :aria-label="item.label" :aria-valuenow="item.percentage" aria-valuemin="0" aria-valuemax="100">
+                  <span :style="{ width: `${Math.min(100, item.percentage)}%` }"></span>
+                </div>
+                <small>{{ formatNumber(item.completed) }} de {{ formatNumber(item.eligible) }} registros elegibles</small>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="row g-3 mb-3" aria-label="Composición de las atenciones">
+          <div class="col-xl-4">
+            <BCard class="analytics-card h-100">
+              <template #header><div class="chart-heading"><div><h5>Prioridad clínica</h5><span>Baja, media, alta y emergencia</span></div></div></template>
+              <div v-if="!dashboard.charts?.priority_distribution?.length" class="analytics-empty">Sin prioridades para el período.</div>
+              <apexchart v-else ref="priorityChart" type="donut" height="315" :options="priorityChartOptions" :series="donutSeries(dashboard.charts?.priority_distribution)" />
+            </BCard>
+          </div>
+          <div class="col-xl-4">
+            <BCard class="analytics-card h-100">
+              <template #header><div class="chart-heading"><div><h5>Resolución de atenciones</h5><span>Estado registrado al cierre del período</span></div></div></template>
+              <div v-if="!dashboard.charts?.attention_statuses?.length" class="analytics-empty">Sin estados para el período.</div>
+              <apexchart v-else ref="statusChart" type="donut" height="315" :options="statusChartOptions" :series="donutSeries(dashboard.charts?.attention_statuses)" />
+            </BCard>
+          </div>
+          <div class="col-xl-4">
+            <BCard class="analytics-card h-100">
+              <template #header><div class="chart-heading"><div><h5>Quién acompaña</h5><span>Tipo de acompañante al ingreso</span></div></div></template>
+              <div v-if="!dashboard.charts?.companion_types?.length" class="analytics-empty">Sin acompañantes registrados.</div>
+              <apexchart v-else ref="companionChart" type="bar" :height="chartHeight(dashboard.charts?.companion_types, 315)" :options="companionChartOptions" :series="chartSeries(dashboard.charts?.companion_types, 'Atenciones')" />
+            </BCard>
+          </div>
+        </section>
+
+        <section class="row g-3 mb-3" aria-label="Tiempos y demanda">
+          <div class="col-xl-4">
+            <BCard class="analytics-card h-100">
+              <template #header><div class="chart-heading"><div><h5>Duración clínica</h5><span>Tramos informados en la atención</span></div></div></template>
+              <div v-if="!dashboard.charts?.duration_bands?.length" class="analytics-empty">Sin duración registrada.</div>
+              <apexchart v-else ref="durationBandChart" type="bar" height="315" :options="durationBandChartOptions" :series="chartSeries(dashboard.charts?.duration_bands, 'Atenciones')" />
+            </BCard>
+          </div>
+          <div class="col-xl-4">
+            <BCard class="analytics-card h-100">
+              <template #header><div class="chart-heading"><div><h5>Tiempo de respuesta</h5><span>Desde el evento hasta el ingreso</span></div></div></template>
+              <div v-if="!dashboard.charts?.response_time_bands?.length" class="analytics-empty">Sin marcas de tiempo comparables.</div>
+              <apexchart v-else ref="responseBandChart" type="bar" height="315" :options="responseBandChartOptions" :series="chartSeries(dashboard.charts?.response_time_bands, 'Atenciones')" />
+            </BCard>
+          </div>
+          <div class="col-xl-4">
+            <BCard class="analytics-card h-100">
+              <template #header><div class="chart-heading"><div><h5>Demanda por día</h5><span>Distribución dentro de la semana</span></div></div></template>
+              <div v-if="!dashboard.charts?.attentions_by_weekday?.length" class="analytics-empty">Sin actividad para el período.</div>
+              <apexchart v-else ref="weekdayChart" type="bar" height="315" :options="weekdayChartOptions" :series="chartSeries(dashboard.charts?.attentions_by_weekday, 'Atenciones')" />
+            </BCard>
+          </div>
+        </section>
+
+        <section class="row g-3 mb-3" aria-label="Recurrencia, edad y comunicación">
+          <div class="col-xl-4">
+            <BCard class="analytics-card h-100">
+              <template #header><div class="chart-heading"><div><h5>Recurrencia estudiantil</h5><span>Estudiantes según número de atenciones</span></div></div></template>
+              <div v-if="!dashboard.charts?.student_recurrence?.length" class="analytics-empty">Sin estudiantes atendidas.</div>
+              <apexchart v-else ref="recurrenceChart" type="donut" height="315" :options="recurrenceChartOptions" :series="donutSeries(dashboard.charts?.student_recurrence)" />
+            </BCard>
+          </div>
+          <div class="col-xl-4">
+            <BCard class="analytics-card h-100">
+              <template #header><div class="chart-heading"><div><h5>Grupos etarios</h5><span>Edad registrada al momento de atención</span></div></div></template>
+              <div v-if="!dashboard.charts?.age_groups?.length" class="analytics-empty">Sin edades registradas.</div>
+              <apexchart v-else ref="ageGroupChart" type="bar" height="315" :options="ageGroupChartOptions" :series="chartSeries(dashboard.charts?.age_groups, 'Atenciones')" />
+            </BCard>
+          </div>
+          <div class="col-xl-4">
+            <BCard class="analytics-card h-100">
+              <template #header><div class="chart-heading"><div><h5>Resultado de llamados</h5><span>Contacto con apoderados y responsables</span></div></div></template>
+              <div v-if="!dashboard.charts?.call_outcomes?.length" class="analytics-empty">Sin llamados vinculados.</div>
+              <apexchart v-else ref="callOutcomeChart" type="donut" height="315" :options="callOutcomeChartOptions" :series="donutSeries(dashboard.charts?.call_outcomes)" />
+            </BCard>
+          </div>
+        </section>
+
+        <section class="row g-3 mb-3" aria-label="Seguimiento y equipo de atención">
+          <div class="col-xl-4">
+            <BCard class="analytics-card h-100">
+              <template #header><div class="chart-heading"><div><h5>Estado de seguimientos</h5><span>Continuidad posterior a la atención</span></div></div></template>
+              <div v-if="!dashboard.charts?.follow_up_statuses?.length" class="analytics-empty">Sin seguimientos registrados.</div>
+              <apexchart v-else ref="followUpChart" type="donut" height="320" :options="followUpChartOptions" :series="donutSeries(dashboard.charts?.follow_up_statuses)" />
+            </BCard>
+          </div>
+          <div class="col-xl-4">
+            <BCard class="analytics-card h-100">
+              <template #header><div class="chart-heading"><div><h5>Carga por profesional</h5><span>Responsable que registró la atención</span></div></div></template>
+              <div v-if="!dashboard.charts?.professionals?.length" class="analytics-empty">Sin profesional informado.</div>
+              <apexchart v-else ref="professionalChart" type="bar" :height="chartHeight(dashboard.charts?.professionals, 320)" :options="professionalChartOptions" :series="chartSeries(dashboard.charts?.professionals, 'Atenciones')" />
+            </BCard>
+          </div>
+          <div class="col-xl-4">
+            <BCard class="analytics-card h-100">
+              <template #header><div class="chart-heading"><div><h5>Origen del ingreso</h5><span>Funcionario derivante o ingreso directo</span></div></div></template>
+              <div v-if="!dashboard.charts?.referring_staff?.length" class="analytics-empty">Sin origen informado.</div>
+              <apexchart v-else ref="referringStaffChart" type="bar" :height="chartHeight(dashboard.charts?.referring_staff, 320)" :options="referringStaffChartOptions" :series="chartSeries(dashboard.charts?.referring_staff, 'Atenciones')" />
+            </BCard>
           </div>
         </section>
 
@@ -1411,7 +1740,8 @@ export default {
 .analytics-toolbar,
 .insight-band,
 .operational-band,
-.health-profile-panel {
+.health-profile-panel,
+.care-quality-panel {
   background: #ffffff;
   border: 1px solid var(--analytics-border);
   border-radius: 6px;
@@ -1421,8 +1751,168 @@ export default {
   padding: 18px;
 }
 
-.health-profile-panel {
+.health-profile-panel,
+.care-quality-panel {
   padding: 18px;
+}
+
+.care-outcome-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.care-outcome {
+  --metric-color: #3568d4;
+  display: grid;
+  grid-template-columns: 38px minmax(0, 1fr);
+  gap: 10px;
+  min-height: 132px;
+  padding: 13px;
+  border: 1px solid var(--analytics-border);
+  border-top: 3px solid var(--metric-color);
+  border-radius: 9px;
+  background: linear-gradient(145deg, #ffffff 0%, #f9fbfe 100%);
+}
+
+.care-outcome-icon {
+  width: 38px;
+  height: 38px;
+  display: grid;
+  place-items: center;
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--metric-color) 12%, white);
+  color: var(--metric-color);
+  font-size: 21px;
+}
+
+.care-outcome-content {
+  min-width: 0;
+}
+
+.care-outcome-content > span,
+.care-outcome-content > small {
+  display: block;
+  color: var(--analytics-muted);
+  font-size: 11px;
+}
+
+.care-outcome-content > strong {
+  display: block;
+  margin: 3px 0;
+  color: #253247;
+  font-size: 21px;
+  line-height: 1.1;
+}
+
+.care-outcome .metric-comparison {
+  grid-column: 1 / -1;
+  margin-top: auto;
+  padding-top: 6px;
+  border-top: 1px solid #edf1f6;
+}
+
+.clinical-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.clinical-detail-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 64px;
+  padding: 11px 12px;
+  border: 1px solid #e7ebf2;
+  border-radius: 8px;
+  background: #fbfcfe;
+}
+
+.clinical-detail-item > i {
+  color: #5575ad;
+  font-size: 22px;
+}
+
+.clinical-detail-item strong,
+.clinical-detail-item span {
+  display: block;
+}
+
+.clinical-detail-item strong {
+  color: #273349;
+  font-size: 18px;
+}
+
+.clinical-detail-item span {
+  color: var(--analytics-muted);
+  font-size: 11px;
+}
+
+.record-quality {
+  padding: 15px;
+  border: 1px solid #e2e8f1;
+  border-radius: 10px;
+  background: linear-gradient(135deg, #f8faff 0%, #fbfdfd 100%);
+}
+
+.record-quality-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.record-quality-heading h6 {
+  margin: 0 0 2px;
+  color: #263247;
+  font-size: 13px;
+}
+
+.record-quality-heading span {
+  color: var(--analytics-muted);
+  font-size: 11px;
+}
+
+.record-quality-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 13px 18px;
+  margin-top: 13px;
+}
+
+.quality-row-label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  color: #4e5a6d;
+  font-size: 11px;
+}
+
+.quality-row-label strong {
+  color: #315fc0;
+  font-size: 12px;
+}
+
+.quality-track {
+  height: 7px;
+  margin: 6px 0 4px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #e4e9f1;
+}
+
+.quality-track span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #3568d4, #27a59a);
+}
+
+.quality-row > small {
+  color: #818b9b;
+  font-size: 10px;
 }
 
 .coverage-indicator {
@@ -1595,12 +2085,12 @@ export default {
   font-size: 11px;
 }
 
-.metric-comparison.is-up {
-  color: #276fc0;
+.metric-comparison.is-good {
+  color: #26805e;
 }
 
-.metric-comparison.is-down {
-  color: #4b876f;
+.metric-comparison.is-warning {
+  color: #c06a36;
 }
 
 .tone-blue { --metric-color: #3568d4; }
@@ -1861,6 +2351,15 @@ export default {
   .health-metric-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+
+  .care-outcome-grid,
+  .clinical-detail-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .record-quality-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 @media (max-width: 991.98px) {
@@ -1895,12 +2394,19 @@ export default {
   .health-metric-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+
+  .care-outcome-grid,
+  .clinical-detail-grid,
+  .record-quality-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 @media (max-width: 575.98px) {
   .analytics-toolbar,
   .operational-band,
-  .health-profile-panel {
+  .health-profile-panel,
+  .care-quality-panel {
     padding: 14px;
   }
 
@@ -1922,6 +2428,12 @@ export default {
   }
 
   .health-metric-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .care-outcome-grid,
+  .clinical-detail-grid,
+  .record-quality-grid {
     grid-template-columns: 1fr;
   }
 

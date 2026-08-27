@@ -14,7 +14,9 @@ use App\Models\StudentEnrollment;
 use App\Models\StudentProfile;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Storage;
 use Laravel\Sanctum\Sanctum;
 use Tests\TestCase;
 
@@ -116,8 +118,80 @@ class StudentMedicalLeaveTest extends TestCase
         ])->assertForbidden();
     }
 
+    public function test_authorized_user_can_upload_and_download_a_private_medical_attachment(): void
+    {
+        Storage::fake('local');
+        $user = $this->superAdmin();
+        $student = StudentProfile::query()->create([
+            'first_name' => 'Fernanda',
+            'last_name' => 'Molina',
+            'registered_name' => 'Fernanda Molina',
+            'rut' => '24.222.333-5',
+            'general_status' => 'activo',
+        ]);
+        Sanctum::actingAs($user);
+
+        $response = $this->post('/api/student-medical-leaves', [
+            'student_profile_id' => $student->id,
+            'starts_on' => '2026-08-21',
+            'ends_on' => '2026-08-24',
+            'reason' => 'Reposo indicado por profesional tratante.',
+            'is_permanent' => false,
+            'source_module' => 'infirmary',
+            'attachment' => UploadedFile::fake()->create('licencia-medica.pdf', 280, 'application/pdf'),
+        ], ['Accept' => 'application/json']);
+
+        $response->assertCreated()
+            ->assertJsonPath('data.attachment.name', 'licencia-medica.pdf')
+            ->assertJsonPath('data.attachment.mime_type', 'application/pdf')
+            ->assertJsonPath('data.attachment.size_bytes', 280 * 1024)
+            ->assertJsonMissingPath('data.private_path')
+            ->assertJsonMissingPath('data.attachment.private_path')
+            ->assertJsonMissingPath('data.attachment.sha256');
+
+        $certificate = MedicalCertificate::query()->sole();
+        $privatePath = $certificate->getRawOriginal('private_path');
+        $this->assertNotNull($privatePath);
+        $this->assertStringStartsWith('student-health/medical-leaves/', $privatePath);
+        Storage::disk('local')->assertExists($privatePath);
+        $this->assertSame($user->id, $certificate->uploaded_by);
+        $this->assertSame(hash('sha256', Storage::disk('local')->get($privatePath)), $certificate->sha256);
+
+        $this->get("/api/student-medical-leaves/{$certificate->id}/attachment")
+            ->assertOk()
+            ->assertHeader('cache-control', 'max-age=0, no-store, private');
+    }
+
+    public function test_medical_attachment_rejects_unsupported_files(): void
+    {
+        Storage::fake('local');
+        $user = $this->superAdmin();
+        $student = StudentProfile::query()->create([
+            'first_name' => 'Javiera',
+            'last_name' => 'Soto',
+            'rut' => '25.222.333-6',
+        ]);
+        Sanctum::actingAs($user);
+
+        $this->post('/api/student-medical-leaves', [
+            'student_profile_id' => $student->id,
+            'starts_on' => '2026-08-21',
+            'ends_on' => '2026-08-22',
+            'reason' => 'Documento con formato no permitido.',
+            'is_permanent' => false,
+            'source_module' => 'inspectoria',
+            'attachment' => UploadedFile::fake()->create('archivo.exe', 12, 'application/x-msdownload'),
+        ], ['Accept' => 'application/json'])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('attachment');
+
+        $this->assertDatabaseCount('student_medical_certificates', 0);
+        $this->assertSame([], Storage::disk('local')->allFiles());
+    }
+
     public function test_temporary_period_cannot_overlap_a_record_created_from_the_other_module(): void
     {
+        Storage::fake('local');
         $user = $this->superAdmin();
         $student = StudentProfile::query()->create([
             'first_name' => 'Martina',
@@ -142,20 +216,23 @@ class StudentMedicalLeaveTest extends TestCase
             ['2026-08-22', '2026-08-24'],
             ['2026-08-25', '2026-08-27'],
         ] as [$startsOn, $endsOn]) {
-            $this->postJson('/api/student-medical-leaves', [
+            $this->post('/api/student-medical-leaves', [
                 'student_profile_id' => $student->id,
                 'starts_on' => $startsOn,
                 'ends_on' => $endsOn,
                 'reason' => 'Intento duplicado desde Inspectoría.',
                 'is_permanent' => false,
                 'source_module' => 'inspectoria',
-            ])->assertUnprocessable()
+                'attachment' => UploadedFile::fake()->create('respaldo-duplicado.pdf', 24, 'application/pdf'),
+            ], ['Accept' => 'application/json'])->assertUnprocessable()
                 ->assertJsonValidationErrors('starts_on')
                 ->assertJsonPath(
                     'errors.starts_on.0',
                     'Ya existe una licencia o certificado temporal para esta alumna entre el 21-08-2026 y el 25-08-2026, ingresado desde Enfermería. Revisa el registro compartido antes de volver a ingresarlo.',
                 );
         }
+
+        $this->assertSame([], Storage::disk('local')->allFiles('student-health/medical-leaves'));
 
         $this->postJson('/api/student-medical-leaves', [
             'student_profile_id' => $student->id,
@@ -204,6 +281,7 @@ class StudentMedicalLeaveTest extends TestCase
 
     public function test_inspector_only_sees_and_registers_students_from_assigned_courses(): void
     {
+        Storage::fake('local');
         [$year, $assignedCourse, $assignedStudent] = $this->academicContext('A', 'Antonia Soto');
         [, $otherCourse, $otherStudent] = $this->academicContext('B', 'Josefina Pérez', $year);
 
@@ -221,6 +299,7 @@ class StudentMedicalLeaveTest extends TestCase
         $permissions = Permission::query()->whereIn('slug', [
             'ver_licencias_medicas_estudiantes',
             'crear_licencias_medicas_estudiantes',
+            'editar_licencias_medicas_estudiantes',
         ])->pluck('id');
         $role->permissions()->syncWithoutDetaching($permissions);
         $user->roles()->attach($role);
@@ -233,8 +312,19 @@ class StudentMedicalLeaveTest extends TestCase
             'active' => true,
         ]);
 
-        $this->certificate($assignedStudent, 'Licencia visible');
-        $this->certificate($otherStudent, 'Licencia de otro curso');
+        $assignedCertificate = $this->certificate($assignedStudent, 'Licencia visible');
+        $otherCertificate = $this->certificate($otherStudent, 'Licencia de otro curso');
+        foreach ([$assignedCertificate, $otherCertificate] as $certificate) {
+            $path = "student-health/medical-leaves/{$certificate->id}.pdf";
+            Storage::disk('local')->put($path, 'private-pdf');
+            $certificate->forceFill([
+                'private_path' => $path,
+                'original_name' => 'licencia.pdf',
+                'mime_type' => 'application/pdf',
+                'size_bytes' => 11,
+                'sha256' => hash('sha256', 'private-pdf'),
+            ])->save();
+        }
         Sanctum::actingAs($user);
 
         $this->getJson('/api/student-medical-leaves')
@@ -250,6 +340,15 @@ class StudentMedicalLeaveTest extends TestCase
         $this->getJson('/api/student-medical-leaves/students?search=Josefina')
             ->assertOk()
             ->assertJsonCount(0, 'data');
+        $this->get("/api/student-medical-leaves/{$assignedCertificate->id}/attachment")->assertOk();
+        $this->get("/api/student-medical-leaves/{$otherCertificate->id}/attachment")->assertNotFound();
+
+        $this->putJson("/api/student-medical-leaves/{$otherCertificate->id}", [
+            'starts_on' => '2026-08-21',
+            'ends_on' => '2026-08-24',
+            'reason' => 'Intento de edición fuera del curso asignado.',
+            'is_permanent' => false,
+        ])->assertNotFound();
 
         $this->postJson('/api/student-medical-leaves', [
             'student_profile_id' => $otherStudent->id,
@@ -268,6 +367,62 @@ class StudentMedicalLeaveTest extends TestCase
             'is_permanent' => false,
             'source_module' => 'inspectoria',
         ])->assertCreated();
+
+        $createdCertificate = MedicalCertificate::query()
+            ->where('student_profile_id', $assignedStudent->id)
+            ->where('administrative_summary', 'Reposo autorizado.')
+            ->sole();
+
+        $this->post("/api/student-medical-leaves/{$createdCertificate->id}", [
+            '_method' => 'PUT',
+            'starts_on' => '2026-08-24',
+            'ends_on' => '2026-08-27',
+            'reason' => 'Reposo autorizado con fecha corregida y respaldo incorporado.',
+            'is_permanent' => false,
+            'attachment' => UploadedFile::fake()->create('licencia-corregida.pdf', 96, 'application/pdf'),
+        ], ['Accept' => 'application/json'])
+            ->assertOk()
+            ->assertJsonPath('data.ends_on', '2026-08-27')
+            ->assertJsonPath('data.reason', 'Reposo autorizado con fecha corregida y respaldo incorporado.')
+            ->assertJsonPath('data.source_module', 'inspectoria')
+            ->assertJsonPath('data.attachment.name', 'licencia-corregida.pdf')
+            ->assertJsonPath('data.updated_by', $user->name)
+            ->assertJsonMissingPath('data.attachment.private_path')
+            ->assertJsonMissingPath('data.attachment.sha256');
+
+        $createdCertificate->refresh();
+        $this->assertSame($user->id, $createdCertificate->updated_by);
+        $this->assertSame($user->id, $createdCertificate->uploaded_by);
+        $this->assertSame('2026-08-27', $createdCertificate->covers_to?->format('Y-m-d'));
+        Storage::disk('local')->assertExists($createdCertificate->getRawOriginal('private_path'));
+    }
+
+    public function test_create_permission_does_not_allow_editing_without_the_dedicated_permission(): void
+    {
+        $student = StudentProfile::query()->create([
+            'first_name' => 'Paz',
+            'last_name' => 'Contreras',
+            'rut' => '23.444.555-6',
+        ]);
+        $certificate = $this->certificate($student, 'Registro protegido');
+        $user = User::factory()->create(['active' => true]);
+        $role = Role::query()->create(['slug' => 'registro_sin_edicion', 'name' => 'Registro sin edición', 'active' => true]);
+        $role->permissions()->attach(Permission::query()->where('slug', 'crear_licencias_medicas_estudiantes')->sole());
+        $user->roles()->attach($role);
+        Sanctum::actingAs($user);
+
+        $this->putJson("/api/student-medical-leaves/{$certificate->id}", [
+            'starts_on' => '2026-08-21',
+            'ends_on' => '2026-08-25',
+            'reason' => 'Cambio no autorizado.',
+            'is_permanent' => false,
+        ])->assertForbidden();
+
+        $this->assertDatabaseHas('student_medical_certificates', [
+            'id' => $certificate->id,
+            'administrative_summary' => 'Registro protegido',
+            'updated_by' => null,
+        ]);
     }
 
     private function superAdmin(): User

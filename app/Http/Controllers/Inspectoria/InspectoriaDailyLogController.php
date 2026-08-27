@@ -69,7 +69,7 @@ class InspectoriaDailyLogController extends Controller
     {
         abort_unless($this->access->can($request->user(), InspectoriaAccessService::DAILY_LOG), 403);
         $user = $request->user();
-        abort_unless($this->canAccessEntry($user, $dailyLog), 403);
+        abort_unless($this->access->canAccessDailyLog($user, $dailyLog), 403);
         $payload = $request->validated();
         $this->assertPayloadAccess($user, $payload);
         DB::transaction(function () use ($dailyLog, $payload, $user) {
@@ -107,23 +107,6 @@ class InspectoriaDailyLogController extends Controller
         foreach ($payload['associated_course_ids'] ?? [] as $courseId) {
             abort_unless($this->access->canAccessCourse($user, (int) $courseId), 403, 'Uno de los cursos asociados no está asignado a esta inspectora.');
         }
-    }
-
-    private function canAccessEntry(User $user, InspectoriaDailyLog $entry): bool
-    {
-        if (! $this->access->isCourseScoped($user)) {
-            return true;
-        }
-
-        if ($entry->course_section_id) {
-            return $this->access->canAccessCourse($user, (int) $entry->course_section_id);
-        }
-
-        if ($entry->is_staff_lateness && $entry->associatedCourses()->exists()) {
-            return $entry->associatedCourses()->whereIn('course_sections.id', $this->access->assignedCourseIds($user))->exists();
-        }
-
-        return (int) $entry->inspector_staff_id === (int) $user->staff_id;
     }
 
     /** @return array{0: array<string, mixed>, 1: array<int, int>} */

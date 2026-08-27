@@ -44,6 +44,16 @@ class SaveInfirmaryAttentionRequest extends FormRequest
             ],
             'attended_by_user_id' => ['nullable', 'integer', 'exists:users,id'],
             'attention_category' => ['required', 'string', 'max:120'],
+            'mental_health_event_type' => [
+                Rule::requiredIf(fn () => $this->isStudentMentalHealthCategory()),
+                'nullable',
+                Rule::in(array_column(InfirmaryAttention::MENTAL_HEALTH_EVENT_OPTIONS, 'value')),
+            ],
+            'self_harm_injury_type' => [
+                Rule::requiredIf(fn () => $this->isStudentSelfHarmEvent()),
+                'nullable',
+                Rule::in(array_column(InfirmaryAttention::SELF_HARM_INJURY_OPTIONS, 'value')),
+            ],
             'accident_location_type' => [
                 Rule::requiredIf(fn () => $this->isAccidentCategory()),
                 'nullable',
@@ -141,12 +151,29 @@ class SaveInfirmaryAttentionRequest extends FormRequest
             'accompanied_by_staff_id.required' => 'Selecciona la funcionaria que acompaña.',
             'student_profile_id.required' => 'Selecciona una estudiante.',
             'staff_id.required' => 'Selecciona un funcionario.',
+            'mental_health_event_type.required' => 'Selecciona el tipo de atención de salud mental.',
+            'mental_health_event_type.in' => 'Selecciona una opción válida de salud mental.',
+            'self_harm_injury_type.required' => 'Selecciona el tipo de lesión por autolesión.',
+            'self_harm_injury_type.in' => 'Selecciona un tipo de lesión válido.',
         ];
     }
 
     protected function prepareForValidation(): void
     {
-        $this->merge(['subject_type' => $this->attentionSubjectType()]);
+        $subjectType = $this->attentionSubjectType();
+        $isMentalHealth = $subjectType === InfirmaryAttention::SUBJECT_STUDENT
+            && $this->input('attention_category') === InfirmaryAttention::MENTAL_HEALTH_CATEGORY;
+        $mentalHealthEventType = $isMentalHealth
+            ? $this->input('mental_health_event_type')
+            : null;
+
+        $this->merge([
+            'subject_type' => $subjectType,
+            'mental_health_event_type' => $mentalHealthEventType,
+            'self_harm_injury_type' => $mentalHealthEventType === 'autolesion'
+                ? $this->input('self_harm_injury_type')
+                : null,
+        ]);
     }
 
     protected function attentionSubjectType(): string
@@ -194,5 +221,17 @@ class SaveInfirmaryAttentionRequest extends FormRequest
     private function isAccidentCategory(): bool
     {
         return in_array($this->input('attention_category'), ['accidente_menor', 'accidente_mayor'], true);
+    }
+
+    private function isStudentMentalHealthCategory(): bool
+    {
+        return $this->input('subject_type') === InfirmaryAttention::SUBJECT_STUDENT
+            && $this->input('attention_category') === InfirmaryAttention::MENTAL_HEALTH_CATEGORY;
+    }
+
+    private function isStudentSelfHarmEvent(): bool
+    {
+        return $this->isStudentMentalHealthCategory()
+            && $this->input('mental_health_event_type') === 'autolesion';
     }
 }

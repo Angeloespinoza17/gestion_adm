@@ -2,6 +2,7 @@
 
 namespace App\Models\RiskPrevention;
 
+use App\Models\Staff;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -14,11 +15,15 @@ class RiskPreventionAccident extends Model
     protected $fillable = [
         'occurred_at',
         'accident_type',
+        'event_type',
+        'staff_id',
         'involved_person_name',
         'involved_person_identifier',
         'location',
         'description',
         'injuries',
+        'injured_body_part',
+        'lost_days',
         'measures_taken',
         'referrals',
         'case_status',
@@ -31,11 +36,17 @@ class RiskPreventionAccident extends Model
     protected $casts = [
         'occurred_at' => 'datetime',
         'closed_at' => 'datetime',
+        'lost_days' => 'integer',
     ];
 
     public function followUps(): HasMany
     {
         return $this->hasMany(RiskPreventionAccidentFollowUp::class, 'accident_id')->orderByDesc('followed_at');
+    }
+
+    public function staff(): BelongsTo
+    {
+        return $this->belongsTo(Staff::class);
     }
 
     public function createdBy(): BelongsTo

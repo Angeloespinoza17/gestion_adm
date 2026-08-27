@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Maintenance;
 
+use App\Models\MaintenanceDependency;
 use App\Models\MaintenanceWorkOrder;
 use App\Models\Permission;
 use App\Models\Role;
@@ -121,12 +122,59 @@ class MaintenanceWorkOrderClosureTest extends TestCase
             ->assertJsonPath('statuses', ['Sin comenzar', 'En proceso', 'En espera', 'Pausado', 'Terminado', 'Anulado']);
     }
 
+    public function test_mobile_dependency_selector_uses_a_small_searchable_catalog(): void
+    {
+        $library = $this->maintenanceDependency('DEP-BIB-01', 'Biblioteca CRA', [
+            'sector' => 'Primer piso',
+            'usage' => 'Lectura y recursos',
+        ]);
+        $gym = $this->maintenanceDependency('DEP-GIM-01', 'Gimnasio principal');
+        $this->maintenanceDependency('DEP-INACTIVA', 'Biblioteca antigua', ['active' => false]);
+        $this->maintenanceDependency('AREA-BIB-01', 'Tablero biblioteca', [
+            'dependency_kind' => MaintenanceDependency::KIND_TECHNICAL_ASSET,
+            'is_maintenance_location' => false,
+        ]);
+
+        $this->getJson('/api/maintenance/work-orders/dependency-options?search='.urlencode('biblioteca lectura'))
+            ->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.id', $library->id)
+            ->assertJsonPath('data.0.code', 'DEP-BIB-01')
+            ->assertJsonPath('data.0.usage', 'Lectura y recursos')
+            ->assertJsonPath('meta.limit', 40);
+
+        $selectedResponse = $this->getJson(
+            '/api/maintenance/work-orders/dependency-options?search='.urlencode('gimnasio').
+            '&selected_id='.$library->id
+        );
+
+        $selectedResponse
+            ->assertOk()
+            ->assertJsonFragment(['id' => $library->id, 'code' => 'DEP-BIB-01'])
+            ->assertJsonFragment(['id' => $gym->id, 'code' => 'DEP-GIM-01']);
+
+        $this->getJson('/api/maintenance/work-orders/catalogs?include_dependencies=0')
+            ->assertOk()
+            ->assertJsonMissingPath('dependencies');
+    }
+
     private function workOrder(array $overrides = []): MaintenanceWorkOrder
     {
         return MaintenanceWorkOrder::query()->create(array_merge([
             'priority' => 'Media',
             'status' => 'En proceso',
             'description' => 'Reparación de prueba.',
+        ], $overrides));
+    }
+
+    private function maintenanceDependency(string $code, string $name, array $overrides = []): MaintenanceDependency
+    {
+        return MaintenanceDependency::query()->create(array_merge([
+            'dependency_kind' => MaintenanceDependency::KIND_SPACE,
+            'code' => $code,
+            'name' => $name,
+            'active' => true,
+            'is_maintenance_location' => true,
         ], $overrides));
     }
 

@@ -16,6 +16,7 @@ import {
 
 const emptyItem = () => ({
   id: null,
+  inventory_item_id: null,
   name: "",
   epp_type: "",
   stock: 0,
@@ -104,14 +105,14 @@ export default {
       savingDelivery: false,
       importing: false,
       downloadingAct: null,
-      catalogs: { epp_types: [], epp_items: [], epp_recipients: [] },
+      catalogs: { epp_types: [], epp_items: [], epp_recipients: [], inventory_items: [], permissions: {} },
       items: [],
       records: [],
       itemFilters: { search: "", epp_type: "", low_stock: false },
       recordFilters: { search: "", received_conformity: "", from: "", to: "" },
       itemPagination: { current_page: 1, last_page: 1, total: 0, per_page: 15 },
       recordPagination: { current_page: 1, last_page: 1, total: 0, per_page: 12 },
-      recordSummary: { total_records: 0, pending_conformity: 0, month_records: 0, delivered_units: 0 },
+      recordSummary: { total_records: 0, pending_conformity: 0, month_records: 0, today_records: 0, delivered_units: 0 },
       showItemModal: false,
       showImportModal: false,
       showDeliveryModal: false,
@@ -133,21 +134,31 @@ export default {
         return [];
       }
     },
-    canManage() {
-      return this.permissions.includes("gestionar_prevencion_riesgos")
+    canManageCatalog() {
+      return Boolean(this.catalogs.permissions?.can_manage_catalog)
+        || this.permissions.includes("gestionar_prevencion_riesgos")
         || this.permissions.includes("__superadmin__");
+    },
+    canRegisterDelivery() {
+      return Boolean(this.catalogs.permissions?.can_register_delivery)
+        || this.permissions.includes("registrar_entregas_epp")
+        || this.permissions.includes("gestionar_prevencion_riesgos")
+        || this.permissions.includes("__superadmin__");
+    },
+    isWarehouseView() {
+      return String(this.$route?.path || "").startsWith("/inventory/");
     },
     isEditingItem() {
       return Boolean(this.itemForm.id);
     },
     availableEppItems() {
-      return (this.catalogs.epp_items || []).filter((item) => Number(item.stock) > 0);
+      return (this.catalogs.epp_items || []).filter((item) => this.itemStock(item) > 0);
     },
     lowStockCount() {
       return this.items.filter((item) => ["critico", "agotado"].includes(item.stock_status)).length;
     },
     totalStock() {
-      return this.items.reduce((total, item) => total + Number(item.stock || 0), 0);
+      return this.items.reduce((total, item) => total + this.itemStock(item), 0);
     },
     selectedDeliveryUnits() {
       return this.deliveryForm.items.reduce((total, line) => total + Number(line.quantity || 0), 0);
@@ -170,7 +181,7 @@ export default {
     },
     async loadCatalogs() {
       try {
-        const response = await axios.get("/api/risk-prevention/catalogs");
+        const response = await axios.get("/api/risk-prevention/epp/catalogs");
         this.catalogs = response.data || this.catalogs;
       } catch (error) {
         showRiskError(formatRiskError(error, "No se pudieron cargar los catálogos de EPP."));
@@ -233,26 +244,27 @@ export default {
       this.loadItems(1);
     },
     openCreateItem() {
-      if (!this.canManage) return;
+      if (!this.canManageCatalog) return;
       this.itemForm = emptyItem();
       this.showItemModal = true;
     },
     openEditItem(item) {
-      if (!this.canManage) return;
+      if (!this.canManageCatalog) return;
       this.itemForm = {
         id: item.id,
+        inventory_item_id: item.inventory_item_id || null,
         name: item.name || "",
         epp_type: item.epp_type || "",
-        stock: item.stock ?? 0,
-        minimum_stock: item.minimum_stock ?? 0,
-        unit: item.unit || "unidad",
+        stock: this.itemStock(item),
+        minimum_stock: this.itemMinimumStock(item),
+        unit: this.itemUnit(item),
         description: item.description || "",
         active: Boolean(item.active),
       };
       this.showItemModal = true;
     },
     async saveItem() {
-      if (!this.itemForm.name.trim() || !this.itemForm.epp_type.trim()) {
+      if (!String(this.itemForm.name || "").trim() || !String(this.itemForm.epp_type || "").trim()) {
         await showRiskWarning("Completa el nombre y el tipo de EPP.", "Falta información");
         return;
       }
@@ -292,7 +304,7 @@ export default {
       }
     },
     openImport() {
-      if (!this.canManage) return;
+      if (!this.canManageCatalog) return;
       this.importFile = null;
       this.importRows = [];
       this.importErrors = [];
@@ -382,7 +394,7 @@ export default {
       }
     },
     openCreateDelivery() {
-      if (!this.canManage) return;
+      if (!this.canRegisterDelivery) return;
       if (!this.availableEppItems.length) {
         showRiskWarning("Primero registra EPP con stock disponible.", "Catálogo sin disponibilidad");
         this.activeTab = "catalog";
@@ -415,9 +427,37 @@ export default {
     eppById(id) {
       return (this.catalogs.epp_items || []).find((item) => Number(item.id) === Number(id));
     },
+    itemStock(item) {
+      return Number(item?.available_stock ?? item?.stock ?? 0);
+    },
+    itemMinimumStock(item) {
+      return Number(item?.available_minimum_stock ?? item?.minimum_stock ?? 0);
+    },
+    itemUnit(item) {
+      return item?.available_unit || item?.unit || "unidad";
+    },
+    availableInventoryOptions() {
+      return [{ value: null, text: "Stock propio del catálogo EPP" }].concat(
+        (this.catalogs.inventory_items || [])
+          .filter((item) => !item.epp_item || Number(item.epp_item.id) === Number(this.itemForm.id))
+          .map((item) => ({
+            value: item.id,
+            text: `${item.code || "S/C"} · ${item.name} · ${item.stock_quantity || 0} ${item.unit_of_measure || "unidad"}`,
+          })),
+      );
+    },
+    onInventoryItemChange() {
+      const inventoryItem = (this.catalogs.inventory_items || [])
+        .find((item) => Number(item.id) === Number(this.itemForm.inventory_item_id));
+      if (!inventoryItem) return;
+      this.itemForm.name = inventoryItem.name || this.itemForm.name;
+      this.itemForm.stock = Number(inventoryItem.stock_quantity || 0);
+      this.itemForm.minimum_stock = Number(inventoryItem.minimum_stock || 0);
+      this.itemForm.unit = inventoryItem.unit_of_measure || "unidad";
+    },
     lineStockLabel(line) {
       const item = this.eppById(line.epp_item_id);
-      return item ? `${item.stock} ${item.unit} disponibles` : "Selecciona un elemento";
+      return item ? `${this.itemStock(item)} ${this.itemUnit(item)} disponibles` : "Selecciona un elemento";
     },
     validateDelivery() {
       if (!this.deliveryForm.employee_name.trim()) return "Selecciona o ingresa al funcionario.";
@@ -430,8 +470,8 @@ export default {
         if (!item) return "Selecciona un EPP en cada fila.";
         if (ids.includes(Number(item.id))) return `El EPP “${item.name}” está repetido.`;
         if (Number(line.quantity) < 1) return `Ingresa una cantidad válida para “${item.name}”.`;
-        if (Number(line.quantity) > Number(item.stock)) {
-          return `Stock insuficiente para “${item.name}”. Disponible: ${item.stock} ${item.unit}.`;
+        if (Number(line.quantity) > this.itemStock(item)) {
+          return `Stock insuficiente para “${item.name}”. Disponible: ${this.itemStock(item)} ${this.itemUnit(item)}.`;
         }
         ids.push(Number(item.id));
       }
@@ -494,7 +534,7 @@ export default {
           const item = this.eppById(line.epp_item_id);
           return {
             epp_name_snapshot: item?.name || "",
-            unit_snapshot: item?.unit || "unidad",
+            unit_snapshot: this.itemUnit(item),
             quantity: Number(line.quantity),
             delivered_at: this.deliveryForm.delivered_at,
             replacement_due_at: line.replacement_due_at || null,
@@ -672,16 +712,16 @@ export default {
   <Layout>
     <section class="epp-hero mb-4">
       <div>
-        <span class="epp-eyebrow">Prevención de riesgos · FO-PREV-03</span>
-        <h1>Entrega de EPP</h1>
-        <p>Administra el catálogo, registra entregas múltiples y genera el acta de recepción.</p>
+        <span class="epp-eyebrow">{{ isWarehouseView ? "Bodega e insumos" : "Prevención de riesgos" }} · FO-PREV-03</span>
+        <h1>{{ isWarehouseView ? "Entrega diaria de EPP" : "Entrega de EPP" }}</h1>
+        <p>Registra la entrega diaria, descuenta el stock de Bodega y genera el acta de recepción.</p>
       </div>
       <div class="d-flex align-items-center gap-2">
         <HelpButton
           title="Ayuda: entrega de EPP"
           text="Carga el catálogo de elementos, selecciona un funcionario, registra uno o más EPP y descarga el acta FO-PREV-03."
         />
-        <BButton v-if="canManage" class="hero-action" @click="openCreateDelivery">
+        <BButton v-if="canRegisterDelivery" class="hero-action" @click="openCreateDelivery">
           <i class="bx bx-plus-circle"></i>
           Nueva entrega
         </BButton>
@@ -710,7 +750,7 @@ export default {
       <div class="col-sm-6 col-xl-3">
         <article class="summary-card">
           <span class="summary-icon violet"><i class="bx bx-calendar-check"></i></span>
-          <div><strong>{{ recordSummary.month_records }}</strong><span>Entregas este mes</span></div>
+          <div><strong>{{ recordSummary.today_records }}</strong><span>Entregas de hoy</span></div>
         </article>
       </div>
     </section>
@@ -730,7 +770,7 @@ export default {
           <h2>Actas de entrega</h2>
           <p>Historial agrupado por funcionario y fecha de recepción.</p>
         </div>
-        <BButton v-if="canManage" variant="primary" @click="openCreateDelivery">
+        <BButton v-if="canRegisterDelivery" variant="primary" @click="openCreateDelivery">
           <i class="bx bx-plus"></i> Registrar entrega
         </BButton>
       </header>
@@ -830,7 +870,7 @@ export default {
         <span><i class="bx bx-file-blank"></i></span>
         <h3>No hay actas de entrega</h3>
         <p>Registra la primera entrega para generar automáticamente el FO-PREV-03.</p>
-        <BButton v-if="canManage" variant="primary" @click="openCreateDelivery">Registrar primera entrega</BButton>
+        <BButton v-if="canRegisterDelivery" variant="primary" @click="openCreateDelivery">Registrar primera entrega</BButton>
       </div>
 
       <BPagination
@@ -849,7 +889,7 @@ export default {
           <h2>Catálogo de EPP</h2>
           <p>Listado disponible para formularios de entrega y control de stock.</p>
         </div>
-        <div v-if="canManage" class="d-flex flex-wrap gap-2">
+        <div v-if="canManageCatalog" class="d-flex flex-wrap gap-2">
           <BButton variant="outline-primary" @click="openImport"><i class="bx bx-spreadsheet"></i> Cargar listado</BButton>
           <BButton variant="primary" @click="openCreateItem"><i class="bx bx-plus"></i> Nuevo EPP</BButton>
         </div>
@@ -884,13 +924,19 @@ export default {
           </thead>
           <tbody>
             <tr v-for="item in items" :key="item.id">
-              <td><strong>{{ item.name }}</strong><span class="cell-muted">{{ item.description || "Sin descripción" }}</span></td>
+              <td>
+                <strong>{{ item.name }}</strong>
+                <span class="cell-muted">{{ item.description || "Sin descripción" }}</span>
+                <BBadge :variant="item.stock_source === 'bodega' ? 'primary' : 'secondary'" class="mt-1">
+                  {{ item.stock_source === "bodega" ? `Bodega · ${item.inventory_item?.code || "insumo"}` : "Catálogo histórico" }}
+                </BBadge>
+              </td>
               <td>{{ item.epp_type }}</td>
-              <td><strong>{{ item.stock }}</strong> {{ item.unit }}</td>
-              <td>{{ item.minimum_stock }} {{ item.unit }}</td>
+              <td><strong>{{ itemStock(item) }}</strong> {{ itemUnit(item) }}</td>
+              <td>{{ itemMinimumStock(item) }} {{ itemUnit(item) }}</td>
               <td><StatusBadge :status="item.stock_status" /></td>
               <td class="text-end">
-                <div v-if="canManage" class="d-flex justify-content-end gap-2">
+                <div v-if="canManageCatalog" class="d-flex justify-content-end gap-2">
                   <BButton size="sm" variant="outline-primary" @click="openEditItem(item)"><i class="bx bx-edit"></i></BButton>
                   <BButton size="sm" variant="outline-danger" @click="removeItem(item)"><i class="bx bx-trash"></i></BButton>
                 </div>
@@ -903,7 +949,7 @@ export default {
         <span><i class="bx bx-hard-hat"></i></span>
         <h3>Catálogo sin elementos</h3>
         <p>Carga una planilla o registra manualmente el primer EPP.</p>
-        <div v-if="canManage" class="d-flex justify-content-center gap-2">
+        <div v-if="canManageCatalog" class="d-flex justify-content-center gap-2">
           <BButton variant="outline-primary" @click="openImport">Cargar listado</BButton>
           <BButton variant="primary" @click="openCreateItem">Nuevo EPP</BButton>
         </div>
@@ -928,9 +974,18 @@ export default {
         </div>
       </div>
       <div class="row g-3">
+        <div class="col-12">
+          <label class="form-label">Insumo vinculado en Bodega</label>
+          <BFormSelect
+            v-model="itemForm.inventory_item_id"
+            :options="availableInventoryOptions()"
+            @change="onInventoryItemChange"
+          />
+          <small class="text-muted">Al vincularlo, Bodega pasa a ser la fuente oficial de stock y cada entrega genera una salida trazable.</small>
+        </div>
         <div class="col-md-7">
           <label class="form-label">Nombre <em>*</em></label>
-          <BFormInput v-model="itemForm.name" placeholder="Ej: Casco de seguridad" />
+          <BFormInput v-model="itemForm.name" :disabled="Boolean(itemForm.inventory_item_id)" placeholder="Ej: Casco de seguridad" />
         </div>
         <div class="col-md-5">
           <label class="form-label">Tipo <em>*</em></label>
@@ -941,15 +996,15 @@ export default {
         </div>
         <div class="col-md-3">
           <label class="form-label">Stock</label>
-          <BFormInput v-model.number="itemForm.stock" type="number" min="0" />
+          <BFormInput v-model.number="itemForm.stock" :disabled="Boolean(itemForm.inventory_item_id)" type="number" min="0" />
         </div>
         <div class="col-md-3">
           <label class="form-label">Stock mínimo</label>
-          <BFormInput v-model.number="itemForm.minimum_stock" type="number" min="0" />
+          <BFormInput v-model.number="itemForm.minimum_stock" :disabled="Boolean(itemForm.inventory_item_id)" type="number" min="0" />
         </div>
         <div class="col-md-3">
           <label class="form-label">Unidad</label>
-          <BFormInput v-model="itemForm.unit" placeholder="unidad, par..." />
+          <BFormInput v-model="itemForm.unit" :disabled="Boolean(itemForm.inventory_item_id)" placeholder="unidad, par..." />
         </div>
         <div class="col-md-3 d-flex align-items-end pb-2">
           <BFormCheckbox v-model="itemForm.active" switch>Elemento activo</BFormCheckbox>
@@ -1068,7 +1123,7 @@ export default {
                 <label>EPP <em>*</em></label>
                 <BFormSelect
                   v-model="line.epp_item_id"
-                  :options="[{ value: null, text: 'Seleccionar elemento' }].concat(availableEppItems.map((item) => ({ value: item.id, text: `${item.name} · ${item.stock} ${item.unit}` })))"
+                  :options="[{ value: null, text: 'Seleccionar elemento' }].concat(availableEppItems.map((item) => ({ value: item.id, text: `${item.name} · ${itemStock(item)} ${itemUnit(item)}` })))"
                 />
                 <small>{{ lineStockLabel(line) }}</small>
               </div>

@@ -4,6 +4,7 @@ namespace App\Http\Controllers\StudentHealth;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\StudentHealth\StoreStudentMedicalLeaveRequest;
+use App\Http\Requests\StudentHealth\UpdateStudentMedicalLeaveRequest;
 use App\Models\SocialWork\MedicalCertificate;
 use App\Models\StudentProfile;
 use App\Services\StudentHealth\StudentMedicalLeaveAccessService;
@@ -11,6 +12,8 @@ use App\Services\StudentHealth\StudentMedicalLeaveRegistrationService;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Storage;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class StudentMedicalLeaveController extends Controller
 {
@@ -31,6 +34,7 @@ class StudentMedicalLeaveController extends Controller
                         ->with(['academicYear:id,name,year,is_active', 'courseSection:id,display_name'])
                         ->orderByDesc('academic_year_id'),
                     'registeredBy:id,name',
+                    'updatedBy:id,name',
                 ]),
             $request->user(),
         );
@@ -72,6 +76,7 @@ class StudentMedicalLeaveController extends Controller
             ],
             'capabilities' => [
                 'can_create' => $this->access->canCreate($request->user()),
+                'can_edit' => $this->access->canEdit($request->user()),
             ],
         ]);
     }
@@ -133,7 +138,11 @@ class StudentMedicalLeaveController extends Controller
         );
 
         $isPermanent = (bool) $validated['is_permanent'];
-        $certificate = $this->registration->register($validated, $request->user()->id);
+        $certificate = $this->registration->register(
+            $validated,
+            $request->user()->id,
+            $request->file('attachment'),
+        );
 
         $certificate->load([
             'student:id,first_name,last_name,registered_name,rut,general_status',
@@ -141,6 +150,7 @@ class StudentMedicalLeaveController extends Controller
                 ->with(['academicYear:id,name,year,is_active', 'courseSection:id,display_name'])
                 ->orderByDesc('academic_year_id'),
             'registeredBy:id,name',
+            'updatedBy:id,name',
         ]);
 
         return response()->json([
@@ -149,6 +159,61 @@ class StudentMedicalLeaveController extends Controller
                 : 'Licencia médica registrada y compartida con Enfermería e Inspectoría.',
             'data' => $this->certificatePayload($certificate, $this->access->currentAcademicYear()),
         ], 201);
+    }
+
+    public function update(UpdateStudentMedicalLeaveRequest $request, int $certificate): JsonResponse
+    {
+        abort_unless($this->access->canEdit($request->user()), 403);
+
+        $medicalCertificate = $this->access->scopeCertificates(
+            MedicalCertificate::query()->whereKey($certificate),
+            $request->user(),
+        )->firstOrFail();
+
+        $medicalCertificate = $this->registration->update(
+            $medicalCertificate,
+            $request->validated(),
+            $request->user()->id,
+            $request->file('attachment'),
+        );
+
+        $medicalCertificate->load([
+            'student:id,first_name,last_name,registered_name,rut,general_status',
+            'student.enrollments' => fn ($enrollments) => $enrollments
+                ->with(['academicYear:id,name,year,is_active', 'courseSection:id,display_name'])
+                ->orderByDesc('academic_year_id'),
+            'registeredBy:id,name',
+            'updatedBy:id,name',
+        ]);
+
+        return response()->json([
+            'message' => 'Licencia médica actualizada. Los cambios ya están disponibles en el registro compartido.',
+            'data' => $this->certificatePayload($medicalCertificate, $this->access->currentAcademicYear()),
+        ]);
+    }
+
+    public function downloadAttachment(Request $request, int $certificate): StreamedResponse
+    {
+        abort_unless($this->access->canView($request->user()), 403);
+
+        $medicalCertificate = $this->access->scopeCertificates(
+            MedicalCertificate::query()->whereKey($certificate),
+            $request->user(),
+        )->firstOrFail();
+        $privatePath = $medicalCertificate->getRawOriginal('private_path');
+
+        abort_unless(filled($privatePath) && Storage::disk('local')->exists($privatePath), 404);
+
+        return Storage::disk('local')->download(
+            $privatePath,
+            $medicalCertificate->original_name ?: 'respaldo-medico-'.$medicalCertificate->id,
+            [
+                'Content-Type' => $medicalCertificate->mime_type ?: 'application/octet-stream',
+                'Cache-Control' => 'private, no-store, max-age=0',
+                'Pragma' => 'no-cache',
+                'X-Content-Type-Options' => 'nosniff',
+            ],
+        );
     }
 
     private function applyFilters(Builder $query, Request $request): void
@@ -202,6 +267,14 @@ class StudentMedicalLeaveController extends Controller
             'source_module' => $certificate->source_module,
             'registered_by' => $certificate->registeredBy?->name,
             'registered_at' => $certificate->created_at?->toIso8601String(),
+            'updated_by' => $certificate->updatedBy?->name,
+            'updated_at' => $certificate->updated_at?->toIso8601String(),
+            'attachment' => filled($certificate->getRawOriginal('private_path')) ? [
+                'name' => $certificate->original_name,
+                'mime_type' => $certificate->mime_type,
+                'size_bytes' => (int) $certificate->size_bytes,
+                'download_url' => "/api/student-medical-leaves/{$certificate->id}/attachment",
+            ] : null,
         ];
     }
 

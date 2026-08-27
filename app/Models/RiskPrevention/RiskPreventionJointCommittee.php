@@ -7,6 +7,7 @@ use App\Models\User;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class RiskPreventionJointCommittee extends Model
 {
@@ -53,5 +54,19 @@ class RiskPreventionJointCommittee extends Model
     public function updatedBy(): BelongsTo
     {
         return $this->belongsTo(User::class, 'updated_by');
+    }
+
+    public function documents(): HasMany
+    {
+        return $this->hasMany(RiskPreventionJointCommitteeDocument::class, 'committee_id')
+            ->orderByDesc('document_date')
+            ->orderByDesc('id');
+    }
+
+    public function trainings(): HasMany
+    {
+        return $this->hasMany(RiskPreventionTraining::class, 'joint_committee_id')
+            ->orderByDesc('training_date')
+            ->orderByDesc('id');
     }
 }

@@ -5,6 +5,7 @@ import Layout from "../../layouts/main.vue";
 import PageHeader from "../../components/page-header.vue";
 import LoadingState from "../../components/ui/loading-state.vue";
 import BookAnalyticsPanel from "../../components/remuneration/book-analytics-panel.vue";
+import PayslipCenter from "../../components/remuneration/payslip-center.vue";
 import { formatRemunerationError, money, shortDate } from "../../components/remuneration/module-utils";
 import { getPdfMake } from "../../utils/pdfmake";
 
@@ -39,6 +40,10 @@ const routeMap = {
   "/remuneraciones/perfiles-cargo": "job-profiles",
   "/remuneraciones/certificados": "labor-certificates",
   "/remuneraciones/auditoria": "audit-logs",
+  "/remuneraciones/liquidaciones-sueldo": "payslip-center",
+  "/remuneraciones/matriz-subvenciones": "payslip-matrix",
+  "/remuneraciones/conciliacion-liquidaciones": "payslip-reconciliation",
+  "/remuneraciones/importaciones-liquidaciones": "payslip-imports",
 };
 
 const statusBadge = {
@@ -440,6 +445,30 @@ const fields = {
 };
 
 const panels = {
+  "payslip-center": {
+    title: "Liquidaciones de sueldo",
+    help: "Detalle individual importado desde PDF, distribución exacta por subvención e histórico auditable.",
+    kind: "payslip-center",
+    payslipView: "history",
+  },
+  "payslip-matrix": {
+    title: "Matriz por subvención",
+    help: "Haberes, descuentos, líquido, aportes y costo total con columnas dinámicas.",
+    kind: "payslip-center",
+    payslipView: "matrix",
+  },
+  "payslip-reconciliation": {
+    title: "Conciliación Libro vs. Liquidaciones",
+    help: "Comparación mensual entre la fuente consolidada y el detalle individual por PDF.",
+    kind: "payslip-center",
+    payslipView: "reconciliation",
+  },
+  "payslip-imports": {
+    title: "Importaciones e incidencias",
+    help: "Asistente por etapas, procesamiento en cola, controles, versiones e incidencias.",
+    kind: "payslip-center",
+    payslipView: "imports",
+  },
   dashboard: {
     title: "Dashboard Remuneraciones",
     help: "Indicadores del período activo, alertas operativas y últimas liquidaciones.",
@@ -869,7 +898,7 @@ const panels = {
 };
 
 export default {
-  components: { Layout, PageHeader, LoadingState, BookAnalyticsPanel },
+  components: { Layout, PageHeader, LoadingState, BookAnalyticsPanel, PayslipCenter },
   data() {
     return {
       catalogs: { statuses: {}, types: {}, data: {}, permissions: [] },
@@ -994,6 +1023,10 @@ export default {
       };
     },
     async loadInitial() {
+      if (this.activePanel.kind === "payslip-center") {
+        this.isLoading = false;
+        return;
+      }
       await this.loadCatalogs();
       await this.loadActive();
     },
@@ -1002,6 +1035,10 @@ export default {
       this.catalogs = response.data;
     },
     async loadActive() {
+      if (this.activePanel.kind === "payslip-center") {
+        this.isLoading = false;
+        return;
+      }
       this.error = null;
       this.isLoading = true;
       try {
@@ -1718,6 +1755,8 @@ export default {
       </BCard>
 
       <template v-else>
+        <PayslipCenter v-if="activePanel.kind === 'payslip-center'" :initial-view="activePanel.payslipView" />
+        <template v-else>
         <section class="remuneration-heading">
           <div>
             <div class="remuneration-eyebrow"><i class="bx bx-wallet"></i> Gestión de personas</div>
@@ -2124,6 +2163,7 @@ export default {
             </table>
           </div>
         </BCard>
+        </template>
       </template>
     </div>
 

@@ -34,7 +34,7 @@ class InspectoriaAttentionController extends Controller
             'student:id,first_name,last_name,registered_name,rut', 'courseSection:id,display_name',
             'inspector:id,full_name', 'attendedBy:id,name', 'psychosocialReferralUser:id,name',
         ]);
-        $this->access->scopeToAssignedCourses($query, $request->user());
+        $this->access->scopeAttentions($query, $request->user());
         $query->when($search !== '', function (Builder $query) use ($search) {
             $query->where(function (Builder $inner) use ($search) {
                 $inner->where('attention_code', 'like', "%{$search}%")

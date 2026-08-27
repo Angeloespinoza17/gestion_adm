@@ -2,9 +2,11 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Support\Facades\Storage;
 
 class MaintenanceWorkOrder extends Model
@@ -29,6 +31,7 @@ class MaintenanceWorkOrder extends Model
         'location_usage',
         'reported_at',
         'requested_by',
+        'created_by_user_id',
         'assigned_to',
         'priority',
         'status',
@@ -154,5 +157,20 @@ class MaintenanceWorkOrder extends Model
     public function closedByUser()
     {
         return $this->belongsTo(User::class, 'closed_by_user_id');
+    }
+
+    public function createdByUser(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'created_by_user_id');
+    }
+
+    public function assigneeUsers(): BelongsToMany
+    {
+        return $this->belongsToMany(
+            User::class,
+            'maintenance_work_order_assignees',
+            'maintenance_work_order_id',
+            'user_id'
+        )->withPivot('assignee_name_snapshot')->withTimestamps();
     }
 }

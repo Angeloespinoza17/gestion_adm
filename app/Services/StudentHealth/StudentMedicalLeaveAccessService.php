@@ -14,6 +14,8 @@ class StudentMedicalLeaveAccessService
 
     public const CREATE_PERMISSION = 'crear_licencias_medicas_estudiantes';
 
+    public const EDIT_PERMISSION = 'editar_licencias_medicas_estudiantes';
+
     private bool $academicYearResolved = false;
 
     private ?AcademicYear $academicYear = null;
@@ -25,12 +27,18 @@ class StudentMedicalLeaveAccessService
     public function canView(?User $user): bool
     {
         return $this->hasPermission($user, self::VIEW_PERMISSION)
-            || $this->hasPermission($user, self::CREATE_PERMISSION);
+            || $this->hasPermission($user, self::CREATE_PERMISSION)
+            || $this->hasPermission($user, self::EDIT_PERMISSION);
     }
 
     public function canCreate(?User $user): bool
     {
         return $this->hasPermission($user, self::CREATE_PERMISSION);
+    }
+
+    public function canEdit(?User $user): bool
+    {
+        return $this->hasPermission($user, self::EDIT_PERMISSION);
     }
 
     public function scopeCertificates(Builder $query, User $user): Builder

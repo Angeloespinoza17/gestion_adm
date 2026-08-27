@@ -98,6 +98,60 @@ const routes = [
         component: () => import("../views/home.vue"),
     },
     {
+        path: "/gestion-pedagogica/instrumentos",
+        name: "pedagogical-my-instruments",
+        meta: {
+            authRequired: true,
+            title: "Mis instrumentos de evaluación",
+            permission: "pedagogical-instruments.view",
+        },
+        component: () =>
+            import("../views/pedagogical-management/teacher-instruments.vue"),
+    },
+    {
+        path: "/gestion-pedagogica/revision-documental",
+        name: "pedagogical-document-review",
+        meta: {
+            authRequired: true,
+            title: "Revisión documental",
+            permission: "pedagogical-instruments.decide",
+        },
+        component: () =>
+            import("../views/pedagogical-management/document-review.vue"),
+    },
+    {
+        path: "/gestion-pedagogica/asignaciones",
+        name: "pedagogical-coordinator-assignments",
+        meta: {
+            authRequired: true,
+            title: "Ámbitos de coordinación",
+            permission: "pedagogical-coordinators.configure",
+        },
+        component: () =>
+            import("../views/pedagogical-management/coordinator-assignments.vue"),
+    },
+    {
+        path: "/gestion-pedagogica/estadisticas",
+        name: "pedagogical-statistics",
+        meta: {
+            authRequired: true,
+            title: "Evolución y estadísticas",
+            permission: "pedagogical-instruments.statistics",
+        },
+        component: () =>
+            import("../views/pedagogical-management/statistics.vue"),
+    },
+    {
+        path: "/gestion-pedagogica/analisis-instrumentos/:instrumentId?",
+        name: "pedagogical-instrument-analysis",
+        meta: {
+            authRequired: true,
+            title: "Análisis de instrumentos",
+            permission: "pedagogical-instruments.view",
+        },
+        component: () => import("../views/pedagogical-management/index.vue"),
+    },
+    {
         path: "/account/profile",
         name: "account-profile",
         meta: { authRequired: true, title: "Mi ficha" },
@@ -388,6 +442,15 @@ const routes = [
         component: () => import("../views/risk-prevention/trainings.vue"),
     },
     {
+        path: "/risk-prevention/joint-committee",
+        meta: {
+            authRequired: true,
+            title: "Comité Paritario",
+            permissionsAny: ["ver_comite_paritario", "cargar_actas_comite_paritario"],
+        },
+        component: () => import("../views/risk-prevention/joint-committee.vue"),
+    },
+    {
         path: "/risk-prevention/personnel",
         meta: {
             authRequired: true,
@@ -611,7 +674,7 @@ const routes = [
         meta: {
             authRequired: true,
             title: "Niveles",
-            permission: "ver_estudiantes",
+            permission: "ver_configuracion_base_estudiantes",
         },
         component: () => import("../views/students/levels.vue"),
     },
@@ -620,7 +683,7 @@ const routes = [
         meta: {
             authRequired: true,
             title: "Años académicos",
-            permission: "ver_estudiantes",
+            permission: "ver_configuracion_base_estudiantes",
         },
         component: () => import("../views/students/academic-years.vue"),
     },
@@ -629,7 +692,7 @@ const routes = [
         meta: {
             authRequired: true,
             title: "Cursos por año",
-            permission: "ver_estudiantes",
+            permission: "ver_configuracion_base_estudiantes",
         },
         component: () => import("../views/students/courses.vue"),
     },
@@ -1000,7 +1063,7 @@ const routes = [
         meta: {
             authRequired: true,
             title: "Bitácora diaria de Inspectoría",
-            permission: "ver_modulo_inspectoria",
+            permission: "ver_bitacora_inspectoria",
         },
         component: () => import("../views/inspectoria/index.vue"),
     },
@@ -1365,6 +1428,26 @@ const routes = [
         "/remuneraciones/liquidaciones",
         "Liquidaciones de Sueldo",
         "remuneraciones.liquidaciones.calcular"
+    ),
+    remunerationRoute(
+        "/remuneraciones/liquidaciones-sueldo",
+        "Liquidaciones de sueldo importadas",
+        "remuneraciones.liquidaciones_pdf.ver"
+    ),
+    remunerationRoute(
+        "/remuneraciones/matriz-subvenciones",
+        "Matriz por subvención",
+        "remuneraciones.liquidaciones_pdf.ver"
+    ),
+    remunerationRoute(
+        "/remuneraciones/conciliacion-liquidaciones",
+        "Conciliación Libro vs. Liquidaciones",
+        "remuneraciones.liquidaciones_pdf.ver"
+    ),
+    remunerationRoute(
+        "/remuneraciones/importaciones-liquidaciones",
+        "Importaciones de liquidaciones",
+        "remuneraciones.liquidaciones_pdf.ver"
     ),
     remunerationRoute(
         "/remuneraciones/importaciones",
@@ -1818,6 +1901,17 @@ const routes = [
         component: () => import("../views/centro-apuntes/index.vue"),
     },
     {
+        path: "/centro-apuntes/instrumentos-aprobados",
+        name: "pedagogical-print-queue",
+        meta: {
+            authRequired: true,
+            title: "Instrumentos aprobados",
+            permission: "pedagogical-print-requests.view",
+        },
+        component: () =>
+            import("../views/pedagogical-management/print-queue.vue"),
+    },
+    {
         path: "/centro-apuntes/solicitudes",
         meta: {
             authRequired: true,
@@ -2096,6 +2190,15 @@ const routes = [
             permission: "ver_inventario",
         },
         component: () => import("../views/inventory/management.vue"),
+    },
+    {
+        path: "/inventory/epp-deliveries",
+        meta: {
+            authRequired: true,
+            title: "Bodega · Entrega diaria de EPP",
+            permissionsAny: ["ver_entregas_epp", "registrar_entregas_epp"],
+        },
+        component: () => import("../views/risk-prevention/epp.vue"),
     },
     {
         path: "/inventory/categories",

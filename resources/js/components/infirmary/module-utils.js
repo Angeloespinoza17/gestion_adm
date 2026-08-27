@@ -255,7 +255,22 @@ export async function downloadPdfReport(fileName, title, subtitle, sections, con
         {
           width: 125,
           stack: [
-            { text: "INFORME ESTADÍSTICO", style: "reportBadge" },
+            {
+              table: {
+                widths: ["*"],
+                body: [[{ text: "INFORME ESTADÍSTICO", style: "reportBadge" }]],
+              },
+              layout: {
+                fillColor: () => "#3568d4",
+                hLineWidth: () => 0,
+                vLineWidth: () => 0,
+                paddingLeft: () => 8,
+                paddingRight: () => 8,
+                paddingTop: () => 7,
+                paddingBottom: () => 7,
+              },
+              margin: [0, 0, 0, 7],
+            },
             { text: `Generado: ${generatedAt}`, style: "generatedAt" },
           ],
         },
@@ -266,7 +281,67 @@ export async function downloadPdfReport(fileName, title, subtitle, sections, con
   ];
 
   if (context.summary) {
-    content.push({ text: context.summary, style: "executiveSummary" });
+    content.push({
+      table: {
+        widths: [5, "*"],
+        body: [[
+          { text: "", fillColor: "#3568d4" },
+          { stack: [{ text: "RESUMEN EJECUTIVO", style: "summaryLabel" }, { text: context.summary, style: "executiveSummary" }] },
+        ]],
+      },
+      layout: {
+        hLineWidth: () => 0,
+        vLineWidth: () => 0,
+        fillColor: (row, node, column) => (column === 1 ? "#f2f6fc" : null),
+        paddingLeft: (column) => (column === 1 ? 12 : 0),
+        paddingRight: () => 12,
+        paddingTop: () => 10,
+        paddingBottom: () => 10,
+      },
+      margin: [0, 12, 0, 8],
+    });
+  }
+
+  if (context.kpis?.length) {
+    const kpiRows = [];
+    for (let index = 0; index < context.kpis.length; index += 4) {
+      const row = context.kpis.slice(index, index + 4).map((kpi, offset) => ({
+        stack: [
+          { text: String(kpi.value ?? "-"), style: "kpiValue" },
+          { text: String(kpi.label ?? "Indicador"), style: "kpiLabel" },
+        ],
+        fillColor: ["#edf3ff", "#edf9f6", "#fff5ed", "#f4f1ff"][(index + offset) % 4],
+      }));
+      while (row.length < 4) row.push({ text: "", fillColor: "#f8fafc" });
+      kpiRows.push(row);
+    }
+
+    content.push({ text: "Indicadores clave", style: "section" });
+    content.push({
+      table: { widths: ["*", "*", "*", "*"], body: kpiRows },
+      layout: {
+        hLineColor: () => "#ffffff",
+        vLineColor: () => "#ffffff",
+        hLineWidth: () => 3,
+        vLineWidth: () => 3,
+        paddingLeft: () => 9,
+        paddingRight: () => 9,
+        paddingTop: () => 9,
+        paddingBottom: () => 9,
+      },
+      margin: [0, 0, 0, 4],
+    });
+  }
+
+  if (context.findings?.length) {
+    content.push({
+      stack: [
+        { text: "Hallazgos del período", style: "findingTitle" },
+        { ul: context.findings.map((finding) => ({ text: String(finding), style: "findingItem" })), margin: [12, 4, 4, 0] },
+      ],
+      fillColor: "#fbfcfe",
+      margin: [0, 8, 0, 4],
+    });
   }
 
   (sections || []).forEach((section) => {
@@ -291,29 +366,51 @@ export async function downloadPdfReport(fileName, title, subtitle, sections, con
       .concat(section.headers?.length ? [normalizeRow(section.headers)] : [])
       .concat(dataRows);
 
-    content.push({ text: section.title, style: "section", pageBreak: section.pageBreakBefore ? "before" : undefined });
-    if (section.description) {
-      content.push({ text: section.description, style: "sectionDescription" });
-    }
-    content.push({
+    const sectionHeading = {
+      columns: [
+        { width: 4, canvas: [{ type: "rect", x: 0, y: 0, w: 4, h: 15, color: section.accentColor || "#3568d4" }] },
+        { width: "*", text: section.title, style: "sectionTitle" },
+      ],
+      columnGap: 7,
+      margin: [0, 12, 0, 6],
+    };
+    const sectionDescription = section.description
+      ? { text: section.description, style: "sectionDescription", unbreakable: true }
+      : null;
+    const sectionTable = {
       table: {
         headerRows: section.headers?.length ? 1 : 0,
+        dontBreakRows: true,
+        keepWithHeaderRows: section.headers?.length ? 1 : 0,
         widths: section.widths?.length === columnCount ? section.widths : Array(columnCount).fill("*"),
         body: rows,
       },
       layout: {
-        fillColor: (rowIndex) => (rowIndex === 0 && section.headers?.length ? "#eaf0fb" : rowIndex % 2 === 0 ? "#f8fafc" : null),
+        fillColor: (rowIndex) => (rowIndex === 0 && section.headers?.length ? "#e6eefb" : rowIndex % 2 === 0 ? "#f8fafc" : null),
         hLineColor: () => "#dfe5ee",
         vLineColor: () => "#dfe5ee",
         hLineWidth: () => 0.5,
         vLineWidth: () => 0.5,
         paddingLeft: () => 6,
         paddingRight: () => 6,
-        paddingTop: () => 5,
-        paddingBottom: () => 5,
+        paddingTop: () => 5.5,
+        paddingBottom: () => 5.5,
       },
       margin: [0, 0, 0, 8],
-    });
+    };
+    const keepTogether = section.keepTogether ?? dataRows.length <= 5;
+
+    if (keepTogether) {
+      content.push({
+        stack: [sectionHeading, sectionDescription, sectionTable].filter(Boolean),
+        unbreakable: true,
+        pageBreak: section.pageBreakBefore ? "before" : undefined,
+      });
+    } else {
+      content.push({ ...sectionHeading, pageBreak: section.pageBreakBefore ? "before" : undefined });
+      if (sectionDescription) content.push(sectionDescription);
+      content.push(sectionTable);
+    }
   });
 
   if (context.charts?.length) {
@@ -322,6 +419,7 @@ export async function downloadPdfReport(fileName, title, subtitle, sections, con
       columns: context.charts.slice(0, 2).map((chart) => chartColumn(chart)),
       columnGap: 12,
       margin: [0, 0, 0, 12],
+      unbreakable: true,
     });
 
     for (let index = 2; index < context.charts.length; index += 2) {
@@ -329,6 +427,7 @@ export async function downloadPdfReport(fileName, title, subtitle, sections, con
         columns: context.charts.slice(index, index + 2).map((chart) => chartColumn(chart)),
         columnGap: 12,
         margin: [0, 0, 0, 12],
+        unbreakable: true,
       });
     }
   }
@@ -351,12 +450,18 @@ export async function downloadPdfReport(fileName, title, subtitle, sections, con
       eyebrow: { fontSize: 8, bold: true, color: "#3568d4", characterSpacing: 1.1, margin: [0, 0, 0, 3] },
       title: { fontSize: 21, bold: true, color: "#263247" },
       subtitle: { fontSize: 9, color: "#687386", margin: [0, 4, 0, 0] },
-      reportBadge: { fontSize: 8, bold: true, color: "#ffffff", fillColor: "#3568d4", alignment: "center", margin: [0, 5, 0, 5] },
+      reportBadge: { fontSize: 8, bold: true, color: "#ffffff", alignment: "center", characterSpacing: 0.5 },
       generatedAt: { fontSize: 7, color: "#7b8493", alignment: "right" },
-      executiveSummary: { fontSize: 9, color: "#3f4a5c", fillColor: "#f2f6fc", margin: [0, 12, 0, 3] },
+      summaryLabel: { fontSize: 7, bold: true, color: "#3568d4", characterSpacing: 0.8, margin: [0, 0, 0, 3] },
+      executiveSummary: { fontSize: 9, color: "#3f4a5c", lineHeight: 1.25 },
       section: { fontSize: 12, bold: true, color: "#263247", margin: [0, 12, 0, 6] },
+      sectionTitle: { fontSize: 11, bold: true, color: "#263247", margin: [0, 1, 0, 0] },
       sectionDescription: { fontSize: 8, color: "#7b8493", margin: [0, -3, 0, 6] },
       chartTitle: { fontSize: 9, bold: true, color: "#263247", margin: [0, 0, 0, 4] },
+      kpiValue: { fontSize: 16, bold: true, color: "#263247", alignment: "center" },
+      kpiLabel: { fontSize: 7, color: "#687386", alignment: "center", margin: [0, 3, 0, 0] },
+      findingTitle: { fontSize: 9, bold: true, color: "#263247", margin: [10, 8, 10, 2] },
+      findingItem: { fontSize: 8, color: "#4e596b", lineHeight: 1.2, margin: [0, 1, 0, 1] },
     },
     defaultStyle: { fontSize: 8, color: "#354052" },
   }).download(fileName.endsWith(".pdf") ? fileName : `${fileName}.pdf`);

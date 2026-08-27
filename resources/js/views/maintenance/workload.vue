@@ -773,7 +773,7 @@ export default {
   <Layout>
     <div class="workload-page">
       <div class="workload-header">
-        <div>
+        <div class="workload-header-copy">
           <span class="workload-eyebrow">Mantención</span>
           <h4>Carga de trabajo</h4>
           <p>Distribución operativa de OT por responsable y por la ubicación actual de cada bien.</p>
@@ -831,15 +831,15 @@ export default {
         </div>
 
         <div class="workload-filters">
-          <label class="workload-filter-field">
+          <label class="workload-filter-field workload-filter-field--from">
             <span>Desde</span>
             <input v-model="filters.from" type="date" />
           </label>
-          <label class="workload-filter-field">
+          <label class="workload-filter-field workload-filter-field--to">
             <span>Hasta</span>
             <input v-model="filters.to" type="date" />
           </label>
-          <label class="workload-filter-field">
+          <label class="workload-filter-field workload-filter-field--assignee">
             <span>Responsable</span>
             <select v-model="filters.assignee">
               <option value="">Todos</option>
@@ -847,22 +847,23 @@ export default {
               <option value="Sin asignar">Sin asignar</option>
             </select>
           </label>
-          <label class="workload-filter-field workload-filter-field--wide workload-filter-field--location">
-            <span><i class="mdi mdi-map-marker-outline"></i> Dependencia / ubicación del bien</span>
-            <small>Usa la dependencia actual del bien inventariado o la ubicación registrada en la OT.</small>
+          <label class="workload-filter-field workload-filter-field--location">
+            <span title="Usa la dependencia actual del bien inventariado o la ubicación registrada en la OT.">
+              <i class="mdi mdi-map-marker-outline"></i> Dependencia / ubicación del bien
+            </span>
             <select v-model="filters.dependency_id" :disabled="catalogsLoading">
               <option value="">Todas las dependencias</option>
               <option v-for="dep in dependencyOptions" :key="dep.id" :value="dep.id">{{ dependencyOptionLabel(dep) }}</option>
             </select>
           </label>
-          <label class="workload-filter-field">
+          <label class="workload-filter-field workload-filter-field--priority">
             <span>Criticidad</span>
             <select v-model="filters.priority">
               <option value="">Todas</option>
               <option v-for="priority in catalogs.priorities" :key="priority" :value="priority">{{ priority }}</option>
             </select>
           </label>
-          <label class="workload-filter-field">
+          <label class="workload-filter-field workload-filter-field--status">
             <span>Estado</span>
             <select v-model="filters.status">
               <option value="">Todos</option>
@@ -996,10 +997,16 @@ export default {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 18px;
-  padding: 18px 0 16px;
+  gap: 24px;
+  padding: 16px 0 15px;
   border-bottom: 1px solid #e3ebfb;
-  margin-bottom: 20px;
+  margin-bottom: 16px;
+}
+
+.workload-header-copy {
+  flex: 1 1 520px;
+  min-width: 0;
+  max-width: 760px;
 }
 
 .workload-eyebrow {
@@ -1035,6 +1042,13 @@ export default {
   gap: 8px;
 }
 
+.workload-header-actions {
+  flex: 0 1 auto;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  min-width: 0;
+}
+
 .workload-primary-button,
 .workload-secondary-button {
   display: inline-flex;
@@ -1048,6 +1062,7 @@ export default {
   font-size: 14px;
   font-weight: 600;
   line-height: 1;
+  white-space: nowrap;
   transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
 }
 
@@ -1096,8 +1111,8 @@ export default {
 .workload-summary-grid {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 14px;
-  margin-bottom: 20px;
+  gap: 12px;
+  margin-bottom: 16px;
 }
 
 .workload-summary-card {
@@ -1105,8 +1120,8 @@ export default {
   grid-template-columns: 44px minmax(0, 1fr);
   align-items: center;
   gap: 13px;
-  min-height: 112px;
-  padding: 18px;
+  min-height: 102px;
+  padding: 15px;
   border: 1px solid #dfebfb;
   border-radius: 8px;
   background: rgba(255, 255, 255, 0.8);
@@ -1180,7 +1195,7 @@ export default {
 
 .workload-panel,
 .workload-table-panel {
-  padding: 22px;
+  padding: 20px;
   border: 1px solid #dfebfb;
   border-radius: 8px;
   background: rgba(255, 255, 255, 0.84);
@@ -1188,7 +1203,8 @@ export default {
 }
 
 .workload-panel {
-  margin-bottom: 20px;
+  margin-bottom: 16px;
+  padding: 16px 18px;
 }
 
 .workload-panel-head {
@@ -1196,7 +1212,7 @@ export default {
   align-items: flex-start;
   justify-content: space-between;
   gap: 12px;
-  margin-bottom: 16px;
+  margin-bottom: 12px;
 }
 
 .workload-panel-description {
@@ -1228,15 +1244,40 @@ export default {
 
 .workload-filters {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-  gap: 12px;
+  grid-template-areas: "from to assignee location location priority status actions";
+  grid-template-columns: repeat(7, minmax(120px, 1fr)) minmax(252px, auto);
+  gap: 10px 12px;
   align-items: end;
+}
+
+.workload-filter-field--from {
+  grid-area: from;
+}
+
+.workload-filter-field--to {
+  grid-area: to;
+}
+
+.workload-filter-field--assignee {
+  grid-area: assignee;
+}
+
+.workload-filter-field--location {
+  grid-area: location;
+}
+
+.workload-filter-field--priority {
+  grid-area: priority;
+}
+
+.workload-filter-field--status {
+  grid-area: status;
 }
 
 .workload-filter-field {
   display: flex;
   flex-direction: column;
-  gap: 7px;
+  gap: 5px;
   min-width: 0;
   margin: 0;
 }
@@ -1248,18 +1289,10 @@ export default {
   line-height: 1.2;
 }
 
-.workload-filter-field > small {
-  min-height: 30px;
-  color: #7b849c;
-  font-size: 12px;
-  font-weight: 400;
-  line-height: 1.35;
-}
-
 .workload-filter-field input,
 .workload-filter-field select {
   width: 100%;
-  min-height: 44px;
+  min-height: 40px;
   padding: 0 14px;
   border: 1px solid #dce5f4;
   border-radius: 8px;
@@ -1276,16 +1309,8 @@ export default {
   box-shadow: 0 0 0 3px rgba(91, 116, 223, 0.12);
 }
 
-.workload-filter-field--wide {
-  grid-column: span 2;
-}
-
 .workload-filter-field--location {
-  align-self: stretch;
-  padding: 13px;
-  border: 1px solid #d8e3fb;
-  border-radius: 10px;
-  background: linear-gradient(135deg, #f8faff 0%, #f2f6ff 100%);
+  align-self: end;
 }
 
 .workload-filter-field--location > span {
@@ -1298,24 +1323,30 @@ export default {
   vertical-align: -1px;
 }
 
+.workload-filter-field--location select {
+  border-color: #cbd8f6;
+  background: #f7f9ff;
+}
+
 .workload-filter-actions {
-  grid-column: 1 / -1;
-  flex-wrap: wrap;
+  grid-area: actions;
+  flex-wrap: nowrap;
   justify-content: flex-end;
   min-width: 0;
-  padding-top: 2px;
 }
 
 .workload-filter-actions .workload-primary-button,
 .workload-filter-actions .workload-secondary-button {
-  min-width: 130px;
+  flex: 1 1 0;
+  min-width: 0;
+  padding-inline: 10px;
 }
 
 .workload-filter-chips {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-  margin-top: 14px;
+  margin-top: 10px;
 }
 
 .workload-filter-chips span {
@@ -1561,50 +1592,120 @@ export default {
   font-weight: 500;
 }
 
-@media (max-width: 1400px) {
+@media (max-width: 1650px) {
+  .workload-filters {
+    grid-template-areas:
+      "from to assignee actions"
+      "location location priority status";
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 1400px) and (min-width: 1181px) {
+  .workload-header-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    width: min(100%, 444px);
+  }
+}
+
+@media (max-width: 1180px) {
+  .workload-header {
+    flex-direction: column;
+  }
+
+  .workload-header-copy {
+    flex: none;
+    max-width: none;
+    width: 100%;
+  }
+
+  .workload-header-actions {
+    justify-content: flex-start;
+    width: 100%;
+  }
+
   .workload-summary-grid {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
   .workload-filters {
-    grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
-  }
-
-  .workload-filter-actions {
-    justify-content: flex-end;
+    grid-template-areas:
+      "from to assignee"
+      "location location location"
+      "priority status actions";
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }
 
 @media (max-width: 768px) {
   .workload-header,
-  .workload-panel-head {
+  .workload-table-panel .workload-panel-head {
     flex-direction: column;
     align-items: stretch;
   }
 
-  .workload-header-actions,
-  .workload-filter-actions {
-    flex-wrap: wrap;
+  .workload-panel .workload-panel-head {
+    align-items: flex-start;
   }
 
-  .workload-summary-grid,
+  .workload-panel .workload-panel-description {
+    display: none;
+  }
+
+  .workload-header-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .workload-summary-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .workload-summary-card:last-child:nth-child(odd) {
+    grid-column: 1 / -1;
+  }
+
   .workload-filters {
+    grid-template-areas:
+      "from"
+      "to"
+      "assignee"
+      "location"
+      "priority"
+      "status"
+      "actions";
     grid-template-columns: 1fr;
   }
 
-  .workload-filter-field--wide,
-  .workload-filter-actions {
-    grid-column: auto;
-  }
-
-  .workload-filter-actions .workload-primary-button,
-  .workload-filter-actions .workload-secondary-button {
-    flex: 1 1 140px;
-  }
-
-  .workload-panel,
   .workload-table-panel {
     padding: 16px;
+  }
+
+  .workload-panel {
+    padding: 14px;
+  }
+
+  .workload-summary-card {
+    grid-template-columns: 38px minmax(0, 1fr);
+    gap: 10px;
+    min-height: 92px;
+    padding: 13px;
+  }
+
+  .workload-summary-icon {
+    width: 38px;
+    height: 38px;
+    font-size: 19px;
+  }
+
+  .workload-summary-content strong {
+    font-size: 23px;
+  }
+
+  .workload-summary-content small {
+    font-size: 11px;
+    line-height: 1.25;
   }
 
   .workload-location-context {
@@ -1616,4 +1717,5 @@ export default {
     justify-content: center;
   }
 }
+
 </style>

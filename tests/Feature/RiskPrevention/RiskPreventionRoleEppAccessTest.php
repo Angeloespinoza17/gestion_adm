@@ -49,6 +49,10 @@ class RiskPreventionRoleEppAccessTest extends TestCase
             'gestionar_prevencion_riesgos',
             'exportar_prevencion_riesgos',
             'ver_documentos_prevencion_difundibles',
+            'ver_comite_paritario',
+            'cargar_actas_comite_paritario',
+            'ver_entregas_epp',
+            'registrar_entregas_epp',
         ], array_keys(app(RiskMatrixConfigurationInstaller::class)->permissions()));
         $expectedModules = [
             'risk_prevention',
@@ -62,6 +66,7 @@ class RiskPreventionRoleEppAccessTest extends TestCase
             'risk_prevention_emergencies',
             'risk_prevention_epp',
             'risk_prevention_trainings',
+            'risk_prevention_joint_committee',
             'risk_prevention_personnel',
             'risk_prevention_documents',
             'risk_prevention_staff_documents',

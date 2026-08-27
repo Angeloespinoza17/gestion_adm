@@ -365,6 +365,79 @@ class InspectoriaModuleTest extends TestCase
             ->assertJsonPath('data.daily_logs.0.title', 'Apoyo a compañera nueva');
     }
 
+    public function test_authorized_user_can_update_contact_data_with_a_minimal_audit_trail(): void
+    {
+        [, , $student] = $this->academicContext();
+        $originalVersion = $student->fresh()->updated_at->toJSON();
+
+        Carbon::setTestNow('2026-08-10 09:01:00');
+
+        $this->putJson("/api/inspectoria/students/{$student->id}/profile", [
+            'profile_updated_at' => $originalVersion,
+            'registered_name' => 'María José Pérez',
+            'phone' => '+56 9 5555 0101',
+            'address' => 'Los Robles 125',
+            'commune' => 'Valdivia',
+            'guardian_name' => 'Ana Pérez Soto',
+            'guardian_relationship' => 'Madre',
+            'guardian_phone' => '+56 9 4444 0202',
+            'guardian_email' => 'ANA.PEREZ@EXAMPLE.CL',
+            'guardian_address' => 'Los Robles 125',
+            'guardian_commune' => 'Valdivia',
+            'guardian_backup_name' => 'Carlos Pérez',
+            'guardian_backup_phone' => '+56 9 3333 0303',
+            'has_judicial_process' => true,
+        ])->assertOk()
+            ->assertJsonPath('message', 'Datos de la ficha actualizados correctamente.')
+            ->assertJsonPath('data.student.address', 'Los Robles 125')
+            ->assertJsonPath('data.student.guardian_email', 'ana.perez@example.cl')
+            ->assertJsonPath('data.student.updated_by.id', $this->user->id);
+
+        $student->refresh();
+        $this->assertSame('María José Pérez', $student->registered_name);
+        $this->assertSame('+56 9 5555 0101', $student->phone);
+        $this->assertNull($student->has_judicial_process, 'Inspectoría no debe modificar antecedentes judiciales desde esta ficha.');
+        $this->assertSame($this->user->id, $student->updated_by);
+
+        $audit = DB::table('inspectoria_student_profile_change_logs')->sole();
+        $this->assertSame($student->id, $audit->student_profile_id);
+        $this->assertSame($this->user->id, $audit->actor_user_id);
+        $this->assertContains('address', json_decode($audit->changed_fields, true, 512, JSON_THROW_ON_ERROR));
+        $this->assertNotNull($audit->ip_address_hash);
+        $this->assertNull(data_get((array) $audit, 'old_values'));
+        $this->assertNull(data_get((array) $audit, 'new_values'));
+    }
+
+    public function test_profile_update_rejects_stale_versions_and_requires_the_edit_permission(): void
+    {
+        [, , $student] = $this->academicContext();
+        $staleVersion = $student->fresh()->updated_at->toJSON();
+
+        Carbon::setTestNow('2026-08-10 09:02:00');
+        $student->update(['phone' => '+56 9 1111 1111']);
+
+        $this->putJson("/api/inspectoria/students/{$student->id}/profile", [
+            'profile_updated_at' => $staleVersion,
+            'phone' => '+56 9 2222 2222',
+        ])->assertConflict()
+            ->assertJsonPath('message', 'La ficha fue actualizada por otra persona. Vuelve a abrirla antes de guardar tus cambios.');
+
+        $viewer = User::factory()->create(['active' => true]);
+        $viewerRole = Role::query()->create(['slug' => 'lector_fichas_inspectoria', 'name' => 'Lector fichas', 'active' => true]);
+        $viewerRole->permissions()->sync(Permission::query()->whereIn('slug', [
+            'ver_modulo_inspectoria',
+            'ver_fichas_inspectoria',
+        ])->pluck('id'));
+        $viewer->roles()->sync([$viewerRole->id]);
+        Sanctum::actingAs($viewer);
+
+        $this->getJson("/api/inspectoria/students/{$student->id}")->assertOk();
+        $this->putJson("/api/inspectoria/students/{$student->id}/profile", [
+            'profile_updated_at' => $student->fresh()->updated_at->toJSON(),
+            'address' => 'Intento sin permiso',
+        ])->assertForbidden();
+    }
+
     public function test_pickup_restrictions_are_managed_from_social_work_routes(): void
     {
         [, $course, $student] = $this->academicContext();
@@ -525,7 +598,9 @@ class InspectoriaModuleTest extends TestCase
             'asignar_cursos_inspectoria' => true,
             'gestionar_pases_inspectoria' => true,
             'ver_fichas_inspectoria' => true,
+            'editar_fichas_inspectoria' => true,
             'ver_retiros_inspectoria' => true,
+            'ver_bitacora_inspectoria' => true,
             'registrar_bitacora_inspectoria' => true,
             'ver_estadisticas_inspectoria' => true,
         ]);
@@ -651,8 +726,8 @@ class InspectoriaModuleTest extends TestCase
         $inspectorRole = Role::query()->where('slug', 'inspectoria')->firstOrFail();
         $inspectorRole->permissions()->sync(Permission::query()->whereIn('slug', [
             'ver_modulo_inspectoria', 'registrar_atenciones_inspectoria', 'asignar_cursos_inspectoria',
-            'gestionar_pases_inspectoria', 'ver_fichas_inspectoria', 'registrar_bitacora_inspectoria',
-            'ver_retiros_inspectoria',
+            'gestionar_pases_inspectoria', 'ver_fichas_inspectoria', 'editar_fichas_inspectoria', 'registrar_bitacora_inspectoria',
+            'ver_retiros_inspectoria', 'ver_bitacora_inspectoria',
         ])->pluck('id'));
         $this->user->roles()->sync([$inspectorRole->id]);
         $this->user->unsetRelation('roles');
@@ -669,6 +744,14 @@ class InspectoriaModuleTest extends TestCase
         $this->getJson("/api/inspectoria/students/{$assignedStudent->id}")->assertOk()
             ->assertJsonCount(1, 'data.attentions')->assertJsonCount(1, 'data.passes')->assertJsonCount(1, 'data.daily_logs');
         $this->getJson("/api/inspectoria/students/{$otherStudent->id}")->assertForbidden();
+        $this->putJson("/api/inspectoria/students/{$assignedStudent->id}/profile", [
+            'profile_updated_at' => $assignedStudent->fresh()->updated_at->toJSON(),
+            'address' => 'Dirección dentro del curso asignado',
+        ])->assertOk()->assertJsonPath('data.student.address', 'Dirección dentro del curso asignado');
+        $this->putJson("/api/inspectoria/students/{$otherStudent->id}/profile", [
+            'profile_updated_at' => $otherStudent->fresh()->updated_at->toJSON(),
+            'address' => 'Intento fuera del curso asignado',
+        ])->assertForbidden();
         $this->getJson('/api/inspectoria/attentions')->assertOk()
             ->assertJsonPath('total', 1)->assertJsonPath('data.0.student_profile_id', $assignedStudent->id);
         $this->getJson('/api/inspectoria/passes')->assertOk()
@@ -707,6 +790,184 @@ class InspectoriaModuleTest extends TestCase
             'academic_year_id' => $year->id, 'course_section_id' => $otherCourse->id,
             'inspector_staff_id' => $this->inspector->id, 'starts_on' => '2026-08-10', 'active' => true,
         ])->assertForbidden();
+    }
+
+    public function test_inspectors_with_the_same_course_only_see_their_own_logs_attentions_and_referrals(): void
+    {
+        [$year, $course, $student] = $this->academicContext();
+        $otherInspector = Staff::query()->create([
+            'full_name' => 'Inspectora del mismo curso',
+            'rut' => '18.888.888-8',
+            'status' => 'activo',
+            'active' => true,
+        ]);
+        $otherUser = User::factory()->create([
+            'name' => 'Inspectora del mismo curso',
+            'active' => true,
+            'staff_id' => $otherInspector->id,
+        ]);
+
+        foreach ([$this->inspector, $otherInspector] as $inspector) {
+            InspectoriaCourseAssignment::query()->create([
+                'academic_year_id' => $year->id,
+                'course_section_id' => $course->id,
+                'inspector_staff_id' => $inspector->id,
+                'physical_location' => 'Pabellón compartido',
+                'starts_on' => '2026-03-01',
+                'active' => true,
+            ]);
+        }
+
+        $ownAttention = InspectoriaAttention::query()->create([
+            'attention_code' => 'INS-ATE-2026-OWN1',
+            'student_profile_id' => $student->id,
+            'course_section_id' => $course->id,
+            'inspector_staff_id' => $this->inspector->id,
+            'attended_by_user_id' => $this->user->id,
+            'attended_at' => '2026-08-10 09:10:00',
+            'request_types' => ['orientacion'],
+            'actions_taken' => ['derivacion_psicosocial'],
+            'priority' => 'normal',
+            'status' => 'registrada',
+            'student_name_snapshot' => $student->registered_name_resolved,
+            'course_name_snapshot' => $course->display_name,
+            'created_by' => $this->user->id,
+            'updated_by' => $this->user->id,
+        ]);
+        $otherAttention = InspectoriaAttention::query()->create([
+            'attention_code' => 'INS-ATE-2026-OWN2',
+            'student_profile_id' => $student->id,
+            'course_section_id' => $course->id,
+            'inspector_staff_id' => $otherInspector->id,
+            'attended_by_user_id' => $otherUser->id,
+            'attended_at' => '2026-08-10 09:20:00',
+            'request_types' => ['orientacion'],
+            'actions_taken' => ['derivacion_psicosocial'],
+            'priority' => 'normal',
+            'status' => 'registrada',
+            'student_name_snapshot' => $student->registered_name_resolved,
+            'course_name_snapshot' => $course->display_name,
+            'created_by' => $otherUser->id,
+            'updated_by' => $otherUser->id,
+        ]);
+        $ownDailyLog = InspectoriaDailyLog::query()->create([
+            'student_profile_id' => $student->id,
+            'course_section_id' => $course->id,
+            'inspector_staff_id' => $this->inspector->id,
+            'registered_by_user_id' => $this->user->id,
+            'happened_at' => '2026-08-10 10:10:00',
+            'category' => 'novedad',
+            'priority' => 'media',
+            'status' => 'registrado',
+            'title' => 'Registro de la primera inspectora',
+            'detail' => 'Antecedente visible solo para quien lo registró.',
+            'requires_follow_up' => false,
+            'created_by' => $this->user->id,
+            'updated_by' => $this->user->id,
+        ]);
+        $otherDailyLog = InspectoriaDailyLog::query()->create([
+            'student_profile_id' => $student->id,
+            'course_section_id' => $course->id,
+            'inspector_staff_id' => $otherInspector->id,
+            'registered_by_user_id' => $otherUser->id,
+            'happened_at' => '2026-08-10 10:20:00',
+            'category' => 'novedad',
+            'priority' => 'media',
+            'status' => 'registrado',
+            'title' => 'Registro de la segunda inspectora',
+            'detail' => 'Antecedente privado de la segunda inspectora.',
+            'requires_follow_up' => false,
+            'created_by' => $otherUser->id,
+            'updated_by' => $otherUser->id,
+        ]);
+        $ownReferral = Referral::query()->create([
+            'inspectoria_attention_id' => $ownAttention->id,
+            'student_profile_id' => $student->id,
+            'course_section_id' => $course->id,
+            'referral_date' => '2026-08-10',
+            'source_unit' => 'Inspectoría',
+            'reason' => 'Derivación de la primera inspectora',
+            'urgency' => 'normal',
+            'status' => 'enviada',
+            'confidentiality' => 'restringido',
+            'created_by' => $this->user->id,
+            'updated_by' => $this->user->id,
+        ]);
+        Referral::query()->create([
+            'inspectoria_attention_id' => $otherAttention->id,
+            'student_profile_id' => $student->id,
+            'course_section_id' => $course->id,
+            'referral_date' => '2026-08-10',
+            'source_unit' => 'Inspectoría',
+            'reason' => 'Derivación de la segunda inspectora',
+            'urgency' => 'normal',
+            'status' => 'enviada',
+            'confidentiality' => 'restringido',
+            'assigned_user_id' => $this->user->id,
+            'created_by' => $otherUser->id,
+            'updated_by' => $otherUser->id,
+        ]);
+
+        $inspectorRole = Role::query()->where('slug', 'inspectoria')->firstOrFail();
+        $inspectorRole->permissions()->syncWithoutDetaching(Permission::query()->whereIn('slug', [
+            'ver_modulo_inspectoria',
+            'registrar_atenciones_inspectoria',
+            'ver_fichas_inspectoria',
+            'ver_bitacora_inspectoria',
+            'registrar_bitacora_inspectoria',
+            'social_work.referrals.submit',
+        ])->pluck('id'));
+        $this->user->roles()->sync([$inspectorRole->id]);
+        $this->user->unsetRelation('roles');
+        $otherUser->roles()->sync([$inspectorRole->id]);
+        Sanctum::actingAs($this->user);
+
+        $this->getJson('/api/inspectoria/attentions')->assertOk()
+            ->assertJsonPath('total', 1)
+            ->assertJsonPath('data.0.id', $ownAttention->id);
+        $this->getJson('/api/inspectoria/daily-log')->assertOk()
+            ->assertJsonPath('total', 1)
+            ->assertJsonPath('data.0.id', $ownDailyLog->id);
+        $this->getJson("/api/inspectoria/students/{$student->id}")->assertOk()
+            ->assertJsonCount(1, 'data.attentions')
+            ->assertJsonPath('data.attentions.0.id', $ownAttention->id)
+            ->assertJsonCount(1, 'data.daily_logs')
+            ->assertJsonPath('data.daily_logs.0.id', $ownDailyLog->id);
+        $this->getJson('/api/social-work/referrals')->assertOk()
+            ->assertJsonPath('total', 1)
+            ->assertJsonPath('data.0.id', $ownReferral->id);
+        $this->putJson("/api/inspectoria/daily-log/{$otherDailyLog->id}", [
+            'student_profile_id' => $student->id,
+            'course_section_id' => $course->id,
+            'happened_at' => '2026-08-10 10:25:00',
+            'category' => 'novedad',
+            'is_staff_lateness' => false,
+            'priority' => 'media',
+            'status' => 'registrado',
+            'title' => 'Intento de edición cruzada',
+            'detail' => 'Este cambio no debe persistirse.',
+            'requires_follow_up' => false,
+        ])->assertForbidden();
+        $this->assertSame('Registro de la segunda inspectora', $otherDailyLog->fresh()->title);
+
+        Sanctum::actingAs($otherUser);
+        $this->getJson('/api/inspectoria/attentions')->assertOk()
+            ->assertJsonPath('total', 1)
+            ->assertJsonPath('data.0.id', $otherAttention->id);
+        $this->getJson('/api/inspectoria/daily-log')->assertOk()
+            ->assertJsonPath('total', 1)
+            ->assertJsonPath('data.0.id', $otherDailyLog->id);
+
+        $coordinator = User::factory()->create(['active' => true]);
+        $coordinator->roles()->sync([
+            Role::query()->where('slug', 'coordinador_inspectoria')->firstOrFail()->id,
+        ]);
+        Sanctum::actingAs($coordinator);
+
+        $this->getJson('/api/inspectoria/attentions')->assertOk()
+            ->assertJsonPath('total', 2);
+        $this->getJson('/api/inspectoria/daily-log')->assertOk()
+            ->assertJsonPath('total', 2);
     }
 
     /** @return array{AcademicYear, CourseSection, StudentProfile} */

@@ -9,6 +9,7 @@ use App\Models\RiskPrevention\RiskPreventionEmergencyPlan;
 use App\Models\RiskPrevention\RiskPreventionEppDelivery;
 use App\Models\RiskPrevention\RiskPreventionEppItem;
 use App\Models\RiskPrevention\RiskPreventionFireExtinguisher;
+use App\Models\RiskPrevention\RiskPreventionJointCommittee;
 use App\Models\RiskPrevention\RiskPreventionStaffRequirementType;
 use App\Models\RiskPrevention\RiskPreventionTrainingParticipant;
 use App\Models\Staff;
@@ -75,6 +76,10 @@ class RiskPreventionCatalogController extends Controller
                 ['Presencial', 'Online', 'Mixta'],
                 [],
             ),
+            'joint_committees' => RiskPreventionJointCommittee::query()
+                ->where('active', true)
+                ->orderByDesc('starts_on')
+                ->get(['id', 'name', 'starts_on', 'ends_on']),
             'personnel_requirements' => RiskPreventionStaffRequirementType::query()
                 ->where('active', true)
                 ->orderBy('sort_order')

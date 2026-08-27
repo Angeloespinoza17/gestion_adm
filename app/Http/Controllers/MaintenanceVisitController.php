@@ -19,17 +19,44 @@ class MaintenanceVisitController extends Controller
 {
     public function index(Request $request): JsonResponse
     {
+        $validated = $request->validate([
+            'responsible_staff_id' => [
+                'nullable',
+                'integer',
+                Rule::exists('staff', 'id')
+                    ->where('active', true)
+                    ->where('can_receive_maintenance_orders', true),
+            ],
+            'per_page' => ['nullable', 'integer', 'min:1', 'max:1000'],
+        ]);
         $search = trim((string) $request->query('search'));
         $responsible = trim((string) $request->query('responsible'));
+        $responsibleStaffId = isset($validated['responsible_staff_id'])
+            ? (int) $validated['responsible_staff_id']
+            : null;
+        $responsibleStaffName = $responsibleStaffId
+            ? Staff::query()->whereKey($responsibleStaffId)->value('full_name')
+            : null;
         $status = trim((string) $request->query('status'));
         $type = trim((string) $request->query('visit_type'));
         $from = trim((string) $request->query('from'));
         $to = trim((string) $request->query('to'));
         $dependencyId = $request->query('dependency_id');
 
-        $visits = MaintenanceVisit::query()
-            ->with('dependency:id,code,name,distribution,sector,zone,usage')
+        $query = MaintenanceVisit::query()
             ->when($dependencyId, fn ($query) => $query->where('maintenance_dependency_id', $dependencyId))
+            ->when($responsibleStaffId, function ($query) use ($responsibleStaffId, $responsibleStaffName) {
+                $query->where(function ($query) use ($responsibleStaffId, $responsibleStaffName) {
+                    $query->where('responsible_staff_id', $responsibleStaffId);
+
+                    if ($responsibleStaffName) {
+                        $query->orWhere(function ($query) use ($responsibleStaffName) {
+                            $query->whereNull('responsible_staff_id')
+                                ->where('responsible', $responsibleStaffName);
+                        });
+                    }
+                });
+            })
             ->when($responsible !== '', fn ($query) => $query->where('responsible', $responsible))
             ->when($status !== '', fn ($query) => $query->where('status', $status))
             ->when($type !== '', fn ($query) => $query->where('visit_type', $type))
@@ -44,12 +71,26 @@ class MaintenanceVisitController extends Controller
                         ->orWhere('sector', 'like', "%{$search}%")
                         ->orWhere('zone', 'like', "%{$search}%");
                 });
-            })
-            ->orderByDesc('visit_date')
-            ->orderByDesc('created_at')
-            ->paginate((int) $request->query('per_page', 15));
+            });
 
-        return response()->json($visits);
+        $statusTotals = (clone $query)
+            ->select('status')
+            ->selectRaw('COUNT(*) AS total')
+            ->groupBy('status')
+            ->pluck('total', 'status')
+            ->map(fn ($total) => (int) $total)
+            ->all();
+
+        $visits = $query
+            ->with('dependency:id,code,name,distribution,sector,zone,usage')
+            ->orderByDesc('visit_date')
+            ->orderByDesc('visit_time')
+            ->orderByDesc('created_at')
+            ->paginate((int) ($validated['per_page'] ?? 15));
+
+        return response()->json(array_merge($visits->toArray(), [
+            'status_totals' => $statusTotals,
+        ]));
     }
 
     public function store(Request $request): JsonResponse
@@ -88,12 +129,14 @@ class MaintenanceVisitController extends Controller
 
     public function catalogs(): JsonResponse
     {
+        $assignees = $this->maintenanceAssigneeCatalog();
+
         return response()->json([
             'visit_types' => ['Inspección', 'Mantención', 'Reunión', 'Otro'],
             'statuses' => ['Programada', 'En progreso', 'Finalizada', 'Cancelada'],
             'review_statuses' => ['OK', 'No OK', 'N/A'],
-            'responsibles' => $this->responsibles(),
-            'maintenance_assignees' => $this->maintenanceAssigneeCatalog(),
+            'responsibles' => collect($assignees)->pluck('full_name')->values()->all(),
+            'maintenance_assignees' => $assignees,
             'dependencies' => MaintenanceDependency::query()
                 ->maintenanceLocations()
                 ->where('active', true)
@@ -244,7 +287,7 @@ class MaintenanceVisitController extends Controller
         $visitTypes = ['Inspección', 'Mantención', 'Reunión', 'Otro'];
         $statuses = ['Programada', 'En progreso', 'Finalizada', 'Cancelada'];
 
-        return $request->validate([
+        $validated = $request->validate([
             'maintenance_dependency_id' => [
                 'required',
                 'integer',
@@ -260,6 +303,21 @@ class MaintenanceVisitController extends Controller
             'status' => ['required', 'string', Rule::in($statuses)],
             'notes' => ['nullable', 'string'],
         ]);
+
+        $responsibleStaffId = $this->maintenanceAssigneeQuery()
+            ->where('full_name', $validated['responsible'])
+            ->value('id');
+        $currentVisit = collect($request->route()?->parameters() ?? [])
+            ->first(fn ($parameter) => $parameter instanceof MaintenanceVisit);
+
+        if (! $responsibleStaffId && $currentVisit instanceof MaintenanceVisit
+            && $currentVisit->responsible === $validated['responsible']) {
+            $responsibleStaffId = $currentVisit->responsible_staff_id;
+        }
+
+        $validated['responsible_staff_id'] = $responsibleStaffId ? (int) $responsibleStaffId : null;
+
+        return $validated;
     }
 
     private function responsibles(): array

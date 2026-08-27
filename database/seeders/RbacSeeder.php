@@ -104,6 +104,7 @@ class RbacSeeder extends Seeder
 
             // Estudiantes
             ['slug' => 'ver_estudiantes', 'name' => 'Ver Estudiantes'],
+            ['slug' => 'ver_configuracion_base_estudiantes', 'name' => 'Ver Configuración Base de Estudiantes'],
             ['slug' => 'crear_estudiantes', 'name' => 'Crear Estudiantes'],
             ['slug' => 'editar_estudiantes', 'name' => 'Editar Estudiantes'],
             ['slug' => 'eliminar_estudiantes', 'name' => 'Eliminar Estudiantes'],
@@ -146,13 +147,16 @@ class RbacSeeder extends Seeder
             ['slug' => 'asignar_cursos_inspectoria', 'name' => 'Asignar Cursos a Inspectoras'],
             ['slug' => 'gestionar_pases_inspectoria', 'name' => 'Gestionar Pases Prioritarios de Inspectoría'],
             ['slug' => 'ver_fichas_inspectoria', 'name' => 'Ver Fichas de Alumnas en Inspectoría'],
+            ['slug' => 'editar_fichas_inspectoria', 'name' => 'Editar Datos de Contacto en Fichas de Inspectoría'],
             ['slug' => 'ver_retiros_inspectoria', 'name' => 'Ver Retiros de Alumnas en Inspectoría'],
             ['slug' => 'social_work.referrals.submit', 'name' => 'Enviar Derivaciones a Trabajo Social'],
             ['slug' => 'social_work.pickup_restrictions.manage', 'name' => 'Gestionar Restricciones de Retiro en Trabajo Social'],
             ['slug' => 'registrar_bitacora_inspectoria', 'name' => 'Registrar Bitácora Diaria de Inspectoría'],
+            ['slug' => 'ver_bitacora_inspectoria', 'name' => 'Ver Bitácora de Inspectoría'],
             ['slug' => 'ver_estadisticas_inspectoria', 'name' => 'Ver Estadísticas de Inspectoría'],
             ['slug' => 'ver_licencias_medicas_estudiantes', 'name' => 'Ver Licencias Médicas de Estudiantes'],
             ['slug' => 'crear_licencias_medicas_estudiantes', 'name' => 'Registrar Licencias Médicas de Estudiantes'],
+            ['slug' => 'editar_licencias_medicas_estudiantes', 'name' => 'Editar Licencias Médicas de Estudiantes'],
 
             // Módulos específicos
             ['slug' => 'ver_salud', 'name' => 'Ver Enfermería / Salud'],
@@ -162,6 +166,10 @@ class RbacSeeder extends Seeder
             ['slug' => 'gestionar_prevencion_riesgos', 'name' => 'Gestionar Prevención de Riesgos'],
             ['slug' => 'exportar_prevencion_riesgos', 'name' => 'Exportar Prevención de Riesgos'],
             ['slug' => 'ver_documentos_prevencion_difundibles', 'name' => 'Ver Documentos Difundibles de Prevención'],
+            ['slug' => 'ver_comite_paritario', 'name' => 'Ver Comité Paritario'],
+            ['slug' => 'cargar_actas_comite_paritario', 'name' => 'Cargar actas del Comité Paritario'],
+            ['slug' => 'ver_entregas_epp', 'name' => 'Ver entregas de EPP en Bodega'],
+            ['slug' => 'registrar_entregas_epp', 'name' => 'Registrar entregas de EPP en Bodega'],
 
             // Mantención
             ['slug' => 'ver_mantencion', 'name' => 'Ver Mantención'],
@@ -258,6 +266,21 @@ class RbacSeeder extends Seeder
             ['slug' => 'registrar_rondas_seguridad', 'name' => 'Registrar Rondas de Seguridad'],
             ['slug' => 'gestionar_novedades_rondas', 'name' => 'Gestionar Novedades de Rondas'],
             ['slug' => 'exportar_rondas_seguridad', 'name' => 'Exportar Rondas de Seguridad'],
+
+            // Gestión pedagógica y flujo hacia Centro de Apuntes
+            ['slug' => 'pedagogical-instruments.view', 'name' => 'Ver instrumentos pedagógicos'],
+            ['slug' => 'pedagogical-instruments.create', 'name' => 'Cargar instrumentos pedagógicos'],
+            ['slug' => 'pedagogical-instruments.update', 'name' => 'Rectificar instrumentos pedagógicos'],
+            ['slug' => 'pedagogical-instruments.download', 'name' => 'Ver archivos de instrumentos pedagógicos'],
+            ['slug' => 'pedagogical-instruments.review-assigned', 'name' => 'Revisar instrumentos pedagógicos asignados'],
+            ['slug' => 'pedagogical-instruments.decide', 'name' => 'Resolver revisión documental pedagógica'],
+            ['slug' => 'pedagogical-instruments.ai-report', 'name' => 'Generar informe pedagógico con IA'],
+            ['slug' => 'pedagogical-guidance.manage', 'name' => 'Gestionar documentos de orientación pedagógica'],
+            ['slug' => 'pedagogical-coordinators.configure', 'name' => 'Configurar alcance de coordinaciones académicas'],
+            ['slug' => 'pedagogical-print-requests.view', 'name' => 'Ver instrumentos aprobados para impresión'],
+            ['slug' => 'pedagogical-print-requests.download', 'name' => 'Descargar instrumentos aprobados'],
+            ['slug' => 'pedagogical-print-requests.print', 'name' => 'Imprimir instrumentos aprobados'],
+            ['slug' => 'pedagogical-print-requests.complete', 'name' => 'Completar impresión pedagógica'],
         ];
 
         foreach ($permissions as $permission) {
@@ -286,6 +309,10 @@ class RbacSeeder extends Seeder
             ['slug' => 'students_reports', 'name' => 'Reportes', 'frontend_route' => '/students/reports', 'icon' => null, 'sort' => 7, 'parent' => 'students'],
             ['slug' => 'students_attendance_statistics', 'name' => 'Estadísticas de asistencia', 'frontend_route' => '/students/attendance-statistics', 'icon' => null, 'sort' => 8, 'parent' => 'students'],
             ['slug' => 'students_grade_statistics', 'name' => 'Estadísticas de calificaciones', 'frontend_route' => '/students/grade-statistics', 'icon' => 'bx-line-chart', 'sort' => 10, 'parent' => 'students'],
+            ['slug' => 'pedagogical_management', 'name' => 'Gestión pedagógica', 'frontend_route' => null, 'icon' => 'bx-book-content', 'sort' => 22],
+            ['slug' => 'pedagogical_my_instruments', 'name' => 'Mis instrumentos', 'frontend_route' => '/gestion-pedagogica/instrumentos', 'icon' => 'bx-file', 'sort' => 1, 'parent' => 'pedagogical_management'],
+            ['slug' => 'pedagogical_document_review', 'name' => 'Revisión documental', 'frontend_route' => '/gestion-pedagogica/revision-documental', 'icon' => 'bx-check-shield', 'sort' => 2, 'parent' => 'pedagogical_management'],
+            ['slug' => 'pedagogical_coordinator_assignments', 'name' => 'Asignar coordinadoras', 'frontend_route' => '/gestion-pedagogica/asignaciones', 'icon' => 'bx-sitemap', 'sort' => 3, 'parent' => 'pedagogical_management'],
             ['slug' => 'schedule', 'name' => 'Horarios docentes', 'frontend_route' => null, 'icon' => 'bx-calendar-event', 'sort' => 23],
             ['slug' => 'inspectoria', 'name' => 'Inspectoría', 'frontend_route' => null, 'icon' => 'bx-shield-quarter', 'sort' => 24],
             ['slug' => 'inspectoria_atenciones', 'name' => 'Atención rápida', 'frontend_route' => '/inspectoria/atenciones', 'icon' => null, 'sort' => 1, 'parent' => 'inspectoria'],
@@ -352,6 +379,7 @@ class RbacSeeder extends Seeder
             ['slug' => 'risk_prevention_emergencies', 'name' => 'Emergencias y planes', 'frontend_route' => '/risk-prevention/emergencies', 'icon' => null, 'sort' => 30, 'parent' => 'risk_prevention'],
             ['slug' => 'risk_prevention_epp', 'name' => 'EPP y seguridad', 'frontend_route' => '/risk-prevention/epp', 'icon' => null, 'sort' => 40, 'parent' => 'risk_prevention'],
             ['slug' => 'risk_prevention_trainings', 'name' => 'Capacitaciones', 'frontend_route' => '/risk-prevention/trainings', 'icon' => null, 'sort' => 50, 'parent' => 'risk_prevention'],
+            ['slug' => 'risk_prevention_joint_committee', 'name' => 'Comité Paritario', 'frontend_route' => '/risk-prevention/joint-committee', 'icon' => null, 'sort' => 55, 'parent' => 'risk_prevention'],
             ['slug' => 'risk_prevention_personnel', 'name' => 'Gestión del personal', 'frontend_route' => '/risk-prevention/personnel', 'icon' => null, 'sort' => 60, 'parent' => 'risk_prevention'],
             ['slug' => 'risk_prevention_documents', 'name' => 'Gestión documental empresa', 'frontend_route' => '/risk-prevention/documents', 'icon' => null, 'sort' => 70, 'parent' => 'risk_prevention'],
             ['slug' => 'risk_prevention_staff_documents', 'name' => 'Gestión documental', 'frontend_route' => '/risk-prevention/document-management', 'icon' => null, 'sort' => 80, 'parent' => 'risk_prevention'],
@@ -370,6 +398,7 @@ class RbacSeeder extends Seeder
             ['slug' => 'inventory', 'name' => 'Inventario', 'frontend_route' => null, 'icon' => 'bx-box', 'sort' => 100],
             ['slug' => 'inventory_items', 'name' => 'Bienes', 'frontend_route' => '/inventory/items', 'icon' => null, 'sort' => 1, 'parent' => 'inventory'],
             ['slug' => 'inventory_management', 'name' => 'Gestión de inventario', 'frontend_route' => '/inventory/management', 'icon' => null, 'sort' => 2, 'parent' => 'inventory'],
+            ['slug' => 'inventory_epp_deliveries', 'name' => 'Entrega diaria de EPP', 'frontend_route' => '/inventory/epp-deliveries', 'icon' => null, 'sort' => 3, 'parent' => 'inventory'],
             ['slug' => 'inventory_categories', 'name' => 'Categorías', 'frontend_route' => '/inventory/categories', 'icon' => null, 'sort' => 3, 'parent' => 'inventory'],
             ['slug' => 'inventory_suppliers', 'name' => 'Proveedores', 'frontend_route' => '/inventory/suppliers', 'icon' => null, 'sort' => 4, 'parent' => 'inventory'],
             ['slug' => 'inventory_reports', 'name' => 'Reportes', 'frontend_route' => '/inventory/reports', 'icon' => null, 'sort' => 5, 'parent' => 'inventory'],
@@ -435,6 +464,7 @@ class RbacSeeder extends Seeder
             ['slug' => 'rrhh', 'name' => 'RRHH / Administración', 'description' => 'Gestión administrativa y documental del personal.'],
             ['slug' => 'direccion', 'name' => 'Dirección', 'description' => 'Dirección del establecimiento.'],
             ['slug' => 'coordinador_academico', 'name' => 'Coordinador Académico', 'description' => 'Coordinación académica.'],
+            ['slug' => 'coordinadora_academica', 'name' => 'Coordinadora Académica', 'description' => 'Gestión académica y operativa, con acceso integral a Estudiantes excepto su configuración base y consulta de la Bitácora de Inspectoría.'],
             ['slug' => 'subdirector', 'name' => 'Subdirector/a', 'description' => 'Visación de solicitudes institucionales.'],
             ['slug' => 'psicologo', 'name' => 'Psicólogo/a', 'description' => 'Acceso a módulo Psicología.'],
             ['slug' => 'enfermeria', 'name' => 'Enfermería', 'description' => 'Acceso a módulo Enfermería.'],
@@ -605,11 +635,26 @@ class RbacSeeder extends Seeder
             'registrar_atenciones_inspectoria',
             'gestionar_pases_inspectoria',
             'ver_fichas_inspectoria',
+            'editar_fichas_inspectoria',
             'ver_retiros_inspectoria',
             'registrar_bitacora_inspectoria',
             'ver_estadisticas_inspectoria',
             'ver_licencias_medicas_estudiantes',
             'crear_licencias_medicas_estudiantes',
+            'editar_licencias_medicas_estudiantes',
+            'pedagogical-instruments.view',
+            'pedagogical-instruments.create',
+            'pedagogical-instruments.update',
+            'pedagogical-instruments.download',
+            'pedagogical-instruments.review-assigned',
+            'pedagogical-instruments.decide',
+            'pedagogical-instruments.ai-report',
+            'pedagogical-guidance.manage',
+            'pedagogical-coordinators.configure',
+            'pedagogical-print-requests.view',
+            'pedagogical-print-requests.download',
+            'pedagogical-print-requests.print',
+            'pedagogical-print-requests.complete',
         ]));
 
         $rolesBySlug['administrador']->modules()->sync($this->ids($modulesBySlug, [
@@ -702,6 +747,12 @@ class RbacSeeder extends Seeder
             'settings_modules',
             'settings_cargos',
             'settings_organigram',
+            'pedagogical_management',
+            'pedagogical_my_instruments',
+            'pedagogical_document_review',
+            'pedagogical_coordinator_assignments',
+            'centro_apuntes',
+            'centro_apuntes_pedagogical_queue',
         ]));
 
         // Dirección: reportes + mantención lectura
@@ -756,6 +807,19 @@ class RbacSeeder extends Seeder
             'ver_reportes_carga_horaria',
             'grade_statistics.view',
             'grade_statistics.view_students',
+            'pedagogical-instruments.view',
+            'pedagogical-instruments.create',
+            'pedagogical-instruments.update',
+            'pedagogical-instruments.download',
+            'pedagogical-instruments.review-assigned',
+            'pedagogical-instruments.decide',
+            'pedagogical-instruments.ai-report',
+            'pedagogical-guidance.manage',
+            'pedagogical-coordinators.configure',
+            'pedagogical-print-requests.view',
+            'pedagogical-print-requests.download',
+            'pedagogical-print-requests.print',
+            'pedagogical-print-requests.complete',
         ]));
 
         $rolesBySlug['direccion']->modules()->sync($this->ids($modulesBySlug, [
@@ -825,6 +889,12 @@ class RbacSeeder extends Seeder
             'inspectoria_estadisticas',
             'inspectoria_medical_leaves',
             'infirmary_medical_leaves',
+            'pedagogical_management',
+            'pedagogical_my_instruments',
+            'pedagogical_document_review',
+            'pedagogical_coordinator_assignments',
+            'centro_apuntes',
+            'centro_apuntes_pedagogical_queue',
         ]));
 
         // Coordinación académica
@@ -869,6 +939,13 @@ class RbacSeeder extends Seeder
             'ver_reportes_carga_horaria',
             'ver_traslados_operativos',
             'solicitar_traslados_operativos',
+            'pedagogical-instruments.view',
+            'pedagogical-instruments.review-assigned',
+            'pedagogical-instruments.download',
+            'pedagogical-instruments.decide',
+            'pedagogical-instruments.ai-report',
+            'pedagogical-guidance.manage',
+            'pedagogical-coordinators.configure',
         ]));
 
         $rolesBySlug['coordinador_academico']->modules()->sync($this->ids($modulesBySlug, [
@@ -910,6 +987,88 @@ class RbacSeeder extends Seeder
             'schedule_conflicts',
             'operational_management',
             'operational_transfers_requests',
+            'pedagogical_management',
+            'pedagogical_document_review',
+            'pedagogical_coordinator_assignments',
+        ]));
+
+        // Coordinadora académica: perfil operativo y estudiantil sin configuración base.
+        $rolesBySlug['coordinadora_academica']->permissions()->sync($this->ids($permissionsBySlug, [
+            'ver_dashboard',
+            'ver_estudiantes',
+            'crear_estudiantes',
+            'editar_estudiantes',
+            'eliminar_estudiantes',
+            'ver_ficha_estudiante',
+            'gestionar_matriculas_estudiantes',
+            'promover_estudiantes',
+            'grade_statistics.view',
+            'grade_statistics.view_students',
+            'ver_asistencia',
+            'importar_asistencia',
+            'importar_calificaciones',
+            'editar_asistencia',
+            'gestionar_alertas_asistencia',
+            'proyectar_ingresos_asistencia',
+            'attendance_statistics.view',
+            'attendance_statistics.view_global',
+            'attendance_statistics.view_course',
+            'attendance_statistics.view_student',
+            'attendance_statistics.view_financial',
+            'attendance_statistics.view_sensitive_segments',
+            'attendance_statistics.export',
+            'attendance_statistics.configure',
+            'attendance_statistics.manage_goals',
+            'attendance_statistics.manage_alerts',
+            'attendance_statistics.manage_interventions',
+            'attendance_statistics.manage_reports',
+            'attendance_statistics.view_audit',
+            'attendance_management.view',
+            'attendance_management.view_all',
+            'attendance_management.manage_cases',
+            'attendance_management.manage_interventions',
+            'attendance_management.manage_causes',
+            'attendance_management.manage_action_plans',
+            'attendance_management.export',
+            'attendance_management.view_sensitive',
+            'attendance_management.configure',
+            'ver_traslados_operativos',
+            'solicitar_traslados_operativos',
+            'visar_traslados_operativos',
+            'gestionar_traslados_operativos',
+            'exportar_traslados_operativos',
+            'rrhh.ausencias.ver',
+            'rrhh.seleccion.ver',
+            'ver_bitacora_inspectoria',
+            'pedagogical-instruments.view',
+            'pedagogical-instruments.review-assigned',
+            'pedagogical-instruments.download',
+            'pedagogical-instruments.decide',
+            'pedagogical-instruments.ai-report',
+            'pedagogical-guidance.manage',
+        ]));
+
+        $rolesBySlug['coordinadora_academica']->modules()->sync($this->ids($modulesBySlug, [
+            'dashboard',
+            'students',
+            'students_directory',
+            'students_promotions',
+            'students_movements',
+            'students_reports',
+            'students_attendance_statistics',
+            'students_attendance_management',
+            'students_grade_statistics',
+            'operational_management',
+            'operational_transfers_requests',
+            'operational_transfers_review',
+            'operational_transfers_management',
+            'operational_transfers_reports',
+            'hr_absence_management',
+            'hr_recruitment_management',
+            'inspectoria',
+            'inspectoria_bitacora',
+            'pedagogical_management',
+            'pedagogical_document_review',
         ]));
 
         // RRHH / Administración
@@ -1163,6 +1322,10 @@ class RbacSeeder extends Seeder
             'gestionar_prevencion_riesgos',
             'exportar_prevencion_riesgos',
             'ver_documentos_prevencion_difundibles',
+            'ver_comite_paritario',
+            'cargar_actas_comite_paritario',
+            'ver_entregas_epp',
+            'registrar_entregas_epp',
             ...array_keys(app(RiskMatrixConfigurationInstaller::class)->permissions()),
             'ver_mantencion',
             'ver_reportes_mantencion',
@@ -1192,10 +1355,13 @@ class RbacSeeder extends Seeder
             'risk_prevention_emergencies',
             'risk_prevention_epp',
             'risk_prevention_trainings',
+            'risk_prevention_joint_committee',
             'risk_prevention_personnel',
             'risk_prevention_documents',
             'risk_prevention_staff_documents',
             'risk_prevention_reports',
+            'inventory',
+            'inventory_epp_deliveries',
             'spaces',
             'spaces_approvers',
             'spaces_reservations',
@@ -1219,12 +1385,14 @@ class RbacSeeder extends Seeder
             'registrar_atenciones_inspectoria',
             'gestionar_pases_inspectoria',
             'ver_fichas_inspectoria',
+            'editar_fichas_inspectoria',
             'ver_retiros_inspectoria',
             'social_work.referrals.submit',
             'registrar_bitacora_inspectoria',
             'ver_estadisticas_inspectoria',
             'ver_licencias_medicas_estudiantes',
             'crear_licencias_medicas_estudiantes',
+            'editar_licencias_medicas_estudiantes',
             'ver_dashboard',
             'ver_estudiantes',
             'ver_ficha_estudiante',
@@ -1309,12 +1477,14 @@ class RbacSeeder extends Seeder
             'asignar_cursos_inspectoria',
             'gestionar_pases_inspectoria',
             'ver_fichas_inspectoria',
+            'editar_fichas_inspectoria',
             'ver_retiros_inspectoria',
             'social_work.referrals.submit',
             'registrar_bitacora_inspectoria',
             'ver_estadisticas_inspectoria',
             'ver_licencias_medicas_estudiantes',
             'crear_licencias_medicas_estudiantes',
+            'editar_licencias_medicas_estudiantes',
         ]));
 
         $rolesBySlug['coordinador_inspectoria']->modules()->sync($this->ids($modulesBySlug, [
@@ -1368,6 +1538,10 @@ class RbacSeeder extends Seeder
             'ver_reportes_carga_horaria',
             'ver_traslados_operativos',
             'solicitar_traslados_operativos',
+            'pedagogical-instruments.view',
+            'pedagogical-instruments.create',
+            'pedagogical-instruments.update',
+            'pedagogical-instruments.download',
         ]));
 
         $rolesBySlug['docente']->modules()->sync($this->ids($modulesBySlug, [
@@ -1384,6 +1558,8 @@ class RbacSeeder extends Seeder
             'schedule_teacher',
             'operational_management',
             'operational_transfers_requests',
+            'pedagogical_management',
+            'pedagogical_my_instruments',
         ]));
 
         // Portería
@@ -1438,6 +1614,25 @@ class RbacSeeder extends Seeder
             'tasks',
             'tasks_backlog',
         ]));
+
+        $baseConfigurationPermission = $permissionsBySlug->get('ver_configuracion_base_estudiantes');
+        if ($baseConfigurationPermission) {
+            Role::query()
+                ->where('slug', '!=', 'coordinadora_academica')
+                ->whereHas('permissions', fn ($query) => $query->where('slug', 'ver_estudiantes'))
+                ->each(fn (Role $role) => $role->permissions()->syncWithoutDetaching([$baseConfigurationPermission->id]));
+        }
+
+        $dailyLogViewPermission = $permissionsBySlug->get('ver_bitacora_inspectoria');
+        if ($dailyLogViewPermission) {
+            Role::query()
+                ->where('slug', '!=', 'coordinadora_academica')
+                ->whereHas('permissions', fn ($query) => $query->whereIn('slug', [
+                    'ver_modulo_inspectoria',
+                    'registrar_bitacora_inspectoria',
+                ]))
+                ->each(fn (Role $role) => $role->permissions()->syncWithoutDetaching([$dailyLogViewPermission->id]));
+        }
     }
 
     /**

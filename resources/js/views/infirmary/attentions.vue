@@ -13,6 +13,13 @@ import {
   QUICK_ATTENTION_RESULTS,
 } from "../../components/infirmary/quick-attention";
 import {
+  MENTAL_HEALTH_CATEGORY,
+  MENTAL_HEALTH_EVENT_OPTIONS,
+  SELF_HARM_INJURY_OPTIONS,
+  mentalHealthCategorizationError,
+  normalizeMentalHealthCategorization,
+} from "../../components/infirmary/mental-health-categorization";
+import {
   confirmInfirmaryAction,
   confirmInfirmaryCancel,
   formatInfirmaryDateTime,
@@ -51,6 +58,8 @@ export default {
         users: [],
         medications: [],
         attention_categories: [],
+        mental_health_event_options: [],
+        self_harm_injury_options: [],
         accident_location_options: [],
         school_insurance_certificate: {},
         companion_staff: {},
@@ -131,6 +140,12 @@ export default {
     isFormAccident() {
       return this.isAccidentCategory(this.form.attention_category);
     },
+    isFormMentalHealth() {
+      return this.form.attention_category === MENTAL_HEALTH_CATEGORY;
+    },
+    isFormSelfHarm() {
+      return this.isFormMentalHealth && this.form.mental_health_event_type === "autolesion";
+    },
     attentionCategoryLabels() {
       return normalizeOptions(this.catalogs.attention_categories).reduce((labels, item) => {
         labels[item.value] = item.text;
@@ -152,6 +167,24 @@ export default {
         labels[item.value] = item.text;
         return labels;
       }, {});
+    },
+    mentalHealthEventOptions() {
+      return normalizeOptions(
+        this.catalogs.mental_health_event_options?.length
+          ? this.catalogs.mental_health_event_options
+          : MENTAL_HEALTH_EVENT_OPTIONS,
+        true,
+        "Seleccione"
+      );
+    },
+    selfHarmInjuryOptions() {
+      return normalizeOptions(
+        this.catalogs.self_harm_injury_options?.length
+          ? this.catalogs.self_harm_injury_options
+          : SELF_HARM_INJURY_OPTIONS,
+        true,
+        "Seleccione"
+      );
     },
     dependencyOptions() {
       return [{ value: null, text: "Sin dependencia" }].concat(
@@ -279,6 +312,11 @@ export default {
   },
   watch: {
     "form.attention_category"(value) {
+      if (value !== MENTAL_HEALTH_CATEGORY) {
+        this.form.mental_health_event_type = null;
+        this.form.self_harm_injury_type = null;
+      }
+
       if (!this.isAccidentCategory(value)) {
         this.form.accident_location_type = null;
         this.form.dependency_id = null;
@@ -288,6 +326,11 @@ export default {
 
       if (!this.form.accident_location_type) {
         this.form.accident_location_type = "colegio";
+      }
+    },
+    "form.mental_health_event_type"(value) {
+      if (value !== "autolesion") {
+        this.form.self_harm_injury_type = null;
       }
     },
     "form.accident_location_type"(value) {
@@ -316,6 +359,12 @@ export default {
     normalizeOptions,
     attentionCategoryLabel(value) {
       return this.attentionCategoryLabels[value] || humanizeInfirmaryStatus(value);
+    },
+    mentalHealthEventLabel(value) {
+      return this.optionLabel(this.mentalHealthEventOptions, value);
+    },
+    selfHarmInjuryLabel(value) {
+      return this.optionLabel(this.selfHarmInjuryOptions, value);
     },
     accidentLocationLabel(value) {
       return this.accidentLocationLabels[value] || humanizeInfirmaryStatus(value);
@@ -469,6 +518,9 @@ export default {
     isAccidentCategory(value) {
       return ["accidente_menor", "accidente_mayor"].includes(value);
     },
+    isMentalHealthCategory(value) {
+      return value === MENTAL_HEALTH_CATEGORY;
+    },
     requiresCompanionStaffType(type) {
       return ["inspectora", "asistente_aula"].includes(type);
     },
@@ -576,6 +628,8 @@ export default {
         student_profile_id: null,
         student_label: "",
         attention_category: "accidente_menor",
+        mental_health_event_type: null,
+        self_harm_injury_type: null,
         accident_location_type: "colegio",
         occurred_at: toInputDateTime(new Date().toISOString()),
         attended_at: toInputDateTime(new Date().toISOString()),
@@ -853,6 +907,33 @@ export default {
         const reference = this.accidentReference(detail);
         const student = this.studentName(detail);
         const fileName = `ficha_atencion_${String(detail.correlative_number || detail.id).padStart(5, "0")}_${this.pdfFileSegment(student)}.pdf`;
+        const attentionDataRows = [
+          ["Fecha del evento", this.formatDateOnly(detail.occurred_at || detail.attended_at)],
+          ["Hora del evento", this.formatTimeOnly(detail.occurred_at || detail.attended_at)],
+          ["Fecha de registro", this.formatInfirmaryDateTime(detail.attended_at)],
+          ["Categorización", this.attentionCategoryLabel(detail.attention_category)],
+        ];
+
+        if (detail.attention_category === MENTAL_HEALTH_CATEGORY) {
+          attentionDataRows.push([
+            "Tipo de atención de salud mental",
+            this.mentalHealthEventLabel(detail.mental_health_event_type),
+          ]);
+
+          if (detail.mental_health_event_type === "autolesion") {
+            attentionDataRows.push([
+              "Tipo de lesión por autolesión",
+              this.selfHarmInjuryLabel(detail.self_harm_injury_type),
+            ]);
+          }
+        }
+
+        attentionDataRows.push(
+          ["Ubicación", detail.accident_location_type ? this.accidentLocationLabel(detail.accident_location_type) : "-"],
+          ["Dependencia", this.dependencyLabel(detail)],
+          ["Quién acompaña", this.companionSummary(detail)],
+          ["Derivación", this.attentionDerivationLabel(detail)],
+        );
         const content = [
           { text: "Ficha de Atención de Enfermería", style: "title" },
           {
@@ -865,16 +946,7 @@ export default {
             ["Curso", detail.course_name_snapshot || detail.course_section?.display_name],
             ["N° correlativo", reference],
           ]),
-          ...this.pdfKeyValueSection("Datos de la atención", [
-            ["Fecha de accidente", this.formatDateOnly(detail.occurred_at || detail.attended_at)],
-            ["Hora de accidente", this.formatTimeOnly(detail.occurred_at || detail.attended_at)],
-            ["Fecha de registro", this.formatInfirmaryDateTime(detail.attended_at)],
-            ["Tipo de accidente", this.attentionCategoryLabel(detail.attention_category)],
-            ["Ubicación", detail.accident_location_type ? this.accidentLocationLabel(detail.accident_location_type) : "-"],
-            ["Dependencia", this.dependencyLabel(detail)],
-            ["Quién acompaña", this.companionSummary(detail)],
-            ["Derivación", this.attentionDerivationLabel(detail)],
-          ]),
+          ...this.pdfKeyValueSection("Datos de la atención", attentionDataRows),
           ...this.pdfKeyValueSection("Detalle clínico", [
             ["Motivo de consulta", detail.consultation_reason],
             ["Circunstancia del accidente", detail.accident_circumstance],
@@ -1179,6 +1251,27 @@ export default {
                 <label class="form-label">Categoría</label>
                 <select id="swal-attention-category" class="form-select">${this.swalSelectOptions(this.catalogs.attention_categories, "accidente_menor")}</select>
               </div>
+              <div id="swal-mental-health-wrapper" class="col-12 d-none">
+                <div class="infirmary-mental-health-panel">
+                  <div class="infirmary-mental-health-panel__heading">
+                    <span><i class="bx bx-heart"></i></span>
+                    <div>
+                      <strong>Categorización de salud mental</strong>
+                      <small>Selecciona el evento observado. Registra solo antecedentes necesarios para la atención.</small>
+                    </div>
+                  </div>
+                  <div class="infirmary-field-grid">
+                    <div>
+                      <label class="form-label" for="swal-mental-health-event-type">Tipo de atención</label>
+                      <select id="swal-mental-health-event-type" class="form-select">${this.swalSelectOptions(this.mentalHealthEventOptions, null)}</select>
+                    </div>
+                    <div id="swal-self-harm-injury-wrapper" class="d-none">
+                      <label class="form-label" for="swal-self-harm-injury-type">Tipo de lesión por autolesión</label>
+                      <select id="swal-self-harm-injury-type" class="form-select">${this.swalSelectOptions(this.selfHarmInjuryOptions, null)}</select>
+                    </div>
+                  </div>
+                </div>
+              </div>
               <div id="swal-accident-location-wrapper" class="col-md-4">
                 <label class="form-label">Tipo de accidente</label>
                 <select id="swal-accident-location-type" class="form-select">${this.swalSelectOptions(this.accidentLocationOptions, "colegio")}</select>
@@ -1411,6 +1504,10 @@ export default {
           const occurredAtInput = popup.querySelector("#swal-occurred-at");
           const attendedAtInput = popup.querySelector("#swal-attended-at");
           const categorySelect = popup.querySelector("#swal-attention-category");
+          const mentalHealthWrapper = popup.querySelector("#swal-mental-health-wrapper");
+          const mentalHealthEventSelect = popup.querySelector("#swal-mental-health-event-type");
+          const selfHarmInjuryWrapper = popup.querySelector("#swal-self-harm-injury-wrapper");
+          const selfHarmInjurySelect = popup.querySelector("#swal-self-harm-injury-type");
           const accidentLocationWrapper = popup.querySelector("#swal-accident-location-wrapper");
           const accidentLocationSelect = popup.querySelector("#swal-accident-location-type");
           const dependencyWrapper = popup.querySelector("#swal-dependency-wrapper");
@@ -1479,6 +1576,28 @@ export default {
             if (!isAccident) {
               accidentCircumstanceInput.value = "";
             }
+          };
+
+          const syncMentalHealthFields = () => {
+            const isMentalHealth = categorySelect.value === MENTAL_HEALTH_CATEGORY;
+            mentalHealthWrapper.classList.toggle("d-none", !isMentalHealth);
+
+            if (!isMentalHealth) {
+              mentalHealthEventSelect.value = "";
+              selfHarmInjurySelect.value = "";
+            }
+
+            const isSelfHarm = isMentalHealth && mentalHealthEventSelect.value === "autolesion";
+            selfHarmInjuryWrapper.classList.toggle("d-none", !isSelfHarm);
+
+            if (!isSelfHarm) {
+              selfHarmInjurySelect.value = "";
+            }
+          };
+
+          const syncCategorizationFields = () => {
+            syncAccidentFields();
+            syncMentalHealthFields();
           };
 
           const checkedValues = (selector) => Array.from(popup.querySelectorAll(selector))
@@ -1687,7 +1806,8 @@ export default {
               occurredAtInput.value = attendedAtInput.value;
             }
           });
-          categorySelect.addEventListener("change", syncAccidentFields);
+          categorySelect.addEventListener("change", syncCategorizationFields);
+          mentalHealthEventSelect.addEventListener("change", syncMentalHealthFields);
           accidentLocationSelect.addEventListener("change", syncAccidentFields);
           companionTypeSelect.addEventListener("change", syncCompanionFields);
           registerCallInput.addEventListener("change", syncCallFields);
@@ -1695,7 +1815,7 @@ export default {
           popup.querySelectorAll(".swal-treatment-category").forEach((input) => {
             input.addEventListener("change", syncTreatmentFields);
           });
-          syncAccidentFields();
+          syncCategorizationFields();
           syncCompanionFields();
           syncCallContacts();
           syncCallFields();
@@ -1756,6 +1876,15 @@ export default {
           }
 
           const attentionCategory = value("swal-attention-category") || "accidente_menor";
+          const mentalHealthCategorization = normalizeMentalHealthCategorization({
+            attentionCategory,
+            mentalHealthEventType: value("swal-mental-health-event-type"),
+            selfHarmInjuryType: value("swal-self-harm-injury-type"),
+          });
+          const mentalHealthError = mentalHealthCategorizationError({
+            attentionCategory,
+            ...mentalHealthCategorization,
+          });
           const occurredAt = value("swal-occurred-at");
           const attendedAt = value("swal-attended-at");
           const isAccident = this.isAccidentCategory(attentionCategory);
@@ -1778,6 +1907,11 @@ export default {
           const hasPhoneCall = Boolean(popup.querySelector("#swal-register-call")?.checked);
           const callPerson = value("swal-call-person");
           const callSummary = value("swal-call-summary");
+
+          if (mentalHealthError) {
+            Swal.showValidationMessage(mentalHealthError);
+            return false;
+          }
 
           if (!occurredAt) {
             Swal.showValidationMessage("Ingresa la fecha de accidente.");
@@ -1822,6 +1956,8 @@ export default {
           return {
             student_profile_id: selectedStudent.id,
             attention_category: attentionCategory,
+            mental_health_event_type: mentalHealthCategorization.mentalHealthEventType,
+            self_harm_injury_type: mentalHealthCategorization.selfHarmInjuryType,
             accident_location_type: accidentLocationType,
             occurred_at: occurredAt,
             attended_at: attendedAt,
@@ -1909,6 +2045,8 @@ export default {
         student_profile_id: attention.student_profile_id,
         student_label: attention.student ? `${attention.student.first_name} ${attention.student.last_name}` : attention.student_full_name_snapshot,
         attention_category: attention.attention_category || "accidente_menor",
+        mental_health_event_type: attention.mental_health_event_type || null,
+        self_harm_injury_type: attention.self_harm_injury_type || null,
         accident_location_type: attention.accident_location_type || (this.isAccidentCategory(attention.attention_category) ? "colegio" : null),
         occurred_at: toInputDateTime(attention.occurred_at || attention.attended_at),
         attended_at: toInputDateTime(attention.attended_at),
@@ -2021,6 +2159,15 @@ export default {
       this.saving = true;
       try {
         const isAccident = this.isAccidentCategory(this.form.attention_category);
+        const mentalHealthCategorization = normalizeMentalHealthCategorization({
+          attentionCategory: this.form.attention_category,
+          mentalHealthEventType: this.form.mental_health_event_type,
+          selfHarmInjuryType: this.form.self_harm_injury_type,
+        });
+        const mentalHealthError = mentalHealthCategorizationError({
+          attentionCategory: this.form.attention_category,
+          ...mentalHealthCategorization,
+        });
         const accidentLocationType = isAccident ? (this.form.accident_location_type || "colegio") : null;
         const dependencyId = isAccident && accidentLocationType === "colegio" ? this.form.dependency_id : null;
         const accompaniedByType = this.form.accompanied_by_type || "sin_acompanante";
@@ -2030,6 +2177,11 @@ export default {
         const accompaniedByName = this.usesCompanionNameType(accompaniedByType)
           ? this.form.accompanied_by_name || null
           : null;
+
+        if (mentalHealthError) {
+          await showInfirmaryWarning(mentalHealthError);
+          return;
+        }
 
         if (!this.form.occurred_at) {
           await showInfirmaryWarning("Ingresa la fecha de accidente.");
@@ -2064,6 +2216,8 @@ export default {
         const payload = {
           ...this.form,
           referred_by_staff_id: null,
+          mental_health_event_type: mentalHealthCategorization.mentalHealthEventType,
+          self_harm_injury_type: mentalHealthCategorization.selfHarmInjuryType,
           accident_location_type: accidentLocationType,
           dependency_id: dependencyId,
           accompanied_by_type: accompaniedByType,
@@ -2382,9 +2536,16 @@ export default {
             <strong>{{ formatInfirmaryDateTime(selectedAttention.attended_at) }}</strong>
           </div>
           <div class="infirmary-view-field">
-            <span>Tipo de accidente</span>
+            <span>Categorización</span>
             <strong>{{ attentionCategoryLabel(selectedAttention.attention_category) }}</strong>
             <small v-if="selectedAttention.accident_location_type">{{ accidentLocationLabel(selectedAttention.accident_location_type) }}</small>
+          </div>
+          <div v-if="isMentalHealthCategory(selectedAttention.attention_category)" class="infirmary-view-field infirmary-view-field--mental-health">
+            <span>Tipo de atención de salud mental</span>
+            <strong>{{ mentalHealthEventLabel(selectedAttention.mental_health_event_type) }}</strong>
+            <small v-if="selectedAttention.mental_health_event_type === 'autolesion'">
+              {{ selfHarmInjuryLabel(selectedAttention.self_harm_injury_type) }}
+            </small>
           </div>
           <div class="infirmary-view-field">
             <span>Dependencia</span>
@@ -2702,6 +2863,27 @@ export default {
         <div class="col-md-4">
           <label class="form-label">Categoría</label>
           <BFormSelect v-model="form.attention_category" :options="normalizeOptions(catalogs.attention_categories)" />
+        </div>
+        <div v-if="isFormMentalHealth" class="col-12">
+          <div class="infirmary-mental-health-panel">
+            <div class="infirmary-mental-health-panel__heading">
+              <span><i class="bx bx-heart"></i></span>
+              <div>
+                <strong>Categorización de salud mental</strong>
+                <small>Selecciona el evento observado. Registra solo antecedentes necesarios para la atención.</small>
+              </div>
+            </div>
+            <div class="infirmary-field-grid">
+              <div>
+                <label class="form-label">Tipo de atención</label>
+                <BFormSelect v-model="form.mental_health_event_type" :options="mentalHealthEventOptions" />
+              </div>
+              <div v-if="isFormSelfHarm">
+                <label class="form-label">Tipo de lesión por autolesión</label>
+                <BFormSelect v-model="form.self_harm_injury_type" :options="selfHarmInjuryOptions" />
+              </div>
+            </div>
+          </div>
         </div>
         <div class="col-md-4" v-if="isFormAccident">
           <label class="form-label">Tipo de accidente</label>
@@ -3025,6 +3207,60 @@ export default {
 </template>
 
 <style>
+.infirmary-mental-health-panel {
+  background: linear-gradient(135deg, #f7f3ff 0%, #f1f8ff 58%, #f8fbff 100%);
+  border: 1px solid #d8d4f1;
+  border-radius: 12px;
+  box-shadow: 0 10px 26px rgba(73, 74, 137, 0.07);
+  padding: 1rem;
+}
+
+.infirmary-mental-health-panel__heading {
+  align-items: center;
+  display: flex;
+  gap: 0.75rem;
+  margin-bottom: 0.9rem;
+}
+
+.infirmary-mental-health-panel__heading > span {
+  align-items: center;
+  background: #fff;
+  border: 1px solid #ddd7f4;
+  border-radius: 10px;
+  color: #6858b8;
+  display: inline-flex;
+  flex: 0 0 2.65rem;
+  font-size: 1.35rem;
+  height: 2.65rem;
+  justify-content: center;
+}
+
+.infirmary-mental-health-panel__heading strong,
+.infirmary-mental-health-panel__heading small {
+  display: block;
+}
+
+.infirmary-mental-health-panel__heading strong {
+  color: #37355b;
+  font-size: 0.94rem;
+}
+
+.infirmary-mental-health-panel__heading small {
+  color: #77758f;
+  font-size: 0.76rem;
+  line-height: 1.4;
+  margin-top: 0.15rem;
+}
+
+.infirmary-view-field--mental-health {
+  background: linear-gradient(135deg, #faf7ff, #f4f9ff);
+  border-color: #d9d5ee;
+}
+
+.infirmary-view-field--mental-health strong {
+  color: #56499a;
+}
+
 .infirmary-treatment-area {
   min-width: 0;
 }

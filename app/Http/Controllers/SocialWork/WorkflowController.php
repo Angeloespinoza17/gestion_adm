@@ -123,7 +123,7 @@ class WorkflowController extends Controller
         return response()->json(['message' => 'Recepción registrada sin determinar responsabilidades.', 'data' => $record], 201);
     }
 
-    public function referrals(Request $request): JsonResponse
+    public function referrals(Request $request, InspectoriaAccessService $inspectoria): JsonResponse
     {
         $search = trim((string) $request->query('search'));
         $query = Referral::with([
@@ -133,7 +133,9 @@ class WorkflowController extends Controller
             'creator:id,name',
             'case:id,code,title',
         ]);
-        if (! $request->user()->hasPermission('social_work.referrals.manage')) {
+        if ($inspectoria->isCourseScoped($request->user())) {
+            $query->where('created_by', $request->user()->id);
+        } elseif (! $request->user()->hasPermission('social_work.referrals.manage')) {
             $query->where(fn (Builder $visibility) => $visibility
                 ->where('created_by', $request->user()->id)
                 ->orWhere('assigned_user_id', $request->user()->id));

@@ -4,6 +4,7 @@ namespace App\Services\Inspectoria;
 
 use App\Models\AcademicYear;
 use App\Models\Inspectoria\InspectoriaCourseAssignment;
+use App\Models\Inspectoria\InspectoriaDailyLog;
 use App\Models\StudentProfile;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Builder;
@@ -21,20 +22,28 @@ class InspectoriaAccessService
 
     public const STUDENTS = 'ver_fichas_inspectoria';
 
+    public const EDIT_STUDENT_PROFILES = 'editar_fichas_inspectoria';
+
     public const WITHDRAWALS = 'ver_retiros_inspectoria';
 
     public const RESTRICTIONS = 'social_work.pickup_restrictions.manage';
 
     public const DAILY_LOG = 'registrar_bitacora_inspectoria';
 
+    public const VIEW_DAILY_LOG = 'ver_bitacora_inspectoria';
+
     public const STATISTICS = 'ver_estadisticas_inspectoria';
 
     /** @var array<int, Collection<int, int>> */
     private array $assignedCourseIds = [];
 
+    private ?int $currentAcademicYearId = null;
+
+    private bool $currentAcademicYearResolved = false;
+
     public function canView(?User $user): bool
     {
-        return $this->hasAny($user, [self::VIEW, self::ATTENTIONS, self::ASSIGNMENTS, self::PASSES, self::STUDENTS, self::WITHDRAWALS, self::DAILY_LOG, self::STATISTICS]);
+        return $this->hasAny($user, [self::VIEW, self::ATTENTIONS, self::ASSIGNMENTS, self::PASSES, self::STUDENTS, self::WITHDRAWALS, self::VIEW_DAILY_LOG, self::DAILY_LOG, self::STATISTICS]);
     }
 
     public function can(?User $user, string $permission): bool
@@ -84,13 +93,43 @@ class InspectoriaAccessService
         return $query->whereIn($column, $this->assignedCourseIds($user));
     }
 
+    public function scopeAttentions(Builder $query, User $user): Builder
+    {
+        if (! $this->isCourseScoped($user)) {
+            return $query;
+        }
+
+        $this->scopeOwnedRecords($query, $user, 'attended_by_user_id');
+
+        return $query->whereIn('course_section_id', $this->assignedCourseIds($user));
+    }
+
     public function scopeDailyLogs(Builder $query, User $user): Builder
     {
         if (! $this->isCourseScoped($user)) {
             return $query;
         }
 
+        return $this->scopeCourseScopedDailyLogs($query, $user);
+    }
+
+    public function canAccessDailyLog(User $user, InspectoriaDailyLog $entry): bool
+    {
+        if (! $this->isCourseScoped($user)) {
+            return true;
+        }
+
+        return $this->scopeCourseScopedDailyLogs(
+            InspectoriaDailyLog::query()->whereKey($entry->getKey()),
+            $user,
+        )->exists();
+    }
+
+    private function scopeCourseScopedDailyLogs(Builder $query, User $user): Builder
+    {
         $courseIds = $this->assignedCourseIds($user);
+
+        $this->scopeOwnedRecords($query, $user, 'registered_by_user_id');
 
         return $query->where(function (Builder $inner) use ($courseIds, $user) {
             $inner->whereIn('course_section_id', $courseIds)
@@ -118,14 +157,26 @@ class InspectoriaAccessService
         }
 
         $courseIds = $this->assignedCourseIds($user);
-        $activeYearId = AcademicYear::query()->where('is_active', true)->value('id');
+        $currentAcademicYearId = $this->currentAcademicYearId();
 
-        return $courseIds->isNotEmpty() && StudentProfile::query()
+        return $currentAcademicYearId !== null && $courseIds->isNotEmpty() && StudentProfile::query()
             ->whereKey($studentId)
             ->whereHas('enrollments', fn (Builder $query) => $query
                 ->whereIn('course_section_id', $courseIds)
-                ->when($activeYearId, fn (Builder $inner) => $inner->where('academic_year_id', $activeYearId)))
+                ->where('academic_year_id', $currentAcademicYearId))
             ->exists();
+    }
+
+    public function currentAcademicYearId(): ?int
+    {
+        if (! $this->currentAcademicYearResolved) {
+            $this->currentAcademicYearId = AcademicYear::query()
+                ->where('year', today()->year)
+                ->value('id');
+            $this->currentAcademicYearResolved = true;
+        }
+
+        return $this->currentAcademicYearId;
     }
 
     private function hasAny(?User $user, array $permissions): bool
@@ -145,5 +196,19 @@ class InspectoriaAccessService
         }
 
         return false;
+    }
+
+    private function scopeOwnedRecords(Builder $query, User $user, string $ownerColumn): Builder
+    {
+        return $query->where(function (Builder $owner) use ($ownerColumn, $user) {
+            $owner->where($ownerColumn, $user->id);
+
+            if ($user->staff_id) {
+                $owner->orWhere(function (Builder $legacy) use ($ownerColumn, $user) {
+                    $legacy->whereNull($ownerColumn)
+                        ->where('inspector_staff_id', $user->staff_id);
+                });
+            }
+        });
     }
 }

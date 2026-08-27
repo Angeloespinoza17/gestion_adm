@@ -5,7 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\InventoryItem;
 use App\Models\MaintenanceDependency;
 use App\Models\MaintenanceWorkOrder;
-use App\Models\Staff;
+use App\Models\User;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -20,6 +20,10 @@ use Illuminate\Validation\ValidationException;
 
 class MaintenanceWorkOrderController extends Controller
 {
+    private const EXPLICIT_ASSIGNEE_NAME_TERMS = [
+        ['Sebastian', 'Matamala'],
+    ];
+
     public function index(Request $request): JsonResponse
     {
         $search = trim((string) $request->query('search'));
@@ -35,6 +39,8 @@ class MaintenanceWorkOrderController extends Controller
                 'technicalArea:id,code,name,parent_dependency_id,distribution,sector,zone,usage',
                 'inventoryItem:id,code,name,dependency_id,status,condition',
                 'closedByUser:id,name',
+                'createdByUser:id,name',
+                'assigneeUsers:id,name',
             ])
             ->when($search !== '', function ($query) use ($search) {
                 $query->where(function ($query) use ($search) {
@@ -94,6 +100,11 @@ class MaintenanceWorkOrderController extends Controller
     public function store(Request $request): JsonResponse
     {
         $payload = $this->validated($request);
+        $assignedUserIds = Arr::pull($payload, 'assigned_user_ids', []);
+        $actor = $request->user();
+
+        $payload['created_by_user_id'] = $actor?->id;
+        $payload['requested_by'] = Str::squish((string) $actor?->name) ?: null;
 
         if ($payload['status'] === 'Terminado' && ! empty($payload['resolution_notes'])) {
             $payload['closed_at'] = now();
@@ -108,6 +119,7 @@ class MaintenanceWorkOrderController extends Controller
         }
 
         $workOrder = MaintenanceWorkOrder::create($payload);
+        $this->syncAssigneeUsers($workOrder, $assignedUserIds);
 
         return response()->json([
             'message' => 'Orden de trabajo creada correctamente.',
@@ -116,6 +128,8 @@ class MaintenanceWorkOrderController extends Controller
                 'technicalArea:id,code,name,parent_dependency_id,distribution,sector,zone,usage',
                 'inventoryItem:id,code,name,dependency_id,status,condition',
                 'closedByUser:id,name',
+                'createdByUser:id,name',
+                'assigneeUsers:id,name',
             ]),
         ], 201);
     }
@@ -128,6 +142,8 @@ class MaintenanceWorkOrderController extends Controller
                 'technicalArea:id,code,name,parent_dependency_id,distribution,sector,zone,usage',
                 'inventoryItem:id,code,name,dependency_id,status,condition',
                 'closedByUser:id,name',
+                'createdByUser:id,name',
+                'assigneeUsers:id,name',
             ]),
         ]);
     }
@@ -135,6 +151,12 @@ class MaintenanceWorkOrderController extends Controller
     public function update(Request $request, MaintenanceWorkOrder $maintenanceWorkOrder): JsonResponse
     {
         $payload = $this->validated($request);
+        $shouldSyncAssignees = array_key_exists('assigned_user_ids', $payload);
+        $assignedUserIds = Arr::pull($payload, 'assigned_user_ids', []);
+        $creatorName = $maintenanceWorkOrder->createdByUser?->name;
+
+        $payload['requested_by'] = $maintenanceWorkOrder->requested_by
+            ?: (Str::squish((string) $creatorName) ?: null);
 
         if ($payload['status'] === 'Terminado' && ! empty($payload['resolution_notes'])) {
             $payload['closed_at'] = $maintenanceWorkOrder->closed_at ?: now();
@@ -153,6 +175,10 @@ class MaintenanceWorkOrderController extends Controller
 
         $maintenanceWorkOrder->update($payload);
 
+        if ($shouldSyncAssignees) {
+            $this->syncAssigneeUsers($maintenanceWorkOrder, $assignedUserIds);
+        }
+
         return response()->json([
             'message' => 'Orden de trabajo actualizada correctamente.',
             'data' => $maintenanceWorkOrder->load([
@@ -160,6 +186,8 @@ class MaintenanceWorkOrderController extends Controller
                 'technicalArea:id,code,name,parent_dependency_id,distribution,sector,zone,usage',
                 'inventoryItem:id,code,name,dependency_id,status,condition',
                 'closedByUser:id,name',
+                'createdByUser:id,name',
+                'assigneeUsers:id,name',
             ]),
         ]);
     }
@@ -191,6 +219,8 @@ class MaintenanceWorkOrderController extends Controller
                 'technicalArea:id,code,name,parent_dependency_id,distribution,sector,zone,usage',
                 'inventoryItem:id,code,name,dependency_id,status,condition',
                 'closedByUser:id,name',
+                'createdByUser:id,name',
+                'assigneeUsers:id,name',
             ]),
         ]);
     }
@@ -233,6 +263,8 @@ class MaintenanceWorkOrderController extends Controller
                 'technicalArea:id,code,name,parent_dependency_id,distribution,sector,zone,usage',
                 'inventoryItem:id,code,name,dependency_id,status,condition',
                 'closedByUser:id,name',
+                'createdByUser:id,name',
+                'assigneeUsers:id,name',
             ]),
         ]);
     }
@@ -254,29 +286,19 @@ class MaintenanceWorkOrderController extends Controller
         ]);
     }
 
-    public function catalogs(): JsonResponse
+    public function catalogs(Request $request): JsonResponse
     {
-        return response()->json([
+        $catalogs = [
             'priorities' => ['Crítico', 'Alta', 'Media', 'Baja'],
             'statuses' => ['Sin comenzar', 'En proceso', 'En espera', 'Pausado', 'Terminado', 'Anulado'],
             'assignees' => $this->assignees(),
             'maintenance_assignees' => $this->maintenanceAssigneeCatalog(),
             'requesters' => $this->requesters(),
+            'current_user' => [
+                'id' => $request->user()?->id,
+                'name' => $request->user()?->name,
+            ],
             'dependency_components' => $this->dependencyComponents(),
-            'dependencies' => MaintenanceDependency::query()
-                ->maintenanceLocations()
-                ->where('active', true)
-                ->orderBy('code')
-                ->get([
-                    'id',
-                    'code',
-                    'name',
-                    'distribution',
-                    'sector',
-                    'zone',
-                    'usage',
-                    'is_maintenance_location',
-                ]),
             'technical_areas' => MaintenanceDependency::query()
                 ->technicalAssets()
                 ->where('active', true)
@@ -304,6 +326,84 @@ class MaintenanceWorkOrderController extends Controller
                 'critical' => MaintenanceWorkOrder::where('priority', 'Crítico')->count(),
                 'pending_closure' => MaintenanceWorkOrder::pendingClosure()->count(),
                 'finished' => MaintenanceWorkOrder::closedWithNote()->count(),
+            ],
+        ];
+
+        // Mantiene compatibilidad con otros consumidores, mientras el formulario
+        // de OT puede omitir este bloque y usar el buscador liviano dedicado.
+        if ($request->boolean('include_dependencies', true)) {
+            $catalogs['dependencies'] = $this->maintenanceDependencyQuery()
+                ->orderBy('code')
+                ->get($this->maintenanceDependencyColumns());
+        }
+
+        return response()->json($catalogs);
+    }
+
+    public function dependencyOptions(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'search' => ['nullable', 'string', 'max:120'],
+            'selected_id' => ['nullable', 'integer', 'min:1'],
+        ]);
+
+        $search = Str::squish((string) ($validated['search'] ?? ''));
+        $selectedId = (int) ($validated['selected_id'] ?? 0);
+        $limit = 40;
+        $terms = collect(preg_split('/\s+/u', $search, -1, PREG_SPLIT_NO_EMPTY))
+            ->take(5)
+            ->values();
+
+        $baseQuery = $this->maintenanceDependencyQuery();
+        $query = clone $baseQuery;
+
+        foreach ($terms as $term) {
+            $query->where(function (Builder $query) use ($term) {
+                $like = "%{$term}%";
+
+                $query
+                    ->where('code', 'like', $like)
+                    ->orWhere('name', 'like', $like)
+                    ->orWhere('distribution', 'like', $like)
+                    ->orWhere('sector', 'like', $like)
+                    ->orWhere('zone', 'like', $like)
+                    ->orWhere('usage', 'like', $like);
+            });
+        }
+
+        if ($search !== '') {
+            $query->orderByRaw(
+                'CASE WHEN code LIKE ? THEN 0 WHEN name LIKE ? THEN 1 ELSE 2 END',
+                ["{$search}%", "{$search}%"]
+            );
+        }
+
+        $dependencies = $query
+            ->orderBy('code')
+            ->limit($limit + 1)
+            ->get($this->maintenanceDependencyColumns());
+        $hasMore = $dependencies->count() > $limit;
+        $dependencies = $dependencies->take($limit)->values();
+
+        // Una OT en edición siempre debe poder mostrar su selección, aunque no
+        // quede dentro de los primeros resultados de la búsqueda actual.
+        if ($selectedId > 0 && ! $dependencies->contains('id', $selectedId)) {
+            $selected = (clone $baseQuery)
+                ->whereKey($selectedId)
+                ->first($this->maintenanceDependencyColumns());
+
+            if ($selected) {
+                $dependencies->prepend($selected);
+                $dependencies = $dependencies->take($limit)->values();
+            }
+        }
+
+        return response()->json([
+            'data' => $dependencies,
+            'meta' => [
+                'query' => $search,
+                'limit' => $limit,
+                'has_more' => $hasMore,
             ],
         ]);
     }
@@ -506,11 +606,32 @@ class MaintenanceWorkOrderController extends Controller
         ]);
     }
 
+    private function maintenanceDependencyQuery(): Builder
+    {
+        return MaintenanceDependency::query()
+            ->maintenanceLocations()
+            ->where('active', true);
+    }
+
+    private function maintenanceDependencyColumns(): array
+    {
+        return [
+            'id',
+            'code',
+            'name',
+            'distribution',
+            'sector',
+            'zone',
+            'usage',
+            'is_maintenance_location',
+        ];
+    }
+
     private function validated(Request $request): array
     {
-        $assignees = $this->allowedAssignees($request);
-        $requesters = $this->requesters();
-
+        $assigneeCatalog = collect($this->maintenanceAssigneeCatalog());
+        $assignees = $this->allowedAssignees($request, $assigneeCatalog->pluck('value')->all());
+        $assigneeUserIds = $assigneeCatalog->pluck('user_id')->filter()->map(fn ($id) => (int) $id)->all();
         $validated = $request->validate([
             'maintenance_dependency_id' => [
                 'nullable',
@@ -535,7 +656,10 @@ class MaintenanceWorkOrderController extends Controller
             'location_name' => ['nullable', 'string', 'max:255'],
             'location_usage' => ['nullable', 'string', 'max:255'],
             'reported_at' => ['nullable', 'date'],
-            'requested_by' => ['nullable', 'string', 'max:255', Rule::in($requesters)],
+            'requested_by' => ['nullable', 'string', 'max:255'],
+            'sync_assignees' => ['nullable', 'boolean'],
+            'assigned_user_ids' => ['nullable', 'array'],
+            'assigned_user_ids.*' => ['nullable', 'integer', Rule::in($assigneeUserIds)],
             'assigned_to' => ['nullable', 'array'],
             'assigned_to.*' => ['nullable', 'string', 'max:255', Rule::in($assignees)],
             'priority' => ['required', 'string', Rule::in(['Crítico', 'Alta', 'Media', 'Baja'])],
@@ -547,15 +671,38 @@ class MaintenanceWorkOrderController extends Controller
             'photo' => ['nullable', 'file', 'image', 'mimes:jpg,jpeg,png,gif,bmp,webp', 'max:5120'],
         ]);
 
-        $assignedTo = Arr::wrap($validated['assigned_to'] ?? null);
-        $assignedTo = collect($assignedTo)
-            ->filter(fn ($value) => is_string($value) && trim($value) !== '')
-            ->map(fn ($value) => trim($value))
-            ->unique()
-            ->values()
-            ->all();
+        $shouldSyncAssignees = $request->boolean('sync_assignees') || $request->has('assigned_user_ids');
 
-        $validated['assigned_to'] = $assignedTo ? implode(', ', $assignedTo) : null;
+        if ($shouldSyncAssignees) {
+            $assignedUserIds = collect(Arr::wrap($validated['assigned_user_ids'] ?? null))
+                ->filter(fn ($value) => is_numeric($value))
+                ->map(fn ($value) => (int) $value)
+                ->unique()
+                ->values();
+            $namesByUserId = $assigneeCatalog->keyBy(fn ($item) => (int) $item['user_id']);
+            $assignedNames = $assignedUserIds
+                ->map(fn ($userId) => $namesByUserId->get($userId)['value'] ?? null)
+                ->filter()
+                ->values();
+
+            $validated['assigned_user_ids'] = $assignedUserIds->all();
+            $validated['assigned_to'] = $assignedNames->isNotEmpty()
+                ? $assignedNames->implode(', ')
+                : null;
+        } elseif ($request->has('assigned_to')) {
+            $assignedTo = collect(Arr::wrap($validated['assigned_to'] ?? null))
+                ->filter(fn ($value) => is_string($value) && trim($value) !== '')
+                ->map(fn ($value) => trim($value))
+                ->unique()
+                ->values()
+                ->all();
+
+            $validated['assigned_to'] = $assignedTo ? implode(', ', $assignedTo) : null;
+        } else {
+            unset($validated['assigned_to']);
+        }
+
+        unset($validated['sync_assignees']);
         $validated['dependency_component'] = isset($validated['dependency_component'])
             ? trim((string) $validated['dependency_component'])
             : null;
@@ -791,15 +938,15 @@ class MaintenanceWorkOrderController extends Controller
 
     private function assignees(): array
     {
-        return $this->maintenanceAssigneeQuery()
-            ->pluck('full_name')
+        return collect($this->maintenanceAssigneeCatalog())
+            ->pluck('value')
             ->values()
             ->all();
     }
 
-    private function allowedAssignees(Request $request): array
+    private function allowedAssignees(Request $request, ?array $catalogAssignees = null): array
     {
-        $assignees = $this->assignees();
+        $assignees = $catalogAssignees ?? $this->assignees();
 
         $currentWorkOrder = collect($request->route()?->parameters() ?? [])
             ->first(fn ($parameter) => $parameter instanceof MaintenanceWorkOrder);
@@ -815,46 +962,84 @@ class MaintenanceWorkOrderController extends Controller
             ->all();
     }
 
-    private function maintenanceAssigneeQuery(): Builder
+    private function maintenanceAssigneeUserQuery(): Builder
     {
-        return Staff::query()
-            ->with('cargo:id,name,slug')
-            ->where('active', true)
-            ->where('can_receive_maintenance_orders', true)
-            ->orderBy('full_name');
+        return User::query()
+            ->with(['staff.cargo:id,name,slug'])
+            ->where('users.active', true)
+            ->where(function (Builder $query) {
+                $query->whereHas('staff', function (Builder $staff) {
+                    $staff
+                        ->where('active', true)
+                        ->where('can_receive_maintenance_orders', true);
+                });
+
+                foreach (self::EXPLICIT_ASSIGNEE_NAME_TERMS as $terms) {
+                    $query
+                        ->orWhere(function (Builder $userName) use ($terms) {
+                            foreach ($terms as $term) {
+                                $userName->where('name', 'like', "%{$term}%");
+                            }
+                        })
+                        ->orWhereHas('staff', function (Builder $staff) use ($terms) {
+                            $staff->where('active', true);
+                            foreach ($terms as $term) {
+                                $staff->where('full_name', 'like', "%{$term}%");
+                            }
+                        });
+                }
+            })
+            ->orderBy('users.name');
     }
 
     private function maintenanceAssigneeCatalog(): array
     {
-        return $this->maintenanceAssigneeQuery()
+        return $this->maintenanceAssigneeUserQuery()
             ->get([
-                'id',
-                'full_name',
-                'rut',
-                'cargo_id',
-                'maintenance_role',
-                'can_receive_maintenance_orders',
+                'users.id',
+                'users.name',
+                'users.staff_id',
             ])
-            ->map(fn (Staff $staff) => [
-                'id' => $staff->id,
-                'full_name' => $staff->full_name,
-                'rut' => $staff->rut,
-                'cargo' => $staff->cargo ? [
-                    'id' => $staff->cargo->id,
-                    'name' => $staff->cargo->name,
-                    'slug' => $staff->cargo->slug,
-                ] : null,
-                'maintenance_role' => $staff->maintenance_role,
-                'maintenance_role_label' => $staff->maintenance_role_label,
-                'label' => trim(sprintf(
-                    '%s%s',
-                    $staff->full_name,
-                    $staff->maintenance_role_label ? ' · '.$staff->maintenance_role_label : ''
-                )),
-                'value' => $staff->full_name,
-            ])
+            ->map(function (User $user) {
+                $staff = $user->staff;
+                $displayName = Str::squish((string) ($staff?->full_name ?: $user->name));
+
+                return [
+                    'id' => $user->id,
+                    'user_id' => $user->id,
+                    'staff_id' => $staff?->id,
+                    'full_name' => $displayName,
+                    'cargo' => $staff?->cargo ? [
+                        'id' => $staff->cargo->id,
+                        'name' => $staff->cargo->name,
+                        'slug' => $staff->cargo->slug,
+                    ] : null,
+                    'maintenance_role' => $staff?->maintenance_role,
+                    'maintenance_role_label' => $staff?->maintenance_role_label,
+                    'label' => trim(sprintf(
+                        '%s%s',
+                        $displayName,
+                        $staff?->maintenance_role_label ? ' · '.$staff->maintenance_role_label : ''
+                    )),
+                    'value' => $displayName,
+                ];
+            })
             ->values()
             ->all();
+    }
+
+    private function syncAssigneeUsers(MaintenanceWorkOrder $workOrder, array $userIds): void
+    {
+        $users = $this->maintenanceAssigneeUserQuery()
+            ->whereKey($userIds)
+            ->get(['users.id', 'users.name', 'users.staff_id']);
+        $syncPayload = $users->mapWithKeys(function (User $user) {
+            $displayName = Str::squish((string) ($user->staff?->full_name ?: $user->name));
+
+            return [$user->id => ['assignee_name_snapshot' => $displayName]];
+        })->all();
+
+        $workOrder->assigneeUsers()->sync($syncPayload);
     }
 
     private function whereAssignedTo(Builder $query, string $assignee): Builder

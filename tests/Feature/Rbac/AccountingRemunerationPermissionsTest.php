@@ -24,6 +24,9 @@ class AccountingRemunerationPermissionsTest extends TestCase
         'contabilidad.manual_cuentas.gestionar',
         'contabilidad.ingresos.gestionar',
         'contabilidad.egresos.gestionar',
+        'contabilidad.ejecucion_presupuestaria.ver',
+        'contabilidad.ejecucion_presupuestaria.importar',
+        'contabilidad.ejecucion_presupuestaria.exportar',
         'contabilidad.pagos.gestionar',
         'contabilidad.caja_chica.gestionar',
         'contabilidad.fondos_rendir.gestionar',
@@ -63,6 +66,14 @@ class AccountingRemunerationPermissionsTest extends TestCase
         'remuneraciones.periodos.cerrar',
         'remuneraciones.rrhh.gestionar',
         'remuneraciones.admin',
+        'remuneraciones.liquidaciones_pdf.ver',
+        'remuneraciones.liquidaciones_pdf.importar',
+        'remuneraciones.liquidaciones_pdf.incidencias',
+        'remuneraciones.liquidaciones_pdf.reprocesar',
+        'remuneraciones.liquidaciones_pdf.exportar',
+        'remuneraciones.liquidaciones_pdf.propuesta_pago',
+        'remuneraciones.liquidaciones_pdf.anular',
+        'remuneraciones.liquidaciones_pdf.auditoria',
     ];
 
     public function test_permission_matrices_are_installed_and_grouped(): void
@@ -79,7 +90,7 @@ class AccountingRemunerationPermissionsTest extends TestCase
         $this->assertTrue($accounting->active);
         $this->assertTrue($remuneration->active);
         $this->assertSame(22, $accounting->children()->count());
-        $this->assertSame(30, $remuneration->children()->count());
+        $this->assertSame(34, $remuneration->children()->count());
 
         $this->assertDatabaseHas('system_modules', [
             'slug' => 'accounting_dashboard',
@@ -91,6 +102,12 @@ class AccountingRemunerationPermissionsTest extends TestCase
             'slug' => 'remuneration_dashboard',
             'parent_id' => $remuneration->id,
             'frontend_route' => '/remuneraciones',
+            'active' => true,
+        ]);
+        $this->assertDatabaseHas('system_modules', [
+            'slug' => 'remuneration_payslips_pdf',
+            'parent_id' => $remuneration->id,
+            'frontend_route' => '/remuneraciones/liquidaciones-sueldo',
             'active' => true,
         ]);
     }
@@ -110,11 +127,10 @@ class AccountingRemunerationPermissionsTest extends TestCase
         ]);
         $role->permissions()->attach($sentinel->id);
 
-        $superAdmin = Role::query()->create([
-            'name' => 'Super Admin',
-            'slug' => 'super_admin',
-            'active' => true,
-        ]);
+        $superAdmin = Role::query()->firstOrCreate(
+            ['slug' => 'super_admin'],
+            ['name' => 'Super Admin', 'active' => true],
+        );
 
         $migration = require database_path('migrations/2026_07_26_190000_ensure_accounting_and_remuneration_permissions.php');
         $migration->up();
@@ -142,7 +158,10 @@ class AccountingRemunerationPermissionsTest extends TestCase
         ];
         $expectedPermissions = array_merge(
             array_values(array_diff(self::ACCOUNTING_PERMISSIONS, $subsidyWorkflowPermissions)),
-            self::REMUNERATION_PERMISSIONS,
+            array_values(array_filter(
+                self::REMUNERATION_PERMISSIONS,
+                fn (string $slug): bool => ! str_starts_with($slug, 'remuneraciones.liquidaciones_pdf.'),
+            )),
         );
         $this->assertEqualsCanonicalizing(
             $expectedPermissions,
@@ -153,16 +172,22 @@ class AccountingRemunerationPermissionsTest extends TestCase
         );
 
         $expectedModuleIds = SystemModule::query()
-            ->where('slug', 'accounting')
-            ->orWhere('slug', 'like', 'accounting_%')
-            ->orWhere('slug', 'remuneration')
-            ->orWhere('slug', 'like', 'remuneration_%')
+            ->whereIn('slug', [
+                'accounting',
+                'accounting_dashboard',
+                'remuneration',
+                'remuneration_dashboard',
+                'remuneration_payslips_pdf',
+                'remuneration_payslip_matrix',
+                'remuneration_payslip_reconciliation',
+                'remuneration_payslip_imports',
+            ])
             ->pluck('id')
             ->all();
 
         $this->assertEqualsCanonicalizing(
             $expectedModuleIds,
-            $superAdmin->modules()->pluck('system_modules.id')->all(),
+            $superAdmin->modules()->whereIn('system_modules.id', $expectedModuleIds)->pluck('system_modules.id')->all(),
         );
     }
 

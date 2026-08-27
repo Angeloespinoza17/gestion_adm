@@ -4,9 +4,11 @@ namespace App\Http\Controllers\RiskPrevention;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\RiskPrevention\BulkStoreRiskPreventionEppItemsRequest;
-use App\Http\Requests\RiskPrevention\SaveRiskPreventionEppDeliveryRequest;
 use App\Http\Requests\RiskPrevention\SaveRiskPreventionEppDeliveryRecordRequest;
+use App\Http\Requests\RiskPrevention\SaveRiskPreventionEppDeliveryRequest;
 use App\Http\Requests\RiskPrevention\SaveRiskPreventionEppItemRequest;
+use App\Models\InventoryItem;
+use App\Models\InventoryStockMovement;
 use App\Models\RiskPrevention\RiskPreventionEppDelivery;
 use App\Models\RiskPrevention\RiskPreventionEppDeliveryRecord;
 use App\Models\RiskPrevention\RiskPreventionEppItem;
@@ -22,8 +24,7 @@ class RiskPreventionEppController extends Controller
 {
     public function __construct(
         private readonly RiskPreventionAccessService $accessService,
-    ) {
-    }
+    ) {}
 
     public function itemsIndex(Request $request): JsonResponse
     {
@@ -34,16 +35,27 @@ class RiskPreventionEppController extends Controller
         $lowStock = filter_var($request->query('low_stock'), FILTER_VALIDATE_BOOLEAN);
 
         $items = RiskPreventionEppItem::query()
+            ->with('inventoryItem:id,code,name,item_type,stock_quantity,minimum_stock,unit_of_measure,active')
             ->withCount('deliveries')
             ->when($search !== '', function ($query) use ($search) {
                 $query->where(function ($query) use ($search) {
                     $query
                         ->where('name', 'like', "%{$search}%")
-                        ->orWhere('epp_type', 'like', "%{$search}%");
+                        ->orWhere('epp_type', 'like', "%{$search}%")
+                        ->orWhereHas('inventoryItem', fn ($query) => $query
+                            ->where('code', 'like', "%{$search}%")
+                            ->orWhere('name', 'like', "%{$search}%"));
                 });
             })
             ->when($type !== '', fn ($query) => $query->where('epp_type', $type))
-            ->when($lowStock, fn ($query) => $query->whereColumn('stock', '<=', 'minimum_stock'))
+            ->when($lowStock, fn ($query) => $query->where(function ($query) {
+                $query
+                    ->where(function ($query) {
+                        $query->whereNull('inventory_item_id')->whereColumn('stock', '<=', 'minimum_stock');
+                    })
+                    ->orWhereHas('inventoryItem', fn ($query) => $query
+                        ->whereColumn('inventory_items.stock_quantity', '<=', 'inventory_items.minimum_stock'));
+            }))
             ->orderBy('name')
             ->paginate((int) $request->query('per_page', 10));
 
@@ -55,7 +67,7 @@ class RiskPreventionEppController extends Controller
         $this->authorize('create', RiskPreventionEppItem::class);
 
         $item = RiskPreventionEppItem::query()->create(array_merge(
-            $request->validated(),
+            $this->normalizedItemPayload($request->validated()),
             [
                 'active' => $request->boolean('active', true),
                 'created_by' => $request->user()->id,
@@ -65,7 +77,7 @@ class RiskPreventionEppController extends Controller
 
         return response()->json([
             'message' => 'Elemento EPP creado correctamente.',
-            'data' => $item->fresh(),
+            'data' => $item->fresh()->load('inventoryItem'),
         ], 201);
     }
 
@@ -74,7 +86,7 @@ class RiskPreventionEppController extends Controller
         $this->authorize('update', $eppItem);
 
         $eppItem->update(array_merge(
-            $request->validated(),
+            $this->normalizedItemPayload($request->validated()),
             [
                 'active' => $request->boolean('active', true),
                 'updated_by' => $request->user()->id,
@@ -83,7 +95,7 @@ class RiskPreventionEppController extends Controller
 
         return response()->json([
             'message' => 'Elemento EPP actualizado correctamente.',
-            'data' => $eppItem->fresh(),
+            'data' => $eppItem->fresh()->load('inventoryItem'),
         ]);
     }
 
@@ -119,6 +131,7 @@ class RiskPreventionEppController extends Controller
                 if ($item) {
                     $item->update($attributes);
                     $updated++;
+
                     continue;
                 }
 
@@ -164,7 +177,10 @@ class RiskPreventionEppController extends Controller
         $itemId = $request->query('epp_item_id');
 
         $deliveries = RiskPreventionEppDelivery::query()
-            ->with('item:id,name,epp_type,unit')
+            ->with([
+                'item:id,inventory_item_id,name,epp_type,stock,minimum_stock,unit',
+                'item.inventoryItem:id,code,name,stock_quantity,minimum_stock,unit_of_measure',
+            ])
             ->when($search !== '', function ($query) use ($search) {
                 $query->where(function ($query) use ($search) {
                     $query
@@ -193,7 +209,7 @@ class RiskPreventionEppController extends Controller
 
         return response()->json([
             'message' => 'Entrega de EPP registrada correctamente.',
-            'data' => $delivery->fresh()->load('item:id,name,epp_type,unit'),
+            'data' => $delivery->fresh()->load(['item', 'item.inventoryItem']),
         ], 201);
     }
 
@@ -216,7 +232,7 @@ class RiskPreventionEppController extends Controller
 
         return response()->json([
             'message' => 'Entrega de EPP actualizada correctamente.',
-            'data' => $eppDelivery->fresh()->load('item:id,name,epp_type,unit'),
+            'data' => $eppDelivery->fresh()->load(['item', 'item.inventoryItem']),
         ]);
     }
 
@@ -248,7 +264,8 @@ class RiskPreventionEppController extends Controller
 
         $records = RiskPreventionEppDeliveryRecord::query()
             ->with([
-                'deliveries.item:id,name,epp_type,unit',
+                'deliveries.item:id,inventory_item_id,name,epp_type,stock,minimum_stock,unit',
+                'deliveries.item.inventoryItem:id,code,name,stock_quantity,minimum_stock,unit_of_measure',
                 'staff:id,full_name,rut,cargo_id',
             ])
             ->when($search !== '', function ($query) use ($search) {
@@ -281,6 +298,9 @@ class RiskPreventionEppController extends Controller
                     ->count(),
                 'month_records' => RiskPreventionEppDeliveryRecord::query()
                     ->whereBetween('delivered_at', [now()->startOfMonth()->toDateString(), now()->endOfMonth()->toDateString()])
+                    ->count(),
+                'today_records' => RiskPreventionEppDeliveryRecord::query()
+                    ->whereDate('delivered_at', today())
                     ->count(),
                 'delivered_units' => RiskPreventionEppDelivery::query()
                     ->whereNotNull('delivery_record_id')
@@ -334,15 +354,16 @@ class RiskPreventionEppController extends Controller
                     ->findOrFail($line['epp_item_id']);
                 $quantity = (int) $line['quantity'];
 
-                if (!$item->active) {
+                if (! $item->active) {
                     throw ValidationException::withMessages([
                         "items.{$index}.epp_item_id" => "El EPP {$item->name} está inactivo.",
                     ]);
                 }
 
-                if ($item->stock < $quantity) {
+                $availableStock = $this->availableStockForUpdate($item);
+                if ($availableStock < $quantity) {
                     throw ValidationException::withMessages([
-                        "items.{$index}.quantity" => "Stock insuficiente para {$item->name}. Disponible: {$item->stock} {$item->unit}.",
+                        "items.{$index}.quantity" => "Stock insuficiente para {$item->name}. Disponible: {$availableStock} {$item->available_unit}.",
                     ]);
                 }
 
@@ -350,7 +371,7 @@ class RiskPreventionEppController extends Controller
                     'delivery_record_id' => $record->id,
                     'epp_item_id' => $item->id,
                     'epp_name_snapshot' => $item->name,
-                    'unit_snapshot' => $item->unit,
+                    'unit_snapshot' => $item->available_unit,
                     'employee_name' => $employeeName,
                     'quantity' => $quantity,
                     'delivered_at' => $validated['delivered_at'],
@@ -361,8 +382,13 @@ class RiskPreventionEppController extends Controller
                     'updated_by' => $request->user()->id,
                 ]);
 
-                $item->decrement('stock', $quantity);
-                $item->forceFill(['updated_by' => $request->user()->id])->save();
+                $this->decrementAvailableStock(
+                    $item,
+                    $quantity,
+                    $record->folio,
+                    $employeeName,
+                    $request->user()->id,
+                );
             }
 
             return $record;
@@ -370,7 +396,136 @@ class RiskPreventionEppController extends Controller
 
         return response()->json([
             'message' => 'Entrega registrada y acta generada correctamente.',
-            'data' => $record->fresh()->load('deliveries.item:id,name,epp_type,unit'),
+            'data' => $record->fresh()->load(['deliveries.item', 'deliveries.item.inventoryItem']),
         ], 201);
+    }
+
+    public function catalogs(Request $request): JsonResponse
+    {
+        abort_unless($this->accessService->canViewEppDeliveries($request->user()), 403);
+
+        $items = RiskPreventionEppItem::query()
+            ->with('inventoryItem:id,code,name,item_type,stock_quantity,minimum_stock,unit_of_measure,active')
+            ->where('active', true)
+            ->orderBy('name')
+            ->get();
+
+        return response()->json([
+            'epp_types' => RiskPreventionEppItem::query()
+                ->whereNotNull('epp_type')
+                ->distinct()
+                ->orderBy('epp_type')
+                ->pluck('epp_type')
+                ->values(),
+            'epp_items' => $items,
+            'epp_recipients' => Staff::query()
+                ->with('cargo:id,name')
+                ->where('active', true)
+                ->orderBy('full_name')
+                ->limit(500)
+                ->get(['id', 'full_name', 'rut', 'cargo_id'])
+                ->map(fn (Staff $staff) => [
+                    'id' => $staff->id,
+                    'name' => $staff->full_name,
+                    'rut' => $staff->rut,
+                    'position' => $staff->cargo?->name,
+                ])
+                ->values(),
+            'inventory_items' => InventoryItem::query()
+                ->with('eppItem:id,inventory_item_id,epp_type')
+                ->where('item_type', 'consumable')
+                ->where('active', true)
+                ->orderBy('name')
+                ->limit(1000)
+                ->get([
+                    'id',
+                    'code',
+                    'name',
+                    'stock_quantity',
+                    'minimum_stock',
+                    'unit_of_measure',
+                ]),
+            'permissions' => [
+                'can_manage_catalog' => $this->accessService->canManage($request->user()),
+                'can_register_delivery' => $this->accessService->canRegisterEppDeliveries($request->user()),
+            ],
+        ]);
+    }
+
+    private function normalizedItemPayload(array $payload): array
+    {
+        if (! filled($payload['inventory_item_id'] ?? null)) {
+            $payload['inventory_item_id'] = null;
+
+            return $payload;
+        }
+
+        $inventoryItem = InventoryItem::query()
+            ->where('item_type', 'consumable')
+            ->where('active', true)
+            ->findOrFail($payload['inventory_item_id']);
+
+        $payload['name'] = $inventoryItem->name;
+        $payload['stock'] = (int) floor((float) ($inventoryItem->stock_quantity ?? 0));
+        $payload['minimum_stock'] = (int) floor((float) ($inventoryItem->minimum_stock ?? 0));
+        $payload['unit'] = $inventoryItem->unit_of_measure ?: ($payload['unit'] ?? 'unidad');
+
+        return $payload;
+    }
+
+    private function availableStockForUpdate(RiskPreventionEppItem $item): float
+    {
+        if (! $item->inventory_item_id) {
+            return (float) $item->stock;
+        }
+
+        $inventoryItem = InventoryItem::query()->lockForUpdate()->findOrFail($item->inventory_item_id);
+        abort_unless($inventoryItem->item_type === 'consumable' && $inventoryItem->active, 422, 'El insumo EPP vinculado no está disponible en Bodega.');
+        $item->setRelation('inventoryItem', $inventoryItem);
+
+        return (float) ($inventoryItem->stock_quantity ?? 0);
+    }
+
+    private function decrementAvailableStock(
+        RiskPreventionEppItem $item,
+        int $quantity,
+        string $folio,
+        string $employeeName,
+        int $userId,
+    ): void {
+        if (! $item->inventory_item_id) {
+            $item->decrement('stock', $quantity);
+            $item->forceFill(['updated_by' => $userId])->save();
+
+            return;
+        }
+
+        /** @var InventoryItem $inventoryItem */
+        $inventoryItem = $item->inventoryItem;
+        $previousStock = (float) ($inventoryItem->stock_quantity ?? 0);
+        $newStock = $previousStock - $quantity;
+
+        InventoryStockMovement::query()->create([
+            'inventory_item_id' => $inventoryItem->id,
+            'movement_type' => 'out',
+            'quantity' => $quantity,
+            'previous_stock' => $previousStock,
+            'new_stock' => $newStock,
+            'reason' => "Entrega EPP {$folio} a {$employeeName}.",
+            'created_by' => $userId,
+        ]);
+
+        $inventoryItem->forceFill([
+            'stock_quantity' => $newStock,
+            'updated_by' => $userId,
+        ])->save();
+
+        // Snapshot de compatibilidad para reportes históricos; Bodega sigue siendo la fuente vigente.
+        $item->forceFill([
+            'stock' => (int) floor($newStock),
+            'minimum_stock' => (int) floor((float) ($inventoryItem->minimum_stock ?? 0)),
+            'unit' => $inventoryItem->unit_of_measure ?: $item->unit,
+            'updated_by' => $userId,
+        ])->save();
     }
 }

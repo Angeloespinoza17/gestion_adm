@@ -2,6 +2,8 @@
 
 namespace App\Models;
 
+use App\Models\It\ItEquipment;
+use App\Models\RiskPrevention\RiskPreventionEppItem;
 use App\Models\Security\SecurityIncident;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -63,7 +65,7 @@ class InventoryItem extends Model
 
     public function getImageUrlAttribute(): ?string
     {
-        if (!$this->image_path) {
+        if (! $this->image_path) {
             return null;
         }
 
@@ -129,6 +131,11 @@ class InventoryItem extends Model
 
     public function itEquipment(): HasOne
     {
-        return $this->hasOne(\App\Models\It\ItEquipment::class, 'inventory_item_id');
+        return $this->hasOne(ItEquipment::class, 'inventory_item_id');
+    }
+
+    public function eppItem(): HasOne
+    {
+        return $this->hasOne(RiskPreventionEppItem::class, 'inventory_item_id');
     }
 }

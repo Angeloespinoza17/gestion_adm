@@ -3,12 +3,9 @@
 namespace App\Services\Infirmary;
 
 use App\Models\Infirmary\InfirmaryAttention;
-use App\Models\Infirmary\InfirmaryAttentionCall;
-use App\Models\Infirmary\InfirmaryAttentionFollowUp;
-use App\Models\Infirmary\InfirmaryAttentionReferral;
-use App\Models\Infirmary\InfirmaryAttentionTreatment;
 use App\Models\Infirmary\InfirmaryMedication;
 use App\Models\Infirmary\InfirmaryMedicationAdministration;
+use App\Models\Infirmary\InfirmaryMedicationMovement;
 use App\Models\Staff;
 use App\Models\StudentProfile;
 use App\Models\User;
@@ -21,13 +18,12 @@ class InfirmaryAttentionService
         private readonly InfirmaryStudentContextService $studentContextService,
         private readonly InfirmaryMedicationStockService $stockService,
         private readonly InfirmarySequenceService $sequenceService,
-    ) {
-    }
+    ) {}
 
     public function store(array $payload, User $user): InfirmaryAttention
     {
         return DB::transaction(function () use ($payload, $user) {
-            $attention = new InfirmaryAttention();
+            $attention = new InfirmaryAttention;
             $this->fillAttention($attention, $payload, $user, true);
             $attention->save();
 
@@ -102,6 +98,11 @@ class InfirmaryAttentionService
             ? Staff::query()->find($teacherId)
             : ($student ? $this->studentContextService->teacherForCourse($currentEnrollment?->courseSection) : null);
         $isAccidentCategory = in_array($payload['attention_category'] ?? null, ['accidente_menor', 'accidente_mayor'], true);
+        $isMentalHealthCategory = $subjectType === InfirmaryAttention::SUBJECT_STUDENT
+            && ($payload['attention_category'] ?? null) === InfirmaryAttention::MENTAL_HEALTH_CATEGORY;
+        $mentalHealthEventType = $isMentalHealthCategory
+            ? ($payload['mental_health_event_type'] ?? null)
+            : null;
         $accidentLocationType = $isAccidentCategory ? ($payload['accident_location_type'] ?? null) : null;
         $companionType = $payload['accompanied_by_type'];
         $companionStaffId = array_key_exists($companionType, InfirmaryAttention::STAFF_COMPANION_DEPARTMENT_SLUGS)
@@ -125,6 +126,10 @@ class InfirmaryAttentionService
             'dependency_id' => $accidentLocationType === 'colegio' ? ($payload['dependency_id'] ?? null) : null,
             'attended_by_user_id' => $payload['attended_by_user_id'] ?? $user->id,
             'attention_category' => $payload['attention_category'],
+            'mental_health_event_type' => $mentalHealthEventType,
+            'self_harm_injury_type' => $mentalHealthEventType === 'autolesion'
+                ? ($payload['self_harm_injury_type'] ?? null)
+                : null,
             'accident_location_type' => $accidentLocationType,
             'occurred_at' => $occurredAt->format('Y-m-d H:i:s'),
             'attended_at' => $attendedAt->format('Y-m-d H:i:s'),
@@ -211,7 +216,7 @@ class InfirmaryAttentionService
         foreach ($payload['treatments'] ?? [] as $treatmentPayload) {
             $treatment = $attention->treatments()->create($this->normalizeTreatmentPayload($treatmentPayload));
 
-            if (!empty($treatmentPayload['medication_id']) && !empty($treatmentPayload['medication_quantity'])) {
+            if (! empty($treatmentPayload['medication_id']) && ! empty($treatmentPayload['medication_quantity'])) {
                 $medication = InfirmaryMedication::query()->findOrFail($treatmentPayload['medication_id']);
                 $administration = InfirmaryMedicationAdministration::query()->create([
                     'attention_id' => $attention->id,
@@ -229,7 +234,7 @@ class InfirmaryAttentionService
 
                 $this->stockService->decreaseStock(
                     $medication,
-                    \App\Models\Infirmary\InfirmaryMedicationMovement::TYPE_ADMINISTRACION,
+                    InfirmaryMedicationMovement::TYPE_ADMINISTRACION,
                     (float) $treatmentPayload['medication_quantity'],
                     $user,
                     'Administración registrada en atención de enfermería',
@@ -263,7 +268,7 @@ class InfirmaryAttentionService
                 'reason' => $callPayload['reason'] ?? null,
                 'conversation_summary' => $callPayload['conversation_summary'] ?? null,
                 'commitments' => $callPayload['commitments'] ?? null,
-                'estimated_arrival_at' => !empty($callPayload['estimated_arrival_at'])
+                'estimated_arrival_at' => ! empty($callPayload['estimated_arrival_at'])
                     ? Carbon::parse($callPayload['estimated_arrival_at'])->format('Y-m-d H:i:s')
                     : null,
                 'duration_minutes' => $callPayload['duration_minutes'] ?? null,
@@ -277,7 +282,7 @@ class InfirmaryAttentionService
                 'responsible_user_id' => $followUpPayload['responsible_user_id'] ?? $user->id,
                 'comment' => $followUpPayload['comment'],
                 'status' => $followUpPayload['status'],
-                'next_review_at' => !empty($followUpPayload['next_review_at'])
+                'next_review_at' => ! empty($followUpPayload['next_review_at'])
                     ? Carbon::parse($followUpPayload['next_review_at'])->format('Y-m-d H:i:s')
                     : null,
                 'completed_at' => ($followUpPayload['status'] ?? null) === 'cerrado' ? now() : null,
@@ -319,7 +324,7 @@ class InfirmaryAttentionService
 
     private function calculateBmi(mixed $weight, mixed $height): ?float
     {
-        if (!$weight || !$height || (float) $height <= 0) {
+        if (! $weight || ! $height || (float) $height <= 0) {
             return null;
         }
 

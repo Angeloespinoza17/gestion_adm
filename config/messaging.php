@@ -2,11 +2,10 @@
 
 return [
     'enabled' => env('MESSAGING_ENABLED', true),
-    'realtime' => [
-        'enabled' => env(
-            'MESSAGING_REALTIME_ENABLED',
-            env('APP_ENV', 'production') !== 'production'
-        ),
+    'polling' => [
+        'enabled' => true,
+        'interval_ms' => (int) env('MESSAGING_POLL_INTERVAL_MS', 15000),
+        'active_interval_ms' => (int) env('MESSAGING_ACTIVE_POLL_INTERVAL_MS', 8000),
         'recovery_limit' => (int) env('MESSAGING_RECOVERY_LIMIT', 100),
     ],
     'messages' => [

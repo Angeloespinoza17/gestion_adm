@@ -21,6 +21,19 @@ export const menuItems = [
         isLayout: true
     },
     {
+        id: 895,
+        label: "Gestión pedagógica",
+        icon: "bx-book-content",
+        subItems: [
+            {
+                id: 8951,
+                label: "Análisis de instrumentos",
+                link: "/gestion-pedagogica/analisis-instrumentos",
+                parentId: 895
+            }
+        ]
+    },
+    {
         id: 900,
         label: "Mantención",
         icon: "bx-wrench",
@@ -194,6 +207,12 @@ export const menuItems = [
                 id: 9396,
                 label: "Capacitaciones",
                 link: "/risk-prevention/trainings",
+                parentId: 939
+            },
+            {
+                id: 93961,
+                label: "Comité Paritario",
+                link: "/risk-prevention/joint-committee",
                 parentId: 939
             },
             {

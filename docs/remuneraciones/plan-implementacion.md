@@ -2,6 +2,8 @@
 
 ## Resumen del modulo
 
+La extensión para importar y conciliar liquidaciones individuales en PDF está documentada en [Liquidaciones de sueldo importadas desde PDF](./liquidaciones-sueldo.md).
+
 El modulo de remuneraciones se integrara al stack existente Laravel 12 + Vue 3 + Sanctum, usando el RBAC propio (`permissions`, `roles`, `system_modules`) y reutilizando entidades ya disponibles: `staff`, `contracts`, `departments`, `cargos`, `accounting_cost_centers`, `accounting_funding_sources`, `accounting_manual_accounts` y `accounting_journal_entries`.
 
 La revision estructural de los adjuntos confirma:

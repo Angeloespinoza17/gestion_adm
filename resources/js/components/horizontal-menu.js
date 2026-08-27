@@ -157,6 +157,12 @@ export const menuItems = [
                 parentId: 9065
             },
             {
+                id: 906561,
+                label: 'Comité Paritario',
+                link: '/risk-prevention/joint-committee',
+                parentId: 9065
+            },
+            {
                 id: 90657,
                 label: 'Gestión del personal',
                 link: '/risk-prevention/personnel',

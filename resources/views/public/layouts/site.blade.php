@@ -8,8 +8,7 @@
   <meta name="description" content="@yield('description', 'Sitio institucional del Colegio Nuestra Señora del Carmen de Valdivia, comunidad educativa pastoral inspirada en Madre Paulina.')">
   <meta name="keywords" content="Colegio Nuestra Señora del Carmen, CNSC Valdivia, colegio católico, educación, pastoral">
 
-  <link href="{{ asset('brand/logo-cnsc.png') }}" rel="icon">
-  <link href="{{ asset('brand/logo-cnsc.png') }}" rel="apple-touch-icon">
+  @include('partials.favicon')
 
   <link href="https://fonts.googleapis.com" rel="preconnect">
   <link href="https://fonts.gstatic.com" rel="preconnect" crossorigin>

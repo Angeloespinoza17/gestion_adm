@@ -17,8 +17,8 @@ use App\Models\Infirmary\InfirmaryMedicationAdministration;
 use App\Models\Infirmary\InfirmaryMedicationAuthorization;
 use App\Models\MaintenanceDependency;
 use App\Models\Staff;
-use App\Models\Supplier;
 use App\Models\StudentProfile;
+use App\Models\Supplier;
 use App\Models\User;
 use App\Services\Infirmary\InfirmaryAccessService;
 use App\Services\Infirmary\InfirmaryMedicationStockService;
@@ -87,6 +87,8 @@ class InfirmaryCatalogController extends Controller
                 ['value' => 'not_applicable', 'label' => 'No aplica hoy'],
             ],
             'attention_categories' => $this->attentionCategoryOptions(),
+            'mental_health_event_options' => InfirmaryAttention::MENTAL_HEALTH_EVENT_OPTIONS,
+            'self_harm_injury_options' => InfirmaryAttention::SELF_HARM_INJURY_OPTIONS,
             'priority_options' => InfirmaryAttention::PRIORITY_OPTIONS,
             'status_options' => InfirmaryAttention::STATUS_OPTIONS,
             'accident_location_options' => InfirmaryAttention::ACCIDENT_LOCATION_OPTIONS,
@@ -187,25 +189,33 @@ class InfirmaryCatalogController extends Controller
 
     private function attentionCategoryOptions(): array
     {
-        if (Schema::hasTable('infirmary_catalog_items')) {
-            $items = InfirmaryCatalogItem::optionsForGroup(InfirmaryCatalogItem::GROUP_ATTENTION_CATEGORY);
+        $options = [];
 
-            if ($items !== []) {
-                return $items;
-            }
+        if (Schema::hasTable('infirmary_catalog_items')) {
+            $options = InfirmaryCatalogItem::optionsForGroup(InfirmaryCatalogItem::GROUP_ATTENTION_CATEGORY);
         }
 
-        return [
-            ['value' => 'accidente_menor', 'label' => 'Accidente menor (caída o golpe)'],
-            ['value' => 'accidente_mayor', 'label' => 'Accidente mayor (herida, contusión o torcedura)'],
-            ['value' => 'emocional', 'label' => 'Emocional'],
-            ['value' => 'dolor_estomago', 'label' => 'Dolor de estómago'],
-            ['value' => 'dolor_cabeza', 'label' => 'Dolor de cabeza'],
-            ['value' => 'epistaxis', 'label' => 'Epistaxis'],
-            ['value' => 'control_signos_vitales', 'label' => 'Control de signos vitales'],
-            ['value' => 'herido_dolor_anterior', 'label' => 'Herido o dolor anterior'],
-            ['value' => 'otro', 'label' => 'Otro'],
-        ];
+        if ($options === []) {
+            $options = [
+                ['value' => 'accidente_menor', 'label' => 'Accidente menor (caída o golpe)'],
+                ['value' => 'accidente_mayor', 'label' => 'Accidente mayor (herida, contusión o torcedura)'],
+                ['value' => 'emocional', 'label' => 'Emocional'],
+                ['value' => 'dolor_estomago', 'label' => 'Dolor de estómago'],
+                ['value' => 'dolor_cabeza', 'label' => 'Dolor de cabeza'],
+                ['value' => 'epistaxis', 'label' => 'Epistaxis'],
+                ['value' => 'control_signos_vitales', 'label' => 'Control de signos vitales'],
+                ['value' => 'herido_dolor_anterior', 'label' => 'Herido o dolor anterior'],
+                ['value' => 'otro', 'label' => 'Otro'],
+            ];
+        }
+
+        if (! collect($options)->contains('value', InfirmaryAttention::MENTAL_HEALTH_CATEGORY)) {
+            $emotionalIndex = collect($options)->search(fn (array $option) => $option['value'] === 'emocional');
+            $insertAt = $emotionalIndex === false ? count($options) : $emotionalIndex + 1;
+            array_splice($options, $insertAt, 0, [InfirmaryAttention::MENTAL_HEALTH_CATEGORY_OPTION]);
+        }
+
+        return $options;
     }
 
     private function dependencyOptions()

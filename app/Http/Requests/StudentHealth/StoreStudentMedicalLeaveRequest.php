@@ -23,6 +23,7 @@ class StoreStudentMedicalLeaveRequest extends FormRequest
             'reason' => ['required', 'string', 'max:1500'],
             'is_permanent' => ['required', 'boolean'],
             'source_module' => ['required', Rule::in(['infirmary', 'inspectoria'])],
+            'attachment' => ['nullable', 'file', 'mimes:pdf,jpg,jpeg,png,webp,heic,heif', 'max:15360'],
         ];
     }
 
@@ -49,6 +50,9 @@ class StoreStudentMedicalLeaveRequest extends FormRequest
             'reason.max' => 'El motivo no puede superar los 1500 caracteres.',
             'is_permanent.required' => 'Indica si corresponde a una condición permanente.',
             'source_module.in' => 'El origen del registro no es válido.',
+            'attachment.file' => 'El respaldo adjunto no es un archivo válido.',
+            'attachment.mimes' => 'El respaldo debe ser PDF o una imagen JPG, PNG, WEBP, HEIC o HEIF.',
+            'attachment.max' => 'El respaldo no puede superar los 15 MB.',
         ];
     }
 }

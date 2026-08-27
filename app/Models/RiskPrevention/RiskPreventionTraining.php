@@ -14,6 +14,7 @@ class RiskPreventionTraining extends Model
     protected $fillable = [
         'name',
         'requirement_type_id',
+        'joint_committee_id',
         'training_type',
         'training_date',
         'modality',
@@ -38,6 +39,11 @@ class RiskPreventionTraining extends Model
     public function requirement(): BelongsTo
     {
         return $this->belongsTo(RiskPreventionStaffRequirementType::class, 'requirement_type_id');
+    }
+
+    public function jointCommittee(): BelongsTo
+    {
+        return $this->belongsTo(RiskPreventionJointCommittee::class, 'joint_committee_id');
     }
 
     public function createdBy(): BelongsTo

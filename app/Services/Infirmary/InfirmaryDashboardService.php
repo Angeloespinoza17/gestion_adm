@@ -42,6 +42,8 @@ class InfirmaryDashboardService
         $previousAdministrations = $this->administrationQuery($previousRange['from'], $previousRange['to'], $filters);
         $calls = $this->callQuery($range['from'], $range['to'], $filters);
         $previousCalls = $this->callQuery($previousRange['from'], $previousRange['to'], $filters);
+        $followUps = $this->followUpRows($range['from'], $range['to'], $filters);
+        $previousFollowUps = $this->followUpRows($previousRange['from'], $previousRange['to'], $filters);
 
         $treatments = $this->treatmentRows($range['from'], $range['to'], $filters);
         $previousTreatments = $this->treatmentRows($previousRange['from'], $previousRange['to'], $filters);
@@ -59,6 +61,8 @@ class InfirmaryDashboardService
             $administrations,
             $calls,
             $referrals,
+            $treatments,
+            $followUps,
         );
         $previousMetrics = $this->metrics(
             $previousAttentions,
@@ -66,6 +70,8 @@ class InfirmaryDashboardService
             $previousAdministrations,
             $previousCalls,
             $previousReferrals,
+            $previousTreatments,
+            $previousFollowUps,
         );
 
         $attentionDates = (clone $attentions)->pluck('attended_at');
@@ -82,6 +88,7 @@ class InfirmaryDashboardService
         $referralDistribution = $this->rowsDistribution($referrals, 'label', 10);
         $administrationOutcomes = $this->administrationOutcomes($administrations);
         $healthProfile = $this->healthProfileStatistics($filters);
+        $recordQuality = $this->recordQuality($attentions, $currentMetrics);
 
         return [
             'generated_at' => now(config('app.timezone'))->toIso8601String(),
@@ -103,6 +110,7 @@ class InfirmaryDashboardService
             ),
             'operational' => $this->operationalStatus(),
             'health_profile' => $healthProfile,
+            'record_quality' => $recordQuality,
             'charts' => [
                 'activity_trend' => $trend,
                 'attentions_by_category' => $categories,
@@ -115,6 +123,20 @@ class InfirmaryDashboardService
                 'medications_administered' => $medications,
                 'referrals' => $referralDistribution,
                 'administration_outcomes' => $administrationOutcomes,
+                'priority_distribution' => $this->groupedColumn($attentions, 'priority', 'Sin prioridad'),
+                'attention_statuses' => $this->groupedColumn($attentions, 'status', 'Sin estado'),
+                'companion_types' => $this->groupedColumn($attentions, 'accompanied_by_type', 'Sin información'),
+                'duration_bands' => $this->durationBands($attentions),
+                'response_time_bands' => $this->responseTimeBands($attentions),
+                'attentions_by_weekday' => $this->weekdayDistribution($attentionDates),
+                'student_recurrence' => $this->studentRecurrence($attentions),
+                'age_groups' => $this->ageGroups($attentions),
+                'call_outcomes' => $this->groupedColumn($calls, 'call_status', 'Sin estado'),
+                'call_relationships' => $this->groupedColumn($calls, 'relationship', 'Sin relación', 10),
+                'follow_up_statuses' => $this->rowsDistribution($followUps, 'status'),
+                'professionals' => $this->professionalDistribution($attentions),
+                'referring_staff' => $this->referringStaffDistribution($attentions),
+                'derivation_support_teams' => $this->arrayDistribution($treatments, 'derivation_support_teams'),
             ],
             'recent' => [
                 'attentions' => (clone $attentions)
@@ -388,7 +410,30 @@ class InfirmaryDashboardService
                 'treatment_types',
                 'treatment_categories',
                 'derivation_type',
+                'derivation_support_teams',
+                'blood_pressure',
+                'pulse',
+                'respiratory_rate',
+                'temperature',
+                'oxygen_saturation',
+                'weight',
+                'height',
+                'bmi',
+                'emotional_support_required',
+                'emotional_duration_minutes',
             ]);
+    }
+
+    /**
+     * @param  array<string, mixed>  $filters
+     */
+    private function followUpRows(CarbonInterface $from, CarbonInterface $to, array $filters): Collection
+    {
+        return InfirmaryAttentionFollowUp::query()
+            ->whereBetween('followed_at', [$from, $to])
+            ->whereHas('attention', fn (Builder $attention) => $this
+                ->applyAttentionDimensions($attention, $filters))
+            ->get(['attention_id', 'status', 'followed_at', 'next_review_at', 'completed_at']);
     }
 
     /**
@@ -430,26 +475,109 @@ class InfirmaryDashboardService
         Builder $administrations,
         Builder $calls,
         Collection $referrals,
+        Collection $treatments,
+        Collection $followUps,
     ): array {
-        $attentionCount = (clone $attentions)->count();
+        $attentionAggregate = (clone $attentions)
+            ->selectRaw('COUNT(*) as aggregate_total')
+            ->selectRaw('COUNT(DISTINCT student_profile_id) as unique_students')
+            ->selectRaw('AVG(attention_duration_minutes) as average_attention_minutes')
+            ->selectRaw("SUM(CASE WHEN priority IN ('alta', 'emergencia') THEN 1 ELSE 0 END) as high_priority_total")
+            ->selectRaw("SUM(CASE WHEN status = 'finalizada' THEN 1 ELSE 0 END) as finalized_total")
+            ->selectRaw("SUM(CASE WHEN status IN ('abierta', 'en_atencion') THEN 1 ELSE 0 END) as active_total")
+            ->first();
+        $attentionCount = (int) ($attentionAggregate?->aggregate_total ?? 0);
+        $uniqueStudents = (int) ($attentionAggregate?->unique_students ?? 0);
+        $highPriorityTotal = (int) ($attentionAggregate?->high_priority_total ?? 0);
+        $finalizedTotal = (int) ($attentionAggregate?->finalized_total ?? 0);
+        $activeTotal = (int) ($attentionAggregate?->active_total ?? 0);
         $administeredCount = $this->administrationCount($administrations, true);
         $notAdministeredCount = $this->administrationCount($administrations, false);
         $registeredMedicationCount = $administeredCount + $notAdministeredCount;
         $referralCount = $referrals->count();
+        $treatmentAttentionCount = $treatments->pluck('attention_id')->filter()->unique()->count();
+        $vitalSignsAttentionCount = $treatments
+            ->filter(fn (InfirmaryAttentionTreatment $treatment) => $this->hasVitalSigns($treatment))
+            ->pluck('attention_id')
+            ->filter()
+            ->unique()
+            ->count();
+        $emotionalSupportRows = $treatments->filter(
+            fn (InfirmaryAttentionTreatment $treatment) => (bool) $treatment->emotional_support_required,
+        );
+        $emotionalSupportAttentionCount = $emotionalSupportRows
+            ->pluck('attention_id')
+            ->filter()
+            ->unique()
+            ->count();
+        $callAggregate = (clone $calls)
+            ->selectRaw('COUNT(*) as aggregate_total')
+            ->selectRaw("SUM(CASE WHEN call_status = 'contesto' THEN 1 ELSE 0 END) as answered_total")
+            ->selectRaw('AVG(duration_minutes) as average_duration_minutes')
+            ->first();
+        $callCount = (int) ($callAggregate?->aggregate_total ?? 0);
+        $answeredCalls = (int) ($callAggregate?->answered_total ?? 0);
+        $followUpCount = $followUps->count();
+        $closedFollowUps = $followUps->where('status', 'cerrado')->count();
 
         return [
             'attentions_total' => $attentionCount,
-            'unique_students' => (clone $attentions)->distinct('student_profile_id')->count('student_profile_id'),
+            'unique_students' => $uniqueStudents,
+            'repeat_attentions_total' => max(0, $attentionCount - $uniqueStudents),
+            'recurrence_rate' => $this->percentage(max(0, $attentionCount - $uniqueStudents), $attentionCount),
+            'average_attentions_per_student' => $uniqueStudents > 0 ? round($attentionCount / $uniqueStudents, 1) : 0.0,
             'accidents_total' => (clone $accidents)->count(),
             'medications_administered_total' => $administeredCount,
             'medications_not_administered_total' => $notAdministeredCount,
             'referrals_total' => $referralCount,
-            'calls_total' => (clone $calls)->count(),
-            'average_attention_minutes' => round((float) (clone $attentions)->avg('attention_duration_minutes'), 1),
+            'calls_total' => $callCount,
+            'answered_calls_total' => $answeredCalls,
+            'call_effectiveness' => $this->percentage($answeredCalls, $callCount),
+            'average_call_minutes' => round((float) ($callAggregate?->average_duration_minutes ?? 0), 1),
+            'follow_ups_total' => $followUpCount,
+            'closed_follow_ups_total' => $closedFollowUps,
+            'follow_up_resolution_rate' => $this->percentage($closedFollowUps, $followUpCount),
+            'treatments_total' => $treatments->count(),
+            'attentions_with_treatment' => $treatmentAttentionCount,
+            'treatment_coverage' => $this->percentage($treatmentAttentionCount, $attentionCount),
+            'vital_signs_attentions' => $vitalSignsAttentionCount,
+            'vital_signs_coverage' => $this->percentage($vitalSignsAttentionCount, $attentionCount),
+            'fever_records_total' => $treatments->filter(
+                fn (InfirmaryAttentionTreatment $treatment) => $treatment->temperature !== null
+                    && (float) $treatment->temperature >= 38,
+            )->count(),
+            'low_oxygen_records_total' => $treatments->filter(
+                fn (InfirmaryAttentionTreatment $treatment) => $treatment->oxygen_saturation !== null
+                    && (int) $treatment->oxygen_saturation <= 94,
+            )->count(),
+            'emotional_support_attentions' => $emotionalSupportAttentionCount,
+            'emotional_support_rate' => $this->percentage($emotionalSupportAttentionCount, $attentionCount),
+            'emotional_support_minutes' => (int) $emotionalSupportRows->sum('emotional_duration_minutes'),
+            'high_priority_total' => $highPriorityTotal,
+            'high_priority_rate' => $this->percentage($highPriorityTotal, $attentionCount),
+            'finalized_total' => $finalizedTotal,
+            'active_total' => $activeTotal,
+            'completion_rate' => $this->percentage($finalizedTotal, $attentionCount),
+            'average_attention_minutes' => round((float) ($attentionAggregate?->average_attention_minutes ?? 0), 1),
+            'average_response_minutes' => $this->averageResponseMinutes($attentions),
             'accident_rate' => $this->percentage((clone $accidents)->count(), $attentionCount),
             'referral_rate' => $this->percentage($referralCount, $attentionCount),
             'medication_adherence' => $this->percentage($administeredCount, $registeredMedicationCount),
         ];
+    }
+
+    private function hasVitalSigns(InfirmaryAttentionTreatment $treatment): bool
+    {
+        return collect([
+            $treatment->blood_pressure,
+            $treatment->pulse,
+            $treatment->respiratory_rate,
+            $treatment->temperature,
+            $treatment->oxygen_saturation,
+            $treatment->weight,
+            $treatment->height,
+            $treatment->bmi,
+        ])->contains(fn ($value) => filled($value));
     }
 
     private function administrationCount(Builder $query, bool $administered): int
@@ -481,12 +609,20 @@ class InfirmaryDashboardService
         $keys = [
             'attentions_total',
             'unique_students',
+            'recurrence_rate',
             'accidents_total',
             'medications_administered_total',
             'referrals_total',
             'calls_total',
             'average_attention_minutes',
+            'average_response_minutes',
             'medication_adherence',
+            'completion_rate',
+            'high_priority_rate',
+            'treatment_coverage',
+            'vital_signs_coverage',
+            'call_effectiveness',
+            'follow_up_resolution_rate',
         ];
 
         return collect($keys)->mapWithKeys(function (string $key) use ($current, $previous) {
@@ -502,6 +638,214 @@ class InfirmaryDashboardService
                 'change' => $change,
             ]];
         })->all();
+    }
+
+    private function averageResponseMinutes(Builder $attentions): float
+    {
+        $expression = $this->responseMinutesExpression($attentions);
+        $row = (clone $attentions)
+            ->whereNotNull('occurred_at')
+            ->whereNotNull('attended_at')
+            ->whereColumn('attended_at', '>=', 'occurred_at')
+            ->selectRaw("AVG({$expression}) as aggregate_average")
+            ->first();
+
+        return round((float) ($row?->aggregate_average ?? 0), 1);
+    }
+
+    private function responseMinutesExpression(Builder $query): string
+    {
+        return match ($query->getModel()->getConnection()->getDriverName()) {
+            'sqlite' => '((julianday(attended_at) - julianday(occurred_at)) * 1440)',
+            'pgsql' => '(EXTRACT(EPOCH FROM (attended_at - occurred_at)) / 60)',
+            'sqlsrv' => 'DATEDIFF(minute, occurred_at, attended_at)',
+            default => 'TIMESTAMPDIFF(MINUTE, occurred_at, attended_at)',
+        };
+    }
+
+    private function durationBands(Builder $attentions): array
+    {
+        $expression = "CASE
+            WHEN attention_duration_minutes IS NULL THEN 'Sin registro'
+            WHEN attention_duration_minutes <= 5 THEN 'Hasta 5 min'
+            WHEN attention_duration_minutes <= 15 THEN '6-15 min'
+            WHEN attention_duration_minutes <= 30 THEN '16-30 min'
+            WHEN attention_duration_minutes <= 60 THEN '31-60 min'
+            ELSE 'Más de 60 min'
+        END";
+
+        return $this->orderedCaseDistribution(
+            $attentions,
+            $expression,
+            ['Hasta 5 min', '6-15 min', '16-30 min', '31-60 min', 'Más de 60 min', 'Sin registro'],
+        );
+    }
+
+    private function responseTimeBands(Builder $attentions): array
+    {
+        $minutes = $this->responseMinutesExpression($attentions);
+        $expression = "CASE
+            WHEN {$minutes} <= 5 THEN 'Hasta 5 min'
+            WHEN {$minutes} <= 15 THEN '6-15 min'
+            WHEN {$minutes} <= 30 THEN '16-30 min'
+            WHEN {$minutes} <= 60 THEN '31-60 min'
+            ELSE 'Más de 60 min'
+        END";
+        $query = (clone $attentions)
+            ->whereNotNull('occurred_at')
+            ->whereNotNull('attended_at')
+            ->whereColumn('attended_at', '>=', 'occurred_at');
+
+        return $this->orderedCaseDistribution(
+            $query,
+            $expression,
+            ['Hasta 5 min', '6-15 min', '16-30 min', '31-60 min', 'Más de 60 min'],
+        );
+    }
+
+    /**
+     * @param  array<int, string>  $order
+     */
+    private function orderedCaseDistribution(Builder $query, string $expression, array $order): array
+    {
+        $rows = (clone $query)
+            ->selectRaw("{$expression} as distribution_label")
+            ->selectRaw('COUNT(*) as aggregate_total')
+            ->groupByRaw($expression)
+            ->get()
+            ->mapWithKeys(fn ($row) => [
+                (string) $row->distribution_label => (int) $row->aggregate_total,
+            ]);
+
+        return collect($order)
+            ->filter(fn (string $label) => $rows->has($label))
+            ->map(fn (string $label) => ['label' => $label, 'total' => $rows[$label]])
+            ->values()
+            ->all();
+    }
+
+    private function weekdayDistribution(Collection $dates): array
+    {
+        $labels = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
+        $counts = $dates
+            ->filter()
+            ->map(fn ($date) => Carbon::parse($date)->dayOfWeek)
+            ->countBy();
+
+        return collect([1, 2, 3, 4, 5, 6, 0])
+            ->filter(fn (int $day) => $counts->has($day))
+            ->map(fn (int $day) => ['label' => $labels[$day], 'total' => (int) $counts[$day]])
+            ->values()
+            ->all();
+    }
+
+    private function studentRecurrence(Builder $attentions): array
+    {
+        $counts = (clone $attentions)
+            ->whereNotNull('student_profile_id')
+            ->select('student_profile_id')
+            ->selectRaw('COUNT(*) as aggregate_total')
+            ->groupBy('student_profile_id')
+            ->pluck('aggregate_total')
+            ->map(fn ($total) => (int) $total);
+
+        $buckets = [
+            '1 atención' => $counts->filter(fn (int $total) => $total === 1)->count(),
+            '2 atenciones' => $counts->filter(fn (int $total) => $total === 2)->count(),
+            '3-4 atenciones' => $counts->filter(fn (int $total) => $total >= 3 && $total <= 4)->count(),
+            '5 o más' => $counts->filter(fn (int $total) => $total >= 5)->count(),
+        ];
+
+        return collect($buckets)
+            ->filter(fn (int $total) => $total > 0)
+            ->map(fn (int $total, string $label) => ['label' => $label, 'total' => $total])
+            ->values()
+            ->all();
+    }
+
+    private function ageGroups(Builder $attentions): array
+    {
+        $expression = "CASE
+            WHEN age_snapshot IS NULL THEN 'Sin edad'
+            WHEN age_snapshot <= 6 THEN 'Hasta 6 años'
+            WHEN age_snapshot <= 9 THEN '7-9 años'
+            WHEN age_snapshot <= 12 THEN '10-12 años'
+            WHEN age_snapshot <= 15 THEN '13-15 años'
+            ELSE '16 años o más'
+        END";
+
+        return $this->orderedCaseDistribution(
+            $attentions,
+            $expression,
+            ['Hasta 6 años', '7-9 años', '10-12 años', '13-15 años', '16 años o más', 'Sin edad'],
+        );
+    }
+
+    private function professionalDistribution(Builder $attentions): array
+    {
+        return (clone $attentions)
+            ->leftJoin('users', 'users.id', '=', 'infirmary_attentions.attended_by_user_id')
+            ->selectRaw("COALESCE(users.name, 'Sin profesional') as distribution_label")
+            ->selectRaw('COUNT(*) as aggregate_total')
+            ->groupBy('users.id', 'users.name')
+            ->orderByDesc('aggregate_total')
+            ->limit(10)
+            ->get()
+            ->map(fn ($row) => [
+                'label' => (string) $row->distribution_label,
+                'total' => (int) $row->aggregate_total,
+            ])
+            ->all();
+    }
+
+    private function referringStaffDistribution(Builder $attentions): array
+    {
+        return (clone $attentions)
+            ->leftJoin('staff', 'staff.id', '=', 'infirmary_attentions.referred_by_staff_id')
+            ->selectRaw("COALESCE(staff.full_name, 'Ingreso directo / sin derivante') as distribution_label")
+            ->selectRaw('COUNT(*) as aggregate_total')
+            ->groupBy('staff.id', 'staff.full_name')
+            ->orderByDesc('aggregate_total')
+            ->limit(10)
+            ->get()
+            ->map(fn ($row) => [
+                'label' => (string) $row->distribution_label,
+                'total' => (int) $row->aggregate_total,
+            ])
+            ->all();
+    }
+
+    private function recordQuality(Builder $attentions, array $metrics): array
+    {
+        $aggregate = (clone $attentions)
+            ->selectRaw('COUNT(*) as aggregate_total')
+            ->selectRaw('SUM(CASE WHEN attention_duration_minutes IS NOT NULL THEN 1 ELSE 0 END) as duration_total')
+            ->selectRaw('SUM(CASE WHEN attended_by_user_id IS NOT NULL THEN 1 ELSE 0 END) as professional_total')
+            ->selectRaw("SUM(CASE WHEN COALESCE(logbook, '') <> '' OR COALESCE(initial_description, '') <> '' OR COALESCE(observations, '') <> '' THEN 1 ELSE 0 END) as narrative_total")
+            ->selectRaw("SUM(CASE WHEN status = 'finalizada' AND finalized_at IS NOT NULL THEN 1 ELSE 0 END) as finalized_with_date_total")
+            ->first();
+        $total = (int) ($aggregate?->aggregate_total ?? 0);
+        $finalized = (int) ($metrics['finalized_total'] ?? 0);
+
+        return [
+            $this->qualityItem('duration', 'Duración consignada', (int) ($aggregate?->duration_total ?? 0), $total),
+            $this->qualityItem('professional', 'Profesional identificado', (int) ($aggregate?->professional_total ?? 0), $total),
+            $this->qualityItem('clinical_detail', 'Detalle clínico complementario', (int) ($aggregate?->narrative_total ?? 0), $total),
+            $this->qualityItem('treatment', 'Tratamiento documentado', (int) ($metrics['attentions_with_treatment'] ?? 0), $total),
+            $this->qualityItem('vital_signs', 'Signos vitales documentados', (int) ($metrics['vital_signs_attentions'] ?? 0), $total),
+            $this->qualityItem('finalization', 'Cierres con fecha registrada', (int) ($aggregate?->finalized_with_date_total ?? 0), $finalized),
+        ];
+    }
+
+    private function qualityItem(string $key, string $label, int $completed, int $eligible): array
+    {
+        return [
+            'key' => $key,
+            'label' => $label,
+            'completed' => $completed,
+            'eligible' => $eligible,
+            'percentage' => $this->percentage($completed, $eligible),
+        ];
     }
 
     private function groupedColumn(Builder $query, string $column, string $fallback, ?int $limit = null): array

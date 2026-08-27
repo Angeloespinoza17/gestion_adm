@@ -52,6 +52,11 @@ export default {
     }
   },
   methods: {
+    translateMenuLabel(value) {
+      const label = String(value ?? "");
+
+      return label && this.$te(label) ? this.$t(label) : label;
+    },
     /**
      * Returns true or false if given menu item has child or not
      * @param item menuItem
@@ -75,42 +80,42 @@ export default {
             <template v-for="(item, index) of menuItems" :key="index">
               <li class="nav-item dropdown">
                 <router-link class="nav-link dropdown-toggle arrow-none" v-if="!item.subItems" id="topnav-components" :to="item.link" role="button">
-                  <i :class="`bx ${item.icon} mr-2`"></i>{{ $t(item.label) }}
+                  <i :class="`bx ${item.icon} mr-2`"></i>{{ translateMenuLabel(item.label) }}
                   <div class="arrow-down" v-if="hasItems(item)"></div>
                 </router-link>
 
                 <BLink v-if="item.subItems" class="nav-link dropdown-toggle arrow-none" id="topnav-components" role="button">
                   <i :class="`bx ${item.icon} mr-1`"></i>
-                  {{ $t(item.label) }}
+                  {{ translateMenuLabel(item.label) }}
                   <div class="arrow-down"></div>
                 </BLink>
 
                 <div class="dropdown-menu" aria-labelledby="topnav-dashboard" v-if="hasItems(item)" :class="{ 'dropdown-mega-menu-xl px-2': item.subItems.length > 11 }">
                   <template v-for="(subitem, index) of item.subItems">
-                    <router-link class="col dropdown-item side-nav-link-ref" :key="index" v-if="item.subItems.length < 11 && !hasItems(subitem)" :to="subitem.link">{{ $t(subitem.label) }}</router-link>
+                    <router-link class="col dropdown-item side-nav-link-ref" :key="index" v-if="item.subItems.length < 11 && !hasItems(subitem)" :to="subitem.link">{{ translateMenuLabel(subitem.label) }}</router-link>
                     <div v-if="item.subItems.length > 11" :key="index">
                       <BRow v-if="index % 3 == 0">
-                        <BCol lg="4"><router-link class="dropdown-item side-nav-link-ref" :to="subitem.link">{{ $t(item.subItems[index].label) }}</router-link></BCol>
-                        <BCol lg="4" v-if="item.subItems[index + 1]"><router-link class="dropdown-item side-nav-link-ref" :to="item.subItems[index + 1].link">{{ $t(item.subItems[index + 1].label) }}</router-link></BCol>
-                        <BCol lg="4" v-if="item.subItems[index + 2]"><router-link class="dropdown-item side-nav-link-ref" :to="item.subItems[index + 2].link">{{ $t(item.subItems[index + 2].label) }}</router-link></BCol>
+                        <BCol lg="4"><router-link class="dropdown-item side-nav-link-ref" :to="subitem.link">{{ translateMenuLabel(item.subItems[index].label) }}</router-link></BCol>
+                        <BCol lg="4" v-if="item.subItems[index + 1]"><router-link class="dropdown-item side-nav-link-ref" :to="item.subItems[index + 1].link">{{ translateMenuLabel(item.subItems[index + 1].label) }}</router-link></BCol>
+                        <BCol lg="4" v-if="item.subItems[index + 2]"><router-link class="dropdown-item side-nav-link-ref" :to="item.subItems[index + 2].link">{{ translateMenuLabel(item.subItems[index + 2].label) }}</router-link></BCol>
                       </BRow>
                     </div>
                     <div class="dropdown" v-if="hasItems(subitem)" :key="index">
-                      <BLink class="dropdown-item dropdown-toggle" href="javascript: void(0);">{{ $t(subitem.label) }}
+                      <BLink class="dropdown-item dropdown-toggle" href="javascript: void(0);">{{ translateMenuLabel(subitem.label) }}
                         <div class="arrow-down"></div>
                       </BLink>
                       <div class="dropdown-menu">
                         <template v-for="(subSubitem, index) of subitem.subItems">
-                          <router-link class="dropdown-item side-nav-link-ref" :key="index" v-if="!hasItems(subSubitem)" :to="subSubitem.link">{{ $t(subSubitem.label) }}</router-link>
+                          <router-link class="dropdown-item side-nav-link-ref" :key="index" v-if="!hasItems(subSubitem)" :to="subSubitem.link">{{ translateMenuLabel(subSubitem.label) }}</router-link>
                           <div class="dropdown" v-if="hasItems(subSubitem)" :key="index">
-                            <BLink class="dropdown-item dropdown-toggle" href="javascript: void(0);">{{ $t(subSubitem.label) }}
+                            <BLink class="dropdown-item dropdown-toggle" href="javascript: void(0);">{{ translateMenuLabel(subSubitem.label) }}
                               <div class="arrow-down"></div>
                             </BLink>
                             <div class="dropdown-menu">
                               <template v-for="(
                                   subSubSubitem, index
                                 ) of subSubitem.subItems" :key="index">
-                                <router-link class="dropdown-item side-nav-link-ref" :to="subSubSubitem.link" routerLinkActive="active">{{ $t(subSubSubitem.label) }}</router-link>
+                                <router-link class="dropdown-item side-nav-link-ref" :to="subSubSubitem.link" routerLinkActive="active">{{ translateMenuLabel(subSubSubitem.label) }}</router-link>
                               </template>
                             </div>
                           </div>

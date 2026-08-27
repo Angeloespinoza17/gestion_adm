@@ -135,4 +135,69 @@ class InfirmaryStudentAttentionContactTest extends TestCase
             'attention_duration_minutes' => 5,
         ]);
     }
+
+    public function test_student_attention_requires_and_stores_the_mental_health_categorization(): void
+    {
+        $this->getJson('/api/infirmary/catalogs')
+            ->assertOk()
+            ->assertJsonFragment(['value' => 'salud_mental', 'label' => 'Salud mental'])
+            ->assertJsonFragment(['value' => 'autolesion', 'label' => 'Autolesión'])
+            ->assertJsonFragment(['value' => 'contencion', 'label' => 'Contención'])
+            ->assertJsonFragment(['value' => 'ingesta_medicamentos', 'label' => 'Ingesta de medicamentos'])
+            ->assertJsonFragment(['value' => 'corte', 'label' => 'Corte'])
+            ->assertJsonFragment(['value' => 'contusion', 'label' => 'Contusión'])
+            ->assertJsonFragment(['value' => 'herida_abrasiva', 'label' => 'Herida abrasiva']);
+
+        $student = StudentProfile::query()->create([
+            'first_name' => 'Antonia',
+            'last_name' => 'Morales',
+            'rut' => '28111222-5',
+        ]);
+        $payload = [
+            'student_profile_id' => $student->id,
+            'attention_category' => 'salud_mental',
+            'occurred_at' => now()->subMinutes(10)->format('Y-m-d H:i:s'),
+            'attended_at' => now()->subMinutes(5)->format('Y-m-d H:i:s'),
+            'accompanied_by_type' => 'sin_acompanante',
+            'consultation_reason' => 'Evaluación y contención inicial en Enfermería.',
+            'priority' => 'alta',
+            'status' => 'abierta',
+        ];
+
+        $this->postJson('/api/infirmary/attentions', $payload)
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('mental_health_event_type');
+
+        $this->postJson('/api/infirmary/attentions', [
+            ...$payload,
+            'mental_health_event_type' => 'autolesion',
+        ])->assertUnprocessable()
+            ->assertJsonValidationErrors('self_harm_injury_type');
+
+        $response = $this->postJson('/api/infirmary/attentions', [
+            ...$payload,
+            'mental_health_event_type' => 'autolesion',
+            'self_harm_injury_type' => 'corte',
+        ])->assertCreated()
+            ->assertJsonPath('data.attention_category', 'salud_mental')
+            ->assertJsonPath('data.mental_health_event_type', 'autolesion')
+            ->assertJsonPath('data.self_harm_injury_type', 'corte');
+
+        $attentionId = $response->json('data.id');
+
+        $this->putJson("/api/infirmary/attentions/{$attentionId}", [
+            ...$payload,
+            'mental_health_event_type' => 'contencion',
+            'self_harm_injury_type' => 'herida_abrasiva',
+        ])->assertOk()
+            ->assertJsonPath('data.mental_health_event_type', 'contencion')
+            ->assertJsonPath('data.self_harm_injury_type', null);
+
+        $this->putJson("/api/infirmary/attentions/{$attentionId}", [
+            ...$payload,
+            'mental_health_event_type' => 'ingesta_medicamentos',
+        ])->assertOk()
+            ->assertJsonPath('data.mental_health_event_type', 'ingesta_medicamentos')
+            ->assertJsonPath('data.self_harm_injury_type', null);
+    }
 }

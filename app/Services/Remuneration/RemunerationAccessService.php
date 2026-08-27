@@ -8,22 +8,55 @@ use Illuminate\Support\Facades\Schema;
 class RemunerationAccessService
 {
     public const CONFIDENTIAL_ACCESS_PERMISSION = 'remuneraciones.acceso_confidencial';
+
     public const VIEW_PERMISSION = 'remuneraciones.ver';
+
     public const DASHBOARD_PERMISSION = 'remuneraciones.dashboard';
+
     public const EMPLOYEES_PERMISSION = 'remuneraciones.trabajadores.gestionar';
+
     public const CONTRACTS_PERMISSION = 'remuneraciones.contratos.gestionar';
+
     public const PARAMETERS_PERMISSION = 'remuneraciones.parametros.gestionar';
+
     public const CONCEPTS_PERMISSION = 'remuneraciones.conceptos.gestionar';
+
     public const MOVEMENTS_PERMISSION = 'remuneraciones.movimientos.gestionar';
+
     public const CALCULATE_PERMISSION = 'remuneraciones.liquidaciones.calcular';
+
     public const APPROVE_PERMISSION = 'remuneraciones.liquidaciones.aprobar';
+
     public const PAYMENTS_PERMISSION = 'remuneraciones.pagos.gestionar';
+
     public const ACCOUNTING_PERMISSION = 'remuneraciones.contabilidad.centralizar';
+
     public const REPORTS_PERMISSION = 'remuneraciones.reportes.ver';
+
     public const EXPORT_PERMISSION = 'remuneraciones.reportes.exportar';
+
     public const IMPORT_PERMISSION = 'remuneraciones.importar';
+
     public const CLOSE_PERIOD_PERMISSION = 'remuneraciones.periodos.cerrar';
+
     public const HR_MANAGEMENT_PERMISSION = 'remuneraciones.rrhh.gestionar';
+
+    public const PAYSLIP_VIEW_PERMISSION = 'remuneraciones.liquidaciones_pdf.ver';
+
+    public const PAYSLIP_IMPORT_PERMISSION = 'remuneraciones.liquidaciones_pdf.importar';
+
+    public const PAYSLIP_ISSUES_PERMISSION = 'remuneraciones.liquidaciones_pdf.incidencias';
+
+    public const PAYSLIP_REPROCESS_PERMISSION = 'remuneraciones.liquidaciones_pdf.reprocesar';
+
+    public const PAYSLIP_EXPORT_PERMISSION = 'remuneraciones.liquidaciones_pdf.exportar';
+
+    public const PAYSLIP_PROPOSAL_PERMISSION = 'remuneraciones.liquidaciones_pdf.propuesta_pago';
+
+    public const PAYSLIP_ANNUL_PERMISSION = 'remuneraciones.liquidaciones_pdf.anular';
+
+    public const PAYSLIP_AUDIT_PERMISSION = 'remuneraciones.liquidaciones_pdf.auditoria';
+
     public const ADMIN_PERMISSION = 'remuneraciones.admin';
 
     /**
@@ -49,6 +82,14 @@ class RemunerationAccessService
             ['slug' => self::IMPORT_PERMISSION, 'name' => 'Importar libro de remuneraciones'],
             ['slug' => self::CLOSE_PERIOD_PERMISSION, 'name' => 'Cerrar y reabrir períodos de remuneraciones'],
             ['slug' => self::HR_MANAGEMENT_PERMISSION, 'name' => 'Gestionar RR.HH. integral'],
+            ['slug' => self::PAYSLIP_VIEW_PERMISSION, 'name' => 'Ver liquidaciones de sueldo importadas'],
+            ['slug' => self::PAYSLIP_IMPORT_PERMISSION, 'name' => 'Importar liquidaciones de sueldo'],
+            ['slug' => self::PAYSLIP_ISSUES_PERMISSION, 'name' => 'Resolver incidencias de liquidaciones'],
+            ['slug' => self::PAYSLIP_REPROCESS_PERMISSION, 'name' => 'Reprocesar liquidaciones'],
+            ['slug' => self::PAYSLIP_EXPORT_PERMISSION, 'name' => 'Exportar matrices de liquidaciones'],
+            ['slug' => self::PAYSLIP_PROPOSAL_PERMISSION, 'name' => 'Generar propuesta de pago de remuneraciones'],
+            ['slug' => self::PAYSLIP_ANNUL_PERMISSION, 'name' => 'Anular importaciones de liquidaciones'],
+            ['slug' => self::PAYSLIP_AUDIT_PERMISSION, 'name' => 'Consultar auditoría de liquidaciones'],
             ['slug' => self::ADMIN_PERMISSION, 'name' => 'Administrar módulo Remuneraciones'],
         ];
     }
@@ -84,6 +125,22 @@ class RemunerationAccessService
             'remuneration_payments',
             'remuneration_accounting_exports',
             'remuneration_audit_logs',
+            'remuneration_funding_source_aliases',
+            'remuneration_payslip_concept_rules',
+            'remuneration_payslip_batches',
+            'remuneration_payslip_files',
+            'remuneration_payslip_pages',
+            'remuneration_payslips',
+            'remuneration_payslip_earnings',
+            'remuneration_payslip_discounts',
+            'remuneration_payslip_discount_allocations',
+            'remuneration_payslip_employer_contributions',
+            'remuneration_payslip_funding_summaries',
+            'remuneration_payslip_controls',
+            'remuneration_payslip_issues',
+            'remuneration_payment_proposals',
+            'remuneration_payment_proposal_items',
+            'remuneration_payment_proposal_allocations',
             'hr_document_controls',
             'hr_medical_leaves',
             'hr_job_profiles',
@@ -100,7 +157,7 @@ class RemunerationAccessService
     public function isInstalled(): bool
     {
         foreach ($this->requiredTables() as $table) {
-            if (!Schema::hasTable($table)) {
+            if (! Schema::hasTable($table)) {
                 return false;
             }
         }
@@ -141,7 +198,7 @@ class RemunerationAccessService
      */
     private function hasAny(?User $user, array $permissions): bool
     {
-        if (!$user || !$user->active) {
+        if (! $user || ! $user->active) {
             return false;
         }
 

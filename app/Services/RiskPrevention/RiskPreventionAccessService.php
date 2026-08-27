@@ -18,6 +18,14 @@ class RiskPreventionAccessService
 
     public const DISSEMINATED_DOCUMENTS_PERMISSION = 'ver_documentos_prevencion_difundibles';
 
+    public const VIEW_COMMITTEE_PERMISSION = 'ver_comite_paritario';
+
+    public const UPLOAD_COMMITTEE_MINUTES_PERMISSION = 'cargar_actas_comite_paritario';
+
+    public const VIEW_EPP_DELIVERIES_PERMISSION = 'ver_entregas_epp';
+
+    public const REGISTER_EPP_DELIVERIES_PERMISSION = 'registrar_entregas_epp';
+
     /**
      * @return array<int, string>
      */
@@ -142,6 +150,32 @@ class RiskPreventionAccessService
         }
 
         return $this->canManage($user) || $user->hasPermission(self::EXPORT_PERMISSION);
+    }
+
+    public function canViewCommittee(?User $user): bool
+    {
+        return $this->canView($user)
+            || ($user?->hasPermission(self::VIEW_COMMITTEE_PERMISSION) ?? false)
+            || ($user?->hasPermission(self::UPLOAD_COMMITTEE_MINUTES_PERMISSION) ?? false);
+    }
+
+    public function canUploadCommitteeMinutes(?User $user): bool
+    {
+        return $this->canManage($user)
+            || ($user?->hasPermission(self::UPLOAD_COMMITTEE_MINUTES_PERMISSION) ?? false);
+    }
+
+    public function canViewEppDeliveries(?User $user): bool
+    {
+        return $this->canView($user)
+            || ($user?->hasPermission(self::VIEW_EPP_DELIVERIES_PERMISSION) ?? false)
+            || ($user?->hasPermission(self::REGISTER_EPP_DELIVERIES_PERMISSION) ?? false);
+    }
+
+    public function canRegisterEppDeliveries(?User $user): bool
+    {
+        return $this->canManage($user)
+            || ($user?->hasPermission(self::REGISTER_EPP_DELIVERIES_PERMISSION) ?? false);
     }
 
     public function refreshDynamicStatuses(): void

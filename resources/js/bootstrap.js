@@ -1,4 +1,4 @@
-import 'bootstrap';
+import "bootstrap";
 
 /**
  * We'll load the axios HTTP library which allows us to easily issue requests
@@ -6,31 +6,29 @@ import 'bootstrap';
  * CSRF token as a header based on the value of the "XSRF" token cookie.
  */
 
-import axios from 'axios';
+import axios from "axios";
 window.axios = axios;
 
-window.axios.defaults.headers.common['X-Requested-With'] = 'XMLHttpRequest';
+window.axios.defaults.headers.common["X-Requested-With"] = "XMLHttpRequest";
 
-const token = localStorage.getItem('token');
+const token = localStorage.getItem("token");
 if (token) {
-    window.axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
-    const secure = window.location.protocol === 'https:' ? '; secure' : '';
-    document.cookie = `cnsc_token=${encodeURIComponent(token)}; path=/; samesite=lax${secure}`;
+    window.axios.defaults.headers.common["Authorization"] = `Bearer ${token}`;
+    const secure = window.location.protocol === "https:" ? "; secure" : "";
+    document.cookie = `cnsc_token=${encodeURIComponent(
+        token
+    )}; path=/; samesite=lax${secure}`;
 }
 
 window.axios.interceptors.request.use((config) => {
-    const token = localStorage.getItem('token');
+    const token = localStorage.getItem("token");
     if (token) {
         config.headers = config.headers || {};
         const value = `Bearer ${token}`;
         config.headers.Authorization = config.headers.Authorization || value;
-        config.headers['X-Authorization'] = config.headers['X-Authorization'] || value;
-        config.headers['X-Api-Token'] = config.headers['X-Api-Token'] || token;
-    }
-    const socketId = window.Echo?.socketId?.();
-    if (socketId) {
-        config.headers = config.headers || {};
-        config.headers['X-Socket-ID'] = socketId;
+        config.headers["X-Authorization"] =
+            config.headers["X-Authorization"] || value;
+        config.headers["X-Api-Token"] = config.headers["X-Api-Token"] || token;
     }
     return config;
 });
@@ -39,33 +37,11 @@ window.axios.interceptors.response.use(
     (response) => response,
     (error) => {
         if (error?.response?.status === 401) {
-            localStorage.removeItem('token');
-            localStorage.removeItem('user');
-            localStorage.removeItem('permissions');
-            localStorage.removeItem('impersonator_token');
-            window.Echo?.disconnect?.();
+            localStorage.removeItem("token");
+            localStorage.removeItem("user");
+            localStorage.removeItem("permissions");
+            localStorage.removeItem("impersonator_token");
         }
         return Promise.reject(error);
     }
 );
-
-/**
- * Echo exposes an expressive API for subscribing to channels and listening
- * for events that are broadcast by Laravel. Echo and event broadcasting
- * allows your team to easily build robust real-time web applications.
- */
-
-// import Echo from 'laravel-echo';
-
-// import Pusher from 'pusher-js';
-// window.Pusher = Pusher;
-
-// window.Echo = new Echo({
-//     broadcaster: 'pusher',
-//     key: import.meta.env.VITE_PUSHER_APP_KEY,
-//     wsHost: import.meta.env.VITE_PUSHER_HOST ?? `ws-${import.meta.env.VITE_PUSHER_APP_CLUSTER}.pusher.com`,
-//     wsPort: import.meta.env.VITE_PUSHER_PORT ?? 80,
-//     wssPort: import.meta.env.VITE_PUSHER_PORT ?? 443,
-//     forceTLS: (import.meta.env.VITE_PUSHER_SCHEME ?? 'https') === 'https',
-//     enabledTransports: ['ws', 'wss'],
-// });

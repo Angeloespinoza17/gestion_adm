@@ -29,6 +29,10 @@ class PrevencionRiesgosModuleSeeder extends Seeder
             ['slug' => 'gestionar_prevencion_riesgos', 'name' => 'Gestionar Prevención de Riesgos'],
             ['slug' => 'exportar_prevencion_riesgos', 'name' => 'Exportar Prevención de Riesgos'],
             ['slug' => 'ver_documentos_prevencion_difundibles', 'name' => 'Ver Documentos Difundibles de Prevención'],
+            ['slug' => 'ver_comite_paritario', 'name' => 'Ver Comité Paritario'],
+            ['slug' => 'cargar_actas_comite_paritario', 'name' => 'Cargar actas del Comité Paritario'],
+            ['slug' => 'ver_entregas_epp', 'name' => 'Ver entregas de EPP en Bodega'],
+            ['slug' => 'registrar_entregas_epp', 'name' => 'Registrar entregas de EPP en Bodega'],
         ];
 
         foreach ($permissions as $permission) {
@@ -68,6 +72,7 @@ class PrevencionRiesgosModuleSeeder extends Seeder
             ['slug' => 'risk_prevention_emergencies', 'name' => 'Emergencias y planes', 'route' => '/risk-prevention/emergencies', 'sort' => 30],
             ['slug' => 'risk_prevention_epp', 'name' => 'EPP y seguridad', 'route' => '/risk-prevention/epp', 'sort' => 40],
             ['slug' => 'risk_prevention_trainings', 'name' => 'Capacitaciones', 'route' => '/risk-prevention/trainings', 'sort' => 50],
+            ['slug' => 'risk_prevention_joint_committee', 'name' => 'Comité Paritario', 'route' => '/risk-prevention/joint-committee', 'sort' => 55],
             ['slug' => 'risk_prevention_personnel', 'name' => 'Gestión del personal', 'route' => '/risk-prevention/personnel', 'sort' => 60],
             ['slug' => 'risk_prevention_documents', 'name' => 'Gestión documental empresa', 'route' => '/risk-prevention/documents', 'sort' => 70],
             ['slug' => 'risk_prevention_staff_documents', 'name' => 'Gestión documental', 'route' => '/risk-prevention/document-management', 'sort' => 80],
@@ -148,6 +153,10 @@ class PrevencionRiesgosModuleSeeder extends Seeder
             'gestionar_prevencion_riesgos',
             'exportar_prevencion_riesgos',
             'ver_documentos_prevencion_difundibles',
+            'ver_comite_paritario',
+            'cargar_actas_comite_paritario',
+            'ver_entregas_epp',
+            'registrar_entregas_epp',
         ])->get()->keyBy('slug');
 
         $modules = SystemModule::query()->whereIn('slug', [
@@ -162,10 +171,13 @@ class PrevencionRiesgosModuleSeeder extends Seeder
             'risk_prevention_emergencies',
             'risk_prevention_epp',
             'risk_prevention_trainings',
+            'risk_prevention_joint_committee',
             'risk_prevention_personnel',
             'risk_prevention_documents',
             'risk_prevention_staff_documents',
             'risk_prevention_reports',
+            'inventory',
+            'inventory_epp_deliveries',
         ])->get();
 
         foreach (['super_admin', 'administrador', 'prevencion_riesgos'] as $roleSlug) {

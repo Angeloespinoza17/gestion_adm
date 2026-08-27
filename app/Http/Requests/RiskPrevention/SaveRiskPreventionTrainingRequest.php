@@ -17,6 +17,7 @@ class SaveRiskPreventionTrainingRequest extends FormRequest
         return [
             'name' => ['required', 'string', 'max:180'],
             'requirement_type_id' => ['nullable', 'integer', 'exists:prevent_staff_requirement_types,id'],
+            'joint_committee_id' => ['nullable', 'integer', 'exists:prevent_joint_committees,id'],
             'training_type' => ['required', Rule::in(['induccion', 'actualizacion', 'obligatoria'])],
             'training_date' => ['required', 'date'],
             'modality' => ['required', 'string', 'max:120'],

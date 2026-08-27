@@ -22,6 +22,25 @@ class InfirmaryAttention extends Model
 
     public const SUBJECT_STAFF = 'staff';
 
+    public const MENTAL_HEALTH_CATEGORY = 'salud_mental';
+
+    public const MENTAL_HEALTH_CATEGORY_OPTION = [
+        'value' => self::MENTAL_HEALTH_CATEGORY,
+        'label' => 'Salud mental',
+    ];
+
+    public const MENTAL_HEALTH_EVENT_OPTIONS = [
+        ['value' => 'autolesion', 'label' => 'Autolesión'],
+        ['value' => 'contencion', 'label' => 'Contención'],
+        ['value' => 'ingesta_medicamentos', 'label' => 'Ingesta de medicamentos'],
+    ];
+
+    public const SELF_HARM_INJURY_OPTIONS = [
+        ['value' => 'corte', 'label' => 'Corte'],
+        ['value' => 'contusion', 'label' => 'Contusión'],
+        ['value' => 'herida_abrasiva', 'label' => 'Herida abrasiva'],
+    ];
+
     public const PRIORITY_OPTIONS = [
         ['value' => 'baja', 'label' => 'Baja'],
         ['value' => 'media', 'label' => 'Media'],
@@ -68,6 +87,8 @@ class InfirmaryAttention extends Model
         'dependency_id',
         'attended_by_user_id',
         'attention_category',
+        'mental_health_event_type',
+        'self_harm_injury_type',
         'accident_location_type',
         'occurred_at',
         'attended_at',

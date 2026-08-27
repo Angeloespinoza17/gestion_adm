@@ -66,6 +66,12 @@ const MENU_ICON_BY_SLUG = {
   relevant_calendar: "bx-calendar-event",
   social_work: "bx-heart",
   psychology: "bx-bulb",
+  pedagogical_management: "bx-book-content",
+  pedagogical_my_instruments: "bx-file",
+  pedagogical_document_review: "bx-file-find",
+  pedagogical_coordinator_assignments: "bx-sitemap",
+  pedagogical_instrument_analysis: "bx-file-find",
+  centro_apuntes_pedagogical_queue: "bx-printer",
   settings: "bx-cog",
 };
 
@@ -94,6 +100,12 @@ const MENU_ICON_BY_LABEL = {
   "calendario y fechas relevantes": "bx-calendar-event",
   "trabajo social": "bx-heart",
   "psicologia escolar": "bx-bulb",
+  "gestion pedagogica": "bx-book-content",
+  "mis instrumentos de evaluacion": "bx-file",
+  "revision documental": "bx-file-find",
+  "ambitos de coordinacion": "bx-sitemap",
+  "instrumentos aprobados": "bx-printer",
+  "analisis de instrumentos": "bx-file-find",
   configuracion: "bx-cog",
 };
 
@@ -110,6 +122,11 @@ const MENU_ICON_BY_ROUTE = {
   "/informatica": "bx-laptop",
   "/social-work": "bx-heart",
   "/psychology": "bx-bulb",
+  "/gestion-pedagogica/analisis-instrumentos": "bx-file-find",
+  "/gestion-pedagogica/instrumentos": "bx-file",
+  "/gestion-pedagogica/revision-documental": "bx-file-find",
+  "/gestion-pedagogica/asignaciones": "bx-sitemap",
+  "/centro-apuntes/instrumentos-aprobados": "bx-printer",
   "/inventory/items": "bx-box",
   "/inventory/management": "bx-box",
 };
@@ -145,6 +162,11 @@ const MENU_LANDING_ROUTE_BY_SLUG = {
   social_work: "/social-work",
   pme: "/pme-sep",
   pme_sep: "/pme-sep",
+  pedagogical_management: "/gestion-pedagogica/instrumentos",
+  pedagogical_my_instruments: "/gestion-pedagogica/instrumentos",
+  pedagogical_document_review: "/gestion-pedagogica/revision-documental",
+  pedagogical_coordinator_assignments: "/gestion-pedagogica/asignaciones",
+  centro_apuntes_pedagogical_queue: "/centro-apuntes/instrumentos-aprobados",
 };
 
 const DEPRECATED_MENU_ICONS = {
@@ -235,6 +257,11 @@ export default {
     this.activateMenu();
   },
   methods: {
+    translateMenuLabel(value) {
+      const label = String(value ?? "");
+
+      return label && this.$te(label) ? this.$t(label) : label;
+    },
     studentsFallbackSection() {
       return {
         id: "fallback-students",
@@ -536,6 +563,12 @@ export default {
             id: "fallback-risk-prevention-trainings",
             label: "Capacitaciones",
             link: "/risk-prevention/trainings",
+            parentId: "fallback-risk-prevention",
+          },
+          {
+            id: "fallback-risk-prevention-joint-committee",
+            label: "Comité Paritario",
+            link: "/risk-prevention/joint-committee",
             parentId: "fallback-risk-prevention",
           },
           {
@@ -863,8 +896,8 @@ export default {
 
       return MENU_LANDING_ROUTE_BY_SLUG[normalizeMenuKey(item.slug)] || null;
     },
-    shouldHideMenuItem() {
-      return false;
+    shouldHideMenuItem(item = {}) {
+      return normalizeMenuKey(item.slug) === "pedagogical_instrument_analysis";
     },
     resolveMenuIcon(item) {
       const slug = normalizeMenuKey(item.slug);
@@ -967,6 +1000,7 @@ export default {
               "/risk-prevention/emergencies",
               "/risk-prevention/epp",
               "/risk-prevention/trainings",
+              "/risk-prevention/joint-committee",
               "/risk-prevention/personnel",
               "/risk-prevention/documents",
               "/risk-prevention/document-management",
@@ -1120,6 +1154,7 @@ export default {
             "/risk-prevention/emergencies",
             "/risk-prevention/epp",
             "/risk-prevention/trainings",
+            "/risk-prevention/joint-committee",
             "/risk-prevention/documents",
             "/risk-prevention/document-management",
             "/risk-prevention/reports",
@@ -1511,36 +1546,36 @@ export default {
       <ul v-else id="side-menu" class="metismenu list-unstyled">
         <template v-for="item in menuItems">
           <li class="menu-title" v-if="item.isTitle" :key="item.id">
-            {{ $t(item.label) }}
+            {{ translateMenuLabel(item.label) }}
           </li>
           <li v-if="!item.isTitle && !item.isLayout" :key="item.id">
             <BLink v-if="hasItems(item)" href="javascript:void(0);" class="is-parent"
               :class="{ 'has-arrow': !item.badge, 'has-dropdown': item.badge }">
               <i :class="`bx ${item.icon}`" v-if="item.icon"></i>
-              <span>{{ $t(item.label) }}</span>
+              <span>{{ translateMenuLabel(item.label) }}</span>
               <span :class="`badge rounded-pill bg-${item.badge.variant} float-end `" v-if="item.badge">{{
-                $t(item.badge.text) }}</span>
+                translateMenuLabel(item.badge.text) }}</span>
             </BLink>
 
             <router-link :to="item.link" v-if="!hasItems(item)" class="side-nav-link-ref" @click="onLeafNavigation">
               <i :class="`bx ${item.icon}`" v-if="item.icon"></i>
-              <span>{{ $t(item.label) }}</span>
+              <span>{{ translateMenuLabel(item.label) }}</span>
               <span :class="`badge rounded-pill bg-${item.badge.variant} float-end`" v-if="item.badge">{{
-                $t(item.badge.text) }}</span>
+                translateMenuLabel(item.badge.text) }}</span>
             </router-link>
 
             <ul v-if="hasItems(item)" class="sub-menu" aria-expanded="false" :id="item.id">
               <li v-for="(subitem, index) of item.subItems" :key="index">
                 <router-link :to="subitem.link" v-if="!hasItems(subitem)" class="side-nav-link-ref" @click="onLeafNavigation">
-                  <span>{{ $t(subitem.label) }}</span>
+                  <span>{{ translateMenuLabel(subitem.label) }}</span>
                   <span :class="`badge rounded-pill bg-${subitem.badge.variant} float-end`" v-if="subitem.badge">{{
-                    $t(subitem.badge.text) }}</span>
+                    translateMenuLabel(subitem.badge.text) }}</span>
                 </router-link>
                 <BLink v-if="hasItems(subitem)" class="side-nav-link-a-ref has-arrow" href="javascript:void(0);">{{
-                  $t(subitem.label) }}</BLink>
+                  translateMenuLabel(subitem.label) }}</BLink>
                 <ul v-if="hasItems(subitem)" class="sub-menu mm-collapse" aria-expanded="false">
                   <li v-for="(subSubitem, index) of subitem.subItems" :key="index">
-                    <router-link :to="subSubitem.link" class="side-nav-link-ref" @click="onLeafNavigation">{{ $t(subSubitem.label) }}</router-link>
+                    <router-link :to="subSubitem.link" class="side-nav-link-ref" @click="onLeafNavigation">{{ translateMenuLabel(subSubitem.label) }}</router-link>
                   </li>
                 </ul>
               </li>
