@@ -43,9 +43,10 @@ class BibliotecaExpandedModuleTest extends TestCase
         Carbon::setTestNow('2026-07-27 10:00:00');
 
         $this->user = User::factory()->create(['active' => true]);
-        $role = Role::query()->create([
-            'name' => 'Super administrador',
+        $role = Role::query()->firstOrCreate([
             'slug' => 'super_admin',
+        ], [
+            'name' => 'Super administrador',
             'active' => true,
         ]);
         $this->user->roles()->attach($role);
@@ -94,6 +95,39 @@ class BibliotecaExpandedModuleTest extends TestCase
                 ->filter(fn (BibliotecaEjemplar $copy) => preg_match('/^BIB-EJ-2026-\d{4}$/', $copy->code))
                 ->count()
         );
+
+        $copy = $obra->ejemplares()->firstOrFail();
+        $copy->update([
+            'barcode' => '780000000001',
+            'physical_state' => 'regular',
+            'availability_status' => 'prestado',
+            'last_inventory_checked_at' => '2026-07-27',
+        ]);
+
+        $details = $this->getJson("/api/biblioteca/obras/{$obra->id}")
+            ->assertOk()
+            ->assertJsonPath('data.title', 'El principito')
+            ->assertJsonCount(3, 'data.ejemplares')
+            ->assertJsonStructure([
+                'data' => [
+                    'ejemplares' => [[
+                        'id',
+                        'code',
+                        'barcode',
+                        'physical_state',
+                        'availability_status',
+                        'last_inventory_checked_at',
+                        'is_active',
+                        'ubicacion' => ['id', 'name', 'code'],
+                    ]],
+                ],
+            ]);
+
+        $copies = collect($details->json('data.ejemplares'));
+        $this->assertSame(3, $copies->pluck('code')->unique()->count());
+        $this->assertSame('regular', $copies->firstWhere('id', $copy->id)['physical_state']);
+        $this->assertSame('prestado', $copies->firstWhere('id', $copy->id)['availability_status']);
+        $this->assertFalse(array_key_exists('movimientos', $copies->first()));
     }
 
     public function test_it_manages_subcategories_and_assigns_them_to_a_title(): void

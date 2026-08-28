@@ -48,6 +48,13 @@ const emptyForm = () => ({
   source_metadata: null,
 });
 
+const emptyCopyFilters = () => ({
+  search: "",
+  physical_state: null,
+  availability_status: null,
+  active_scope: "all",
+});
+
 export default {
   components: { LibraryHelpButton, LibraryStatusBadge, LoadingState },
   props: {
@@ -79,6 +86,7 @@ export default {
       openLibraryError: null,
       showDetailsModal: false,
       selectedItem: null,
+      copyFilters: emptyCopyFilters(),
       form: emptyForm(),
     };
   },
@@ -139,6 +147,50 @@ export default {
         this.filters.available_only
       );
     },
+    selectedCopies() {
+      return Array.isArray(this.selectedItem?.ejemplares)
+        ? this.selectedItem.ejemplares
+        : [];
+    },
+    filteredCopies() {
+      const search = String(this.copyFilters.search || "").trim().toLocaleLowerCase("es");
+
+      return this.selectedCopies.filter((copy) => {
+        if (this.copyFilters.physical_state && copy.physical_state !== this.copyFilters.physical_state) return false;
+        if (this.copyFilters.availability_status && copy.availability_status !== this.copyFilters.availability_status) return false;
+        if (this.copyFilters.active_scope === "active" && !copy.is_active) return false;
+        if (this.copyFilters.active_scope === "inactive" && copy.is_active) return false;
+        if (!search) return true;
+
+        return [
+          copy.code,
+          copy.barcode,
+          copy.legacy_registration_number,
+          copy.ubicacion?.code,
+          copy.ubicacion?.name,
+          copy.physical_location,
+        ].some((value) => String(value || "").toLocaleLowerCase("es").includes(search));
+      });
+    },
+    copySummary() {
+      const incidentStates = new Set(["danado", "en_reparacion", "perdido"]);
+
+      return this.selectedCopies.reduce((summary, copy) => {
+        summary.total += 1;
+        if (copy.is_active && copy.availability_status === "disponible") summary.available += 1;
+        if (["prestado", "reservado"].includes(copy.availability_status)) summary.circulating += 1;
+        if (incidentStates.has(copy.physical_state) || incidentStates.has(copy.availability_status)) summary.incidents += 1;
+        return summary;
+      }, { total: 0, available: 0, circulating: 0, incidents: 0 });
+    },
+    hasCopyFilters() {
+      return Boolean(
+        this.copyFilters.search
+        || this.copyFilters.physical_state
+        || this.copyFilters.availability_status
+        || this.copyFilters.active_scope !== "all"
+      );
+    },
   },
   mounted() {
     const savedView = window.localStorage.getItem("biblioteca-catalog-view");
@@ -196,6 +248,7 @@ export default {
     },
     async openDetails(item) {
       this.selectedItem = item;
+      this.copyFilters = emptyCopyFilters();
       this.showDetailsModal = true;
       this.detailsLoading = true;
       try {
@@ -210,6 +263,18 @@ export default {
     closeDetails() {
       this.showDetailsModal = false;
       this.selectedItem = null;
+      this.copyFilters = emptyCopyFilters();
+    },
+    resetCopyFilters() {
+      this.copyFilters = emptyCopyFilters();
+    },
+    copyLocation(copy) {
+      return copy.ubicacion?.name || copy.physical_location || "Sin ubicación asignada";
+    },
+    formatCopyDate(value) {
+      if (!value) return "Sin revisión";
+      const parts = String(value).slice(0, 10).split("-");
+      return parts.length === 3 ? `${parts[2]}-${parts[1]}-${parts[0]}` : String(value);
     },
     editFromDetails() {
       const item = this.selectedItem;
@@ -564,7 +629,7 @@ export default {
             </div>
             <div class="book-actions">
               <button type="button" class="action-button action-button--view" @click="openDetails(item)">
-                <i class="bx bx-show"></i><span>Ver ficha</span>
+                <i class="bx bx-show"></i><span>Ver ejemplares</span>
               </button>
               <button v-if="catalogs.capabilities?.manage_catalog !== false" type="button" class="action-button action-button--edit" @click="openEdit(item)">
                 <i class="bx bx-edit-alt"></i><span>Editar ficha</span>
@@ -626,7 +691,7 @@ export default {
               <td><LibraryStatusBadge :status="item.general_status" /></td>
               <td>
                 <div class="table-actions">
-                  <button type="button" class="icon-action icon-action--view" title="Ver ficha" :aria-label="`Ver ficha de ${item.title}`" @click="openDetails(item)"><i class="bx bx-show"></i></button>
+                  <button type="button" class="icon-action icon-action--view" title="Ver ejemplares" :aria-label="`Ver ejemplares de ${item.title}`" @click="openDetails(item)"><i class="bx bx-show"></i></button>
                   <button v-if="catalogs.capabilities?.manage_catalog !== false" type="button" class="icon-action icon-action--edit" title="Editar ficha" :aria-label="`Editar ficha de ${item.title}`" @click="openEdit(item)"><i class="bx bx-edit-alt"></i></button>
                   <button v-if="catalogs.capabilities?.manage_catalog !== false" type="button" class="icon-action icon-action--delete" title="Eliminar libro" :aria-label="`Eliminar ${item.title}`" @click="destroy(item)"><i class="bx bx-trash"></i></button>
                 </div>
@@ -642,7 +707,7 @@ export default {
       </footer>
     </section>
 
-    <BModal v-model="showDetailsModal" size="lg" title="Ficha del libro" hide-footer scrollable @hidden="selectedItem = null">
+    <BModal v-model="showDetailsModal" size="xl" title="Libro y existencias" hide-footer scrollable @hidden="closeDetails">
       <LoadingState v-if="detailsLoading && !selectedItem" message="Cargando ficha..." compact />
       <div v-else-if="selectedItem" class="details-sheet">
         <div class="details-hero">
@@ -670,6 +735,90 @@ export default {
           <article class="available"><i class="bx bx-check-circle"></i><div><strong>{{ selectedItem.available_copies || 0 }}</strong><span>Disponibles</span></div></article>
           <article><i class="bx bx-map"></i><div><strong>{{ selectedItem.ubicacion?.name || "Sin asignar" }}</strong><span>Ubicación</span></div></article>
         </div>
+
+        <section class="copies-panel" aria-labelledby="book-copies-heading">
+          <header class="copies-panel__header">
+            <div class="copies-panel__title">
+              <span><i class="bx bx-barcode"></i></span>
+              <div>
+                <small>INVENTARIO DEL TÍTULO</small>
+                <h5 id="book-copies-heading">Existencias individuales</h5>
+                <p>Cada fila corresponde a un ejemplar físico y conserva su código institucional.</p>
+              </div>
+            </div>
+            <span class="copies-panel__count">{{ copySummary.total }} {{ copySummary.total === 1 ? "unidad" : "unidades" }}</span>
+          </header>
+
+          <div class="copies-metrics" aria-label="Resumen de existencias">
+            <article><span class="copies-metric__icon blue"><i class="bx bx-layer"></i></span><div><strong>{{ copySummary.total }}</strong><small>Total registradas</small></div></article>
+            <article><span class="copies-metric__icon green"><i class="bx bx-check-shield"></i></span><div><strong>{{ copySummary.available }}</strong><small>Disponibles</small></div></article>
+            <article><span class="copies-metric__icon violet"><i class="bx bx-transfer"></i></span><div><strong>{{ copySummary.circulating }}</strong><small>Prestadas o reservadas</small></div></article>
+            <article><span class="copies-metric__icon amber"><i class="bx bx-error-circle"></i></span><div><strong>{{ copySummary.incidents }}</strong><small>Con incidencias</small></div></article>
+          </div>
+
+          <div class="copies-filters">
+            <label class="copies-search">
+              <span>Código o ubicación</span>
+              <span class="copies-control"><i class="bx bx-search"></i><BFormInput v-model="copyFilters.search" placeholder="Buscar código, barra o ubicación" /></span>
+            </label>
+            <label>
+              <span>Estado físico</span>
+              <BFormSelect v-model="copyFilters.physical_state" :options="[{ value: null, text: 'Todos los estados' }].concat((catalogs.ejemplar_states || []).map((item) => ({ value: item.value, text: item.label })))" />
+            </label>
+            <label>
+              <span>Disponibilidad</span>
+              <BFormSelect v-model="copyFilters.availability_status" :options="[{ value: null, text: 'Todas' }].concat((catalogs.ejemplar_availability_statuses || []).map((item) => ({ value: item.value, text: item.label })))" />
+            </label>
+            <label>
+              <span>Control</span>
+              <BFormSelect v-model="copyFilters.active_scope" :options="[{ value: 'all', text: 'Activos e inactivos' }, { value: 'active', text: 'Solo activos' }, { value: 'inactive', text: 'Solo inactivos' }]" />
+            </label>
+            <button type="button" class="copies-reset" :disabled="!hasCopyFilters" title="Limpiar filtros de ejemplares" @click="resetCopyFilters"><i class="bx bx-reset"></i><span>Limpiar</span></button>
+          </div>
+
+          <LoadingState v-if="detailsLoading" message="Consultando existencias del título..." compact />
+          <div v-else-if="!selectedCopies.length" class="copies-empty">
+            <span><i class="bx bx-package"></i></span>
+            <strong>Este título aún no tiene ejemplares registrados</strong>
+            <p>Las unidades físicas aparecerán aquí cuando se incorporen desde Inventario.</p>
+          </div>
+          <div v-else-if="!filteredCopies.length" class="copies-empty copies-empty--filtered">
+            <span><i class="bx bx-filter-alt"></i></span>
+            <strong>No hay ejemplares que coincidan</strong>
+            <p>Ajusta los filtros para volver a consultar las {{ copySummary.total }} existencias.</p>
+            <button type="button" @click="resetCopyFilters">Limpiar filtros</button>
+          </div>
+          <div v-else class="copies-table-wrap">
+            <table class="copies-table">
+              <thead>
+                <tr>
+                  <th>Código individual</th>
+                  <th>Identificación</th>
+                  <th>Estado físico</th>
+                  <th>Disponibilidad</th>
+                  <th>Ubicación</th>
+                  <th>Control de inventario</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="copy in filteredCopies" :key="copy.id" :class="{ 'is-inactive': !copy.is_active }">
+                  <td data-label="Código individual">
+                    <div class="copy-code"><i class="bx bx-barcode"></i><div><strong>{{ copy.code }}</strong><small>{{ copy.is_active ? "Ejemplar activo" : "Ejemplar inactivo" }}</small></div></div>
+                  </td>
+                  <td data-label="Identificación">
+                    <div class="copy-identifiers"><span>{{ copy.barcode || "Sin código de barras" }}</span><small v-if="copy.legacy_registration_number">Registro anterior: {{ copy.legacy_registration_number }}</small><small v-if="copy.is_loanable === false">Préstamo restringido</small></div>
+                  </td>
+                  <td data-label="Estado físico"><LibraryStatusBadge :status="copy.physical_state" /></td>
+                  <td data-label="Disponibilidad"><LibraryStatusBadge :status="copy.availability_status" /></td>
+                  <td data-label="Ubicación"><div class="copy-location"><i class="bx bx-map"></i><span>{{ copyLocation(copy) }}</span></div></td>
+                  <td data-label="Control de inventario">
+                    <div class="copy-review"><strong>{{ formatCopyDate(copy.last_inventory_checked_at) }}</strong><small>{{ copy.last_inventory_checked_at ? "Última revisión física" : "Pendiente de revisión física" }}</small></div>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
 
         <div class="details-actions">
           <div class="details-export">
@@ -959,6 +1108,68 @@ export default {
 .details-stats article > div { min-width: 0; display: flex; flex-direction: column; }
 .details-stats strong { color: #2c3a51; font-size: .88rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .details-stats span { color: #8a95a7; font-size: .65rem; }
+.copies-panel { overflow: hidden; border: 1px solid #dfe6f2; border-radius: 18px; background: linear-gradient(180deg,#f8faff 0%,#fff 36%); box-shadow: 0 12px 30px rgba(35,49,78,.07); }
+.copies-panel__header { padding: 1rem 1.05rem; display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; border-bottom: 1px solid #e6ebf4; background: linear-gradient(135deg,rgba(76,111,255,.07),rgba(42,169,139,.06)); }
+.copies-panel__title { min-width: 0; display: flex; align-items: center; gap: .8rem; }
+.copies-panel__title > span { width: 42px; height: 42px; flex: 0 0 42px; display: grid; place-items: center; border-radius: 12px; color: #fff; background: linear-gradient(135deg,#405fd2,#4c7dff); box-shadow: 0 7px 16px rgba(64,95,210,.23); font-size: 1.2rem; }
+.copies-panel__title > div { min-width: 0; }
+.copies-panel__title small { display: block; color: #4c6fff; font-size: .59rem; font-weight: 850; letter-spacing: .12em; }
+.copies-panel__title h5 { margin: .12rem 0 .15rem; color: #26354c; font-size: 1rem; }
+.copies-panel__title p { margin: 0; color: #7d899b; font-size: .7rem; }
+.copies-panel__count { flex: 0 0 auto; padding: .42rem .68rem; border: 1px solid #d9e1f0; border-radius: 999px; background: rgba(255,255,255,.78); color: #53627a; font-size: .68rem; font-weight: 800; white-space: nowrap; }
+.copies-metrics { padding: .85rem 1rem 0; display: grid; grid-template-columns: repeat(4,1fr); gap: .55rem; }
+.copies-metrics article { min-width: 0; padding: .62rem .68rem; display: flex; align-items: center; gap: .56rem; border: 1px solid #e7ebf2; border-radius: 12px; background: #fff; }
+.copies-metrics article > div { min-width: 0; display: flex; flex-direction: column; }
+.copies-metrics strong { color: #26354c; font-size: .94rem; line-height: 1.1; }
+.copies-metrics small { margin-top: .1rem; color: #8792a4; font-size: .59rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.copies-metric__icon { width: 30px; height: 30px; flex: 0 0 30px; display: grid; place-items: center; border-radius: 9px; font-size: .9rem; }
+.copies-metric__icon.blue { color: #4667dd; background: #edf1ff; }
+.copies-metric__icon.green { color: #218c6f; background: #e8f8f2; }
+.copies-metric__icon.violet { color: #7358cc; background: #f0ecff; }
+.copies-metric__icon.amber { color: #b67817; background: #fff5dc; }
+.copies-filters { padding: .85rem 1rem; display: grid; grid-template-columns: minmax(220px,1.45fr) repeat(3,minmax(145px,1fr)) auto; align-items: end; gap: .6rem; }
+.copies-filters label { min-width: 0; margin: 0; }
+.copies-filters label > span:first-child { display: block; margin-bottom: .28rem; color: #657289; font-size: .61rem; font-weight: 750; }
+.copies-filters :deep(.form-control),
+.copies-filters :deep(.form-select) { min-height: 38px; border-color: #dfe5ee; color: #45536a; font-size: .68rem; box-shadow: none; }
+.copies-filters :deep(.form-control:focus),
+.copies-filters :deep(.form-select:focus) { border-color: #8298f7; box-shadow: 0 0 0 3px rgba(76,111,255,.09); }
+.copies-control { position: relative; display: block !important; margin: 0 !important; }
+.copies-control > i { position: absolute; top: 50%; left: .68rem; z-index: 2; transform: translateY(-50%); color: #8895a9; font-size: .92rem; }
+.copies-control :deep(.form-control) { padding-left: 2rem; }
+.copies-reset { min-height: 38px; padding: .42rem .62rem; border: 1px solid #dfe5ee; border-radius: 9px; display: inline-flex; align-items: center; justify-content: center; gap: .32rem; color: #58677e; background: #fff; font-size: .65rem; font-weight: 750; transition: color .15s ease, border-color .15s ease, background .15s ease; }
+.copies-reset:hover:not(:disabled) { color: #405fd2; border-color: #b9c7f9; background: #f5f7ff; }
+.copies-reset:disabled { opacity: .42; cursor: not-allowed; }
+.copies-table-wrap { margin: 0 1rem 1rem; overflow-x: auto; border: 1px solid #e4e9f1; border-radius: 13px; background: #fff; }
+.copies-table { width: 100%; min-width: 940px; border-collapse: separate; border-spacing: 0; }
+.copies-table th { padding: .68rem .72rem; border-bottom: 1px solid #e4e9f1; background: #f5f7fb; color: #7f8b9e; font-size: .58rem; font-weight: 850; letter-spacing: .06em; text-transform: uppercase; white-space: nowrap; }
+.copies-table td { padding: .68rem .72rem; border-bottom: 1px solid #edf0f5; color: #536076; font-size: .68rem; vertical-align: middle; }
+.copies-table tbody tr:last-child td { border-bottom: 0; }
+.copies-table tbody tr { transition: background .15s ease; }
+.copies-table tbody tr:hover { background: #fafbff; }
+.copies-table tbody tr.is-inactive { opacity: .68; background: #f8f8fa; }
+.copy-code { display: flex; align-items: center; gap: .52rem; min-width: 155px; }
+.copy-code > i { width: 30px; height: 30px; flex: 0 0 30px; display: grid; place-items: center; border-radius: 8px; color: #4665d4; background: #edf1ff; font-size: .95rem; }
+.copy-code > div,
+.copy-identifiers,
+.copy-review { display: flex; flex-direction: column; gap: .08rem; }
+.copy-code strong { color: #304565; font-size: .7rem; letter-spacing: .015em; }
+.copy-code small,
+.copy-identifiers small,
+.copy-review small { color: #919cad; font-size: .57rem; }
+.copy-identifiers { min-width: 145px; }
+.copy-identifiers span { color: #46566d; font-weight: 650; }
+.copy-identifiers small:last-child { color: #a06f28; }
+.copy-location { min-width: 130px; display: flex; align-items: center; gap: .35rem; color: #526178; }
+.copy-location i { color: #8391a7; font-size: .88rem; }
+.copy-review { min-width: 120px; }
+.copy-review strong { color: #40516b; font-size: .67rem; }
+.copies-table :deep(.badge) { font-size: .54rem; letter-spacing: .025em; }
+.copies-empty { margin: 0 1rem 1rem; min-height: 180px; padding: 1.4rem; border: 1px dashed #d9e1ed; border-radius: 13px; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; color: #68778d; background: #fafbfe; }
+.copies-empty > span { width: 46px; height: 46px; display: grid; place-items: center; margin-bottom: .65rem; border-radius: 13px; color: #5b75d9; background: #edf1ff; font-size: 1.35rem; }
+.copies-empty strong { color: #374860; }
+.copies-empty p { max-width: 470px; margin: .2rem 0 0; color: #8a96a8; font-size: .68rem; }
+.copies-empty button { margin-top: .65rem; padding: .38rem .7rem; border: 1px solid #cbd5f4; border-radius: 8px; color: #405fd2; background: #fff; font-size: .66rem; font-weight: 750; }
 .details-section { padding: 1rem; border: 1px solid #e6ebf3; border-radius: 15px; }
 .details-section__title { display: flex; align-items: center; gap: .7rem; margin-bottom: .9rem; }
 .details-section__title > span { width: 34px; height: 34px; flex: 0 0 34px; display: grid; place-items: center; border-radius: 10px; color: #4c6fff; background: #eef2ff; }
@@ -1014,6 +1225,24 @@ export default {
   .details-codes { margin-top: .5rem; }
   .details-codes > span { min-width: 0; flex: 1 1 120px; }
   .details-stats { grid-template-columns: 1fr; }
+  .copies-panel__header { align-items: stretch; flex-direction: column; }
+  .copies-panel__count { align-self: flex-start; }
+  .copies-metrics { grid-template-columns: repeat(2,1fr); }
+  .copies-filters { grid-template-columns: repeat(2,1fr); }
+  .copies-search { grid-column: 1 / -1; }
+  .copies-reset { align-self: end; }
+  .copies-table-wrap { overflow: visible; border: 0; background: transparent; }
+  .copies-table { min-width: 0; border-collapse: collapse; }
+  .copies-table thead { display: none; }
+  .copies-table tbody { display: grid; gap: .7rem; }
+  .copies-table tr { padding: .25rem .75rem; border: 1px solid #e2e8f1; border-radius: 13px; display: block; background: #fff; box-shadow: 0 6px 18px rgba(35,49,78,.05); }
+  .copies-table td { min-height: 42px; padding: .52rem 0; border-bottom: 1px solid #edf0f5; display: grid; grid-template-columns: 112px minmax(0,1fr); align-items: center; gap: .65rem; }
+  .copies-table td::before { content: attr(data-label); color: #8a95a7; font-size: .57rem; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; }
+  .copies-table tr td:last-child { border-bottom: 0; }
+  .copy-code,
+  .copy-identifiers,
+  .copy-location,
+  .copy-review { min-width: 0; }
   .details-grid { grid-template-columns: repeat(2,1fr); }
   .details-actions { align-items: stretch; flex-direction: column; }
   .details-export,
@@ -1033,6 +1262,14 @@ export default {
   .details-hero { grid-template-columns: 1fr; }
   .details-cover { width: 96px; height: 132px; }
   .details-heading__top { align-items: flex-start; }
+  .copies-panel__title { align-items: flex-start; }
+  .copies-metrics { grid-template-columns: 1fr; }
+  .copies-filters { grid-template-columns: 1fr; }
+  .copies-search { grid-column: auto; }
+  .copies-reset { width: 100%; }
+  .copies-table-wrap,
+  .copies-empty { margin-right: .7rem; margin-left: .7rem; }
+  .copies-table td { grid-template-columns: 1fr; gap: .22rem; }
   .details-grid { grid-template-columns: 1fr; }
   .details-export,
   .details-management { display: grid; grid-template-columns: 1fr; }

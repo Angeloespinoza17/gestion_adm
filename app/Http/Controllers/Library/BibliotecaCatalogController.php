@@ -70,11 +70,7 @@ class BibliotecaCatalogController extends Controller
                 'categoria',
                 'subcategoria',
                 'ubicacion',
-                'ejemplares.movimientos',
-                'prestamos.obra:id,title',
-                'prestamos.ejemplar:id,code',
-                'reservas.obra:id,title',
-                'planesLectores.courseSection:id,display_name',
+                'ejemplares.ubicacion:id,name,code',
             ]),
         ]);
     }
