@@ -46,4 +46,13 @@ describe('Carga de Trabajo Social', () => {
     expect(api.error.value).toBe('El servidor no pudo cargar la información de Trabajo Social.')
     expect(axios).toHaveBeenCalledWith(expect.objectContaining({ timeout: 15000 }))
   })
+
+  it('traduce el límite temporal de consultas sin exponer el mensaje genérico del servidor', async () => {
+    axios.mockRejectedValue({ response: { status: 429, data: { message: 'Too Many Attempts.' } } })
+    const api = useSocialWork()
+
+    await expect(api.get('/support-matrix')).rejects.toBeTruthy()
+
+    expect(api.error.value).toBe('Se alcanzó temporalmente el límite de consultas. Espera unos segundos y vuelve a intentar.')
+  })
 })

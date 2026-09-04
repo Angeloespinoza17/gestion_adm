@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Inspectoria\InspectoriaPickupRestrictionController;
 use App\Http\Controllers\SocialWork\CaseController;
 use App\Http\Controllers\SocialWork\ConfigurationController;
 use App\Http\Controllers\SocialWork\DashboardController;
@@ -7,7 +8,6 @@ use App\Http\Controllers\SocialWork\DocumentController;
 use App\Http\Controllers\SocialWork\StudentController;
 use App\Http\Controllers\SocialWork\SupportController;
 use App\Http\Controllers\SocialWork\WorkflowController;
-use App\Http\Controllers\Inspectoria\InspectoriaPickupRestrictionController;
 use Illuminate\Support\Facades\Route;
 
 Route::middleware('auth:sanctum')->prefix('social-work')->group(function () {
@@ -21,6 +21,7 @@ Route::middleware('auth:sanctum')->prefix('social-work')->group(function () {
     Route::get('/cases', [CaseController::class, 'index'])->middleware('permission:social_work.cases.view');
     Route::post('/cases', [CaseController::class, 'store'])->middleware('permission:social_work.cases.create');
     Route::get('/cases/{case}', [CaseController::class, 'show'])->middleware('permission:social_work.cases.view');
+    Route::post('/cases/{case}/export', [CaseController::class, 'export'])->middleware(['permission:social_work.reports.export', 'throttle:20,1']);
     Route::patch('/cases/{case}', [CaseController::class, 'update'])->middleware('permission:social_work.cases.update');
     Route::post('/cases/{case}/assign', [CaseController::class, 'assign'])->middleware('permission:social_work.cases.assign');
     Route::post('/cases/{case}/change-status', [CaseController::class, 'changeStatus'])->middleware('permission:social_work.cases.update');
@@ -60,6 +61,7 @@ Route::middleware('auth:sanctum')->prefix('social-work')->group(function () {
     Route::get('/protection-measures', [SupportController::class, 'protectionMeasures'])->middleware('permission:social_work.student_profile.view');
     Route::post('/protection-measures', [SupportController::class, 'storeProtectionMeasure'])->middleware('permission:social_work.cases.update');
     Route::get('/junaeb/benefits', [SupportController::class, 'benefits'])->middleware('permission:social_work.junaeb.manage');
+    Route::get('/junaeb/student-options', [SupportController::class, 'studentOptions'])->middleware('permission:social_work.junaeb.manage');
     Route::post('/junaeb/benefits', [SupportController::class, 'storeBenefit'])->middleware('permission:social_work.junaeb.manage');
     Route::post('/junaeb/benefits/{benefit}/deliveries', [SupportController::class, 'deliver'])->middleware('permission:social_work.junaeb.manage');
     Route::post('/junaeb/deliveries/{delivery}/clone', [SupportController::class, 'cloneDelivery'])->middleware('permission:social_work.junaeb.manage');

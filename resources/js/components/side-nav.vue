@@ -3,10 +3,10 @@ import MetisMenu from "metismenujs";
 const axios = window.axios;
 
 import { menuItems } from "./menu";
+import { sortSidebarMenuItems } from "./sidebar-menu-order";
 import { useAuthStore } from "@/state/pinia";
 import LoadingState from "@/components/ui/loading-state.vue";
 import InternalNotifications from "@/components/internal-notifications.vue";
-import avatarPlaceholder from "@/assets/images/users/user-dummy-img.jpg";
 
 const cnscLogo = "/brand/logo-cnsc.png";
 
@@ -60,18 +60,34 @@ const MENU_ICON_BY_SLUG = {
   contabilidad: "bx-wallet-alt",
   informatica: "bx-laptop",
   inventory: "bx-box",
+  supplies: "bx-package",
   maintenance: "bx-wrench",
   spaces: "bx-calendar-event",
   security: "bx-shield-quarter",
   relevant_calendar: "bx-calendar-event",
   social_work: "bx-heart",
   psychology: "bx-bulb",
+  orientation: "bx-compass",
   pedagogical_management: "bx-book-content",
   pedagogical_my_instruments: "bx-file",
   pedagogical_document_review: "bx-file-find",
+  pedagogical_ai_workspace: "bx-sparkles",
   pedagogical_coordinator_assignments: "bx-sitemap",
   pedagogical_instrument_analysis: "bx-file-find",
+  class_presentation_generator: "bx-slideshow",
   centro_apuntes_pedagogical_queue: "bx-printer",
+  documentation: "bx-folder-open",
+  public_site: "bx-globe",
+  public_site_news: "bx-news",
+  public_site_events: "bx-calendar-event",
+  public_site_testimonials: "bx-message-rounded-dots",
+  public_site_student_life: "bx-images",
+  public_site_installations: "bx-buildings",
+  public_site_cgpa: "bx-group",
+  public_site_cde: "bx-user-voice",
+  public_site_joint_committee: "bx-shield-quarter",
+  public_site_contacts: "bx-envelope",
+  superadmin: "bx-lock-alt",
   settings: "bx-cog",
 };
 
@@ -100,12 +116,22 @@ const MENU_ICON_BY_LABEL = {
   "calendario y fechas relevantes": "bx-calendar-event",
   "trabajo social": "bx-heart",
   "psicologia escolar": "bx-bulb",
+  orientacion: "bx-compass",
   "gestion pedagogica": "bx-book-content",
   "mis instrumentos de evaluacion": "bx-file",
   "revision documental": "bx-file-find",
   "ambitos de coordinacion": "bx-sitemap",
   "instrumentos aprobados": "bx-printer",
   "analisis de instrumentos": "bx-file-find",
+  "generador de clases": "bx-slideshow",
+  documentacion: "bx-folder-open",
+  "sitio web": "bx-globe",
+  testimonios: "bx-message-rounded-dots",
+  "vida estudiantil": "bx-images",
+  cgpa: "bx-group",
+  cde: "bx-user-voice",
+  "comite paritario": "bx-shield-quarter",
+  "comité paritario": "bx-shield-quarter",
   configuracion: "bx-cog",
 };
 
@@ -122,11 +148,27 @@ const MENU_ICON_BY_ROUTE = {
   "/informatica": "bx-laptop",
   "/social-work": "bx-heart",
   "/psychology": "bx-bulb",
+  "/orientation/plan-anual": "bx-compass",
+  "/orientation/calendarizacion": "bx-layer",
+  "/orientation/calendario": "bx-compass",
+  "/orientation/estadisticas": "bx-bar-chart-alt-2",
   "/gestion-pedagogica/analisis-instrumentos": "bx-file-find",
   "/gestion-pedagogica/instrumentos": "bx-file",
   "/gestion-pedagogica/revision-documental": "bx-file-find",
+  "/gestion-pedagogica/revision-ia": "bx-sparkles",
   "/gestion-pedagogica/asignaciones": "bx-sitemap",
+  "/gestion-pedagogica/generador-clases": "bx-slideshow",
   "/centro-apuntes/instrumentos-aprobados": "bx-printer",
+  "/documentation": "bx-folder-open",
+  "/admin/noticias": "bx-news",
+  "/admin/eventos": "bx-calendar-event",
+  "/admin/testimonios": "bx-message-rounded-dots",
+  "/admin/vida-estudiantil": "bx-images",
+  "/admin/instalaciones": "bx-buildings",
+  "/admin/cgpa": "bx-group",
+  "/admin/cde": "bx-user-voice",
+  "/admin/comite-paritario": "bx-shield-quarter",
+  "/admin/contactos": "bx-envelope",
   "/inventory/items": "bx-box",
   "/inventory/management": "bx-box",
 };
@@ -146,6 +188,8 @@ const MENU_LANDING_ROUTE_BY_SLUG = {
   mantencion: "/maintenance",
   inventory: "/inventory/items",
   inventario: "/inventory/items",
+  supplies: "/supplies/cleaning",
+  abastecimiento: "/supplies/cleaning",
   spaces: "/spaces/dependencies",
   security: "/security/dashboard",
   relevant_calendar: "/relevant-calendar",
@@ -165,8 +209,11 @@ const MENU_LANDING_ROUTE_BY_SLUG = {
   pedagogical_management: "/gestion-pedagogica/instrumentos",
   pedagogical_my_instruments: "/gestion-pedagogica/instrumentos",
   pedagogical_document_review: "/gestion-pedagogica/revision-documental",
+  pedagogical_ai_workspace: "/gestion-pedagogica/revision-ia",
   pedagogical_coordinator_assignments: "/gestion-pedagogica/asignaciones",
+  class_presentation_generator: "/gestion-pedagogica/generador-clases",
   centro_apuntes_pedagogical_queue: "/centro-apuntes/instrumentos-aprobados",
+  documentation: "/documentation",
 };
 
 const DEPRECATED_MENU_ICONS = {
@@ -174,54 +221,6 @@ const DEPRECATED_MENU_ICONS = {
   "bx-calendar-week": "bx-calendar-event",
   "bx-book-reader": "bx-book-open",
 };
-
-const PINNED_TOP_MENU_PRIORITIES = [
-  {
-    labels: ["espacios", "dependencias y reservas"],
-    slugs: ["spaces"],
-    routePrefixes: ["/spaces/"],
-  },
-  {
-    labels: ["mantencion"],
-    slugs: ["maintenance", "mantencion"],
-    routePrefixes: ["/maintenance/"],
-  },
-  {
-    labels: ["inventario"],
-    slugs: ["inventory", "inventario"],
-    routePrefixes: ["/inventory/"],
-  },
-  {
-    labels: ["estudiantes"],
-    slugs: ["students", "estudiantes"],
-    routePrefixes: ["/students"],
-  },
-  {
-    labels: ["porteria"],
-    slugs: ["porter", "porteria"],
-    routePrefixes: ["/porter/"],
-  },
-  {
-    labels: ["permisos"],
-    slugs: ["staff_permissions", "permisos"],
-    routePrefixes: ["/staff/permissions"],
-  },
-  {
-    labels: ["tareas"],
-    slugs: ["tasks", "tareas"],
-    routePrefixes: ["/tasks/"],
-  },
-  {
-    labels: ["control de nochero"],
-    slugs: ["security"],
-    routePrefixes: ["/security/"],
-  },
-  {
-    labels: ["calendario y fechas relevantes"],
-    slugs: ["relevant_calendar"],
-    routePrefixes: ["/relevant-calendar"],
-  },
-];
 
 const normalizeMenuKey = (value) =>
   String(value || "")
@@ -241,13 +240,16 @@ export default {
       menuItems: [],
       isLoadingMenu: true,
       cnscLogo,
-      avatarPlaceholder,
       auth: useAuthStore(),
+      sidebarAvatarFailed: false,
     };
   },
   watch: {
     $route() {
       this.$nextTick(() => this.activateMenu());
+    },
+    sidebarAvatarUrl() {
+      this.sidebarAvatarFailed = false;
     },
   },
   async mounted() {
@@ -713,6 +715,46 @@ export default {
         ],
       };
     },
+    orientationFallbackSection() {
+      const parentId = "fallback-orientation";
+
+      return {
+        id: parentId,
+        label: "Orientación",
+        slug: "orientation",
+        icon: "bx-compass",
+        subItems: [
+          {
+            id: "fallback-orientation-annual-plan",
+            label: "Plan anual",
+            slug: "orientation_annual_plan",
+            link: "/orientation/plan-anual",
+            parentId,
+          },
+          {
+            id: "fallback-orientation-calendarization",
+            label: "Calendarización",
+            slug: "orientation_calendarization",
+            link: "/orientation/calendarizacion",
+            parentId,
+          },
+          {
+            id: "fallback-orientation-calendar",
+            label: "Calendario operativo",
+            slug: "orientation_calendar",
+            link: "/orientation/calendario",
+            parentId,
+          },
+          {
+            id: "fallback-orientation-statistics",
+            label: "Estadísticas",
+            slug: "orientation_statistics",
+            link: "/orientation/estadisticas",
+            parentId,
+          },
+        ],
+      };
+    },
     async loadMenu() {
       this.isLoadingMenu = true;
       const token = localStorage.getItem("token");
@@ -741,7 +783,9 @@ export default {
     prepareMenuItems(items = []) {
       const normalizedItems = this.normalizeMenuLinks(
         this.normalizeConvivenciaSection(
-          this.normalizeStudentsSection(items)
+          this.normalizeOrientationSection(
+            this.normalizeStudentsSection(items)
+          )
         )
       );
 
@@ -856,7 +900,7 @@ export default {
           const subItems = buildItems(mod.id);
           const item = {
             id: mod.id,
-            label: mod.name,
+            label: normalizeMenuKey(mod.slug) === "remuneration_documents" ? "Documentos" : mod.name,
             slug: mod.slug,
             icon: this.resolveMenuIcon(mod),
           };
@@ -890,6 +934,10 @@ export default {
       return items;
     },
     resolveModuleLandingLink(item) {
+      if (normalizeMenuKey(item.slug) === "remuneration_documents") {
+        return "/remuneraciones/documentos";
+      }
+
       if (item.frontend_route) {
         return item.frontend_route;
       }
@@ -1063,6 +1111,43 @@ export default {
             })),
         };
       });
+    },
+    normalizeOrientationSection(items) {
+      const fallbackOrientation = this.orientationFallbackSection();
+      let foundOrientation = false;
+
+      const normalized = items.map((item) => {
+        const label = normalizeMenuKey(item.name || item.label);
+        const slug = normalizeMenuKey(item.slug);
+        const routes = this.collectMenuRoutes(item);
+        const isOrientationSection =
+          label === "orientacion" ||
+          slug === "orientation" ||
+          routes.some((route) => String(route || "").startsWith("/orientation/"));
+
+        if (!isOrientationSection) {
+          return item;
+        }
+
+        foundOrientation = true;
+        const parentId = item.id || fallbackOrientation.id;
+        const existingIdsByRoute = new Map(
+          (item.subItems || []).map((subitem) => [subitem.link, subitem.id])
+        );
+
+        return {
+          ...fallbackOrientation,
+          id: parentId,
+          icon: item.icon || fallbackOrientation.icon,
+          subItems: fallbackOrientation.subItems.map((subitem) => ({
+            ...subitem,
+            id: existingIdsByRoute.get(subitem.link) || subitem.id,
+            parentId,
+          })),
+        };
+      });
+
+      return foundOrientation ? normalized : [...normalized, fallbackOrientation];
     },
     normalizeConvivenciaSection(items) {
       const fallbackConvivencia = this.convivenciaFallbackSection();
@@ -1348,49 +1433,8 @@ export default {
         route === "/inicio"
       );
     },
-    getPinnedTopMenuPriority(item) {
-      const label = normalizeMenuKey(item.name || item.label);
-      const slug = normalizeMenuKey(item.slug);
-      const routes = this.collectMenuRoutes(item);
-
-      return PINNED_TOP_MENU_PRIORITIES.findIndex((priority) => {
-        const matchesLabel = priority.labels.includes(label);
-        const matchesSlug = priority.slugs.includes(slug);
-        const matchesRoute = routes.some((route) =>
-          priority.routePrefixes.some((prefix) => String(route || "").startsWith(prefix))
-        );
-
-        return matchesLabel || matchesSlug || matchesRoute;
-      });
-    },
     reorderTopMenuSections(items = []) {
-      const intro = [];
-      const pinned = [];
-      const rest = [];
-      let readingIntro = true;
-
-      items.forEach((item, index) => {
-        if (readingIntro && (item.isTitle || item.isLayout || this.isDashboardMenuItem(item))) {
-          intro.push(item);
-          return;
-        }
-
-        readingIntro = false;
-        const priority = this.getPinnedTopMenuPriority(item);
-
-        if (priority >= 0) {
-          pinned.push({ item, priority, index });
-          return;
-        }
-
-        rest.push(item);
-      });
-
-      const sortedPinned = pinned
-        .sort((a, b) => (a.priority === b.priority ? a.index - b.index : a.priority - b.priority))
-        .map((entry) => entry.item);
-
-      return [...intro, ...sortedPinned, ...rest];
+      return sortSidebarMenuItems(items, (label) => this.translateMenuLabel(label));
     },
     initMenu() {
       if (document.getElementById("side-menu")) new MetisMenu("#side-menu");
@@ -1479,6 +1523,9 @@ export default {
           this.$router.push("/login");
         });
     },
+    onSidebarAvatarError() {
+      this.sidebarAvatarFailed = true;
+    },
   },
   computed: {
     sidebarUser() {
@@ -1506,11 +1553,22 @@ export default {
         };
       }
     },
-    sidebarAvatar() {
-      return this.sidebarUser.profile_photo_url || this.avatarPlaceholder;
+    sidebarAvatarUrl() {
+      const value = this.sidebarUser.profile_photo_url;
+
+      return typeof value === "string" ? value.trim() : "";
     },
-    userInitial() {
-      return (this.sidebarUser.name || "U").trim().charAt(0).toUpperCase();
+    hasSidebarAvatar() {
+      return Boolean(this.sidebarAvatarUrl) && !this.sidebarAvatarFailed;
+    },
+    userInitials() {
+      return (this.sidebarUser.name || "Usuario")
+        .trim()
+        .split(/\s+/)
+        .filter(Boolean)
+        .slice(0, 2)
+        .map((word) => word.charAt(0).toUpperCase())
+        .join("");
     },
   },
 };
@@ -1586,30 +1644,51 @@ export default {
     </div>
 
     <div class="sidebar-shell__footer">
+      <div class="sidebar-footer__heading">
+        <span>Mi espacio</span>
+        <i class="bx bx-shield-quarter" aria-hidden="true"></i>
+      </div>
       <InternalNotifications sidebar />
       <div class="sidebar-account">
-        <router-link to="/account/profile" class="sidebar-account__user" @click="onLeafNavigation">
+        <router-link
+          to="/account/profile"
+          class="sidebar-account__user"
+          aria-label="Abrir mi perfil"
+          @click="onLeafNavigation"
+        >
           <div class="sidebar-account__avatar">
-            <img :src="sidebarAvatar" :alt="`Foto de perfil de ${sidebarUser.name}`" />
-            <span>{{ userInitial }}</span>
+            <img
+              v-if="hasSidebarAvatar"
+              :src="sidebarAvatarUrl"
+              alt=""
+              aria-hidden="true"
+              @error="onSidebarAvatarError"
+            />
+            <span v-else aria-hidden="true">{{ userInitials }}</span>
+            <i class="sidebar-account__status" aria-label="Sesión iniciada"></i>
           </div>
           <div class="sidebar-account__meta">
-            <span class="sidebar-account__label">Cuenta</span>
+            <span class="sidebar-account__label">Cuenta personal</span>
             <strong class="sidebar-account__name">{{ sidebarUser.name }}</strong>
             <span class="sidebar-account__email">{{ sidebarUser.email }}</span>
           </div>
+          <i class="bx bx-chevron-right sidebar-account__open" aria-hidden="true"></i>
         </router-link>
 
         <div class="sidebar-account__actions">
           <router-link to="/account/profile" class="sidebar-account__action" @click="onLeafNavigation">
-            <i class="bx bx-user-circle"></i>
-            <span>Mi ficha</span>
+            <span class="sidebar-account__action-icon"><i class="bx bx-user-circle"></i></span>
+            <span>Mi perfil</span>
           </router-link>
           <button type="button" class="sidebar-account__action sidebar-account__action--logout" @click="logoutUser">
-            <i class="bx bx-log-out"></i>
-            <span>Cerrar sesión</span>
+            <span class="sidebar-account__action-icon"><i class="bx bx-log-out"></i></span>
+            <span>Salir</span>
           </button>
         </div>
+      </div>
+      <div class="sidebar-footer__security">
+        <i class="bx bx-lock-alt" aria-hidden="true"></i>
+        <span>Acceso institucional protegido</span>
       </div>
     </div>
   </div>

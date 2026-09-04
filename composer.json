@@ -61,6 +61,10 @@
         "worker:pedagogical": [
             "Composer\\Config::disableProcessTimeout",
             "@php artisan queue:work database --queue=pedagogical-instruments --tries=3 --timeout=600 --sleep=1"
+        ],
+        "worker:class-presentations": [
+            "Composer\\Config::disableProcessTimeout",
+            "@php artisan queue:work database --queue=class-presentations --tries=3 --timeout=900 --sleep=2"
         ]
     },
     "extra": {

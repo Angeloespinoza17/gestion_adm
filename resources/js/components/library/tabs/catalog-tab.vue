@@ -4,6 +4,12 @@ import LibraryHelpButton from "../help-button.vue";
 import LibraryStatusBadge from "../status-badge.vue";
 import LoadingState from "../../ui/loading-state.vue";
 import {
+  canUseLiveCamera,
+  captureCameraPhoto,
+  openRearCamera,
+  stopMediaStream,
+} from "../../../utils/camera-capture";
+import {
   confirmLibraryAction,
   confirmLibraryCancel,
   downloadPdfReport,
@@ -88,9 +94,18 @@ export default {
       selectedItem: null,
       copyFilters: emptyCopyFilters(),
       form: emptyForm(),
+      coverFile: null,
+      coverPreviewUrl: null,
+      coverError: null,
+      coverCameraStream: null,
+      coverCameraActive: false,
+      coverCameraError: null,
     };
   },
   computed: {
+    formCoverPreview() {
+      return this.coverPreviewUrl || this.form.cover_image_url || "";
+    },
     categoryOptions() {
       return [{ value: null, text: "Todas las categorías" }].concat(
         (this.catalogs.categories || []).map((item) => ({
@@ -197,6 +212,18 @@ export default {
     if (["cards", "table"].includes(savedView)) this.viewMode = savedView;
     this.load();
     this.consumeRouteFocus();
+  },
+  beforeUnmount() {
+    this.stopCoverCamera();
+    this.clearCoverFile();
+  },
+  watch: {
+    showModal(visible) {
+      if (!visible) {
+        this.stopCoverCamera();
+        this.clearCoverFile();
+      }
+    },
   },
   methods: {
     async load(page = 1) {
@@ -324,7 +351,138 @@ export default {
         source_metadata: this.form.source_metadata || null,
       };
     },
+    appendFormDataValue(formData, key, value) {
+      if (value === null || value === undefined) {
+        formData.append(key, "");
+        return;
+      }
+      if (Array.isArray(value)) {
+        value.forEach((item) => this.appendFormDataValue(formData, `${key}[]`, item));
+        return;
+      }
+      if (typeof value === "object") {
+        Object.entries(value).forEach(([nestedKey, nestedValue]) => {
+          this.appendFormDataValue(formData, `${key}[${nestedKey}]`, nestedValue);
+        });
+        return;
+      }
+      formData.append(key, String(value));
+    },
+    buildCoverFormData(payload, method = null) {
+      const formData = new FormData();
+      Object.entries(payload).forEach(([key, value]) => {
+        this.appendFormDataValue(formData, key, value);
+      });
+      formData.append("cover_image", this.coverFile);
+      if (method) formData.append("_method", method);
+      return formData;
+    },
+    selectCover(event) {
+      const input = event?.target;
+      const file = input?.files?.[0];
+      if (input) input.value = "";
+      if (!file) return;
+
+      const allowedTypes = new Set([
+        "image/jpeg",
+        "image/jpg",
+        "image/pjpeg",
+        "image/png",
+        "image/webp",
+        "image/heic",
+        "image/heif",
+        "image/x-heic",
+        "image/x-heif",
+      ]);
+      const supportedExtension = /\.(?:jpe?g|png|webp|heic|heif)$/i.test(file.name || "");
+      if (!allowedTypes.has(String(file.type || "").toLowerCase()) && !supportedExtension) {
+        this.coverError = "Selecciona una portada en formato JPG, PNG, WebP, HEIC o HEIF.";
+        return;
+      }
+      if (file.size > 10 * 1024 * 1024) {
+        this.coverError = "La imagen de portada no puede superar los 10 MB.";
+        return;
+      }
+
+      this.setCoverFile(file);
+    },
+    setCoverFile(file) {
+      this.clearCoverFile();
+      this.coverFile = file;
+      this.coverPreviewUrl = URL.createObjectURL(file);
+      this.coverError = null;
+    },
+    clearCoverFile() {
+      if (this.coverPreviewUrl?.startsWith("blob:")) {
+        URL.revokeObjectURL(this.coverPreviewUrl);
+      }
+      this.coverFile = null;
+      this.coverPreviewUrl = null;
+      if (this.$refs.coverCameraInput) this.$refs.coverCameraInput.value = "";
+      if (this.$refs.coverFileInput) this.$refs.coverFileInput.value = "";
+    },
+    async startCoverCamera() {
+      this.coverCameraError = null;
+
+      if (!canUseLiveCamera()) {
+        this.$refs.coverCameraInput?.click?.();
+        return;
+      }
+
+      this.stopCoverCamera(false);
+
+      try {
+        const stream = await openRearCamera();
+        if (!this.showModal) {
+          stopMediaStream(stream);
+          return;
+        }
+
+        this.coverCameraStream = stream;
+        this.coverCameraActive = true;
+        await this.$nextTick();
+
+        const video = this.$refs.coverCameraVideo;
+        if (video) {
+          video.srcObject = stream;
+          await video.play().catch(() => {});
+        }
+      } catch (_) {
+        this.coverCameraStream = null;
+        this.coverCameraActive = false;
+        this.coverCameraError = "No se pudo abrir la cámara. Revisa el permiso del navegador o selecciona una imagen desde el computador.";
+      }
+    },
+    stopCoverCamera(clearError = true) {
+      if (this.coverCameraStream) stopMediaStream(this.coverCameraStream);
+      this.coverCameraStream = null;
+      this.coverCameraActive = false;
+
+      const video = this.$refs.coverCameraVideo;
+      if (video) video.srcObject = null;
+      if (clearError) this.coverCameraError = null;
+    },
+    async captureCoverPhoto() {
+      const photo = await captureCameraPhoto(
+        this.$refs.coverCameraVideo,
+        this.$refs.coverCameraCanvas,
+        "portada-libro"
+      );
+      if (!photo) {
+        this.coverCameraError = "La cámara aún no está lista para capturar la portada.";
+        return;
+      }
+
+      this.setCoverFile(photo);
+      this.stopCoverCamera();
+    },
+    resetCoverUpload() {
+      this.stopCoverCamera();
+      this.clearCoverFile();
+      this.coverError = null;
+    },
     openCreate() {
+      this.resetCoverUpload();
       this.form = emptyForm();
       this.showModal = true;
     },
@@ -352,6 +510,7 @@ export default {
       await this.openEditById(item.id);
     },
     async openEditById(id) {
+      this.resetCoverUpload();
       const response = await axios.get(`/api/biblioteca/obras/${id}`);
       const obra = response.data.data;
       const normalizedSubcategory = (this.catalogs.subcategories || []).find(
@@ -459,9 +618,19 @@ export default {
       try {
         const payload = this.buildPayload();
         if (this.form.id) {
-          await axios.put(`/api/biblioteca/obras/${this.form.id}`, payload);
+          if (this.coverFile) {
+            await axios.post(
+              `/api/biblioteca/obras/${this.form.id}`,
+              this.buildCoverFormData(payload, "PUT")
+            );
+          } else {
+            await axios.put(`/api/biblioteca/obras/${this.form.id}`, payload);
+          }
         } else {
-          await axios.post("/api/biblioteca/obras", payload);
+          await axios.post(
+            "/api/biblioteca/obras",
+            this.coverFile ? this.buildCoverFormData(payload) : payload
+          );
         }
         const wasEdit = Boolean(this.form.id);
         this.showModal = false;
@@ -867,7 +1036,7 @@ export default {
     <BModal v-model="showModal" size="xl" :title="form.id ? 'Editar ficha del libro' : 'Registrar nueva obra'" hide-footer scrollable>
       <div class="book-form-head">
         <div class="book-form-cover">
-          <img v-if="form.cover_image_url" :src="form.cover_image_url" alt="Vista previa de portada" />
+          <img v-if="formCoverPreview" :src="formCoverPreview" alt="Vista previa de portada" />
           <i v-else class="bx bx-image-add"></i>
         </div>
         <div>
@@ -935,8 +1104,57 @@ export default {
       <div class="form-section">
         <h6><span>3</span> Contenido y metadatos</h6>
         <div class="row g-3">
-          <div class="col-md-6"><label class="form-label">Portada</label><BFormInput v-model="form.cover_image_url" /></div>
-          <div class="col-md-6"><label class="form-label">Palabras clave</label><BFormInput v-model="form.keywords_text" placeholder="Separadas por coma" /></div>
+          <div class="col-12">
+            <div class="cover-upload">
+              <div class="cover-upload__preview" aria-live="polite">
+                <img v-if="formCoverPreview" :src="formCoverPreview" alt="Vista previa de la portada del libro" />
+                <span v-else><i class="bx bx-book-open"></i><strong>Portada del libro</strong><small>Aún no seleccionada</small></span>
+                <em v-if="coverFile"><i class="bx bx-check"></i> Lista para guardar</em>
+              </div>
+
+              <div class="cover-upload__content">
+                <span class="cover-upload__eyebrow">IMAGEN DE PORTADA</span>
+                <h6>Agrega una imagen clara y vertical</h6>
+                <p>Puedes tomar una fotografía ahora o seleccionar una imagen guardada en el computador. Se aceptan JPG, PNG, WebP, HEIC y HEIF de hasta 10 MB.</p>
+
+                <div class="cover-upload__actions">
+                  <button type="button" class="cover-action cover-action--camera" :disabled="saving" @click="startCoverCamera">
+                    <i class="bx bx-camera"></i><span><strong>Tomar fotografía</strong><small>Usar la cámara del dispositivo</small></span>
+                  </button>
+                  <label class="cover-action cover-action--file" :class="{ 'is-disabled': saving }">
+                    <i class="bx bx-image-add"></i><span><strong>Seleccionar desde computador</strong><small>Buscar una imagen guardada</small></span>
+                    <input ref="coverFileInput" type="file" accept="image/jpeg,image/png,image/webp,image/heic,image/heif" :disabled="saving" @change="selectCover" />
+                  </label>
+                  <button v-if="coverFile" type="button" class="cover-upload__remove" @click="clearCoverFile"><i class="bx bx-x"></i> Descartar selección</button>
+                </div>
+
+                <input ref="coverCameraInput" class="d-none" type="file" accept="image/*" capture="environment" @change="selectCover" />
+                <div class="cover-upload__url">
+                  <label class="form-label">URL externa (opcional)</label>
+                  <BFormInput v-model="form.cover_image_url" placeholder="https://..." />
+                  <small>Si seleccionas o tomas una foto, esa imagen reemplazará la URL al guardar.</small>
+                </div>
+
+                <BAlert v-if="coverError" show variant="warning" class="mt-3 mb-0">{{ coverError }}</BAlert>
+              </div>
+            </div>
+
+            <section v-if="coverCameraActive || coverCameraError" class="cover-camera" aria-label="Cámara para fotografiar la portada del libro">
+              <div v-if="coverCameraError" class="cover-camera__error"><i class="bx bx-error-circle"></i><span>{{ coverCameraError }}</span></div>
+              <template v-else>
+                <div class="cover-camera__viewport">
+                  <video ref="coverCameraVideo" autoplay muted playsinline></video>
+                  <div class="cover-camera__guide"><span></span><small>Centra la portada dentro de la guía</small></div>
+                </div>
+                <canvas ref="coverCameraCanvas" class="d-none"></canvas>
+                <div class="cover-camera__actions">
+                  <button type="button" class="btn btn-light" @click="stopCoverCamera"><i class="bx bx-x me-1"></i>Cerrar cámara</button>
+                  <button type="button" class="btn btn-primary" @click="captureCoverPhoto"><i class="bx bx-camera me-1"></i>Capturar portada</button>
+                </div>
+              </template>
+            </section>
+          </div>
+          <div class="col-12"><label class="form-label">Palabras clave</label><BFormInput v-model="form.keywords_text" placeholder="Separadas por coma" /></div>
           <div class="col-12"><label class="form-label">Descripción</label><BFormTextarea v-model="form.description" rows="3" /></div>
           <div class="col-12"><label class="form-label">Observaciones</label><BFormTextarea v-model="form.observations" rows="2" /></div>
         </div>
@@ -1200,6 +1418,41 @@ export default {
 .form-section { border: 1px solid #e7ebf2; border-radius: 15px; padding: 1rem; margin-top: .8rem; }
 .form-section h6 { display: flex; align-items: center; gap: .55rem; margin-bottom: 1rem; color: #2e3c53; }
 .form-section h6 span { display: grid; place-items: center; width: 25px; height: 25px; border-radius: 8px; background: #e8edff; color: #4c6fff; font-size: .75rem; }
+.cover-upload { display: grid; grid-template-columns: 150px minmax(0,1fr); gap: 1.15rem; padding: 1rem; border: 1px solid #dfe6f4; border-radius: 16px; background: linear-gradient(145deg,#f9fbff,#f2f6ff); }
+.cover-upload__preview { position: relative; width: 150px; aspect-ratio: 3/4; border: 1px solid #d8e0ee; border-radius: 13px; background: #e9eef7; color: #7c899e; overflow: hidden; display: grid; place-items: center; box-shadow: 0 12px 28px rgba(42,58,91,.12); }
+.cover-upload__preview img { width: 100%; height: 100%; object-fit: cover; }
+.cover-upload__preview > span { padding: 1rem; display: flex; flex-direction: column; align-items: center; text-align: center; gap: .25rem; }
+.cover-upload__preview > span i { margin-bottom: .25rem; color: #6678a4; font-size: 2.2rem; }
+.cover-upload__preview > span strong { color: #5c6a83; font-size: .72rem; }
+.cover-upload__preview > span small { font-size: .62rem; }
+.cover-upload__preview > em { position: absolute; right: .45rem; bottom: .45rem; padding: .3rem .48rem; border-radius: 99px; background: rgba(27,128,98,.92); color: white; font-size: .57rem; font-style: normal; font-weight: 750; }
+.cover-upload__content { min-width: 0; align-self: center; }
+.cover-upload__eyebrow { color: #4c6fff; font-size: .58rem; font-weight: 850; letter-spacing: .13em; }
+.cover-upload__content > h6 { margin: .2rem 0 .25rem; color: #2c3c56; font-size: .9rem; }
+.cover-upload__content > p { max-width: 720px; margin: 0 0 .75rem; color: #738097; font-size: .7rem; line-height: 1.5; }
+.cover-upload__actions { display: flex; flex-wrap: wrap; gap: .55rem; align-items: stretch; }
+.cover-action { min-width: 210px; padding: .62rem .72rem; border: 1px solid #d9e1f1; border-radius: 11px; background: #fff; color: #42516b; cursor: pointer; display: flex; align-items: center; gap: .58rem; text-align: left; transition: transform .15s, border-color .15s, box-shadow .15s; }
+.cover-action:hover { transform: translateY(-1px); border-color: #9aabec; box-shadow: 0 7px 18px rgba(58,78,132,.1); }
+.cover-action > i { width: 34px; height: 34px; flex: 0 0 34px; border-radius: 9px; display: grid; place-items: center; font-size: 1.15rem; }
+.cover-action > span { display: flex; min-width: 0; flex-direction: column; }
+.cover-action strong { font-size: .69rem; }
+.cover-action small { margin-top: .05rem; color: #8994a6; font-size: .58rem; }
+.cover-action--camera > i { background: #e9edff; color: #4c63d9; }
+.cover-action--file > i { background: #e6f7f1; color: #238261; }
+.cover-action input { display: none; }
+.cover-action:disabled, .cover-action.is-disabled { cursor: not-allowed; opacity: .55; transform: none; box-shadow: none; }
+.cover-upload__remove { padding: .45rem .6rem; border: 0; background: transparent; color: #b54e5b; font-size: .65rem; font-weight: 700; }
+.cover-upload__url { margin-top: .8rem; }
+.cover-upload__url small { display: block; margin-top: .3rem; color: #8792a4; font-size: .6rem; }
+.cover-camera { margin-top: .75rem; padding: .85rem; border: 1px solid #dce4f3; border-radius: 15px; background: #f6f8fc; }
+.cover-camera__viewport { position: relative; width: min(100%,680px); aspect-ratio: 16/9; margin: 0 auto; border: 1px solid #253854; border-radius: 14px; background: #102034; overflow: hidden; box-shadow: inset 0 0 0 1px rgba(255,255,255,.06); }
+.cover-camera__viewport video { width: 100%; height: 100%; object-fit: cover; }
+.cover-camera__guide { position: absolute; inset: 0; pointer-events: none; }
+.cover-camera__guide > span { position: absolute; width: 42%; height: 84%; top: 8%; left: 50%; border: 2px solid rgba(255,255,255,.84); border-radius: 9px; transform: translateX(-50%); box-shadow: 0 0 0 999px rgba(8,20,34,.22); }
+.cover-camera__guide small { position: absolute; bottom: .7rem; left: 50%; padding: .3rem .62rem; border-radius: 99px; background: rgba(7,21,36,.78); color: #fff; font-size: .59rem; transform: translateX(-50%); white-space: nowrap; }
+.cover-camera__actions { margin-top: .7rem; display: flex; justify-content: flex-end; gap: .5rem; }
+.cover-camera__error { display: flex; align-items: center; gap: .55rem; color: #915461; font-size: .7rem; }
+.cover-camera__error i { font-size: 1.2rem; }
 .open-library-banner { display: flex; gap: .8rem; align-items: center; padding: .9rem 1rem; border-radius: 13px; background: #eef4ff; color: #34518b; margin-bottom: 1rem; }
 .open-library-banner i { font-size: 2rem; }
 .open-library-banner span { display: block; font-size: .78rem; color: #6f7f99; }
@@ -1250,6 +1503,9 @@ export default {
   .details-actions button { flex: 1; }
   .book-form-head { align-items: flex-start; flex-wrap: wrap; }
   .book-form-head .ms-auto { margin-left: 0 !important; width: 100%; }
+  .cover-upload { grid-template-columns: 118px minmax(0,1fr); }
+  .cover-upload__preview { width: 118px; }
+  .cover-action { min-width: 0; flex: 1 1 200px; }
 }
 @media (max-width: 430px) {
   .catalog-hero { border-radius: 16px; padding: 1.15rem; }
@@ -1273,5 +1529,13 @@ export default {
   .details-grid { grid-template-columns: 1fr; }
   .details-export,
   .details-management { display: grid; grid-template-columns: 1fr; }
+  .cover-upload { grid-template-columns: 1fr; padding: .8rem; }
+  .cover-upload__preview { width: 112px; }
+  .cover-upload__actions { display: grid; grid-template-columns: 1fr; }
+  .cover-action { width: 100%; }
+  .cover-upload__remove { justify-self: start; }
+  .cover-camera__viewport { aspect-ratio: 3/4; }
+  .cover-camera__guide > span { width: 70%; height: 82%; top: 9%; }
+  .cover-camera__actions { display: grid; grid-template-columns: 1fr; }
 }
 </style>

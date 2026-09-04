@@ -700,6 +700,25 @@ export default {
           deltas: {},
         },
         annual: [],
+        annual_overview: {
+          year: currentSubsidyDate.getFullYear(),
+          metrics: {
+            net_liquidated: 0,
+            transferred_total: 0,
+            income_total: 0,
+            income_gap: 0,
+            pie_total: 0,
+            settlement_count: 0,
+            months_with_data: 0,
+            average_active_month: 0,
+            observed_count: 0,
+            pending_transfer_count: 0,
+          },
+          first_period: null,
+          last_period: null,
+          peak_month: null,
+          by_family: [],
+        },
         available_years: [],
         attendance_reconciliation: {
           available: false,
@@ -839,9 +858,6 @@ export default {
         { key: "pie_informative_total", label: "PIE (informativo)", current: current.pie_informative_total, previous: previous.pie_informative_total },
       ];
     },
-    subsidyAnnualMax() {
-      return Math.max(1, ...(this.subsidyDashboard.annual || []).map((item) => Number(item.net_liquidated || 0)));
-    },
     subsidyAnnualTotals() {
       return (this.subsidyDashboard.annual || []).reduce((totals, item) => ({
         settlement_count: totals.settlement_count + Number(item.settlement_count || 0),
@@ -856,6 +872,46 @@ export default {
         income_total: 0,
         pie_total: 0,
       });
+    },
+    subsidyAnnualOverview() {
+      return this.subsidyDashboard.annual_overview || {
+        metrics: this.subsidyAnnualTotals,
+        first_period: null,
+        last_period: null,
+        peak_month: null,
+        by_family: [],
+      };
+    },
+    subsidyAnnualChartMax() {
+      return Math.max(1, ...(this.subsidyDashboard.annual || []).flatMap((item) => [
+        Number(item.net_liquidated || 0),
+        Number(item.income_total || 0),
+      ]));
+    },
+    subsidyAnnualIncomeCoverage() {
+      const liquidated = Number(this.subsidyAnnualOverview.metrics?.net_liquidated || 0);
+      const income = Number(this.subsidyAnnualOverview.metrics?.income_total || 0);
+      return liquidated > 0 ? Math.min(100, Math.max(0, (income / liquidated) * 100)) : 0;
+    },
+    subsidyAnnualLoadedRange() {
+      const first = this.subsidyAnnualOverview.first_period;
+      const last = this.subsidyAnnualOverview.last_period;
+      if (!first || !last) return "Aún no hay liquidaciones cargadas";
+      if (first === last) return this.subsidyPeriodLabel(first);
+      return `${this.subsidyPeriodLabel(first)} a ${this.subsidyPeriodLabel(last)}`;
+    },
+    subsidyAnnualHealth() {
+      const metrics = this.subsidyAnnualOverview.metrics || {};
+      if (!Number(metrics.settlement_count || 0)) {
+        return { label: "SIN DATOS", className: "empty", detail: "Importa una liquidación para comenzar" };
+      }
+      if (Number(metrics.observed_count || 0) > 0) {
+        return { label: "REQUIERE REVISIÓN", className: "danger", detail: `${metrics.observed_count} liquidación(es) observada(s)` };
+      }
+      if (Number(metrics.pending_transfer_count || 0) > 0) {
+        return { label: "PENDIENTE DE CONCILIAR", className: "warning", detail: `${metrics.pending_transfer_count} liquidación(es) sin transferencia` };
+      }
+      return { label: "CONCILIADO", className: "success", detail: "Sin observaciones pendientes" };
     },
     subsidyQuadrature() {
       const settlements = this.subsidyDashboard.settlements || [];
@@ -1449,8 +1505,21 @@ export default {
       const direction = Number(delta.amount || 0) > 0 ? "+" : "";
       return `${direction}${money(delta.amount || 0)}${percentage}`;
     },
-    subsidyAnnualBarWidth(item) {
-      return `${Math.max(0, (Number(item.net_liquidated || 0) / this.subsidyAnnualMax) * 100)}%`;
+    subsidyAnnualColumnHeight(item, key) {
+      const value = Number(item?.[key] || 0);
+      return `${Math.max(0, (value / this.subsidyAnnualChartMax) * 100)}%`;
+    },
+    subsidyAnnualMonthStatus(status) {
+      return {
+        sin_datos: { label: "Sin datos", className: "empty" },
+        revisar: { label: "Revisar", className: "danger" },
+        pendiente: { label: "Pendiente", className: "warning" },
+        diferencia: { label: "Diferencia", className: "danger" },
+        cuadrado: { label: "Cuadrado", className: "success" },
+      }[status] || { label: "Sin datos", className: "empty" };
+    },
+    goToSubsidyAnnual() {
+      this.$refs.subsidyAnnualSection?.scrollIntoView({ behavior: "smooth", block: "start" });
     },
     perStudentAverage(item) {
       return item?.average_per_student == null ? "Sin matrícula" : money(item.average_per_student);
@@ -2088,6 +2157,8 @@ export default {
         sep_preferente: "SEP Preferente",
         pro_retention: "Subvención Pro-Retención",
         school_bonus: "Nómina Bono Escolar",
+        maintenance: "Subvención de Mantenimiento",
+        staff_bonuses: "Bonos al personal",
         cd_brp: "CD-BRP",
         cd_asignacion_tramo: "CD-ASIGNACIÓN POR TRAMO",
         otro: "Otro ingreso",
@@ -2142,6 +2213,36 @@ export default {
     },
     schoolBonusComponents(settlement) {
       return this.schoolBonusLine(settlement)?.metadata?.bonus_components || {};
+    },
+    maintenanceLine(settlement) {
+      return (settlement?.lines || []).find((line) => line.concept_code === "maintenance") || null;
+    },
+    maintenanceRows(settlement) {
+      return this.maintenanceLine(settlement)?.allocations || [];
+    },
+    maintenanceData(allocation) {
+      return allocation?.source_payload?._maintenance || {};
+    },
+    staffBonusLines(settlement) {
+      return (settlement?.lines || []).filter((line) => line.concept_code?.startsWith("staff_"));
+    },
+    staffBonusRows(settlement) {
+      return this.staffBonusLines(settlement).flatMap((line) => (line.allocations || []).map((allocation) => ({
+        allocation,
+        conceptName: line.concept_name,
+      })));
+    },
+    staffBonusData(allocation) {
+      return allocation?.source_payload?._staff_bonus || {};
+    },
+    reliquidationLine(settlement) {
+      return (settlement?.lines || []).find((line) => line.concept_code === "reliquidation") || null;
+    },
+    reliquidationRows(settlement) {
+      return this.reliquidationLine(settlement)?.allocations || [];
+    },
+    reliquidationData(allocation) {
+      return allocation?.source_payload?._reliquidation || {};
     },
     pieLine(settlement) {
       return (settlement?.lines || []).find((line) => line.concept_code === "pie_breakdown") || null;
@@ -2772,6 +2873,9 @@ export default {
           </div>
           <div class="toolbar-actions">
             <input ref="subsidyFiles" class="d-none" type="file" multiple accept=".pdf,.xls,.html" @change="uploadSubsidyFiles" />
+            <BButton variant="light" class="subsidy-annual-jump" @click="goToSubsidyAnnual">
+              <i class="bx bx-line-chart"></i> Resumen anual
+            </BButton>
             <BButton
               variant="outline-secondary"
               :disabled="downloadingSubsidyPdf"
@@ -2800,7 +2904,7 @@ export default {
           </div>
           <div class="subsidy-period-note">
             <i class="bx bx-calendar-check"></i>
-            <span>Importa órdenes, anexos, Pro-Retención o nóminas de Bono Escolar de <strong>{{ subsidyPeriodLabel(subsidyPeriod) }}</strong>. El sistema valida mes y año antes de guardar.</span>
+            <span>Importa órdenes, anexos, Mantenimiento, reliquidaciones, Pro-Retención o nóminas de bonos de <strong>{{ subsidyPeriodLabel(subsidyPeriod) }}</strong>. El sistema valida mes, año y contenido antes de guardar.</span>
           </div>
         </section>
 
@@ -3296,40 +3400,112 @@ export default {
           </div>
         </section>
 
-        <section class="content-card subsidy-annual-card">
-          <div class="card-heading">
-            <div><span>VISIÓN ANUAL</span><h2>Liquidaciones mensuales {{ subsidyYear }}</h2></div>
-            <small>Selecciona un mes para abrir su detalle</small>
+        <section id="resumen-anual-subvenciones" ref="subsidyAnnualSection" class="content-card subsidy-annual-card">
+          <header class="subsidy-annual-hero">
+            <div>
+              <span class="subsidy-annual-eyebrow"><i class="bx bx-calendar"></i> VISIÓN ANUAL {{ subsidyYear }}</span>
+              <h2>Panorama consolidado de subvenciones</h2>
+              <p>{{ subsidyAnnualLoadedRange }} · Selecciona cualquier mes para abrir su detalle.</p>
+            </div>
+            <div class="subsidy-annual-health" :class="subsidyAnnualHealth.className">
+              <span>{{ subsidyAnnualHealth.label }}</span>
+              <small>{{ subsidyAnnualHealth.detail }}</small>
+            </div>
+          </header>
+
+          <div class="subsidy-annual-kpis">
+            <article>
+              <span>Total liquidado</span>
+              <strong>{{ money(subsidyAnnualOverview.metrics?.net_liquidated) }}</strong>
+              <small>{{ subsidyAnnualOverview.metrics?.settlement_count || 0 }} liquidaciones en {{ subsidyAnnualOverview.metrics?.months_with_data || 0 }} meses</small>
+            </article>
+            <article>
+              <span>Ingreso contabilizado</span>
+              <strong>{{ money(subsidyAnnualOverview.metrics?.income_total) }}</strong>
+              <small>{{ subsidyAnnualIncomeCoverage.toLocaleString('es-CL', { maximumFractionDigits: 1 }) }}% del líquido anual</small>
+            </article>
+            <article :class="{ warning: Number(subsidyAnnualOverview.metrics?.income_gap || 0) !== 0 }">
+              <span>Brecha frente a Ingresos</span>
+              <strong>{{ money(subsidyAnnualOverview.metrics?.income_gap) }}</strong>
+              <small>Control contable; no confirma una deuda bancaria</small>
+            </article>
+            <article>
+              <span>Promedio por mes cargado</span>
+              <strong>{{ money(subsidyAnnualOverview.metrics?.average_active_month) }}</strong>
+              <small v-if="subsidyAnnualOverview.peak_month">Máximo: {{ subsidyPeriodLabel(subsidyAnnualOverview.peak_month.period) }}</small>
+              <small v-else>Sin meses disponibles</small>
+            </article>
           </div>
-          <div class="subsidy-annual-grid">
-            <button
-              v-for="item in subsidyDashboard.annual || []"
-              :key="item.period"
-              type="button"
-              class="subsidy-annual-row"
-              :class="{ active: item.period === subsidyPeriod }"
-              @click="selectSubsidyAnnualMonth(item)"
-            >
-              <span class="subsidy-annual-month">{{ item.label }}</span>
-              <span class="subsidy-annual-bar"><span :style="{ width: subsidyAnnualBarWidth(item) }"></span></span>
-              <strong>{{ money(item.net_liquidated) }}</strong>
-              <small>{{ item.settlement_count }} liquidación(es)</small>
-            </button>
+
+          <div class="subsidy-annual-analysis">
+            <section class="subsidy-annual-trend">
+              <div class="subsidy-annual-section-heading">
+                <div><span>TENDENCIA MENSUAL</span><h3>Liquidado frente a contabilizado</h3></div>
+                <div class="subsidy-annual-legend"><span><i></i> Liquidado</span><span class="income"><i></i> Contabilizado</span></div>
+              </div>
+              <div class="subsidy-annual-chart" role="img" :aria-label="`Comparación mensual de subvenciones liquidadas y contabilizadas durante ${subsidyYear}`">
+                <button
+                  v-for="item in subsidyDashboard.annual || []"
+                  :key="`chart-${item.period}`"
+                  type="button"
+                  class="subsidy-annual-column"
+                  :class="{ active: item.period === subsidyPeriod, empty: !Number(item.settlement_count) }"
+                  :title="`${subsidyPeriodLabel(item.period)}: ${money(item.net_liquidated)} liquidado`"
+                  @click="selectSubsidyAnnualMonth(item)"
+                >
+                  <span class="subsidy-annual-bars">
+                    <i class="liquidated" :style="{ height: subsidyAnnualColumnHeight(item, 'net_liquidated') }"></i>
+                    <i class="income" :style="{ height: subsidyAnnualColumnHeight(item, 'income_total') }"></i>
+                  </span>
+                  <strong>{{ item.label }}</strong>
+                  <small v-if="item.settlement_count">{{ item.settlement_count }}</small>
+                </button>
+              </div>
+              <footer class="subsidy-annual-trend-footer">
+                <div><span>Período cubierto</span><strong>{{ subsidyAnnualLoadedRange }}</strong></div>
+                <div><span>Mes de mayor liquidación</span><strong>{{ subsidyAnnualOverview.peak_month ? `${subsidyPeriodLabel(subsidyAnnualOverview.peak_month.period)} · ${money(subsidyAnnualOverview.peak_month.amount)}` : '-' }}</strong></div>
+              </footer>
+            </section>
+
+            <section class="subsidy-annual-composition">
+              <div class="subsidy-annual-section-heading">
+                <div><span>COMPOSICIÓN</span><h3>Participación por subvención</h3></div>
+                <small>{{ subsidyAnnualOverview.by_family?.length || 0 }} tipos</small>
+              </div>
+              <div v-if="subsidyAnnualOverview.by_family?.length" class="subsidy-annual-family-list">
+                <article v-for="family in subsidyAnnualOverview.by_family" :key="family.key">
+                  <div><strong>{{ family.label }}</strong><span>{{ family.percentage.toLocaleString('es-CL') }}%</span></div>
+                  <div class="subsidy-annual-family-track"><i :style="{ width: `${family.percentage}%` }"></i></div>
+                  <footer><span>{{ family.months_count }} mes(es) · {{ family.settlement_count }} liquidación(es)</span><strong>{{ money(family.net_amount) }}</strong></footer>
+                </article>
+              </div>
+              <div v-else class="mini-empty">Sin subvenciones para el año seleccionado.</div>
+            </section>
           </div>
+
+          <div class="subsidy-annual-controls">
+            <div><i class="bx bx-calendar-check"></i><span>Meses con datos</span><strong>{{ subsidyAnnualOverview.metrics?.months_with_data || 0 }} de 12</strong></div>
+            <div :class="{ danger: Number(subsidyAnnualOverview.metrics?.observed_count || 0) > 0 }"><i class="bx bx-error-circle"></i><span>Por revisar</span><strong>{{ subsidyAnnualOverview.metrics?.observed_count || 0 }}</strong></div>
+            <div :class="{ warning: Number(subsidyAnnualOverview.metrics?.pending_transfer_count || 0) > 0 }"><i class="bx bx-transfer"></i><span>Sin transferencia informada</span><strong>{{ subsidyAnnualOverview.metrics?.pending_transfer_count || 0 }}</strong></div>
+            <div><i class="bx bx-puzzle"></i><span>PIE informativo</span><strong>{{ money(subsidyAnnualOverview.metrics?.pie_total) }}</strong></div>
+          </div>
+
           <div class="subsidy-annual-master">
             <div class="subsidy-pie-section-heading">
-              <div><span>TABLA MAESTRA</span><h3>Ingreso anual por mes</h3></div>
-              <small>Liquidado, transferido y contabilizado</small>
+              <div><span>TABLA MAESTRA</span><h3>Seguimiento anual por mes</h3></div>
+              <small>Haz clic en una fila para revisar sus liquidaciones</small>
             </div>
             <div class="table-responsive">
               <table class="table accounting-table align-middle mb-0">
                 <thead>
                   <tr>
                     <th>Mes</th>
+                    <th>Estado</th>
                     <th class="text-end">Liquidaciones</th>
                     <th class="text-end">Líquido</th>
                     <th class="text-end">Transferido</th>
                     <th class="text-end">Contabilizado</th>
+                    <th class="text-end">Brecha ingresos</th>
                     <th class="text-end">PIE informativo</th>
                   </tr>
                 </thead>
@@ -3342,20 +3518,24 @@ export default {
                     @click="selectSubsidyAnnualMonth(item)"
                   >
                     <td><strong>{{ subsidyPeriodLabel(item.period) }}</strong></td>
+                    <td><span class="subsidy-annual-status" :class="subsidyAnnualMonthStatus(item.status).className">{{ subsidyAnnualMonthStatus(item.status).label }}</span></td>
                     <td class="text-end">{{ item.settlement_count }}</td>
                     <td class="text-end">{{ money(item.net_liquidated) }}</td>
                     <td class="text-end">{{ money(item.transferred_total) }}</td>
                     <td class="text-end">{{ money(item.income_total) }}</td>
+                    <td class="text-end" :class="{ 'text-danger fw-semibold': Number(item.income_gap || 0) !== 0 }">{{ money(item.income_gap) }}</td>
                     <td class="text-end">{{ money(item.pie_total) }}</td>
                   </tr>
                 </tbody>
                 <tfoot>
                   <tr>
                     <th>Total {{ subsidyYear }}</th>
+                    <th>-</th>
                     <th class="text-end">{{ subsidyAnnualTotals.settlement_count }}</th>
                     <th class="text-end">{{ money(subsidyAnnualTotals.net_liquidated) }}</th>
                     <th class="text-end">{{ money(subsidyAnnualTotals.transferred_total) }}</th>
                     <th class="text-end">{{ money(subsidyAnnualTotals.income_total) }}</th>
+                    <th class="text-end">{{ money(subsidyAnnualTotals.net_liquidated - subsidyAnnualTotals.income_total) }}</th>
                     <th class="text-end">{{ money(subsidyAnnualTotals.pie_total) }}</th>
                   </tr>
                 </tfoot>
@@ -3536,6 +3716,103 @@ export default {
                       <td class="text-end">{{ money(schoolBonusData(allocation).bonus_amount) }}</td>
                       <td class="text-end">{{ money(schoolBonusData(allocation).additional_amount) }}</td>
                       <td class="text-end"><strong>{{ money(allocation.amount) }}</strong></td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </template>
+            <template v-if="maintenanceLine(selectedSubsidy)">
+              <div class="subsidy-pie-detail-title">
+                <div>
+                  <span>DETALLE POR CURSO</span>
+                  <h6>Subvención de Mantenimiento</h6>
+                </div>
+                <strong>{{ maintenanceRows(selectedSubsidy).length }} registro(s)</strong>
+              </div>
+              <div class="table-responsive subsidy-pie-detail-table">
+                <table class="table table-sm align-middle mb-0">
+                  <thead>
+                    <tr>
+                      <th>Nivel / curso</th>
+                      <th>Glosa</th>
+                      <th>Asistencia año anterior</th>
+                      <th>Matrícula promedio</th>
+                      <th>Factor</th>
+                      <th class="text-end">Monto</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr v-for="allocation in maintenanceRows(selectedSubsidy)" :key="allocation.id">
+                      <td><strong>{{ pieCourse(allocation) }}</strong><small class="d-block text-muted">Cód. {{ allocation.teaching_code }}</small></td>
+                      <td>{{ allocation.education_label || '-' }}</td>
+                      <td>{{ pieNumber(maintenanceData(allocation).attendance_previous_year) }}</td>
+                      <td>{{ pieNumber(maintenanceData(allocation).average_enrollment) }}</td>
+                      <td>{{ pieNumber(maintenanceData(allocation).calculation_factor) }}</td>
+                      <td class="text-end"><strong>{{ money(allocation.amount) }}</strong></td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </template>
+            <template v-if="staffBonusLines(selectedSubsidy).length">
+              <div class="subsidy-pie-detail-title">
+                <div>
+                  <span>DETALLE CONFIDENCIAL DE NÓMINA</span>
+                  <h6>Bonos y aguinaldos al personal</h6>
+                </div>
+                <strong>{{ staffBonusRows(selectedSubsidy).length }} registro(s)</strong>
+              </div>
+              <div class="table-responsive subsidy-pie-detail-table">
+                <table class="table table-sm align-middle mb-0">
+                  <thead>
+                    <tr>
+                      <th>Concepto</th>
+                      <th>Trabajador</th>
+                      <th>Tipo / horas</th>
+                      <th>Tramo</th>
+                      <th>Período origen</th>
+                      <th class="text-end">Monto</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr v-for="entry in staffBonusRows(selectedSubsidy)" :key="entry.allocation.id">
+                      <td><strong>{{ entry.conceptName }}</strong></td>
+                      <td><strong>{{ staffBonusData(entry.allocation).worker_name || '-' }}</strong><small class="d-block text-muted">{{ staffBonusData(entry.allocation).worker_rut || '-' }}</small></td>
+                      <td>{{ staffBonusData(entry.allocation).worker_type || '-' }}<small class="d-block text-muted">{{ pieNumber(staffBonusData(entry.allocation).hours) }} hora(s)</small></td>
+                      <td>{{ staffBonusData(entry.allocation).tranche ? `Tramo ${staffBonusData(entry.allocation).tranche}` : '-' }}</td>
+                      <td>{{ staffBonusData(entry.allocation).source_period || '-' }}</td>
+                      <td class="text-end"><strong>{{ money(entry.allocation.amount) }}</strong></td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </template>
+            <template v-if="reliquidationLine(selectedSubsidy)">
+              <div class="subsidy-pie-detail-title">
+                <div>
+                  <span>AJUSTE RETROACTIVO</span>
+                  <h6>Reliquidación marzo a mayo</h6>
+                </div>
+                <strong>{{ money(Number(reliquidationLine(selectedSubsidy).amount || 0) * Number(reliquidationLine(selectedSubsidy).sign || 1)) }}</strong>
+              </div>
+              <div class="table-responsive subsidy-pie-detail-table">
+                <table class="table table-sm align-middle mb-0">
+                  <thead>
+                    <tr>
+                      <th>Mes reliquidado</th>
+                      <th>Período origen</th>
+                      <th class="text-end">Monto a pagar</th>
+                      <th class="text-end">Pagado en el mes</th>
+                      <th class="text-end">Diferencia</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr v-for="allocation in reliquidationRows(selectedSubsidy)" :key="allocation.id">
+                      <td><strong>{{ reliquidationData(allocation).month || '-' }} {{ reliquidationData(allocation).year || '' }}</strong></td>
+                      <td>{{ reliquidationData(allocation).source_period || '-' }}</td>
+                      <td class="text-end">{{ money(reliquidationData(allocation).expected_amount) }}</td>
+                      <td class="text-end">{{ money(reliquidationData(allocation).paid_amount) }}</td>
+                      <td class="text-end" :class="{ 'text-danger fw-semibold': Number(reliquidationData(allocation).difference) < 0 }"><strong>{{ money(reliquidationData(allocation).difference) }}</strong></td>
                     </tr>
                   </tbody>
                 </table>
@@ -3897,20 +4174,31 @@ export default {
 .subsidy-cycle-card>div{display:flex;justify-content:space-between;gap:.7rem;margin-top:.65rem;padding-top:.55rem;border-top:1px solid #e6ebf2;color:#687589;font-size:.59rem}
 .subsidy-per-student-card .accounting-table td:not(:first-child),.subsidy-per-student-card .accounting-table th:not(:first-child){white-space:nowrap}
 .subsidy-per-student-card .accounting-table tfoot th,.subsidy-annual-master .accounting-table tfoot th{border-top:2px solid #d9e0ea;background:#f3f6fa;color:#334055;font-size:.62rem}
-.subsidy-annual-card{overflow:hidden}
-.subsidy-annual-card .card-heading>small{color:#8a94a4;font-size:.62rem}
-.subsidy-annual-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0;border-top:0}
-.subsidy-annual-row{display:grid;grid-template-columns:42px minmax(80px,1fr) 110px 86px;align-items:center;gap:.7rem;padding:.68rem 1rem;border:0;border-right:1px solid #edf0f4;border-bottom:1px solid #edf0f4;background:#fff;color:#536075;text-align:left;transition:.15s ease}
-.subsidy-annual-row:nth-child(even){border-right:0}
-.subsidy-annual-row:hover{background:#f8faff}
-.subsidy-annual-row.active{background:#eef2fb;box-shadow:inset 3px 0 #405189}
-.subsidy-annual-month{text-transform:capitalize;font-size:.66rem;font-weight:700}
-.subsidy-annual-bar{height:6px;border-radius:4px;background:#edf1f6;overflow:hidden}
-.subsidy-annual-bar>span{display:block;height:100%;min-width:0;border-radius:4px;background:linear-gradient(90deg,#405189,#7c8fc5)}
-.subsidy-annual-row strong{text-align:right;font-size:.67rem}
-.subsidy-annual-row small{text-align:right;color:#8c96a6;font-size:.57rem}
-.subsidy-annual-master{border-top:1px solid #dfe5ed}
-.subsidy-annual-master tbody tr{cursor:pointer}
+.subsidy-annual-jump{display:inline-flex;align-items:center;gap:.35rem;border-color:#dbe3ee;color:#405189;font-weight:700}
+.subsidy-annual-card{overflow:hidden;scroll-margin-top:82px;background:linear-gradient(180deg,#fff 0%,#fbfcff 100%)}
+.subsidy-annual-hero{display:flex;align-items:flex-start;justify-content:space-between;gap:1rem;padding:1.35rem 1.4rem;background:radial-gradient(circle at 84% -25%,rgba(120,143,199,.23),transparent 42%),linear-gradient(135deg,#354777,#4b6098);color:#fff}
+.subsidy-annual-eyebrow{display:flex;align-items:center;gap:.38rem;color:#d9e2ff;font-size:.62rem;font-weight:800;letter-spacing:.12em}
+.subsidy-annual-hero h2{margin:.38rem 0 .25rem;color:#fff;font-size:1.25rem}
+.subsidy-annual-hero p{margin:0;color:#d8e0f1;font-size:.68rem}
+.subsidy-annual-health{display:flex;flex-direction:column;align-items:flex-end;min-width:190px;padding:.6rem .72rem;border:1px solid rgba(255,255,255,.2);border-radius:10px;background:rgba(255,255,255,.1);text-align:right;backdrop-filter:blur(5px)}
+.subsidy-annual-health span{font-size:.62rem;font-weight:800;letter-spacing:.05em}
+.subsidy-annual-health small{margin-top:.18rem;color:#e1e7f5;font-size:.55rem}.subsidy-annual-health.success{background:rgba(31,122,89,.28)}.subsidy-annual-health.warning{background:rgba(154,104,20,.3)}.subsidy-annual-health.danger{background:rgba(178,54,70,.3)}
+.subsidy-annual-kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border-bottom:1px solid #e4e9f0}
+.subsidy-annual-kpis article{min-width:0;padding:1rem 1.15rem;border-right:1px solid #e6eaf0;background:rgba(255,255,255,.8)}.subsidy-annual-kpis article:last-child{border-right:0}.subsidy-annual-kpis article.warning{background:#fffaf3}
+.subsidy-annual-kpis span,.subsidy-annual-kpis strong,.subsidy-annual-kpis small{display:block}.subsidy-annual-kpis span{color:#7b8494;font-size:.6rem;font-weight:700}.subsidy-annual-kpis strong{margin:.32rem 0;color:#29364b;font-size:1.02rem}.subsidy-annual-kpis small{color:#98a2b3;font-size:.55rem;line-height:1.35}
+.subsidy-annual-analysis{display:grid;grid-template-columns:minmax(0,1.6fr) minmax(290px,.8fr);gap:.85rem;padding:.9rem}
+.subsidy-annual-trend,.subsidy-annual-composition{overflow:hidden;border:1px solid #e1e6ee;border-radius:12px;background:#fff;box-shadow:0 7px 20px rgba(41,54,75,.045)}
+.subsidy-annual-section-heading{display:flex;align-items:center;justify-content:space-between;gap:.8rem;padding:.85rem 1rem;border-bottom:1px solid #edf0f4}.subsidy-annual-section-heading span{color:#405189;font-size:.55rem;font-weight:800;letter-spacing:.09em}.subsidy-annual-section-heading h3{margin:.18rem 0 0;color:#344054;font-size:.82rem}.subsidy-annual-section-heading>small{color:#8b95a5;font-size:.56rem}
+.subsidy-annual-legend{display:flex;align-items:center;gap:.75rem}.subsidy-annual-legend span{display:flex;align-items:center;gap:.3rem;color:#7b8494;font-size:.54rem;font-weight:600;letter-spacing:0}.subsidy-annual-legend i{width:8px;height:8px;border-radius:3px;background:#405189}.subsidy-annual-legend .income i{background:#2f9e78}
+.subsidy-annual-chart{display:grid;grid-template-columns:repeat(12,minmax(30px,1fr));align-items:end;height:245px;padding:1.15rem .8rem .7rem;background:repeating-linear-gradient(to bottom,#fff 0,#fff 54px,#eef1f5 55px)}
+.subsidy-annual-column{display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%;min-width:0;padding:0 .16rem;border:0;border-radius:7px;background:transparent;color:#667085;transition:.18s ease}.subsidy-annual-column:hover,.subsidy-annual-column.active{background:#f0f3fa}.subsidy-annual-column.active{box-shadow:inset 0 -3px #405189}.subsidy-annual-column.empty{opacity:.48}
+.subsidy-annual-bars{display:flex;align-items:flex-end;justify-content:center;gap:3px;width:100%;height:180px}.subsidy-annual-bars i{display:block;width:10px;min-height:0;border-radius:5px 5px 2px 2px;transition:height .25s ease}.subsidy-annual-bars .liquidated{background:linear-gradient(180deg,#7d90c3,#405189)}.subsidy-annual-bars .income{background:linear-gradient(180deg,#62c29f,#2f9e78)}
+.subsidy-annual-column>strong{margin-top:.4rem;font-size:.55rem;text-transform:uppercase}.subsidy-annual-column>small{display:grid;place-items:center;min-width:18px;height:18px;margin-top:.18rem;border-radius:9px;background:#edf1f7;color:#536075;font-size:.48rem;font-weight:800}
+.subsidy-annual-trend-footer{display:grid;grid-template-columns:1fr 1fr;border-top:1px solid #edf0f4;background:#fafbfd}.subsidy-annual-trend-footer>div{padding:.7rem 1rem;border-right:1px solid #e7ebf0}.subsidy-annual-trend-footer>div:last-child{border-right:0}.subsidy-annual-trend-footer span,.subsidy-annual-trend-footer strong{display:block}.subsidy-annual-trend-footer span{color:#8a94a4;font-size:.53rem}.subsidy-annual-trend-footer strong{margin-top:.22rem;color:#465366;font-size:.61rem}
+.subsidy-annual-family-list{max-height:310px;overflow-y:auto;padding:.3rem 1rem .65rem}.subsidy-annual-family-list article{padding:.62rem 0;border-bottom:1px solid #edf0f4}.subsidy-annual-family-list article:last-child{border-bottom:0}.subsidy-annual-family-list article>div:first-child,.subsidy-annual-family-list footer{display:flex;align-items:center;justify-content:space-between;gap:.65rem}.subsidy-annual-family-list strong{color:#465366;font-size:.6rem}.subsidy-annual-family-list article>div:first-child span{color:#405189;font-size:.54rem;font-weight:800}.subsidy-annual-family-track{height:6px;margin:.42rem 0;border-radius:4px;background:#edf0f4;overflow:hidden}.subsidy-annual-family-track i{display:block;height:100%;border-radius:4px;background:linear-gradient(90deg,#405189,#8294c4)}.subsidy-annual-family-list footer span{color:#98a2b3;font-size:.5rem}.subsidy-annual-family-list footer strong{font-size:.56rem}
+.subsidy-annual-controls{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));margin:0 .9rem .9rem;border:1px solid #e2e7ee;border-radius:10px;background:#fff;overflow:hidden}.subsidy-annual-controls>div{display:grid;grid-template-columns:30px 1fr;grid-template-rows:auto auto;align-items:center;padding:.72rem .8rem;border-right:1px solid #e7ebf0}.subsidy-annual-controls>div:last-child{border-right:0}.subsidy-annual-controls i{grid-row:1/3;display:grid;place-items:center;width:27px;height:27px;border-radius:8px;background:#edf1f8;color:#405189;font-size:1rem}.subsidy-annual-controls span{color:#8a94a4;font-size:.51rem}.subsidy-annual-controls strong{color:#465366;font-size:.65rem}.subsidy-annual-controls .warning i{background:#fff3dc;color:#9a6814}.subsidy-annual-controls .danger i{background:#fdecef;color:#bd4252}
+.subsidy-annual-status{display:inline-flex;padding:.25rem .48rem;border-radius:12px;background:#eef1f5;color:#667085;font-size:.52rem;font-weight:800}.subsidy-annual-status.success{background:#e8f6ef;color:#1f7a59}.subsidy-annual-status.warning{background:#fff3dc;color:#9a6814}.subsidy-annual-status.danger{background:#fdecef;color:#bd4252}
+.subsidy-annual-master{border-top:1px solid #dfe5ed;background:#fff}.subsidy-annual-master tbody tr{cursor:pointer}.subsidy-annual-master tbody tr:hover{background:#f8faff}
 .attendance-reconciliation-card{overflow:hidden;border-color:#d9e2ee;background:linear-gradient(145deg,#fff 0%,#fbfcff 100%);box-shadow:0 10px 30px rgba(43,57,85,.07)}
 .attendance-reconciliation-header{display:flex;align-items:center;justify-content:space-between;gap:1rem;padding:1.15rem 1.25rem;border-bottom:1px solid #e4e9f1;background:linear-gradient(120deg,#f8faff 0%,#eef3fb 100%)}
 .attendance-reconciliation-title{display:flex;align-items:center;gap:.8rem}.attendance-reconciliation-icon{display:grid;place-items:center;flex:0 0 46px;width:46px;height:46px;border-radius:12px;background:linear-gradient(135deg,#405189,#667bb3);box-shadow:0 8px 18px rgba(64,81,137,.22);color:#fff;font-size:1.45rem}.attendance-reconciliation-title h2{margin:.16rem 0;color:#263043;font-size:1rem}.attendance-reconciliation-title p{margin:0;color:#738096;font-size:.63rem}.attendance-status{display:inline-flex;align-items:center;gap:.35rem;padding:.38rem .6rem;border-radius:16px;background:#eef1f5;color:#667085;font-size:.58rem;font-weight:800;letter-spacing:.035em;white-space:nowrap}.attendance-status.success{background:#e7f6ef;color:#1f7a59}.attendance-status.warning{background:#fff3dc;color:#95640f}.attendance-status.danger{background:#fdecef;color:#b83b4c}.attendance-status i{font-size:.9rem}
@@ -3929,6 +4217,8 @@ export default {
 .be-visual-grid{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:.8rem}.be-cumulative-card{grid-column:span 8;overflow:hidden}.be-mix-card{grid-column:span 4;overflow:hidden}.be-ranking-card{grid-column:span 7;overflow:hidden}.be-heatmap-card{grid-column:span 5;overflow:hidden}.be-line-legend .balance i{border-radius:50%;background:#c2414f}.be-chart-legend .budget i{background:#d7dde8}.be-cumulative-chart{padding:.4rem .8rem .1rem}.be-cumulative-chart svg{display:block;width:100%;height:auto;min-height:250px}.be-svg-grid{stroke:#e8ecf2;stroke-width:1}.be-svg-zero{stroke:#aeb8c8;stroke-width:1.2;stroke-dasharray:4 4}.be-svg-axis-label,.be-svg-month{fill:#8994a6;font-size:9px}.be-svg-line{fill:none;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}.be-svg-line.income{stroke:#2f9e78}.be-svg-line.expense{stroke:#405189}.be-svg-line.balance{stroke:#c2414f;stroke-width:2;stroke-dasharray:5 4}.be-svg-dot{stroke:#fff;stroke-width:1.5}.be-svg-dot.income{fill:#2f9e78}.be-svg-dot.expense{fill:#405189}.be-svg-dot.balance{fill:#c2414f}.be-mix-body{display:grid;grid-template-columns:145px 1fr;align-items:center;gap:.35rem;padding:.8rem 1rem .55rem}.be-donut-wrap svg{display:block;width:100%;height:auto}.be-donut-base,.be-donut-segment{fill:none;stroke-width:20;transform:rotate(-90deg);transform-origin:90px 90px}.be-donut-base{stroke:#edf0f4}.be-donut-segment{stroke-linecap:butt}.be-donut-value{fill:#28364c;font-size:25px;font-weight:800}.be-donut-label{fill:#8994a6;font-size:9px}.be-mix-legend>div{display:grid;grid-template-columns:8px 1fr auto;align-items:center;gap:.45rem;padding:.47rem 0;border-bottom:1px solid #edf0f4}.be-mix-legend>div:last-child{border-bottom:0}.be-mix-legend i{width:8px;height:8px;border-radius:50%}.be-mix-legend strong,.be-mix-legend small{display:block}.be-mix-legend strong{color:#465366;font-size:.59rem}.be-mix-legend small{margin-top:.08rem;color:#8b95a5;font-size:.51rem}.be-mix-legend b{color:#344054;font-size:.58rem}.be-chart-note{padding:.65rem 1rem;border-top:1px solid #edf0f4;background:#fafbfd;color:#7b8494;font-size:.56rem}.be-chart-note strong{color:#344054}.be-ranking-list{padding:.25rem 1rem .65rem}.be-ranking-row{display:grid;grid-template-columns:24px minmax(150px,1.2fr) minmax(120px,1fr) 95px;align-items:center;gap:.65rem;padding:.57rem 0;border-bottom:1px solid #edf0f4}.be-ranking-row:last-child{border-bottom:0}.be-rank-number{display:grid;place-items:center;width:22px;height:22px;border-radius:6px;background:#eef1f7;color:#405189;font-size:.56rem;font-weight:800}.be-rank-copy strong,.be-rank-copy small{display:block}.be-rank-copy strong{overflow:hidden;color:#465366;font-size:.59rem;text-overflow:ellipsis;white-space:nowrap}.be-rank-copy small{margin-top:.12rem;overflow:hidden;color:#98a2b3;font-size:.49rem;text-overflow:ellipsis;white-space:nowrap}.be-rank-bars{position:relative;height:10px;border-radius:6px;background:#f0f2f6;overflow:hidden}.be-rank-bars i{position:absolute;top:0;left:0;height:100%;border-radius:6px}.be-rank-bars .budget{background:#d7dde8}.be-rank-bars .executed{top:3px;height:4px;background:#405189}.be-ranking-row>strong{text-align:right;color:#344054;font-size:.59rem}.be-heatmap{display:grid;grid-template-columns:repeat(3,1fr);gap:5px;padding:.8rem 1rem}.be-heatmap article{min-height:72px;padding:.62rem;border:1px solid rgba(64,81,137,.08);border-radius:8px}.be-heatmap span,.be-heatmap strong,.be-heatmap small{display:block}.be-heatmap span{color:#3e4b60;font-size:.52rem;font-weight:800;text-transform:uppercase}.be-heatmap strong{margin:.28rem 0;color:#263043;font-size:.64rem}.be-heatmap small{color:#58667b;font-size:.5rem}.be-heatmap small.positive{color:#1b6e51}.be-heatmap small.negative{color:#a73545}.be-heat-legend{display:flex;flex-wrap:wrap;gap:.8rem;padding:.62rem 1rem;border-top:1px solid #edf0f4;color:#7b8494;font-size:.51rem}.be-heat-legend span{display:flex;align-items:center;gap:.3rem}.be-heat-legend i{width:18px;height:6px;border-radius:4px;background:rgba(64,81,137,.12)}.be-heat-legend i.high{background:rgba(64,81,137,.76)}.be-heat-legend b{color:#c2414f}
 @media(max-width:1100px){.metric-grid{grid-template-columns:repeat(2,1fr)}.dashboard-grid{grid-template-columns:1fr 1fr}.alert-panel{grid-column:1/-1}.accounting-nav{padding:.45rem}.nav-group{min-width:auto}.nav-group-title{display:none}.subsidy-pie-consolidations{grid-template-columns:1fr}.subsidy-pie-consolidated+ .subsidy-pie-consolidated{border-top:1px solid #e7ebf0;border-left:0}.subsidy-cycle-grid{grid-template-columns:1fr}.attendance-assumptions,.attendance-kpi-grid{grid-template-columns:repeat(2,1fr)}.attendance-meaning-strip{grid-template-columns:repeat(2,1fr)}.attendance-meaning-strip>div:nth-child(2){border-right:0}.attendance-meaning-strip>div:nth-child(-n+2){border-bottom:1px solid #e4e9f0}.attendance-methodology{flex-direction:column}.attendance-methodology>div:first-child{max-width:none}.attendance-sources{justify-content:flex-start}}
 @media(max-width:720px){.accounting-hero{align-items:flex-start;padding:1rem}.accounting-hero,.records-toolbar{flex-direction:column}.hero-actions,.toolbar-actions{width:100%}.hero-actions .btn{flex:1}.accounting-hero h1{font-size:1.25rem}.metric-grid,.dashboard-grid{grid-template-columns:1fr}.alert-panel{grid-column:auto}.records-toolbar{align-items:stretch}.toolbar-actions{flex-wrap:wrap}.search-box{flex:1;min-width:200px}.accounting-form-grid{grid-template-columns:1fr}.accounting-form-grid .full{grid-column:auto}.accounting-nav{display:block}.nav-group{padding:.3rem;border-right:0;border-bottom:1px solid #edf0f4}.nav-group-title{display:none}.nav-group-links{flex-wrap:nowrap;overflow-x:auto}.scope-notice{align-items:flex-start}.subsidy-command-card{align-items:stretch}.subsidy-command-card,.subsidy-period-filters{flex-direction:column}.subsidy-period-filters{align-items:stretch}.subsidy-period-select,.subsidy-month-select,.subsidy-compare-select{width:100%}.subsidy-period-note{position:static;margin:1rem -1.1rem -2.9rem}.subsidy-pie-overview{grid-template-columns:1fr 1fr}.subsidy-pie-overview>div:nth-child(2){border-right:0}.subsidy-pie-overview>div{border-bottom:1px solid #edf0f4}.subsidy-annual-grid{grid-template-columns:1fr}.subsidy-annual-row{grid-template-columns:40px minmax(70px,1fr) 100px}.subsidy-annual-row:nth-child(n){border-right:0}.subsidy-annual-row small{display:none}.subsidy-cycle-card>div{align-items:flex-start;flex-direction:column}.attendance-reconciliation-header{align-items:flex-start;flex-direction:column}.attendance-assumptions,.attendance-kpi-grid,.attendance-window-strip,.attendance-meaning-strip{grid-template-columns:1fr}.attendance-meaning-strip>div{border-right:0;border-bottom:1px solid #e4e9f0}.attendance-meaning-strip>div:last-child{border-bottom:0}.attendance-window-strip>div{border-right:0;border-bottom:1px solid #e5eaf1}.attendance-window-strip>div:last-child{border-bottom:0}.attendance-contrast-band{grid-template-columns:1fr}.attendance-contrast-bars>div{grid-template-columns:54px minmax(75px,1fr) 95px}.attendance-warning-panel ul{grid-template-columns:1fr}.attendance-empty-state{align-items:flex-start;flex-direction:column}.attendance-reconciliation-title{align-items:flex-start}.attendance-table,.attendance-income-table{min-width:760px}.attendance-income-heading{align-items:flex-start;flex-direction:column}.attendance-income-heading .btn{width:100%;justify-content:center}}
+@media(max-width:1100px){.subsidy-annual-kpis{grid-template-columns:repeat(2,1fr)}.subsidy-annual-kpis article:nth-child(2){border-right:0}.subsidy-annual-kpis article:nth-child(-n+2){border-bottom:1px solid #e6eaf0}.subsidy-annual-analysis{grid-template-columns:1fr}.subsidy-annual-controls{grid-template-columns:repeat(2,1fr)}.subsidy-annual-controls>div:nth-child(2){border-right:0}.subsidy-annual-controls>div:nth-child(-n+2){border-bottom:1px solid #e7ebf0}}
+@media(max-width:720px){.subsidy-annual-hero{align-items:stretch;flex-direction:column;padding:1rem}.subsidy-annual-health{align-items:flex-start;min-width:0;text-align:left}.subsidy-annual-kpis{grid-template-columns:1fr}.subsidy-annual-kpis article:nth-child(n){border-right:0;border-bottom:1px solid #e6eaf0}.subsidy-annual-kpis article:last-child{border-bottom:0}.subsidy-annual-analysis{padding:.65rem}.subsidy-annual-trend{overflow-x:auto}.subsidy-annual-trend>.subsidy-annual-section-heading,.subsidy-annual-chart,.subsidy-annual-trend-footer{min-width:680px}.subsidy-annual-controls{grid-template-columns:1fr;margin:0 .65rem .65rem}.subsidy-annual-controls>div:nth-child(n){border-right:0;border-bottom:1px solid #e7ebf0}.subsidy-annual-controls>div:last-child{border-bottom:0}.subsidy-annual-master .accounting-table{min-width:940px}.subsidy-annual-jump{width:100%;justify-content:center}}
 @media(max-width:1100px){.be-kpi-grid,.be-subsidy-grid{grid-template-columns:repeat(2,1fr)}.be-analysis-grid,.be-detail-grid{grid-template-columns:1fr}.be-cumulative-card,.be-mix-card,.be-ranking-card,.be-heatmap-card{grid-column:span 12}.be-account-toolbar{align-items:stretch}.be-account-filters{flex-wrap:wrap}.be-account-filters .search-box{flex:1}}
 @media(max-width:720px){.be-command-bar{align-items:stretch;flex-direction:column;padding-bottom:1rem}.be-year-control>div,.be-command-actions{align-items:stretch;flex-direction:column}.be-year-select{width:100%}.be-version-strip{position:static;align-items:flex-start;flex-direction:column;margin:1rem -1.15rem -1rem;white-space:normal}.be-empty-state{min-height:420px;padding:2.5rem 1rem}.be-empty-state h2{font-size:1.35rem}.be-empty-features{align-items:flex-start;flex-direction:column;gap:.65rem}.be-kpi-grid,.be-subsidy-grid{grid-template-columns:1fr}.be-monthly-card{overflow-x:auto}.be-month-chart{min-width:720px}.be-chart-summary{min-width:720px}.be-cumulative-card{overflow-x:auto}.be-cumulative-chart{min-width:700px}.be-mix-body{grid-template-columns:120px 1fr}.be-ranking-card{overflow-x:auto}.be-ranking-list{min-width:650px}.be-heatmap{grid-template-columns:repeat(2,1fr)}.be-subsidy-grid{padding:.75rem}.be-account-filters{align-items:stretch;flex-direction:column}.be-filter-select{width:100%;min-width:0}.be-account-filters .search-box{width:100%;min-width:0}.be-health-score{grid-template-columns:105px 1fr}}
 </style>

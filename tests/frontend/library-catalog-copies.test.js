@@ -130,7 +130,19 @@ const mountTab = () => mount(CatalogTab, {
 describe("Biblioteca · ejemplares por título", () => {
   beforeEach(() => {
     window.localStorage.clear();
+    Object.defineProperty(URL, "createObjectURL", {
+      configurable: true,
+      value: vi.fn(() => "blob:portada-libro"),
+    });
+    Object.defineProperty(URL, "revokeObjectURL", {
+      configurable: true,
+      value: vi.fn(),
+    });
     axios.get.mockReset();
+    axios.post.mockReset();
+    axios.put.mockReset();
+    axios.post.mockResolvedValue({ data: { data: workDetails } });
+    axios.put.mockResolvedValue({ data: { data: workDetails } });
     axios.get.mockImplementation((url) => Promise.resolve({
       data: url === "/api/biblioteca/obras"
         ? indexResponse
@@ -178,5 +190,38 @@ describe("Biblioteca · ejemplares por título", () => {
     expect(wrapper.findAll(".copies-table tbody tr")).toHaveLength(1);
     expect(wrapper.text()).toContain("BIB-EJ-2026-0102");
     expect(wrapper.text()).not.toContain("BIB-EJ-2026-0103");
+  });
+
+  it("selects a cover from the computer and sends it with the new book", async () => {
+    const wrapper = mountTab();
+    await flushPromises();
+    await wrapper.find(".hero-button").trigger("click");
+
+    expect(wrapper.find(".cover-action--camera").text()).toContain("Tomar fotografía");
+    expect(wrapper.find(".cover-action--file").text()).toContain("Seleccionar desde computador");
+    expect(wrapper.find('input[capture="environment"]').exists()).toBe(true);
+
+    const cover = new File(["imagen"], "portada.jpg", { type: "image/jpeg" });
+    const fileInput = wrapper.find(".cover-action--file input");
+    Object.defineProperty(fileInput.element, "files", {
+      configurable: true,
+      value: [cover],
+    });
+    await fileInput.trigger("change");
+
+    expect(wrapper.vm.coverFile).toBe(cover);
+    expect(wrapper.find(".cover-upload__preview img").attributes("src")).toBe("blob:portada-libro");
+    expect(wrapper.text()).toContain("Lista para guardar");
+
+    wrapper.vm.form.title = "Libro fotografiado";
+    wrapper.vm.form.main_author = "Biblioteca escolar";
+    await wrapper.vm.save();
+    await flushPromises();
+
+    const [url, payload] = axios.post.mock.calls.find(([requestUrl]) => requestUrl === "/api/biblioteca/obras");
+    expect(url).toBe("/api/biblioteca/obras");
+    expect(payload).toBeInstanceOf(FormData);
+    expect(payload.get("title")).toBe("Libro fotografiado");
+    expect(payload.get("cover_image")).toBe(cover);
   });
 });

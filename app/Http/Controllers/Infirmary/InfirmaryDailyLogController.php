@@ -43,7 +43,7 @@ class InfirmaryDailyLogController extends Controller
             ->selectRaw('COUNT(*) as total_records')
             ->selectRaw('SUM(CASE WHEN happened_at >= ? AND happened_at < ? THEN 1 ELSE 0 END) as today_records', [$today, $tomorrow])
             ->selectRaw("SUM(CASE WHEN requires_follow_up = 1 AND status <> 'cerrado' THEN 1 ELSE 0 END) as pending_follow_up")
-            ->selectRaw("SUM(CASE WHEN priority IN ('alta', 'urgente') AND status <> 'cerrado' THEN 1 ELSE 0 END) as high_priority")
+            ->selectRaw("SUM(CASE WHEN priority IN ('alta', 'urgente') AND status <> 'cerrado' THEN 1 ELSE 0 END) as open_high_priority_records")
             ->first();
 
         return response()->json([
@@ -52,7 +52,7 @@ class InfirmaryDailyLogController extends Controller
                 'total_records' => (int) ($summary?->total_records ?? 0),
                 'today_records' => (int) ($summary?->today_records ?? 0),
                 'pending_follow_up' => (int) ($summary?->pending_follow_up ?? 0),
-                'high_priority' => (int) ($summary?->high_priority ?? 0),
+                'high_priority' => (int) ($summary?->open_high_priority_records ?? 0),
             ],
             'capabilities' => [
                 'can_manage' => $this->access->canManageDailyLog($request->user()),

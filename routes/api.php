@@ -5,7 +5,11 @@ use App\Http\Controllers\Accounting\AccountingModuleController;
 use App\Http\Controllers\Accounting\AccountingSubsidyController;
 use App\Http\Controllers\Admin\BackupController;
 use App\Http\Controllers\Admin\RoleImpersonationController;
+use App\Http\Controllers\Admin\RelojControlController;
 use App\Http\Controllers\Admin\SuperAdminDashboardController;
+use App\Http\Controllers\Admin\SuperAdminLogbookReviewController;
+use App\Http\Controllers\Admin\SuperAdminSupplyRequestController;
+use App\Http\Controllers\Admin\SuperAdminUsageLevelController;
 use App\Http\Controllers\Api\Messaging\ConversationController as MessagingConversationController;
 use App\Http\Controllers\Api\Messaging\MessageController as MessagingMessageController;
 use App\Http\Controllers\Api\Messaging\MessagingController;
@@ -70,6 +74,7 @@ use App\Http\Controllers\HomeDashboardController;
 use App\Http\Controllers\HumanResources\HrAbsenceController;
 use App\Http\Controllers\HumanResources\HrImportController;
 use App\Http\Controllers\HumanResources\HrRecruitmentController;
+use App\Http\Controllers\Remuneration\RemunerationDocumentController;
 use App\Http\Controllers\Infirmary\InfirmaryAccidentController;
 use App\Http\Controllers\Infirmary\InfirmaryAttentionCategoryController;
 use App\Http\Controllers\Infirmary\InfirmaryAttentionController;
@@ -110,6 +115,11 @@ use App\Http\Controllers\Inventory\InventoryReportController;
 use App\Http\Controllers\Inventory\InventoryStockController;
 use App\Http\Controllers\Inventory\InventorySubcategoryController;
 use App\Http\Controllers\Inventory\SupplierController as InventorySupplierController;
+use App\Http\Controllers\Supply\SupplyDeliveryController;
+use App\Http\Controllers\Supply\SupplyItemController;
+use App\Http\Controllers\Supply\SupplyReceiptController;
+use App\Http\Controllers\Supply\SupplyRequestController;
+use App\Http\Controllers\Supply\SupplyStoreroomController;
 use App\Http\Controllers\Library\BibliotecaCatalogController;
 use App\Http\Controllers\Library\BibliotecaCatalogsController;
 use App\Http\Controllers\Library\BibliotecaDashboardController;
@@ -131,6 +141,7 @@ use App\Http\Controllers\MaintenanceReportController;
 use App\Http\Controllers\MaintenanceVisitController;
 use App\Http\Controllers\MaintenanceVisitPlanningController;
 use App\Http\Controllers\MaintenanceWorkOrderController;
+use App\Http\Controllers\ManagedDocumentController;
 use App\Http\Controllers\MeController;
 use App\Http\Controllers\NewsPostController;
 use App\Http\Controllers\Operational\OperationalTransferController;
@@ -140,6 +151,14 @@ use App\Http\Controllers\Operational\OperationalTransferProviderController;
 use App\Http\Controllers\Operational\OperationalTransferQuoteController;
 use App\Http\Controllers\Operational\OperationalTransferReportController;
 use App\Http\Controllers\OrganigramController;
+use App\Http\Controllers\Orientation\OrientationActionController;
+use App\Http\Controllers\Orientation\OrientationActivityController;
+use App\Http\Controllers\Orientation\OrientationCalendarController;
+use App\Http\Controllers\Orientation\OrientationCalendarizationController;
+use App\Http\Controllers\Orientation\OrientationEvidenceController;
+use App\Http\Controllers\Orientation\OrientationPlanController;
+use App\Http\Controllers\Orientation\OrientationRelatedPlanController;
+use App\Http\Controllers\Orientation\OrientationStatisticsController;
 use App\Http\Controllers\PermissionController;
 use App\Http\Controllers\Pme\PmeActionController;
 use App\Http\Controllers\Pme\PmeActivityController;
@@ -170,6 +189,7 @@ use App\Http\Controllers\Porter\PorterStudentWithdrawalController;
 use App\Http\Controllers\Porter\PorterVisitController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\Psychology\PsychologyCoordinationController;
+use App\Http\Controllers\PublicSiteContentMediaController;
 use App\Http\Controllers\RelevantCalendar\CalendarEventAttachmentController;
 use App\Http\Controllers\RelevantCalendar\CalendarEventController;
 use App\Http\Controllers\RelevantCalendar\CalendarInstitutionController;
@@ -215,6 +235,8 @@ use App\Http\Controllers\Security\SecurityIncidentController;
 use App\Http\Controllers\Security\SecurityNotificationController;
 use App\Http\Controllers\Security\SecurityShiftController;
 use App\Http\Controllers\SiteEventController;
+use App\Http\Controllers\SiteInstallationController;
+use App\Http\Controllers\SiteOrganizationController;
 use App\Http\Controllers\Spaces\DependencyReservationController;
 use App\Http\Controllers\Spaces\DependencyTypeController;
 use App\Http\Controllers\Spaces\SpaceStatisticsController;
@@ -230,6 +252,7 @@ use App\Http\Controllers\Staff\StaffController;
 use App\Http\Controllers\Staff\StaffDocumentController;
 use App\Http\Controllers\Staff\StaffPermissionWatcherController;
 use App\Http\Controllers\StudentHealth\StudentMedicalLeaveController;
+use App\Http\Controllers\StudentLifePostController;
 use App\Http\Controllers\Students\AcademicYearController;
 use App\Http\Controllers\Students\CourseSectionController;
 use App\Http\Controllers\Students\EducationLevelController;
@@ -242,6 +265,7 @@ use App\Http\Controllers\SystemModuleController;
 use App\Http\Controllers\Tasks\TaskAssignerController;
 use App\Http\Controllers\Tasks\TaskController;
 use App\Http\Controllers\Tasks\TaskReportController;
+use App\Http\Controllers\TestimonialController;
 use App\Http\Controllers\UserController;
 use App\Http\Middleware\NoStoreSensitiveResponse;
 use Illuminate\Http\Request;
@@ -293,6 +317,27 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/inicio/overview', HomeDashboardController::class);
     Route::post('/logout', [APIController::class, 'logout']);
     Route::get('/logout', [APIController::class, 'logout']);
+
+    Route::prefix('documentation')->group(function () {
+        Route::get('/catalogs', [ManagedDocumentController::class, 'catalogs'])
+            ->middleware('permission:documentation.view');
+        Route::get('/', [ManagedDocumentController::class, 'index'])
+            ->middleware('permission:documentation.view');
+        Route::post('/', [ManagedDocumentController::class, 'store'])
+            ->middleware('permission:documentation.create');
+        Route::get('/{managedDocument}/download', [ManagedDocumentController::class, 'download'])
+            ->whereNumber('managedDocument')
+            ->middleware('permission:documentation.view');
+        Route::get('/{managedDocument}', [ManagedDocumentController::class, 'show'])
+            ->whereNumber('managedDocument')
+            ->middleware('permission:documentation.view');
+        Route::match(['put', 'patch', 'post'], '/{managedDocument}', [ManagedDocumentController::class, 'update'])
+            ->whereNumber('managedDocument')
+            ->middleware('permission:documentation.update');
+        Route::delete('/{managedDocument}', [ManagedDocumentController::class, 'destroy'])
+            ->whereNumber('managedDocument')
+            ->middleware('permission:documentation.delete');
+    });
 
     Route::prefix('student-medical-leaves')->group(function () {
         Route::get('/', [StudentMedicalLeaveController::class, 'index']);
@@ -413,6 +458,66 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::put('/events/{siteEvent}', [SiteEventController::class, 'update'])->middleware('permission:gestionar_eventos');
         Route::delete('/events/{siteEvent}', [SiteEventController::class, 'destroy'])->middleware('permission:gestionar_eventos');
 
+        Route::get('/testimonials/catalogs', [TestimonialController::class, 'catalogs'])->middleware('permission:ver_testimonios');
+        Route::get('/testimonials', [TestimonialController::class, 'index'])->middleware('permission:ver_testimonios');
+        Route::post('/testimonials', [TestimonialController::class, 'store'])->middleware('permission:gestionar_testimonios');
+        Route::get('/testimonials/{testimonial}/image', [PublicSiteContentMediaController::class, 'adminTestimonialImage'])
+            ->middleware('permission:ver_testimonios')
+            ->name('api.admin.testimonials.image');
+        Route::get('/testimonials/{testimonial}', [TestimonialController::class, 'show'])->middleware('permission:ver_testimonios');
+        Route::match(['put', 'patch'], '/testimonials/{testimonial}', [TestimonialController::class, 'update'])->middleware('permission:gestionar_testimonios');
+        Route::delete('/testimonials/{testimonial}', [TestimonialController::class, 'destroy'])->middleware('permission:gestionar_testimonios');
+
+        Route::get('/student-life/catalogs', [StudentLifePostController::class, 'catalogs'])->middleware('permission:ver_vida_estudiantil');
+        Route::get('/student-life', [StudentLifePostController::class, 'index'])->middleware('permission:ver_vida_estudiantil');
+        Route::post('/student-life', [StudentLifePostController::class, 'store'])->middleware('permission:gestionar_vida_estudiantil');
+        Route::get('/student-life/{studentLifePost}/cover', [PublicSiteContentMediaController::class, 'adminStudentLifeCover'])
+            ->middleware('permission:ver_vida_estudiantil')
+            ->name('api.admin.student-life.cover');
+        Route::get('/student-life/{studentLifePost}/gallery/{studentLifePostImage}', [PublicSiteContentMediaController::class, 'adminStudentLifeGallery'])
+            ->middleware('permission:ver_vida_estudiantil')
+            ->name('api.admin.student-life.gallery');
+        Route::get('/student-life/{studentLifePost}', [StudentLifePostController::class, 'show'])->middleware('permission:ver_vida_estudiantil');
+        Route::match(['put', 'patch'], '/student-life/{studentLifePost}', [StudentLifePostController::class, 'update'])->middleware('permission:gestionar_vida_estudiantil');
+        Route::delete('/student-life/{studentLifePost}', [StudentLifePostController::class, 'destroy'])->middleware('permission:gestionar_vida_estudiantil');
+
+        Route::get('/installations/catalogs', [SiteInstallationController::class, 'catalogs'])
+            ->middleware('permission:ver_instalaciones_sitio');
+        Route::get('/installations', [SiteInstallationController::class, 'index'])
+            ->middleware('permission:ver_instalaciones_sitio');
+        Route::post('/installations', [SiteInstallationController::class, 'store'])
+            ->middleware('permission:gestionar_instalaciones_sitio');
+        Route::patch('/installations/reorder', [SiteInstallationController::class, 'reorder'])
+            ->middleware('permission:gestionar_instalaciones_sitio');
+        Route::get('/installations/{siteInstallation}/cover', [PublicSiteContentMediaController::class, 'adminInstallationCover'])
+            ->middleware('permission:ver_instalaciones_sitio')
+            ->name('api.admin.installations.cover');
+        Route::get('/installations/{siteInstallation}/gallery/{siteInstallationImage}', [PublicSiteContentMediaController::class, 'adminInstallationGallery'])
+            ->middleware('permission:ver_instalaciones_sitio')
+            ->name('api.admin.installations.gallery');
+        Route::get('/installations/{siteInstallation}', [SiteInstallationController::class, 'show'])
+            ->middleware('permission:ver_instalaciones_sitio');
+        Route::match(['put', 'patch'], '/installations/{siteInstallation}', [SiteInstallationController::class, 'update'])
+            ->middleware('permission:gestionar_instalaciones_sitio');
+        Route::delete('/installations/{siteInstallation}', [SiteInstallationController::class, 'destroy'])
+            ->middleware('permission:gestionar_instalaciones_sitio');
+
+        Route::prefix('site-organizations')->group(function () {
+            Route::get('/catalogs', [SiteOrganizationController::class, 'catalogs']);
+            Route::get('/students', [SiteOrganizationController::class, 'students']);
+            Route::get('/staff', [SiteOrganizationController::class, 'staff']);
+            Route::post('/roles', [SiteOrganizationController::class, 'storeRole']);
+            Route::put('/roles/{siteOrganizationRole}', [SiteOrganizationController::class, 'updateRole']);
+            Route::get('/', [SiteOrganizationController::class, 'index']);
+            Route::post('/', [SiteOrganizationController::class, 'store']);
+            Route::get('/{type}/{id}', [SiteOrganizationController::class, 'show'])
+                ->whereNumber('id');
+            Route::match(['put', 'patch'], '/{type}/{id}', [SiteOrganizationController::class, 'update'])
+                ->whereNumber('id');
+            Route::delete('/{type}/{id}', [SiteOrganizationController::class, 'destroy'])
+                ->whereNumber('id');
+        });
+
         Route::get('/contact-messages/catalogs', [ContactMessageController::class, 'catalogs'])->middleware('permission:ver_contactos_sitio');
         Route::get('/contact-messages', [ContactMessageController::class, 'index'])->middleware('permission:ver_contactos_sitio');
         Route::get('/contact-messages/{contactMessage}', [ContactMessageController::class, 'show'])->middleware('permission:ver_contactos_sitio');
@@ -428,6 +533,18 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/organigram', [OrganigramController::class, 'index'])->middleware('permission:administrar_organigrama');
         Route::get('/organigram/{staff}', [OrganigramController::class, 'show'])->middleware('permission:administrar_organigrama');
         Route::put('/organigram/{staff}/relations', [OrganigramController::class, 'sync'])->middleware('permission:administrar_organigrama');
+    });
+
+    Route::prefix('superadmin')->middleware('superadmin')->group(function () {
+        Route::get('/logbooks', [SuperAdminLogbookReviewController::class, 'index']);
+        Route::get('/reloj-control/users', [RelojControlController::class, 'users'])->middleware('throttle:30,1');
+        Route::post('/reloj-control/attendance', [RelojControlController::class, 'attendance'])->middleware('throttle:20,1');
+        Route::post('/reloj-control/reports', [RelojControlController::class, 'reports'])->middleware('throttle:10,1');
+        Route::get('/usage-level/users', [SuperAdminUsageLevelController::class, 'index']);
+        Route::get('/usage-level/users/{user}', [SuperAdminUsageLevelController::class, 'show'])->whereNumber('user');
+        Route::get('/supply-requests', [SuperAdminSupplyRequestController::class, 'index']);
+        Route::get('/supply-requests/{supplyRequest}', [SuperAdminSupplyRequestController::class, 'show']);
+        Route::post('/supply-requests/{supplyRequest}', [SuperAdminSupplyRequestController::class, 'update']);
     });
 
     Route::prefix('attendance-statistics')->group(function () {
@@ -922,6 +1039,33 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::delete('/attachments/{attachment}', [ConvivenciaAttachmentController::class, 'destroy']);
     });
 
+    Route::prefix('orientation')->middleware('permission:orientation.view')->group(function () {
+        Route::get('/plans', [OrientationPlanController::class, 'index']);
+        Route::get('/calendarization', [OrientationCalendarizationController::class, 'index']);
+        Route::post('/plans', [OrientationPlanController::class, 'store'])->middleware('permission:orientation.manage_plan');
+        Route::put('/plans/{plan}', [OrientationPlanController::class, 'update'])->middleware('permission:orientation.manage_plan');
+        Route::get('/plans/{plan}/calendar', OrientationCalendarController::class);
+        Route::get('/plans/{plan}/statistics', OrientationStatisticsController::class);
+        Route::post('/plans/{plan}/calendarization/import-reference', [OrientationCalendarizationController::class, 'importReference'])->middleware('permission:orientation.manage_plan');
+        Route::post('/plans/{plan}/calendarization', [OrientationCalendarizationController::class, 'store'])->middleware('permission:orientation.manage_plan');
+        Route::put('/calendarization/{calendarizationEntry}', [OrientationCalendarizationController::class, 'update'])->middleware('permission:orientation.manage_plan');
+        Route::delete('/calendarization/{calendarizationEntry}', [OrientationCalendarizationController::class, 'destroy'])->middleware('permission:orientation.manage_plan');
+
+        Route::post('/plans/{plan}/actions', [OrientationActionController::class, 'store'])->middleware('permission:orientation.manage_plan');
+        Route::get('/actions/{action}', [OrientationActionController::class, 'show']);
+        Route::put('/actions/{action}', [OrientationActionController::class, 'update'])->middleware('permission:orientation.manage_plan');
+        Route::delete('/actions/{action}', [OrientationActionController::class, 'destroy'])->middleware('permission:orientation.manage_plan');
+
+        Route::post('/plans/{plan}/related-plans', [OrientationRelatedPlanController::class, 'store'])->middleware('permission:orientation.manage_plan');
+        Route::put('/related-plans/{relatedPlan}', [OrientationRelatedPlanController::class, 'update'])->middleware('permission:orientation.manage_plan');
+
+        Route::post('/actions/{action}/activities', [OrientationActivityController::class, 'store'])->middleware('permission:orientation.manage_execution');
+        Route::put('/activities/{activity}', [OrientationActivityController::class, 'update'])->middleware('permission:orientation.manage_execution');
+
+        Route::post('/actions/{action}/evidences', [OrientationEvidenceController::class, 'store'])->middleware('permission:orientation.manage_evidence');
+        Route::get('/evidences/{evidence}/download', [OrientationEvidenceController::class, 'download']);
+    });
+
     Route::prefix('risk-prevention')->middleware('risk_prevention.installed')->group(function () {
         Route::middleware('risk_matrix.installed')->group(function () {
             Route::get('/risk-matrices/dashboard', RiskMatrixDashboardController::class)->middleware('permission:risk-matrix.view');
@@ -1063,6 +1207,9 @@ Route::middleware('auth:sanctum')->group(function () {
 
         Route::get('/obras', [BibliotecaCatalogController::class, 'index'])->middleware('permission:ver_modulo_biblioteca');
         Route::post('/obras', [BibliotecaCatalogController::class, 'store'])->middleware('permission:crear_libros_biblioteca');
+        Route::get('/obras/{obra}/cover/{cover}', [BibliotecaCatalogController::class, 'cover'])
+            ->where('cover', '[a-fA-F0-9-]+\.(?:jpe?g|png|webp|heic|heif)')
+            ->middleware('permission:ver_modulo_biblioteca');
         Route::get('/obras/{obra}', [BibliotecaCatalogController::class, 'show'])->middleware('permission:ver_modulo_biblioteca');
         Route::put('/obras/{obra}', [BibliotecaCatalogController::class, 'update'])->middleware('permission:editar_libros_biblioteca');
         Route::delete('/obras/{obra}', [BibliotecaCatalogController::class, 'destroy'])->middleware('permission:eliminar_libros_biblioteca');
@@ -1072,6 +1219,10 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/ejemplares', [BibliotecaInventoryController::class, 'store'])->middleware('permission:administrar_inventario_biblioteca');
         Route::get('/ejemplares/{ejemplar}', [BibliotecaInventoryController::class, 'show'])->middleware('permission:ver_modulo_biblioteca');
         Route::put('/ejemplares/{ejemplar}', [BibliotecaInventoryController::class, 'update'])->middleware('permission:administrar_inventario_biblioteca');
+        Route::post('/ejemplares/{ejemplar}/photos', [BibliotecaInventoryController::class, 'uploadPhotos'])->middleware('permission:administrar_inventario_biblioteca');
+        Route::get('/ejemplares/{ejemplar}/photos/{photo}', [BibliotecaInventoryController::class, 'photo'])
+            ->where('photo', '[a-fA-F0-9-]+\.(?:jpe?g|png|webp|heic|heif)')
+            ->middleware('permission:ver_modulo_biblioteca');
         Route::post('/ejemplares/{ejemplar}/audit', [BibliotecaInventoryController::class, 'audit'])->middleware('permission:administrar_inventario_biblioteca');
         Route::post('/ejemplares/{ejemplar}/damage', [BibliotecaInventoryController::class, 'markDamage'])->middleware('permission:administrar_inventario_biblioteca');
         Route::post('/ejemplares/{ejemplar}/loss', [BibliotecaInventoryController::class, 'markLoss'])->middleware('permission:administrar_inventario_biblioteca');
@@ -1293,6 +1444,18 @@ Route::middleware('auth:sanctum')->group(function () {
                 Route::post('/payment-proposals/{proposal}/confirm', [PayslipModuleController::class, 'confirmProposal'])->middleware('permission:remuneraciones.liquidaciones_pdf.propuesta_pago');
             });
             Route::get('/catalogs', [RemunerationModuleController::class, 'catalogs'])->middleware('permission:remuneraciones.ver');
+            Route::prefix('documents')
+                ->middleware('permission:remuneraciones.rrhh.gestionar')
+                ->group(function () {
+                    Route::get('/staff', [RemunerationDocumentController::class, 'staff']);
+                    Route::get('/requirements', [RemunerationDocumentController::class, 'requirements']);
+                    Route::post('/requirements', [RemunerationDocumentController::class, 'storeRequirement']);
+                    Route::put('/requirements/{requirement}', [RemunerationDocumentController::class, 'updateRequirement']);
+                    Route::delete('/requirements/{requirement}', [RemunerationDocumentController::class, 'destroyRequirement']);
+                    Route::post('/staff/{staff}/requirements/{requirement}', [RemunerationDocumentController::class, 'saveCompliance']);
+                    Route::get('/compliances/{control}/download', [RemunerationDocumentController::class, 'download'])
+                        ->name('remuneration.documents.download');
+                });
             Route::get('/dashboard', [RemunerationModuleController::class, 'dashboard'])->middleware('permission:remuneraciones.ver');
             Route::get('/book-analytics', [RemunerationModuleController::class, 'bookAnalytics'])->middleware('permission:remuneraciones.reportes.ver');
             Route::get('/book-alert-rules', [RemunerationModuleController::class, 'bookAlertRules'])->middleware('permission:remuneraciones.reportes.ver');
@@ -1503,6 +1666,8 @@ Route::middleware('auth:sanctum')->group(function () {
         ->middleware('permission:editar_ot');
     Route::post('/maintenance/work-orders/{maintenanceWorkOrder}/close', [MaintenanceWorkOrderController::class, 'close'])
         ->middleware('permission:editar_ot');
+    Route::delete('/maintenance/work-orders/{maintenanceWorkOrder}/photos/{photo}', [MaintenanceWorkOrderController::class, 'deletePhoto'])
+        ->middleware('permission:editar_ot');
     Route::delete('/maintenance/work-orders/{maintenanceWorkOrder}', [MaintenanceWorkOrderController::class, 'destroy'])
         ->middleware('permission:editar_ot');
 
@@ -1516,6 +1681,8 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/maintenance/visits/{maintenanceVisit}/checklist', [MaintenanceVisitController::class, 'upsertChecklist'])
         ->middleware('permission:gestionar_visitas_mantencion');
     Route::post('/maintenance/visits/{maintenanceVisit}/checklist-photo', [MaintenanceVisitController::class, 'uploadChecklistPhoto'])
+        ->middleware('permission:gestionar_visitas_mantencion');
+    Route::delete('/maintenance/visits/{maintenanceVisit}/checklist-photos/{photo}', [MaintenanceVisitController::class, 'deleteChecklistPhoto'])
         ->middleware('permission:gestionar_visitas_mantencion');
     Route::post('/maintenance/visit-checklist-responses/{checklistResponse}/create-work-order', [MaintenanceVisitController::class, 'createWorkOrderFromFinding'])
         ->middleware('permission:crear_ot');
@@ -1544,6 +1711,58 @@ Route::middleware('auth:sanctum')->group(function () {
         ->middleware('permission:gestionar_plan_anual_mantencion');
     Route::delete('/maintenance/annual-plans/{maintenanceAnnualPlan}', [MaintenanceAnnualPlanController::class, 'destroy'])
         ->middleware('permission:gestionar_plan_anual_mantencion');
+
+    // Abastecimiento: catálogo, compras y entregas trazables sobre el inventario central.
+    Route::prefix('supplies')->group(function () {
+        Route::get('/storerooms', [SupplyStoreroomController::class, 'index'])
+            ->middleware('permission:ver_abastecimiento');
+        Route::post('/storerooms', [SupplyStoreroomController::class, 'store'])
+            ->middleware('permission:gestionar_insumos_abastecimiento');
+        Route::get('/storerooms/inventory-candidates', [SupplyStoreroomController::class, 'candidates'])
+            ->middleware('permission:ver_abastecimiento');
+        Route::post('/storerooms/{storeroom}/items', [SupplyStoreroomController::class, 'attachItems'])
+            ->middleware('permission:gestionar_insumos_abastecimiento');
+        Route::get('/inventory-items/{item}/image', [SupplyStoreroomController::class, 'inventoryImage'])
+            ->middleware('permission:ver_abastecimiento');
+
+        Route::get('/catalogs', [SupplyItemController::class, 'catalogs'])
+            ->middleware('permission:ver_abastecimiento');
+        Route::get('/items', [SupplyItemController::class, 'index'])
+            ->middleware('permission:ver_abastecimiento');
+        Route::post('/items', [SupplyItemController::class, 'store'])
+            ->middleware('permission:gestionar_insumos_abastecimiento');
+        Route::get('/items/{item}', [SupplyItemController::class, 'show'])
+            ->middleware('permission:ver_abastecimiento');
+        Route::put('/items/{item}', [SupplyItemController::class, 'update'])
+            ->middleware('permission:gestionar_insumos_abastecimiento');
+        Route::delete('/items/{item}', [SupplyItemController::class, 'destroy'])
+            ->middleware('permission:gestionar_insumos_abastecimiento');
+        Route::post('/items/{item}/photo', [SupplyItemController::class, 'storePhoto'])
+            ->middleware('permission:gestionar_insumos_abastecimiento');
+        Route::get('/items/{item}/photo', [SupplyItemController::class, 'photo'])
+            ->middleware('permission:ver_abastecimiento');
+
+        Route::get('/receipts', [SupplyReceiptController::class, 'index'])
+            ->middleware('permission:ver_abastecimiento');
+        Route::post('/receipts', [SupplyReceiptController::class, 'store'])
+            ->middleware('permission:registrar_compras_abastecimiento');
+
+        Route::get('/deliveries', [SupplyDeliveryController::class, 'index'])
+            ->middleware('permission:ver_abastecimiento');
+        Route::post('/deliveries', [SupplyDeliveryController::class, 'store'])
+            ->middleware('permission:registrar_entregas_abastecimiento');
+        Route::get('/deliveries/{delivery}', [SupplyDeliveryController::class, 'show'])
+            ->middleware('permission:exportar_actas_abastecimiento');
+
+        Route::get('/requests', [SupplyRequestController::class, 'index'])
+            ->middleware('permission:ver_solicitudes_abastecimiento');
+        Route::post('/requests', [SupplyRequestController::class, 'store'])
+            ->middleware('permission:crear_solicitudes_abastecimiento');
+        Route::get('/requests/{supplyRequest}', [SupplyRequestController::class, 'show'])
+            ->middleware('permission:ver_solicitudes_abastecimiento');
+        Route::get('/request-items/{item}/photo', [SupplyRequestController::class, 'photo'])
+            ->middleware('permission:ver_solicitudes_abastecimiento');
+    });
 
     // Inventario
     Route::prefix('inventory')->group(function () {

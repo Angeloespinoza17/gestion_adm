@@ -13,18 +13,67 @@ use App\Models\SocialWork\ProtectionMeasure;
 use App\Models\SocialWork\StudentProgram;
 use App\Models\SocialWork\SupportDevice;
 use App\Models\SocialWork\TransportPass;
+use App\Models\StudentEnrollment;
 use App\Models\StudentProfile;
+use App\Services\Attendance\StudentMonthlyAttendanceContextService;
 use App\Services\SocialWork\AuditService;
 use App\Services\SocialWork\JunaebService;
-use App\Services\Attendance\StudentMonthlyAttendanceContextService;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 
 class SupportController extends Controller
 {
+    public function studentOptions(): JsonResponse
+    {
+        $activeYear = AcademicYear::query()->where('is_active', true)->first();
+
+        if (! $activeYear) {
+            return response()->json(['data' => [], 'academic_year' => null]);
+        }
+
+        $students = StudentProfile::query()
+            ->select(['id', 'first_name', 'last_name', 'registered_name', 'rut'])
+            ->where('general_status', 'activo')
+            ->whereHas('enrollments', fn (Builder $query) => $query
+                ->where('academic_year_id', $activeYear->id)
+                ->whereNotIn('enrollment_status', StudentEnrollment::NON_ROSTER_STATUS_VALUES))
+            ->with(['enrollments' => fn ($query) => $query
+                ->where('academic_year_id', $activeYear->id)
+                ->whereNotIn('enrollment_status', StudentEnrollment::NON_ROSTER_STATUS_VALUES)
+                ->with([
+                    'academicYear:id,name,year',
+                    'courseSection:id,display_name,education_level_id',
+                    'courseSection.educationLevel:id,name,order,type',
+                ])
+                ->latest('id')])
+            ->orderBy('last_name')
+            ->orderBy('first_name')
+            ->get()
+            ->map(function (StudentProfile $student) use ($activeYear): array {
+                $enrollment = $student->preferredEnrollment($activeYear);
+
+                return [
+                    'id' => $student->id,
+                    'first_name' => $student->first_name,
+                    'last_name' => $student->last_name,
+                    'registered_name' => $student->registered_name,
+                    'registered_name_resolved' => $student->registered_name_resolved,
+                    'rut' => $student->rut,
+                    'current_enrollment' => $enrollment,
+                    'transport_pass_eligible' => $this->isTransportPassEligible($enrollment),
+                ];
+            });
+
+        return response()->json([
+            'data' => $students,
+            'academic_year' => $activeYear->only(['id', 'name', 'year']),
+        ]);
+    }
+
     public function supportMatrix(Request $request, StudentMonthlyAttendanceContextService $attendanceContext): JsonResponse
     {
         $activeYear = AcademicYear::query()->where('is_active', true)->first();
@@ -529,5 +578,40 @@ class SupportController extends Controller
     private function perPage(Request $request, int $default = 30, int $max = 100): int
     {
         return min(max($request->integer('per_page', $default), 1), $max);
+    }
+
+    private function isTransportPassEligible(?StudentEnrollment $enrollment): bool
+    {
+        $level = $enrollment?->courseSection?->educationLevel;
+        $type = $level?->type;
+
+        if (! in_array($type, ['basica', 'media'], true)) {
+            return false;
+        }
+
+        $grade = $this->gradeFromLabel((string) ($level?->name ?: $enrollment?->courseSection?->display_name));
+
+        return $type === 'basica'
+            ? $grade !== null && $grade >= 5 && $grade <= 8
+            : $grade !== null && $grade >= 1 && $grade <= 4;
+    }
+
+    private function gradeFromLabel(string $label): ?int
+    {
+        $normalized = strtolower(Str::ascii($label));
+        if (preg_match('/(^|\D)([1-8])(?:\D|$)/', $normalized, $matches)) {
+            return (int) $matches[2];
+        }
+
+        foreach ([
+            'primero' => 1, 'primer' => 1, 'segundo' => 2, 'tercero' => 3, 'cuarto' => 4,
+            'quinto' => 5, 'sexto' => 6, 'septimo' => 7, 'octavo' => 8,
+        ] as $word => $grade) {
+            if (str_contains($normalized, $word)) {
+                return $grade;
+            }
+        }
+
+        return null;
     }
 }

@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\InventoryItem;
 use App\Models\MaintenanceDependency;
+use App\Models\MaintenanceEvidencePhoto;
 use App\Models\MaintenanceWorkOrder;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Builder;
@@ -13,13 +14,17 @@ use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
+use Throwable;
 
 class MaintenanceWorkOrderController extends Controller
 {
+    private const MAX_EVIDENCE_PHOTOS = 3;
+
     private const EXPLICIT_ASSIGNEE_NAME_TERMS = [
         ['Sebastian', 'Matamala'],
     ];
@@ -41,6 +46,7 @@ class MaintenanceWorkOrderController extends Controller
                 'closedByUser:id,name',
                 'createdByUser:id,name',
                 'assigneeUsers:id,name',
+                'evidencePhotos:id,maintenance_work_order_id,path,original_name,mime_type,size_bytes,created_at',
             ])
             ->when($search !== '', function ($query) use ($search) {
                 $query->where(function ($query) use ($search) {
@@ -100,6 +106,7 @@ class MaintenanceWorkOrderController extends Controller
     public function store(Request $request): JsonResponse
     {
         $payload = $this->validated($request);
+        $photoFiles = $this->uploadedPhotoFiles($request);
         $assignedUserIds = Arr::pull($payload, 'assigned_user_ids', []);
         $actor = $request->user();
 
@@ -114,12 +121,31 @@ class MaintenanceWorkOrderController extends Controller
             $payload['closed_by_user_id'] = null;
         }
 
-        if ($request->hasFile('photo')) {
-            $payload['photo_reference'] = $this->storePhoto($request->file('photo'));
+        $referenceCount = trim((string) ($payload['photo_reference'] ?? '')) !== '' ? 1 : 0;
+        if ($referenceCount + $photoFiles->count() > self::MAX_EVIDENCE_PHOTOS) {
+            throw ValidationException::withMessages([
+                'photos' => 'Cada OT admite un máximo de 3 fotografías.',
+            ]);
         }
 
-        $workOrder = MaintenanceWorkOrder::create($payload);
-        $this->syncAssigneeUsers($workOrder, $assignedUserIds);
+        $storedPhotos = $this->storePhotoBatch($photoFiles);
+
+        if ($storedPhotos !== [] && empty($payload['photo_reference'])) {
+            $payload['photo_reference'] = $storedPhotos[0]['path'];
+        }
+
+        try {
+            $workOrder = DB::transaction(function () use ($actor, $assignedUserIds, $payload, $storedPhotos) {
+                $workOrder = MaintenanceWorkOrder::create($payload);
+                $this->persistEvidencePhotos($workOrder, $storedPhotos, $actor?->id);
+                $this->syncAssigneeUsers($workOrder, $assignedUserIds);
+
+                return $workOrder;
+            });
+        } catch (Throwable $exception) {
+            Storage::disk('public')->delete(collect($storedPhotos)->pluck('path')->all());
+            throw $exception;
+        }
 
         return response()->json([
             'message' => 'Orden de trabajo creada correctamente.',
@@ -130,6 +156,7 @@ class MaintenanceWorkOrderController extends Controller
                 'closedByUser:id,name',
                 'createdByUser:id,name',
                 'assigneeUsers:id,name',
+                'evidencePhotos:id,maintenance_work_order_id,path,original_name,mime_type,size_bytes,created_at',
             ]),
         ], 201);
     }
@@ -144,6 +171,7 @@ class MaintenanceWorkOrderController extends Controller
                 'closedByUser:id,name',
                 'createdByUser:id,name',
                 'assigneeUsers:id,name',
+                'evidencePhotos:id,maintenance_work_order_id,path,original_name,mime_type,size_bytes,created_at',
             ]),
         ]);
     }
@@ -151,6 +179,7 @@ class MaintenanceWorkOrderController extends Controller
     public function update(Request $request, MaintenanceWorkOrder $maintenanceWorkOrder): JsonResponse
     {
         $payload = $this->validated($request);
+        $photoFiles = $this->uploadedPhotoFiles($request);
         $shouldSyncAssignees = array_key_exists('assigned_user_ids', $payload);
         $assignedUserIds = Arr::pull($payload, 'assigned_user_ids', []);
         $creatorName = $maintenanceWorkOrder->createdByUser?->name;
@@ -169,14 +198,48 @@ class MaintenanceWorkOrderController extends Controller
             $payload['closed_by_user_id'] = null;
         }
 
-        if ($request->hasFile('photo')) {
-            $payload['photo_reference'] = $this->storePhoto($request->file('photo'), $maintenanceWorkOrder->photo_reference);
+        $currentPhotoCount = $this->workOrderPhotoCount($maintenanceWorkOrder);
+        if ($currentPhotoCount + $photoFiles->count() > self::MAX_EVIDENCE_PHOTOS) {
+            throw ValidationException::withMessages([
+                'photos' => "La OT ya tiene {$currentPhotoCount} fotografía(s). El máximo permitido es 3.",
+            ]);
         }
 
-        $maintenanceWorkOrder->update($payload);
+        $storedPhotos = $this->storePhotoBatch($photoFiles);
+        if ($storedPhotos !== [] && ! trim((string) $maintenanceWorkOrder->photo_reference)) {
+            $payload['photo_reference'] = $storedPhotos[0]['path'];
+        }
 
-        if ($shouldSyncAssignees) {
-            $this->syncAssigneeUsers($maintenanceWorkOrder, $assignedUserIds);
+        try {
+            DB::transaction(function () use (
+                $assignedUserIds,
+                $maintenanceWorkOrder,
+                $payload,
+                $request,
+                $shouldSyncAssignees,
+                $storedPhotos
+            ): void {
+                $lockedWorkOrder = MaintenanceWorkOrder::query()
+                    ->lockForUpdate()
+                    ->findOrFail($maintenanceWorkOrder->id);
+                $lockedPhotoCount = $this->workOrderPhotoCount($lockedWorkOrder);
+
+                if ($lockedPhotoCount + count($storedPhotos) > self::MAX_EVIDENCE_PHOTOS) {
+                    throw ValidationException::withMessages([
+                        'photos' => 'La OT alcanzó el máximo de 3 fotografías.',
+                    ]);
+                }
+
+                $lockedWorkOrder->update($payload);
+                $this->persistEvidencePhotos($lockedWorkOrder, $storedPhotos, $request->user()?->id);
+
+                if ($shouldSyncAssignees) {
+                    $this->syncAssigneeUsers($lockedWorkOrder, $assignedUserIds);
+                }
+            });
+        } catch (Throwable $exception) {
+            Storage::disk('public')->delete(collect($storedPhotos)->pluck('path')->all());
+            throw $exception;
         }
 
         return response()->json([
@@ -188,6 +251,7 @@ class MaintenanceWorkOrderController extends Controller
                 'closedByUser:id,name',
                 'createdByUser:id,name',
                 'assigneeUsers:id,name',
+                'evidencePhotos:id,maintenance_work_order_id,path,original_name,mime_type,size_bytes,created_at',
             ]),
         ]);
     }
@@ -221,6 +285,7 @@ class MaintenanceWorkOrderController extends Controller
                 'closedByUser:id,name',
                 'createdByUser:id,name',
                 'assigneeUsers:id,name',
+                'evidencePhotos:id,maintenance_work_order_id,path,original_name,mime_type,size_bytes,created_at',
             ]),
         ]);
     }
@@ -265,21 +330,72 @@ class MaintenanceWorkOrderController extends Controller
                 'closedByUser:id,name',
                 'createdByUser:id,name',
                 'assigneeUsers:id,name',
+                'evidencePhotos:id,maintenance_work_order_id,path,original_name,mime_type,size_bytes,created_at',
+            ]),
+        ]);
+    }
+
+    public function deletePhoto(
+        MaintenanceWorkOrder $maintenanceWorkOrder,
+        MaintenanceEvidencePhoto $photo
+    ): JsonResponse
+    {
+        abort_unless((int) $photo->maintenance_work_order_id === (int) $maintenanceWorkOrder->id, 404);
+
+        $path = $photo->path;
+
+        DB::transaction(function () use ($maintenanceWorkOrder, $path, $photo): void {
+            $photo->delete();
+
+            if ($maintenanceWorkOrder->photo_reference !== $path) {
+                return;
+            }
+
+            $replacement = $maintenanceWorkOrder->evidencePhotos()->oldest('id')->value('path');
+            $maintenanceWorkOrder->update(['photo_reference' => $replacement]);
+        });
+
+        Storage::disk('public')->delete($path);
+
+        return response()->json([
+            'message' => 'Fotografía eliminada correctamente.',
+            'data' => $maintenanceWorkOrder->fresh()->load([
+                'dependency:id,code,name,distribution,sector,zone,usage',
+                'technicalArea:id,code,name,parent_dependency_id,distribution,sector,zone,usage',
+                'inventoryItem:id,code,name,dependency_id,status,condition',
+                'closedByUser:id,name',
+                'createdByUser:id,name',
+                'assigneeUsers:id,name',
+                'evidencePhotos:id,maintenance_work_order_id,path,original_name,mime_type,size_bytes,created_at',
             ]),
         ]);
     }
 
     public function destroy(MaintenanceWorkOrder $maintenanceWorkOrder): JsonResponse
     {
-        if (MaintenanceWorkOrder::isManagedPhotoReference($maintenanceWorkOrder->photo_reference)) {
-            Storage::disk('public')->delete($maintenanceWorkOrder->photo_reference);
+        $maintenanceWorkOrder->load('evidencePhotos');
+        $standalonePhotos = $maintenanceWorkOrder->evidencePhotos
+            ->whereNull('maintenance_visit_checklist_response_id');
+        $checklistPaths = $maintenanceWorkOrder->evidencePhotos
+            ->whereNotNull('maintenance_visit_checklist_response_id')
+            ->pluck('path');
+        $photoPathsToDelete = $standalonePhotos->pluck('path');
+
+        if (MaintenanceWorkOrder::isManagedPhotoReference($maintenanceWorkOrder->photo_reference)
+            && ! $checklistPaths->contains($maintenanceWorkOrder->photo_reference)) {
+            $photoPathsToDelete->push($maintenanceWorkOrder->photo_reference);
         }
 
         if (MaintenanceWorkOrder::isManagedClosureDocumentReference($maintenanceWorkOrder->closure_document_reference)) {
             Storage::disk('public')->delete($maintenanceWorkOrder->closure_document_reference);
         }
 
-        $maintenanceWorkOrder->delete();
+        DB::transaction(function () use ($maintenanceWorkOrder, $standalonePhotos): void {
+            MaintenanceEvidencePhoto::query()->whereKey($standalonePhotos->pluck('id'))->delete();
+            $maintenanceWorkOrder->delete();
+        });
+
+        Storage::disk('public')->delete($photoPathsToDelete->filter()->unique()->values()->all());
 
         return response()->json([
             'message' => 'Orden de trabajo eliminada correctamente.',
@@ -669,6 +785,8 @@ class MaintenanceWorkOrderController extends Controller
             'resolution_notes' => ['nullable', 'string'],
             'photo_reference' => ['nullable', 'string'],
             'photo' => ['nullable', 'file', 'image', 'mimes:jpg,jpeg,png,gif,bmp,webp', 'max:5120'],
+            'photos' => ['nullable', 'array', 'max:3'],
+            'photos.*' => ['required', 'file', 'image', 'mimes:jpg,jpeg,png,gif,bmp,webp', 'max:5120'],
         ]);
 
         $shouldSyncAssignees = $request->boolean('sync_assignees') || $request->has('assigned_user_ids');
@@ -754,12 +872,81 @@ class MaintenanceWorkOrderController extends Controller
             }
         }
 
-        unset($validated['photo']);
+        unset($validated['photo'], $validated['photos']);
 
         return $validated;
     }
 
-    private function storePhoto(UploadedFile $file, ?string $previous = null): string
+    /** @return Collection<int, UploadedFile> */
+    private function uploadedPhotoFiles(Request $request): Collection
+    {
+        $files = collect(Arr::wrap($request->file('photos')))
+            ->filter(fn ($file) => $file instanceof UploadedFile);
+
+        if ($request->hasFile('photo')) {
+            $files->push($request->file('photo'));
+        }
+
+        if ($files->count() > self::MAX_EVIDENCE_PHOTOS) {
+            throw ValidationException::withMessages([
+                'photos' => 'Cada OT admite un máximo de 3 fotografías.',
+            ]);
+        }
+
+        return $files->values();
+    }
+
+    /** @return array<int, array{file: UploadedFile, path: string}> */
+    private function storePhotoBatch(Collection $files): array
+    {
+        $stored = [];
+
+        try {
+            foreach ($files as $file) {
+                $stored[] = [
+                    'file' => $file,
+                    'path' => $this->storePhoto($file),
+                ];
+            }
+        } catch (Throwable $exception) {
+            Storage::disk('public')->delete(collect($stored)->pluck('path')->all());
+            throw $exception;
+        }
+
+        return $stored;
+    }
+
+    /** @param array<int, array{file: UploadedFile, path: string}> $storedPhotos */
+    private function persistEvidencePhotos(
+        MaintenanceWorkOrder $workOrder,
+        array $storedPhotos,
+        ?int $uploadedByUserId
+    ): void {
+        foreach ($storedPhotos as $storedPhoto) {
+            $file = $storedPhoto['file'];
+            $path = $storedPhoto['path'];
+
+            $workOrder->evidencePhotos()->create([
+                'path' => $path,
+                'original_name' => Str::limit($file->getClientOriginalName(), 255, ''),
+                'mime_type' => 'image/jpeg',
+                'size_bytes' => Storage::disk('public')->size($path),
+                'uploaded_by_user_id' => $uploadedByUserId,
+            ]);
+        }
+    }
+
+    private function workOrderPhotoCount(MaintenanceWorkOrder $workOrder): int
+    {
+        return collect([$workOrder->photo_reference])
+            ->concat($workOrder->evidencePhotos()->pluck('path'))
+            ->map(fn ($path) => trim((string) $path))
+            ->filter()
+            ->unique()
+            ->count();
+    }
+
+    private function storePhoto(UploadedFile $file): string
     {
         if (! function_exists('imagecreatefromstring') || ! function_exists('imagejpeg')) {
             throw ValidationException::withMessages([
@@ -829,10 +1016,6 @@ class MaintenanceWorkOrderController extends Controller
             throw ValidationException::withMessages([
                 'photo' => 'No se pudo guardar la foto. Intenta nuevamente.',
             ]);
-        }
-
-        if (MaintenanceWorkOrder::isManagedPhotoReference($previous)) {
-            Storage::disk('public')->delete($previous);
         }
 
         return $path;

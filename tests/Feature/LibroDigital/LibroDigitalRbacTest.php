@@ -24,8 +24,8 @@ class LibroDigitalRbacTest extends TestCase
         $group = PermissionGroup::query()->where('slug', 'libro_digital')->firstOrFail();
         $audit = app(RbacReconciliationService::class)->audit();
 
-        $this->assertCount(45, $permissionSlugs);
-        $this->assertSame(45, $group->permissions()->where('permissions.slug', 'like', 'libro_digital.%')->count());
+        $this->assertCount(46, $permissionSlugs);
+        $this->assertSame(46, $group->permissions()->where('permissions.slug', 'like', 'libro_digital.%')->count());
         $this->assertSame(11, SystemModule::query()->where('slug', 'like', 'libro_digital%')->count());
         $this->assertSame([], array_values(array_filter(
             [...$audit['missing_backend_permissions'], ...$audit['missing_frontend_permissions']],

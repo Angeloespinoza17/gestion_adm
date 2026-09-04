@@ -10,6 +10,7 @@ import esLocale from "@fullcalendar/core/locales/es";
 import PsychologyBadge from "./PsychologyBadge.vue";
 import PsychologyModal from "./PsychologyModal.vue";
 import { downloadPsychologyActivityPdf } from "./psychology-activity-pdf";
+import { downloadPsychologyCasePdf } from "./psychology-case-pdf";
 import { downloadPsychologyPlanPdf } from "./psychology-plan-pdf";
 import {
     priorityLabels,
@@ -87,6 +88,7 @@ const selected = ref(null);
 const selectedActivity = ref(null);
 const selectedPlan = ref(null);
 const exportingActivityPdf = ref(false);
+const exportingCasePdf = ref(false);
 const exportingPlanPdf = ref(false);
 const activeTab = ref("summary");
 const formModal = ref("");
@@ -359,6 +361,19 @@ const blankCaseCreation = () => ({
     guardian_information_status: "pending",
 });
 const caseCreation = reactive(blankCaseCreation());
+const blankCaseEdit = () => ({
+    status: "open",
+    priority: "medium",
+    confidentiality: "private_psychology",
+    general_reason: "",
+    categories: "",
+    objectives: "",
+    next_action: "",
+    next_review_on: "",
+    guardian_information_status: "pending",
+    change_reason: "",
+});
+const caseEdit = reactive(blankCaseEdit());
 const selectedReferral = computed(() =>
     eligibleReferrals.value.find(
         (item) => Number(item.id) === Number(selectedReferralId.value)
@@ -639,6 +654,25 @@ const closeCaseFile = () => {
     activeTab.value = "summary";
     closeForm();
 };
+const openCaseEditForm = () => {
+    if (!selected.value) return;
+
+    Object.assign(caseEdit, blankCaseEdit(), {
+        status: selected.value.status || "open",
+        priority: selected.value.priority || "medium",
+        confidentiality:
+            selected.value.confidentiality || "private_psychology",
+        general_reason: selected.value.general_reason || "",
+        categories: selected.value.categories || "",
+        objectives: selected.value.objectives || "",
+        next_action: selected.value.next_action || "",
+        next_review_on: selected.value.next_review_on || "",
+        guardian_information_status:
+            selected.value.guardian_information_status || "pending",
+    });
+    api.error.value = "";
+    openForm("edit-case");
+};
 const reloadCase = async () => {
     if (!selected.value) return;
     const currentTab = activeTab.value;
@@ -666,6 +700,19 @@ const saveActivity = async (finalized = false) => {
         closeForm();
     } catch {
         // El mensaje validado se mantiene visible dentro del formulario.
+    }
+};
+const saveCaseChanges = async () => {
+    try {
+        const response = await api.patch(
+            `/api/psychology/cases/${selected.value.id}`,
+            { ...caseEdit }
+        );
+        selected.value = response.data || response;
+        await load();
+        closeForm();
+    } catch {
+        // El formulario conserva el mensaje validado por el servidor.
     }
 };
 const saveCoordination = async () => {
@@ -697,6 +744,22 @@ const exportSelectedActivityPdf = async (
         // El servicio conserva el mensaje de autorización o descarga.
     } finally {
         exportingActivityPdf.value = false;
+    }
+};
+const exportCasePdf = async () => {
+    if (!selected.value || exportingCasePdf.value) return;
+
+    exportingCasePdf.value = true;
+    api.error.value = "";
+    try {
+        const response = await api.post(
+            `/api/psychology/cases/${selected.value.id}/export`
+        );
+        await downloadPsychologyCasePdf(response);
+    } catch {
+        // El servicio conserva el mensaje de autorización o descarga.
+    } finally {
+        exportingCasePdf.value = false;
     }
 };
 const exportPlanPdf = async (planItem = selectedPlan.value) => {
@@ -1323,6 +1386,19 @@ onMounted(load);
                             }}
                         </span>
                     </div>
+                    <button
+                        type="button"
+                        class="btn psi-case-export-button"
+                        :disabled="exportingCasePdf"
+                        @click="exportCasePdf"
+                    >
+                        <i class="bx bxs-file-pdf"></i>
+                        <span>{{
+                            exportingCasePdf
+                                ? "Preparando expediente…"
+                                : "Exportar caso"
+                        }}</span>
+                    </button>
                     <div class="psi-case-identity-badges">
                         <PsychologyBadge :value="selected.priority" priority />
                         <PsychologyBadge :value="selected.status" />
@@ -1352,10 +1428,23 @@ onMounted(load);
                                         <div>
                                             <h5>Información del caso</h5>
                                             <p>
-                                                Datos registrados durante la
-                                                apertura de la ficha.
+                                                Datos vigentes y actualizables
+                                                del expediente.
                                             </p>
                                         </div>
+                                        <button
+                                            v-if="
+                                                catalogs.capabilities
+                                                    .edit_case &&
+                                                selected.status !== 'closed'
+                                            "
+                                            type="button"
+                                            class="btn psi-edit-case-button"
+                                            @click="openCaseEditForm"
+                                        >
+                                            <i class="bx bx-edit-alt"></i>
+                                            Editar
+                                        </button>
                                     </div>
                                     <dl class="psi-case-data-grid">
                                         <div class="wide emphasized">
@@ -1394,6 +1483,15 @@ onMounted(load);
                                                               selected.next_review_on
                                                           )
                                                         : "Sin fecha"
+                                                }}
+                                            </dd>
+                                        </div>
+                                        <div>
+                                            <dt>Categorías</dt>
+                                            <dd>
+                                                {{
+                                                    selected.categories ||
+                                                    "Sin categorías"
                                                 }}
                                             </dd>
                                         </div>
@@ -1528,6 +1626,255 @@ onMounted(load);
                             </div>
                         </div>
                     </div>
+                    <PsychologyModal
+                        v-if="formModal === 'edit-case'"
+                        eyebrow="Actualización trazable"
+                        title="Editar información del caso"
+                        @close="closeForm"
+                    >
+                        <div class="psi-edit-case-context">
+                            <span><i class="bx bx-lock-alt"></i></span>
+                            <div>
+                                <strong>{{ selected.code }}</strong>
+                                <p>
+                                    {{ selected.student?.name }} · El código,
+                                    estudiante, origen y fecha técnica de
+                                    apertura no se modifican.
+                                </p>
+                            </div>
+                        </div>
+                        <div
+                            v-if="api.error.value"
+                            class="alert alert-danger psi-form-error"
+                            role="alert"
+                        >
+                            <i class="bx bx-error-circle"></i>
+                            <div>
+                                <strong>No se pudo actualizar el caso</strong>
+                                <span>{{ api.error.value }}</span>
+                            </div>
+                        </div>
+                        <div class="psi-create-grid psi-edit-case-grid">
+                            <div class="wide">
+                                <label
+                                    for="psi-case-edit-general-reason"
+                                    class="form-label"
+                                    >Motivo general <span>*</span></label
+                                >
+                                <input
+                                    id="psi-case-edit-general-reason"
+                                    v-model="caseEdit.general_reason"
+                                    class="form-control"
+                                    maxlength="191"
+                                />
+                            </div>
+                            <div class="wide">
+                                <label
+                                    for="psi-case-edit-objectives"
+                                    class="form-label"
+                                    >Objetivos del caso</label
+                                >
+                                <textarea
+                                    id="psi-case-edit-objectives"
+                                    v-model="caseEdit.objectives"
+                                    class="form-control"
+                                    rows="3"
+                                ></textarea>
+                            </div>
+                            <div>
+                                <label
+                                    for="psi-case-edit-status"
+                                    class="form-label"
+                                    >Estado del caso</label
+                                >
+                                <select
+                                    id="psi-case-edit-status"
+                                    v-model="caseEdit.status"
+                                    class="form-select"
+                                >
+                                    <option value="open">Abierto</option>
+                                    <option value="assessment">
+                                        Evaluación
+                                    </option>
+                                    <option value="active_intervention">
+                                        Intervención activa
+                                    </option>
+                                    <option value="monitoring">
+                                        Seguimiento
+                                    </option>
+                                    <option value="awaiting_information">
+                                        Esperando antecedentes
+                                    </option>
+                                    <option value="awaiting_external_response">
+                                        Esperando red externa
+                                    </option>
+                                    <option value="paused">Pausado</option>
+                                    <option value="externally_referred">
+                                        Derivación externa
+                                    </option>
+                                    <option value="closure_pending">
+                                        Cierre pendiente
+                                    </option>
+                                    <option value="reopened">Reabierto</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label
+                                    for="psi-case-edit-priority"
+                                    class="form-label"
+                                    >Prioridad</label
+                                >
+                                <select
+                                    id="psi-case-edit-priority"
+                                    v-model="caseEdit.priority"
+                                    class="form-select"
+                                >
+                                    <option value="low">Baja</option>
+                                    <option value="medium">Media</option>
+                                    <option value="high">Alta</option>
+                                    <option value="critical">Crítica</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label
+                                    for="psi-case-edit-confidentiality"
+                                    class="form-label"
+                                    >Confidencialidad</label
+                                >
+                                <select
+                                    id="psi-case-edit-confidentiality"
+                                    v-model="caseEdit.confidentiality"
+                                    class="form-select"
+                                >
+                                    <option value="private_psychology">
+                                        Privada de Psicología
+                                    </option>
+                                    <option value="psychology_team">
+                                        Equipo de Psicología
+                                    </option>
+                                    <option value="interdisciplinary_team">
+                                        Equipo interdisciplinario
+                                    </option>
+                                </select>
+                            </div>
+                            <div>
+                                <label
+                                    for="psi-case-edit-next-action"
+                                    class="form-label"
+                                    >Próxima acción</label
+                                >
+                                <input
+                                    id="psi-case-edit-next-action"
+                                    v-model="caseEdit.next_action"
+                                    class="form-control"
+                                    maxlength="2000"
+                                />
+                            </div>
+                            <div>
+                                <label
+                                    for="psi-case-edit-next-review"
+                                    class="form-label"
+                                    >Próxima revisión</label
+                                >
+                                <input
+                                    id="psi-case-edit-next-review"
+                                    v-model="caseEdit.next_review_on"
+                                    type="date"
+                                    class="form-control"
+                                />
+                            </div>
+                            <div>
+                                <label
+                                    for="psi-case-edit-guardian-status"
+                                    class="form-label"
+                                    >Información al apoderado</label
+                                >
+                                <select
+                                    id="psi-case-edit-guardian-status"
+                                    v-model="
+                                        caseEdit.guardian_information_status
+                                    "
+                                    class="form-select"
+                                >
+                                    <option value="pending">
+                                        Pendiente de informar
+                                    </option>
+                                    <option value="informed">
+                                        Apoderado informado
+                                    </option>
+                                    <option value="not_required">
+                                        No requerido
+                                    </option>
+                                    <option value="unable_to_contact">
+                                        No fue posible contactar
+                                    </option>
+                                    <option value="institutional_exception">
+                                        Excepción institucional
+                                    </option>
+                                </select>
+                            </div>
+                            <div>
+                                <label
+                                    for="psi-case-edit-categories"
+                                    class="form-label"
+                                    >Categorías o etiquetas</label
+                                >
+                                <input
+                                    id="psi-case-edit-categories"
+                                    v-model="caseEdit.categories"
+                                    class="form-control"
+                                    placeholder="Ej.: convivencia, bienestar"
+                                />
+                            </div>
+                            <div class="wide psi-change-reason-field">
+                                <label
+                                    for="psi-case-edit-change-reason"
+                                    class="form-label"
+                                    >Motivo de la actualización
+                                    <span>*</span></label
+                                >
+                                <textarea
+                                    id="psi-case-edit-change-reason"
+                                    v-model="caseEdit.change_reason"
+                                    class="form-control"
+                                    rows="2"
+                                    maxlength="1000"
+                                    placeholder="Ej.: corrección de antecedente o actualización acordada"
+                                ></textarea>
+                                <small>
+                                    Este motivo quedará en la trazabilidad del
+                                    expediente; el contenido sensible no se
+                                    copiará a la auditoría.
+                                </small>
+                            </div>
+                        </div>
+                        <template #footer>
+                            <button
+                                type="button"
+                                class="btn btn-light"
+                                @click="closeForm"
+                            >
+                                Cancelar
+                            </button>
+                            <button
+                                type="button"
+                                class="btn btn-primary"
+                                :disabled="
+                                    !caseEdit.general_reason.trim() ||
+                                    caseEdit.change_reason.trim().length < 5 ||
+                                    api.loading.value
+                                "
+                                @click="saveCaseChanges"
+                            >
+                                <i class="bx bx-save me-1"></i>
+                                {{
+                                    api.loading.value
+                                        ? "Guardando…"
+                                        : "Guardar cambios"
+                                }}
+                            </button>
+                        </template>
+                    </PsychologyModal>
                     <PsychologyModal
                         v-if="formModal === 'reassign'"
                         eyebrow="Gestión del equipo"
@@ -1867,16 +2214,22 @@ onMounted(load);
                                             </div>
                                             <div class="col-lg-3 col-md-6">
                                                 <label class="form-label"
-                                                    >Fecha</label
+                                                    >Fecha de la atención</label
                                                 >
                                                 <input
                                                     v-model="
                                                         activity.activity_on
                                                     "
                                                     type="date"
-                                                    class="form-control psi-readonly-field"
-                                                    readonly
+                                                    class="form-control"
+                                                    required
                                                 />
+                                                <small class="psi-date-help"
+                                                    >Puedes registrar una fecha
+                                                    histórica, aunque sea
+                                                    anterior a la apertura del
+                                                    caso.</small
+                                                >
                                             </div>
                                             <div class="col-lg-3 col-md-6">
                                                 <label class="form-label"
@@ -3105,8 +3458,11 @@ onMounted(load);
                                     v-model="coordination.requested_for"
                                     type="date"
                                     class="form-control"
-                                    :min="deviceDate()"
                                 />
+                                <small class="psi-date-help"
+                                    >También admite fechas históricas para
+                                    coordinaciones ya realizadas.</small
+                                >
                             </div>
                             <div class="col-12">
                                 <label class="form-label">Solicitud</label>
@@ -6114,6 +6470,31 @@ onMounted(load);
     justify-content: flex-end;
     gap: 0.4rem;
 }
+.psi-case-export-button {
+    display: inline-flex;
+    flex: 0 0 auto;
+    align-items: center;
+    gap: 0.45rem;
+    min-height: 38px;
+    padding: 0.5rem 0.75rem;
+    color: #684255;
+    background: linear-gradient(135deg, #fff8f8, #f8edf1);
+    border: 1px solid #e6cbd5;
+    border-radius: 10px;
+    font-size: 0.72rem;
+    font-weight: 800;
+    box-shadow: 0 6px 16px rgba(121, 68, 87, 0.08);
+}
+.psi-case-export-button:hover,
+.psi-case-export-button:focus-visible {
+    color: #563244;
+    background: #f7e9ee;
+    border-color: #d7aeba;
+}
+.psi-case-export-button i {
+    color: #b24a64;
+    font-size: 1rem;
+}
 .psi-casefile nav {
     display: flex;
     gap: 0.25rem;
@@ -6158,6 +6539,82 @@ onMounted(load);
     align-items: center;
     gap: 0.65rem;
     margin-bottom: 1rem;
+}
+.psi-card-title > div {
+    min-width: 0;
+}
+.psi-edit-case-button {
+    display: inline-flex;
+    flex: 0 0 auto;
+    align-items: center;
+    gap: 0.35rem;
+    min-height: 34px;
+    margin-left: auto;
+    padding: 0.4rem 0.65rem;
+    color: #604b7b;
+    background: #f4f0fa;
+    border: 1px solid #ded5eb;
+    border-radius: 9px;
+    font-size: 0.69rem;
+    font-weight: 800;
+}
+.psi-edit-case-button:hover,
+.psi-edit-case-button:focus-visible {
+    color: #4d3968;
+    background: #ece5f5;
+    border-color: #bbaacb;
+}
+.psi-edit-case-context {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-bottom: 1rem;
+    padding: 0.8rem;
+    color: #536176;
+    background: linear-gradient(135deg, #f7f4fb, #f8fbfd);
+    border: 1px solid #e2dced;
+    border-radius: 12px;
+}
+.psi-edit-case-context > span {
+    display: grid;
+    flex: 0 0 auto;
+    width: 2.3rem;
+    height: 2.3rem;
+    place-items: center;
+    color: #675181;
+    background: #fff;
+    border-radius: 10px;
+    box-shadow: 0 5px 14px rgba(84, 64, 109, 0.09);
+}
+.psi-edit-case-context strong,
+.psi-edit-case-context p {
+    display: block;
+    margin: 0;
+}
+.psi-edit-case-context strong {
+    color: #34445a;
+    font-size: 0.78rem;
+}
+.psi-edit-case-context p {
+    margin-top: 0.12rem;
+    font-size: 0.69rem;
+    line-height: 1.4;
+}
+.psi-edit-case-grid {
+    padding: 0.1rem;
+}
+.psi-change-reason-field {
+    padding: 0.85rem;
+    background: #fffaf0;
+    border: 1px solid #f0dfb8;
+    border-radius: 12px;
+}
+.psi-change-reason-field small {
+    display: block;
+    margin-top: 0.35rem;
+    color: #806b43;
+    font-size: 0.66rem;
+    line-height: 1.4;
 }
 .psi-card-title > span {
     display: grid;
@@ -6260,6 +6717,11 @@ onMounted(load);
         width: 100%;
         padding-left: 3.45rem;
     }
+    .psi-case-export-button {
+        order: 3;
+        width: 100%;
+        justify-content: center;
+    }
     .psi-case-data-grid {
         grid-template-columns: 1fr;
     }
@@ -6359,9 +6821,12 @@ onMounted(load);
     margin-top: 0.1rem;
     font-size: 0.75rem;
 }
-.psi-readonly-field {
-    color: #526078;
-    background-color: #f5f7fa;
+.psi-date-help {
+    display: block;
+    margin-top: 0.3rem;
+    color: #748297;
+    font-size: 0.66rem;
+    line-height: 1.35;
 }
 .psi-device-time-panel {
     display: grid;

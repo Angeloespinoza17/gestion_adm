@@ -833,6 +833,8 @@ class AttendanceSubsidyReconciliationService
             'sep_combined' => 'SEP sin desglose',
             'pro_retention' => 'Pro-Retención',
             'school_bonus' => 'Bono Escolar',
+            'maintenance' => 'Subvención de Mantenimiento',
+            'staff_bonuses' => 'Bonos al personal',
             'cd_brp' => 'CD-BRP',
             'cd_asignacion_tramo' => 'CD-Asignación por tramo',
             'pie' => 'Programa de Integración Escolar',

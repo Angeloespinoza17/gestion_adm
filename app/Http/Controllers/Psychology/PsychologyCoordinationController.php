@@ -75,7 +75,7 @@ class PsychologyCoordinationController extends Controller
             'coordination_type' => ['required', Rule::in(['meeting', 'information_request', 'case_review', 'classroom_support', 'family_support', 'protocol_coordination', 'other'])],
             'subject' => ['required', 'string', 'max:191'],
             'request_message' => ['required', 'string', 'max:4000'],
-            'requested_for' => ['nullable', 'date', 'after_or_equal:today'],
+            'requested_for' => ['nullable', 'date'],
         ], [
             'recipient_user_id.required' => 'Selecciona el funcionario que recibirá la solicitud.',
             'subject.required' => 'Indica el asunto de la coordinación.',

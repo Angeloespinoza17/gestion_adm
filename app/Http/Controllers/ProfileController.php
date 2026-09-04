@@ -76,12 +76,17 @@ class ProfileController extends Controller
     {
         $user->loadMissing('cargo:id,name,slug', 'roles:id,name,slug', 'staff:id,full_name,rut,profile_photo_path');
 
+        $photoSource = $user->profile_photo_path
+            ? 'user'
+            : ($user->staff?->profile_photo_path ? 'staff' : null);
+
         return [
             'id' => $user->id,
             'name' => $user->name,
             'email' => $user->email,
             'user_type' => $user->user_type,
             'profile_photo_url' => $user->profile_photo_url,
+            'profile_photo_source' => $photoSource,
             'cargo' => $user->cargo ? [
                 'id' => $user->cargo->id,
                 'name' => $user->cargo->name,
@@ -97,6 +102,7 @@ class ProfileController extends Controller
                 'full_name' => $user->staff->full_name,
                 'rut' => $user->staff->rut,
                 'position' => $user->cargo?->name,
+                'profile_photo_url' => $user->staff->profile_photo_url,
             ] : null,
         ];
     }

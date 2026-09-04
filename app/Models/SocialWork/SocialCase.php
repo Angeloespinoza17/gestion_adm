@@ -9,6 +9,7 @@ use App\Models\User;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 
@@ -43,4 +44,7 @@ class SocialCase extends SocialWorkModel
     public function reports(): HasMany { return $this->hasMany(Report::class, 'case_id')->latest('id'); }
     public function documents(): HasMany { return $this->hasMany(Document::class, 'case_id')->latest('id'); }
     public function commitments(): HasMany { return $this->hasMany(Commitment::class, 'case_id')->latest('due_at'); }
+    public function protocolZero(): HasOne { return $this->hasOne(ProtocolZero::class, 'case_id')->latestOfMany(); }
+    public function requestedInformation(): HasMany { return $this->hasMany(RequestedInformation::class, 'case_id')->latest('requested_at'); }
+    public function riskAssessments(): HasMany { return $this->hasMany(RiskAssessment::class, 'case_id')->latest('assessed_at'); }
 }

@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Facades\Storage;
 
 class MaintenanceWorkOrder extends Model
@@ -15,6 +16,7 @@ class MaintenanceWorkOrder extends Model
 
     protected $appends = [
         'photo_url',
+        'photo_urls',
         'closure_document_url',
     ];
 
@@ -87,6 +89,22 @@ class MaintenanceWorkOrder extends Model
 
         return str_starts_with($reference, 'maintenance/work-orders/')
             && ! str_contains($reference, '../');
+    }
+
+    /** @return array<int, string> */
+    public function getPhotoUrlsAttribute(): array
+    {
+        $urls = collect([$this->photo_url]);
+
+        if ($this->relationLoaded('evidencePhotos')) {
+            $urls = $urls->concat($this->evidencePhotos->pluck('url'));
+        }
+
+        return $urls
+            ->filter(fn ($url) => is_string($url) && $url !== '')
+            ->unique()
+            ->values()
+            ->all();
     }
 
     public function getClosureDocumentUrlAttribute(): ?string
@@ -172,5 +190,11 @@ class MaintenanceWorkOrder extends Model
             'maintenance_work_order_id',
             'user_id'
         )->withPivot('assignee_name_snapshot')->withTimestamps();
+    }
+
+    public function evidencePhotos(): HasMany
+    {
+        return $this->hasMany(MaintenanceEvidencePhoto::class, 'maintenance_work_order_id')
+            ->oldest('id');
     }
 }

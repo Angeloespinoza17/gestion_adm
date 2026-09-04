@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { flushPromises, mount } from "@vue/test-utils";
 import axios from "axios";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import JointCommittee from "../../resources/js/views/risk-prevention/joint-committee.vue";
 
 vi.mock("axios", () => ({
@@ -65,7 +65,7 @@ const committee = {
     active_members: 1,
     constitution_uploaded: true,
     monthly_minutes_current_year: 7,
-    expected_months_current_year: 8,
+    expected_months_current_year: 9,
     committee_trainings: 1,
   },
 };
@@ -97,6 +97,8 @@ const stubs = {
 
 describe("expansión operativa de Prevención de Riesgos", () => {
   beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-09-01T12:00:00-04:00"));
     axios.get.mockReset();
     axios.post.mockReset();
     axios.get.mockResolvedValue({
@@ -107,13 +109,17 @@ describe("expansión operativa de Prevención de Riesgos", () => {
     });
   });
 
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it("muestra actas, integrantes y las capacitaciones vinculadas al Comité", async () => {
     const wrapper = mount(JointCommittee, { global: { stubs, config: { warnHandler: () => {} } } });
     await flushPromises();
 
     expect(axios.get).toHaveBeenCalledWith("/api/risk-prevention/joint-committees");
     expect(wrapper.text()).toContain("Comité Paritario 2026-2028");
-    expect(wrapper.text()).toContain("1/8");
+    expect(wrapper.text()).toContain("1/9");
     expect(wrapper.text()).toContain("Acta de constitución");
 
     await wrapper.findAll(".committee-tabs button")[1].trigger("click");

@@ -48,6 +48,7 @@ export default {
       success: null,
       showModalPlan: false,
       viewMode: "table",
+      showAdvancedFilters: false,
       calendarMonth: localYM(),
       search: "",
       filters: {
@@ -101,6 +102,15 @@ export default {
         this.filters.dependency_id,
         this.viewMode === "upcoming" ? "" : this.filters.planned_year,
         this.viewMode === "upcoming" ? "" : this.filters.planned_month,
+        this.filters.item_type,
+        this.filters.category,
+        this.filters.responsible,
+        this.filters.frequency,
+        this.filters.status,
+      ].filter(Boolean).length;
+    },
+    advancedFiltersCount() {
+      return [
         this.filters.item_type,
         this.filters.category,
         this.filters.responsible,
@@ -295,6 +305,7 @@ export default {
     },
     resetFilters() {
       this.search = "";
+      this.showAdvancedFilters = false;
       this.filters = {
         dependency_id: "",
         planned_year: new Date().getFullYear(),
@@ -788,27 +799,43 @@ export default {
         </div>
       </div>
 
-      <section class="annual-panel annual-filters-panel">
-        <div class="annual-panel-head">
-          <div>
-            <span class="annual-eyebrow">Filtros</span>
-            <h5>Consulta del plan</h5>
+      <section class="annual-panel annual-filters-panel" :class="{ 'has-advanced-filters': showAdvancedFilters }">
+        <div class="annual-filter-compact-head">
+          <div class="annual-filter-title">
+            <span class="annual-filter-title__icon"><i class="mdi mdi-filter-variant"></i></span>
+            <div>
+              <h5>Filtros del plan</h5>
+              <p>Acota rápidamente el período y la dependencia.</p>
+            </div>
           </div>
-          <span class="annual-filter-count" :class="{ active: activeFiltersCount > 0 }">
-            {{ activeFiltersCount }} filtros
-          </span>
+          <div class="annual-filter-head-actions">
+            <span class="annual-filter-count" :class="{ active: activeFiltersCount > 0 }">
+              {{ activeFiltersCount }} {{ activeFiltersCount === 1 ? "aplicado" : "aplicados" }}
+            </span>
+            <button
+              class="annual-advanced-toggle"
+              :class="{ active: showAdvancedFilters || advancedFiltersCount > 0 }"
+              type="button"
+              :aria-expanded="showAdvancedFilters"
+              @click="showAdvancedFilters = !showAdvancedFilters"
+            >
+              <i class="mdi mdi-tune-variant"></i>
+              {{ showAdvancedFilters ? "Ocultar avanzados" : "Más filtros" }}
+              <span v-if="advancedFiltersCount">{{ advancedFiltersCount }}</span>
+            </button>
+          </div>
         </div>
 
-        <div class="annual-filters">
+        <div class="annual-filters annual-filters--primary" :class="{ 'is-upcoming': viewMode === 'upcoming' }">
           <label class="annual-field annual-field--search">
             <span>Búsqueda</span>
             <input v-model="search" type="search" placeholder="Título, ítem, dependencia..." @keyup.enter="loadPlans(1)" />
           </label>
-          <label v-if="viewMode !== 'upcoming'" class="annual-field">
+          <label v-if="viewMode !== 'upcoming'" class="annual-field annual-field--year">
             <span>Año</span>
             <input v-model.number="filters.planned_year" type="number" min="2000" max="2100" />
           </label>
-          <label v-if="viewMode !== 'upcoming'" class="annual-field">
+          <label v-if="viewMode !== 'upcoming'" class="annual-field annual-field--month">
             <span>Mes</span>
             <select v-model="filters.planned_month">
               <option value="">Todos</option>
@@ -824,6 +851,19 @@ export default {
               </option>
             </select>
           </label>
+          <div class="annual-filter-actions">
+            <button class="annual-primary-button" type="button" :disabled="loading" @click="loadPlans(1)">
+              <i class="mdi mdi-filter-outline"></i>
+              Filtrar
+            </button>
+            <button class="annual-secondary-button" type="button" @click="resetFilters">
+              <i class="mdi mdi-refresh"></i>
+              Limpiar
+            </button>
+          </div>
+        </div>
+
+        <div v-show="showAdvancedFilters" class="annual-filters annual-filters--advanced">
           <label class="annual-field">
             <span>Tipo de ítem</span>
             <select v-model="filters.item_type">
@@ -859,13 +899,6 @@ export default {
               <option v-for="status in catalogs.statuses" :key="status" :value="status">{{ status }}</option>
             </select>
           </label>
-          <div class="annual-filter-actions">
-            <button class="annual-primary-button" type="button" :disabled="loading" @click="loadPlans(1)">
-              <i class="mdi mdi-filter-outline"></i>
-              Filtrar
-            </button>
-            <button class="annual-secondary-button" type="button" @click="resetFilters">Limpiar</button>
-          </div>
         </div>
       </section>
 
@@ -1540,6 +1573,152 @@ export default {
   justify-content: flex-end;
 }
 
+.annual-filters-panel {
+  padding: 14px 16px 16px;
+}
+
+.annual-filter-compact-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: 11px;
+}
+
+.annual-filter-title,
+.annual-filter-head-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.annual-filter-title__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  flex: 0 0 34px;
+  border-radius: 9px;
+  color: #3152c9;
+  background: #eef4ff;
+  font-size: 18px;
+}
+
+.annual-filter-title h5 {
+  margin: 0;
+  color: #303848;
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.annual-filter-title p {
+  margin: 2px 0 0;
+  color: #7a8499;
+  font-size: 12px;
+  line-height: 1.25;
+}
+
+.annual-advanced-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 32px;
+  padding: 0 10px;
+  border: 1px solid #d6deec;
+  border-radius: 8px;
+  color: #59647b;
+  background: #fff;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.annual-advanced-toggle:hover,
+.annual-advanced-toggle.active {
+  color: #3152c9;
+  border-color: #b9c9f8;
+  background: #f4f7ff;
+}
+
+.annual-advanced-toggle > span {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 19px;
+  height: 19px;
+  padding: 0 5px;
+  border-radius: 999px;
+  color: #fff;
+  background: #5b74df;
+  font-size: 10px;
+}
+
+.annual-filters--primary,
+.annual-filters--advanced {
+  gap: 8px;
+}
+
+.annual-filters--primary .annual-field--search {
+  grid-column: span 3;
+}
+
+.annual-filters--primary .annual-field--year {
+  grid-column: span 1;
+}
+
+.annual-filters--primary .annual-field--month {
+  grid-column: span 2;
+}
+
+.annual-filters--primary .annual-field--dependency {
+  grid-column: span 3;
+}
+
+.annual-filters--primary .annual-filter-actions {
+  grid-column: span 3;
+  flex-wrap: nowrap;
+}
+
+.annual-filters--primary.is-upcoming .annual-field--search,
+.annual-filters--primary.is-upcoming .annual-field--dependency,
+.annual-filters--primary.is-upcoming .annual-filter-actions {
+  grid-column: span 4;
+}
+
+.annual-filters--advanced {
+  grid-template-columns: repeat(10, minmax(0, 1fr));
+  padding-top: 11px;
+  margin-top: 11px;
+  border-top: 1px solid #e7edf7;
+}
+
+.annual-filters--advanced .annual-field {
+  grid-column: span 2;
+}
+
+.annual-filters-panel .annual-field {
+  gap: 4px;
+}
+
+.annual-filters-panel .annual-field > span {
+  font-size: 11px;
+}
+
+.annual-filters-panel .annual-field input,
+.annual-filters-panel .annual-field select {
+  min-height: 38px;
+  padding: 0 10px;
+  font-size: 13px;
+}
+
+.annual-filters-panel .annual-primary-button,
+.annual-filters-panel .annual-secondary-button {
+  min-height: 38px;
+  padding: 0 13px;
+  font-size: 13px;
+}
+
 .annual-table-wrap {
   overflow-x: auto;
   border-top: 1px solid #e2eaf8;
@@ -2074,6 +2253,32 @@ export default {
   }
 }
 
+@media (max-width: 1100px) {
+  .annual-filters--primary .annual-field--search {
+    grid-column: span 6;
+  }
+
+  .annual-filters--primary .annual-field--year {
+    grid-column: span 2;
+  }
+
+  .annual-filters--primary .annual-field--month {
+    grid-column: span 4;
+  }
+
+  .annual-filters--primary .annual-field--dependency,
+  .annual-filters--primary .annual-filter-actions,
+  .annual-filters--primary.is-upcoming .annual-field--search,
+  .annual-filters--primary.is-upcoming .annual-field--dependency,
+  .annual-filters--primary.is-upcoming .annual-filter-actions {
+    grid-column: span 6;
+  }
+
+  .annual-filters--advanced .annual-field {
+    grid-column: span 5;
+  }
+}
+
 @media (max-width: 768px) {
   .annual-header,
   .annual-panel-head,
@@ -2100,6 +2305,39 @@ export default {
   .annual-field--search,
   .annual-field--dependency,
   .annual-filter-actions {
+    grid-column: 1 / -1;
+  }
+
+  .annual-filter-compact-head,
+  .annual-filter-head-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .annual-filter-title {
+    align-items: flex-start;
+  }
+
+  .annual-filter-head-actions {
+    gap: 8px;
+  }
+
+  .annual-filter-count,
+  .annual-advanced-toggle {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .annual-filters--primary .annual-field,
+  .annual-filters--primary .annual-field--search,
+  .annual-filters--primary .annual-field--year,
+  .annual-filters--primary .annual-field--month,
+  .annual-filters--primary .annual-field--dependency,
+  .annual-filters--primary .annual-filter-actions,
+  .annual-filters--primary.is-upcoming .annual-field--search,
+  .annual-filters--primary.is-upcoming .annual-field--dependency,
+  .annual-filters--primary.is-upcoming .annual-filter-actions,
+  .annual-filters--advanced .annual-field {
     grid-column: 1 / -1;
   }
 

@@ -83,7 +83,7 @@ class PedagogicalCatalogController extends Controller
             'subjects' => $subjects,
             'courses' => $courses,
             'owners' => $owners,
-            'max_file_kb' => (int) config('pedagogical_management.storage.max_file_kb', 20480),
+            'max_file_kb' => (int) config('pedagogical_management.storage.max_file_kb', 30720),
             'analysis_configured' => $analysis->isConfigured(),
             'analysis_engine' => 'Reglas determinísticas Laravel · smalot/pdfparser',
             'openai_configured' => $aiReports->isConfigured(),

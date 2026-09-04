@@ -59,7 +59,7 @@ function go(path){if(path!==route.path)router.push(path)}
 async function initializeSection(){
   const section=pathSection.value; const tasks=[load()]
   if(api.can('social_work.dashboard.view') && (['dashboard','cases','case-new','case-detail','referrals','junaeb','restrictions'].includes(section) || !catalogs.value.case_statuses.length))tasks.push(loadCatalogs())
-  if(['cases','case-new','case-detail','junaeb','restrictions'].includes(section) && api.can('social_work.students.view'))tasks.push(loadStudentsForSelect())
+  if(['cases','case-new','case-detail','restrictions'].includes(section) && api.can('social_work.students.view'))tasks.push(loadStudentsForSelect())
   await Promise.allSettled(tasks)
 }
 watch(()=>route.fullPath,initializeSection); onMounted(initializeSection)
@@ -69,13 +69,13 @@ watch(()=>route.fullPath,initializeSection); onMounted(initializeSection)
 <Layout><div class="sw-page container-fluid py-3">
   <header class="sw-header mb-3"><div><p class="sw-kicker mb-1">Gestión confidencial y trazable</p><h1>{{ title }}</h1><p class="mb-0 text-muted">Información sensible visible únicamente según permisos y asignación.</p></div><button v-if="api.can('social_work.cases.create') && pathSection==='dashboard'" class="btn btn-primary" @click="go('/social-work/cases/new')"><i class="bx bx-plus"></i> Nuevo caso</button></header>
   <nav class="sw-tabs mb-3" aria-label="Secciones de Trabajo Social"><button v-for="tab in visibleTabs" :key="tab[0]" :class="{active:pathSection===tab[0]}" @click="go(tab[3])"><i class="bx" :class="tab[2]"></i>{{tab[1]}}</button></nav>
-  <div v-if="api.error" class="alert alert-danger d-flex align-items-center justify-content-between gap-2"><span><i class="bx bx-error-circle"></i> {{api.error}}</span><button type="button" class="btn btn-sm btn-outline-danger" @click="load()">Reintentar</button></div><div v-if="success" class="alert alert-success"><i class="bx bx-check-circle"></i> {{success}}</div>
+  <div v-if="api.error" class="alert alert-danger d-flex align-items-center justify-content-between gap-2"><span><i class="bx bx-error-circle"></i> {{api.error}}</span><button type="button" class="btn btn-sm btn-outline-danger" @click="initializeSection()">Reintentar</button></div><div v-if="success" class="alert alert-success"><i class="bx bx-check-circle"></i> {{success}}</div>
   <div v-if="api.loading" class="sw-loading"><span class="spinner-border spinner-border-sm"></span> Cargando información autorizada…</div>
 
-  <CaseWorkspace v-else-if="['cases','case-new','case-detail'].includes(pathSection)" :students="studentsForSelect" :catalogs="catalogs" :initial-case-id="route.params.caseId" :open-create="pathSection === 'case-new'" @route-reset="router.replace('/social-work/cases')" />
+  <CaseWorkspace v-if="['cases','case-new','case-detail'].includes(pathSection)" :students="studentsForSelect" :catalogs="catalogs" :initial-case-id="route.params.caseId" :open-create="pathSection === 'case-new'" @route-reset="router.replace('/social-work/cases')" />
   <StudentSupportWorkspace v-else-if="pathSection === 'students'" :catalogs="catalogs" @open-student="id => go(`/social-work/students/${id}`)" />
   <ReferralWorkspace v-else-if="pathSection === 'referrals'" :catalogs="catalogs" @open-case="id => go(`/social-work/cases/${id}`)" />
-  <JunaebWorkspace v-else-if="pathSection === 'junaeb'" :students="studentsForSelect" :catalogs="catalogs" />
+  <JunaebWorkspace v-else-if="pathSection === 'junaeb'" :catalogs="catalogs" />
   <HealthWorkspace v-else-if="pathSection === 'health'" />
   <PickupRestrictionsWorkspace v-else-if="pathSection === 'restrictions'" :students="studentsForSelect" />
   <CalendarWorkspace v-else-if="pathSection === 'calendar'" :events="data?.data || []" @open="go" />

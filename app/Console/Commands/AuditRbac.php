@@ -55,8 +55,13 @@ class AuditRbac extends Command
         return [
             'missing_backend_permissions' => 'Permisos faltantes en rutas API',
             'missing_frontend_permissions' => 'Permisos faltantes en rutas Vue',
+            'missing_code_permissions' => 'Permisos faltantes referenciados directamente en código',
             'ungrouped_permissions' => 'Permisos sin grupo',
             'groups_without_active_module' => 'Grupos sin módulo activo',
+            'super_admin_missing_permissions' => 'Permisos activos no persistidos en Super Admin',
+            'super_admin_missing_modules' => 'Módulos activos no persistidos en Super Admin',
+            'roles_with_inactive_permissions' => 'Roles con permisos históricos inactivos',
+            'roles_with_inactive_modules' => 'Roles con módulos históricos inactivos',
             'contaminated_roles' => 'Roles con permisos globales incorrectos de Inventario',
             'nurse_missing_permissions' => 'Permisos faltantes de Enfermería',
             'nurse_missing_modules' => 'Módulos faltantes de Enfermería',

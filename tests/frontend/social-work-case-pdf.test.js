@@ -53,4 +53,27 @@ describe('Ficha PDF de casos sociales', () => {
     expect(serialized).toContain('Participan: María Soto, Profesor Carlos')
     expect(serialized).toContain('Apoyan: Orientadora Ana')
   })
+
+  it('incorpora la trazabilidad completa del expediente autorizado', async () => {
+    await downloadSocialCaseMaster({
+      code: 'TS-2026-00003', title: 'Caso integral', status: 'abierto',
+      student: { first_name: 'Elena', last_name: 'Soto' }, responsible: { name: 'Trabajadora Social' },
+      interventions: [], status_history: [], alerts: [],
+      reopenings: [{ reopened_at: '2026-08-20', reason: 'Nuevos antecedentes' }],
+      requested_information: [{ item: 'Informe de asistencia', status: 'recibido' }],
+      risk_assessments: [{ final_level: 'alto', notes: 'Revisión profesional' }],
+      protocol_zero: { status: 'recibido', initial_account: 'Relato autorizado' },
+      protocols: [{ status: 'activo', protocol: { code: 'PRO-01', name: 'Protección' } }],
+      reports: [{ type: 'informe_social', status: 'borrador', versions: [{ version: 1, content: 'Contenido revisable' }] }],
+      documents: [{ original_name: 'respaldo.pdf', category: 'antecedente' }],
+    })
+
+    const serialized = JSON.stringify(pdfState.definition.content)
+    expect(serialized).toContain('TRAZABILIDAD DE ESTADOS Y REAPERTURAS')
+    expect(serialized).toContain('Antecedente solicitado')
+    expect(serialized).toContain('Evaluación de riesgo')
+    expect(serialized).toContain('Protocolo cero')
+    expect(serialized).toContain('INFORMES Y DOCUMENTOS')
+    expect(serialized).toContain('respaldo.pdf')
+  })
 })

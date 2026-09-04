@@ -25,7 +25,7 @@ class PedagogicalInstrumentFileService
         if ($size <= 0) {
             throw new PedagogicalInstrumentException('El archivo está vacío.', 'INSTRUMENT_FILE_EMPTY');
         }
-        $maxBytes = max(1, (int) config('pedagogical_management.storage.max_file_kb', 20480)) * 1024;
+        $maxBytes = max(1, (int) config('pedagogical_management.storage.max_file_kb', 30720)) * 1024;
         if ($size > $maxBytes) {
             throw new PedagogicalInstrumentException('El archivo supera el tamaño máximo permitido.', 'INSTRUMENT_FILE_TOO_LARGE', 422, ['max_bytes' => $maxBytes]);
         }

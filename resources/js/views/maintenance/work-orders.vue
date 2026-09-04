@@ -47,7 +47,8 @@ export default {
       showModalCerrarOT: false,
       catalogsError: null,
       dependencyOptionsError: null,
-      selectedPhoto: null,
+      selectedPhotos: [],
+      photoDeleting: {},
       activeWorkOrder: null,
       cameraStream: null,
       cameraError: null,
@@ -157,6 +158,23 @@ export default {
     },
     currentUserName() {
       return String(this.catalogs.current_user?.name || "").trim();
+    },
+    existingPhotoCount() {
+      if (!this.isEditing) return 0;
+
+      return Math.max(
+        this.workOrderPhotoUrls(this.form).length,
+        this.form.photo_reference ? 1 : 0
+      );
+    },
+    totalPhotoCount() {
+      return this.existingPhotoCount + this.selectedPhotos.length;
+    },
+    remainingPhotoSlots() {
+      return Math.max(0, 3 - this.totalPhotoCount);
+    },
+    photoLimitReached() {
+      return this.totalPhotoCount >= 3;
     },
     dependencySelectOptions() {
       return (this.catalogs.dependencies || []).map((dependency) => ({
@@ -366,9 +384,7 @@ export default {
           payload.append("resolution_notes", this.form.resolution_notes);
         }
 
-        if (this.selectedPhoto) {
-          payload.append("photo", this.selectedPhoto);
-        }
+        this.selectedPhotos.forEach((photo) => payload.append("photos[]", photo));
 
         if (this.isEditing) {
           payload.append("_method", "PUT");
@@ -411,7 +427,7 @@ export default {
         description: this.workOrderDescription(workOrder),
       };
 
-      this.selectedPhoto = null;
+      this.selectedPhotos = [];
       this.showModalCrearOT = true;
       this.debugLog("showModalCrearOT=true (edit)");
     },
@@ -518,7 +534,7 @@ export default {
     resetForm() {
       this.form = emptyForm();
       this.dependencyOptionsError = null;
-      this.selectedPhoto = null;
+      this.selectedPhotos = [];
     },
     formatInputDate(value) {
       return value ? String(value).slice(0, 10) : "";
@@ -638,11 +654,29 @@ export default {
       }
     },
     handlePhotoSelection(event) {
-      const file = event.target?.files?.[0];
-      this.selectedPhoto = file || null;
+      const files = Array.from(event.target?.files || []);
+      if (!files.length) return;
+
+      const accepted = files.slice(0, this.remainingPhotoSlots);
+      this.selectedPhotos = [...this.selectedPhotos, ...accepted];
+
+      if (accepted.length < files.length) {
+        this.error = `Cada OT admite un máximo de 3 fotografías. Puedes agregar ${accepted.length} de ${files.length} seleccionada(s).`;
+      } else {
+        this.error = null;
+      }
+
+      if (event.target) event.target.value = "";
+    },
+    removeSelectedPhoto(index) {
+      this.selectedPhotos = this.selectedPhotos.filter((_, photoIndex) => photoIndex !== index);
     },
     async startCameraCapture() {
       this.cameraError = null;
+      if (this.photoLimitReached) {
+        this.error = "Esta OT ya alcanzó el máximo de 3 fotografías.";
+        return;
+      }
       if (!confirm("¿Quieres abrir la cámara para tomar una foto?")) return;
 
       const canUseWebcam =
@@ -699,7 +733,10 @@ export default {
       if (!blob) return;
 
       const filename = `ot-foto-${Date.now()}.jpg`;
-      this.selectedPhoto = new File([blob], filename, { type: "image/jpeg" });
+      this.selectedPhotos = [
+        ...this.selectedPhotos,
+        new File([blob], filename, { type: "image/jpeg" }),
+      ].slice(0, 3 - this.existingPhotoCount);
 
       this.stopCameraStream();
       this.showModalTomarFoto = false;
@@ -722,6 +759,54 @@ export default {
       if (value.startsWith("//")) return value;
       if (value.startsWith("/")) return value;
       return `/${value}`;
+    },
+    workOrderPhotoUrls(workOrder) {
+      const urls = Array.isArray(workOrder?.photo_urls) && workOrder.photo_urls.length
+        ? workOrder.photo_urls
+        : [workOrder?.photo_url];
+
+      return [...new Set(urls.map((url) => this.resolvePhotoUrl(url)).filter(Boolean))];
+    },
+    workOrderPhotoEntries(workOrder) {
+      const entries = [];
+      const seen = new Set();
+
+      (workOrder?.evidence_photos || []).forEach((photo) => {
+        const url = this.resolvePhotoUrl(photo?.url);
+        if (!url || seen.has(url)) return;
+        seen.add(url);
+        entries.push({
+          id: photo.id,
+          url,
+          name: photo.original_name || `Foto ${entries.length + 1}`,
+        });
+      });
+
+      this.workOrderPhotoUrls(workOrder).forEach((url) => {
+        if (seen.has(url)) return;
+        seen.add(url);
+        entries.push({ id: null, url, name: `Foto ${entries.length + 1}` });
+      });
+
+      return entries;
+    },
+    async deleteWorkOrderPhoto(workOrder, photo) {
+      if (!photo.id || !confirm("¿Eliminar esta fotografía de la OT?")) return;
+
+      this.photoDeleting = { ...this.photoDeleting, [photo.id]: true };
+      this.error = null;
+      this.success = null;
+
+      try {
+        const { data } = await axios.delete(`/api/maintenance/work-orders/${workOrder.id}/photos/${photo.id}`);
+        this.activeWorkOrder = data.data;
+        this.success = data.message;
+        await this.loadWorkOrders(this.pagination.current_page);
+      } catch (error) {
+        this.error = this.formatError(error);
+      } finally {
+        this.photoDeleting = { ...this.photoDeleting, [photo.id]: false };
+      }
     },
     openCreateModal() {
       this.debugLog("openCreateModal(click)");
@@ -1309,21 +1394,37 @@ export default {
               </label>
 
               <div class="work-order-photo-field">
-                <span>Foto</span>
+                <div class="work-order-photo-field__head">
+                  <div>
+                    <span>Fotografías de la OT</span>
+                    <small>Hasta 3 imágenes, máximo 5 MB cada una.</small>
+                  </div>
+                  <strong :class="{ complete: photoLimitReached }">{{ totalPhotoCount }} / 3</strong>
+                </div>
                 <div class="work-order-photo-actions">
-                  <button class="work-order-secondary-button" type="button" @click="startCameraCapture">
+                  <button class="work-order-secondary-button" type="button" :disabled="photoLimitReached" @click="startCameraCapture">
                     <i class="mdi mdi-camera-outline"></i>
                     Tomar foto
                   </button>
-                  <input ref="cameraInput" type="file" class="d-none" accept="image/*" capture="environment" @change="handlePhotoSelection" />
+                  <input ref="cameraInput" type="file" class="d-none" accept="image/*" capture="environment" :disabled="photoLimitReached" @change="handlePhotoSelection" />
 
-                  <label class="work-order-secondary-button mb-0">
-                    <i class="mdi mdi-paperclip"></i>
-                    Adjuntar
-                    <input type="file" class="d-none" accept="image/*" @change="handlePhotoSelection" />
+                  <label :class="['work-order-secondary-button mb-0', { disabled: photoLimitReached }]">
+                    <i class="mdi mdi-image-multiple-outline"></i>
+                    Elegir fotos
+                    <input type="file" class="d-none" accept="image/*" multiple :disabled="photoLimitReached" @change="handlePhotoSelection" />
                   </label>
-                  <span class="work-order-photo-name">{{ selectedPhoto ? selectedPhoto.name : "Sin archivo seleccionado" }}</span>
                 </div>
+                <div v-if="selectedPhotos.length" class="work-order-selected-photos">
+                  <div v-for="(photo, photoIndex) in selectedPhotos" :key="`${photo.name}-${photoIndex}`">
+                    <span><i class="mdi mdi-image-outline"></i>{{ photo.name }}</span>
+                    <button type="button" :aria-label="`Quitar ${photo.name}`" @click="removeSelectedPhoto(photoIndex)">
+                      <i class="mdi mdi-close"></i>
+                    </button>
+                  </div>
+                </div>
+                <span v-else class="work-order-photo-name">
+                  {{ existingPhotoCount ? `${existingPhotoCount} foto(s) existente(s) · quedan ${remainingPhotoSlots} cupo(s)` : "Aún no has seleccionado fotografías" }}
+                </span>
                 <small v-if="cameraError" class="text-danger d-block mt-1">{{ cameraError }}</small>
               </div>
             </div>
@@ -1517,60 +1618,39 @@ export default {
             <div class="work-order-detail-section-head">
               <i class="mdi mdi-camera-outline"></i>
               <div>
-                <h6>Foto</h6>
-                <span>Respaldo visual de la orden</span>
+                <h6>Fotografías</h6>
+                <span>Respaldo visual de la orden · {{ workOrderPhotoEntries(activeWorkOrder).length }} / 3</span>
               </div>
             </div>
 
-            <div v-if="activeWorkOrder.photo_url || activeWorkOrder.photo_reference" class="work-order-detail-photo">
-              <div v-if="detailPhotoError" class="work-order-detail-alert">
-                <i class="mdi mdi-alert-circle-outline"></i>
-                <div>
-                  {{ detailPhotoError }}
-                  <a
-                    v-if="resolvePhotoUrl(activeWorkOrder.photo_url)"
-                    :href="resolvePhotoUrl(activeWorkOrder.photo_url)"
-                    target="_blank"
-                    rel="noopener"
-                  >
-                    Abrir enlace de la foto
-                  </a>
-                </div>
-              </div>
-
-              <div v-if="activeWorkOrder.photo_url && !detailPhotoError" class="work-order-detail-photo-preview">
-                <div v-if="detailPhotoLoading" class="work-order-detail-photo-loading">
-                  <div class="spinner-border text-light" role="status"></div>
-                </div>
+            <div v-if="workOrderPhotoEntries(activeWorkOrder).length" class="work-order-detail-photo">
+              <div v-for="(photo, photoIndex) in workOrderPhotoEntries(activeWorkOrder)" :key="photo.url" class="work-order-detail-photo-preview">
                 <img
-                  :src="resolvePhotoUrl(activeWorkOrder.photo_url)"
-                  alt="Foto OT"
-                  @load="onDetailPhotoLoaded"
-                  @error="onDetailPhotoError"
+                  :src="photo.url"
+                  :alt="`Foto ${photoIndex + 1} de OT #${activeWorkOrder.id}`"
+                  loading="lazy"
                 />
                 <div class="work-order-detail-photo-actions">
-                  <a
-                    class="work-order-secondary-button"
-                    :href="resolvePhotoUrl(activeWorkOrder.photo_url)"
-                    target="_blank"
-                    rel="noopener"
+                  <span>{{ photo.name || `Foto ${photoIndex + 1}` }}</span>
+                  <a class="work-order-secondary-button" :href="photo.url" target="_blank" rel="noopener"><i class="mdi mdi-open-in-new"></i>Ver</a>
+                  <a class="work-order-secondary-button" :href="photo.url" download><i class="mdi mdi-download-outline"></i>Descargar</a>
+                  <button
+                    v-if="photo.id"
+                    class="work-order-secondary-button work-order-photo-delete"
+                    type="button"
+                    :disabled="photoDeleting[photo.id]"
+                    @click="deleteWorkOrderPhoto(activeWorkOrder, photo)"
                   >
-                    <i class="mdi mdi-open-in-new"></i>
-                    Ver
-                  </a>
-                  <a class="work-order-secondary-button" :href="resolvePhotoUrl(activeWorkOrder.photo_url)" download>
-                    <i class="mdi mdi-download-outline"></i>
-                    Descargar
-                  </a>
+                    <span v-if="photoDeleting[photo.id]" class="spinner-border spinner-border-sm"></span>
+                    <i v-else class="mdi mdi-delete-outline"></i>
+                    Quitar
+                  </button>
                 </div>
               </div>
-
-              <div v-else-if="activeWorkOrder.photo_reference && !activeWorkOrder.photo_url" class="work-order-detail-empty">
-                Hay una referencia de foto, pero no hay URL disponible.
-              </div>
             </div>
+            <div v-else-if="activeWorkOrder.photo_reference" class="work-order-detail-empty">Hay una referencia de foto, pero no hay URL disponible.</div>
             <div v-else class="work-order-detail-empty">
-              Esta OT no tiene foto adjunta.
+              Esta OT no tiene fotografías adjuntas.
             </div>
           </section>
         </div>
@@ -1810,6 +1890,13 @@ export default {
 
 .work-order-primary-button:disabled {
   opacity: 0.7;
+  cursor: not-allowed;
+}
+
+.work-order-secondary-button:disabled,
+.work-order-secondary-button.disabled {
+  opacity: 0.55;
+  pointer-events: none;
   cursor: not-allowed;
 }
 
@@ -2611,6 +2698,7 @@ textarea.work-order-form-control {
 
 .work-order-detail-photo {
   display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
   gap: 12px;
 }
 
@@ -2646,6 +2734,26 @@ textarea.work-order-form-control {
   gap: 8px;
   padding: 10px;
   background: #fff;
+}
+
+.work-order-detail-photo-actions > span {
+  align-self: center;
+  margin-right: auto;
+  color: #6b7280;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.work-order-photo-delete {
+  color: #b42318;
+  border-color: #fecaca;
+  background: #fff7f7;
+}
+
+.work-order-photo-delete:hover {
+  color: #912018;
+  border-color: #fca5a5;
+  background: #fff1f2;
 }
 
 .work-order-detail-alert {
@@ -2768,6 +2876,97 @@ textarea.work-order-form-control {
   display: flex;
   flex-direction: column;
   gap: 8px;
+}
+
+.work-order-photo-field__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.work-order-photo-field__head > div {
+  display: grid;
+  gap: 3px;
+}
+
+.work-order-photo-field__head span {
+  color: #303848;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.work-order-photo-field__head small {
+  color: #7b859a;
+  font-size: 11px;
+}
+
+.work-order-photo-field__head strong {
+  min-width: 52px;
+  padding: 5px 9px;
+  border: 1px solid #cdd9f8;
+  border-radius: 999px;
+  color: #3152c9;
+  background: #eef4ff;
+  font-size: 11px;
+  text-align: center;
+}
+
+.work-order-photo-field__head strong.complete {
+  color: #166534;
+  border-color: #bbebd0;
+  background: #ecfdf3;
+}
+
+.work-order-selected-photos {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.work-order-selected-photos > div {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  padding: 8px 9px;
+  border: 1px solid #dce5f4;
+  border-radius: 9px;
+  color: #536079;
+  background: #f8faff;
+}
+
+.work-order-selected-photos span {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.work-order-selected-photos span i {
+  flex: 0 0 auto;
+  color: #5870d5;
+  font-size: 15px;
+}
+
+.work-order-selected-photos button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 24px;
+  height: 24px;
+  margin-left: auto;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  color: #a33131;
+  background: #fff0f0;
 }
 
 .work-order-photo-name {
@@ -3101,6 +3300,10 @@ textarea.work-order-form-control {
   .work-order-detail-pills,
   .work-order-detail-photo-actions {
     justify-content: flex-start;
+  }
+
+  .work-order-selected-photos {
+    grid-template-columns: 1fr;
   }
 
   .work-order-panel {

@@ -140,6 +140,65 @@ class PsychologyModuleTest extends TestCase
         $this->getJson("/api/psychology/cases/{$caseId}")->assertForbidden();
     }
 
+    public function test_psychologist_can_edit_functional_case_fields_with_an_audited_reason(): void
+    {
+        $psychologist = $this->userWithRole('psicologo');
+        $otherPsychologist = $this->userWithRole('psicologo');
+        $case = PsychologyCase::factory()->create([
+            'responsible_user_id' => $psychologist->id,
+            'general_reason' => 'Motivo inicial.',
+            'priority' => 'medium',
+            'confidentiality' => 'private_psychology',
+            'guardian_information_status' => 'pending',
+        ]);
+        $historicalReviewDate = now()->subMonth()->toDateString();
+
+        Sanctum::actingAs($psychologist);
+        $this->patchJson("/api/psychology/cases/{$case->id}", [
+            'general_reason' => 'Motivo actualizado con antecedentes revisados.',
+            'status' => 'assessment',
+            'objectives' => 'Ajustar el acompañamiento y monitorear acuerdos.',
+            'categories' => 'bienestar, seguimiento',
+            'next_action' => 'Contactar al apoderado.',
+            'next_review_on' => $historicalReviewDate,
+            'priority' => 'high',
+            'confidentiality' => 'psychology_team',
+            'guardian_information_status' => 'informed',
+            'change_reason' => 'Corrección y actualización acordada del expediente.',
+        ])->assertOk()
+            ->assertJsonPath('data.general_reason', 'Motivo actualizado con antecedentes revisados.')
+            ->assertJsonPath('data.next_review_on', $historicalReviewDate)
+            ->assertJsonPath('data.status', 'assessment')
+            ->assertJsonPath('data.priority', 'high')
+            ->assertJsonPath('data.guardian_information_status', 'informed');
+
+        $this->assertDatabaseHas('psychology_cases', [
+            'id' => $case->id,
+            'updated_by' => $psychologist->id,
+            'status' => 'assessment',
+            'priority' => 'high',
+            'next_review_on' => $historicalReviewDate,
+        ]);
+        $audit = DB::table('psychology_audit_events')
+            ->where('action', 'case.updated')
+            ->where('auditable_id', $case->id)
+            ->first();
+        $this->assertNotNull($audit);
+        $this->assertSame('Corrección y actualización acordada del expediente.', $audit->reason);
+        $this->assertSame('[PROTEGIDO]', json_decode($audit->old_values, true)['general_reason']);
+        $this->assertSame('[PROTEGIDO]', json_decode($audit->new_values, true)['objectives']);
+
+        Sanctum::actingAs($otherPsychologist);
+        $this->patchJson("/api/psychology/cases/{$case->id}", [
+            'general_reason' => 'Intento fuera del alcance.',
+            'status' => 'paused',
+            'priority' => 'low',
+            'confidentiality' => 'psychology_team',
+            'guardian_information_status' => 'pending',
+            'change_reason' => 'Intento de edición no autorizado.',
+        ])->assertForbidden();
+    }
+
     public function test_private_activity_note_is_hidden_without_explicit_permission(): void
     {
         $psychologist = $this->userWithRole('psicologo');
@@ -429,6 +488,7 @@ class PsychologyModuleTest extends TestCase
             ->assertJsonPath('data.2.id', 'task-'.$ownTask->id);
         $this->getJson('/api/psychology/catalogs')
             ->assertOk()
+            ->assertJsonPath('capabilities.edit_case', true)
             ->assertJsonPath('capabilities.personal_scope', true)
             ->assertJsonPath('capabilities.full_domain', false);
     }
@@ -567,10 +627,11 @@ class PsychologyModuleTest extends TestCase
             'coordination_type' => 'meeting',
             'subject' => 'Reunión de coordinación preventiva',
             'request_message' => 'Solicito coordinar una reunión de trabajo institucional.',
-            'requested_for' => now()->addDays(4)->toDateString(),
+            'requested_for' => now()->subYear()->toDateString(),
         ])->assertCreated()
             ->assertJsonPath('data.status', 'pending')
-            ->assertJsonPath('data.activity_id', null);
+            ->assertJsonPath('data.activity_id', null)
+            ->assertJsonPath('data.requested_for', now()->subYear()->toDateString());
 
         Sanctum::actingAs($recipient);
         $inbox = $this->getJson('/api/psychology-coordinations/mine?direction=incoming')
@@ -653,6 +714,7 @@ class PsychologyModuleTest extends TestCase
         $this->getJson('/api/psychology/reports?nominal=1')->assertOk()->assertJsonCount(1, 'nominal');
         $this->getJson('/api/psychology/catalogs')->assertOk()
             ->assertJsonPath('capabilities.view_cases', true)
+            ->assertJsonPath('capabilities.edit_case', true)
             ->assertJsonPath('capabilities.view_private', true)
             ->assertJsonPath('capabilities.reopen_case', true)
             ->assertJsonPath('capabilities.config', true)
@@ -769,6 +831,40 @@ class PsychologyModuleTest extends TestCase
         $other = $this->userWithRole('coordinador_psicologia');
         Sanctum::actingAs($other);
         $this->getJson("/api/psychology/exports/{$exportId}")->assertNotFound();
+    }
+
+    public function test_historical_activity_can_predate_case_opening_and_case_export_is_audited(): void
+    {
+        $psychologist = $this->userWithRole('psicologo');
+        $case = PsychologyCase::factory()->create([
+            'responsible_user_id' => $psychologist->id,
+            'opened_at' => now(),
+            'code' => 'PSI-2026-000777',
+        ]);
+        $historicalDate = now()->subYears(2)->toDateString();
+        Sanctum::actingAs($psychologist);
+
+        $this->postJson("/api/psychology/cases/{$case->id}/activities", [
+            'type' => 'case_review',
+            'activity_on' => $historicalDate,
+            'objective' => 'Incorporar antecedente histórico al expediente.',
+            'institutional_summary' => 'Actuación realizada antes de la apertura administrativa del caso.',
+            'visibility' => 'psychology_team',
+            'status' => 'finalized',
+        ])->assertCreated()
+            ->assertJsonPath('data.activity_on', $historicalDate);
+
+        $this->postJson("/api/psychology/cases/{$case->id}/export")
+            ->assertOk()
+            ->assertJsonPath('data.code', 'PSI-2026-000777')
+            ->assertJsonPath('data.activities.0.activity_on', $historicalDate)
+            ->assertJsonPath('data.activities.0.institutional_summary', 'Actuación realizada antes de la apertura administrativa del caso.');
+
+        $this->assertDatabaseHas('psychology_audit_events', [
+            'action' => 'case.pdf_exported',
+            'auditable_id' => $case->id,
+            'user_id' => $psychologist->id,
+        ]);
     }
 
     private function userWithRole(string $slug): User

@@ -15,7 +15,7 @@ class StorePedagogicalInstrumentRequest extends FormRequest
 
     public function rules(): array
     {
-        $fileRules = ['file', 'mimes:pdf,docx', 'max:'.(int) config('pedagogical_management.storage.max_file_kb', 20480)];
+        $fileRules = ['file', 'mimes:pdf,docx', 'max:'.(int) config('pedagogical_management.storage.max_file_kb', 30720)];
 
         return [
             'school_id' => ['required', 'integer', 'exists:lcd_schools,id'],
@@ -45,7 +45,7 @@ class StorePedagogicalInstrumentRequest extends FormRequest
     public function messages(): array
     {
         $applicationLimitMb = max(1, (int) ceil(
-            (int) config('pedagogical_management.storage.max_file_kb', 20480) / 1024
+            (int) config('pedagogical_management.storage.max_file_kb', 30720) / 1024
         ));
         $runtimeLimit = trim((string) ini_get('upload_max_filesize')) ?: 'desconocido';
 

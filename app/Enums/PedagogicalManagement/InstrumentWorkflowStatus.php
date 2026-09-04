@@ -4,6 +4,7 @@ namespace App\Enums\PedagogicalManagement;
 
 enum InstrumentWorkflowStatus: string
 {
+    case Draft = 'draft';
     case Submitted = 'submitted';
     case RectificationRequested = 'rectification_requested';
     case Resubmitted = 'resubmitted';

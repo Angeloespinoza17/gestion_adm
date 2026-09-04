@@ -51,6 +51,7 @@ class PsychologyCatalogController extends Controller
             'view_referrals' => $nominalAccess && ($user->hasPermission('psychology.referrals.view_own') || $user->hasPermission('psychology.referrals.view_all')),
             'view_cases' => $nominalAccess && ($user->hasPermission('psychology.cases.view_assigned') || $user->hasPermission('psychology.cases.view_all')),
             'assign' => $nominalAccess && $user->hasPermission('psychology.referrals.assign'), 'create_case' => $nominalAccess && $user->hasPermission('psychology.cases.create'),
+            'edit_case' => $nominalAccess && ($user->hasPermission('psychology.sessions.create') || $user->hasPermission('psychology.cases.reassign')),
             'reassign_case' => $nominalAccess && $user->hasPermission('psychology.cases.reassign'), 'close_case' => $nominalAccess && $user->hasPermission('psychology.cases.close'),
             'reopen_case' => $nominalAccess && $user->hasPermission('psychology.cases.reopen'),
             'create_activity' => $nominalAccess && $user->hasPermission('psychology.sessions.create'), 'view_private' => $access->hasExplicitPermission($user, 'psychology.sessions.view_private'),

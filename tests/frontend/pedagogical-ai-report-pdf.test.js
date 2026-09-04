@@ -29,7 +29,8 @@ const report = {
             finding: "Una instrucción es ambigua.",
             evidence: "Responde correctamente.",
             recommendation: "Precisar la acción.",
-            improvement_example: "Reemplazar por: Explica dos causas usando evidencia del texto.",
+            improvement_example:
+                "Reemplazar por: Explica dos causas usando evidencia del texto.",
             page: 2,
         },
         {
@@ -41,32 +42,39 @@ const report = {
             finding: "No se ve el detalle de puntajes.",
             evidence: null,
             recommendation: "Agregar puntaje por ítem.",
-            improvement_example: "Incorporar 5 puntos junto al ítem de desarrollo.",
+            improvement_example:
+                "Incorporar 5 puntos junto al ítem de desarrollo.",
             page: null,
         },
     ],
     strengths: ["OA visible"],
-    observations: [{
-        category: "instrucciones",
-        severity: "important",
-        title: "Consigna ambigua",
-        description: "La acción no es observable.",
-        recommendation: "Usar un verbo observable.",
-        evidence: "Responde correctamente.",
-        page: 2,
-    }],
-    miscellaneous_findings: [{
-        category: "arithmetic",
-        severity: "critical",
-        title: "Suma de puntajes inconsistente",
-        finding: "Los ítems suman 28 y el encabezado declara 30.",
-        evidence: "5 + 8 + 15 = 28.",
-        recommendation: "Corregir el total declarado.",
-        improvement_example: "Cambiar Puntaje total: 30 por Puntaje total: 28.",
-        page: 1,
-    }],
+    observations: [
+        {
+            category: "instrucciones",
+            severity: "important",
+            title: "Consigna ambigua",
+            description: "La acción no es observable.",
+            recommendation: "Usar un verbo observable.",
+            evidence: "Responde correctamente.",
+            page: 2,
+        },
+    ],
+    miscellaneous_findings: [
+        {
+            category: "arithmetic",
+            severity: "critical",
+            title: "Suma de puntajes inconsistente",
+            finding: "Los ítems suman 28 y el encabezado declara 30.",
+            evidence: "5 + 8 + 15 = 28.",
+            recommendation: "Corregir el total declarado.",
+            improvement_example:
+                "Cambiar Puntaje total: 30 por Puntaje total: 28.",
+            page: 1,
+        },
+    ],
     recommendations: ["Precisar las instrucciones"],
-    suggested_teacher_message: "Corrige la consigna y el total antes de reenviar.",
+    suggested_teacher_message:
+        "Corrige la consigna y el total antes de reenviar.",
 };
 
 const instrument = {
@@ -104,13 +112,23 @@ describe("informe descargable de retroalimentación documental", () => {
 
         expect(serialized).toContain("Retroalimentación completa sin resumir");
         expect(serialized).toContain("ESTADÍSTICA DE RESUMEN");
-        expect(serialized).toContain("Ejemplo específico: Reemplazar por: Explica dos causas");
+        expect(serialized).toContain(
+            "Ejemplo específico: Reemplazar por: Explica dos causas"
+        );
         expect(serialized).toContain("HALLAZGOS MISCELÁNEOS");
         expect(serialized).toContain("5 + 8 + 15 = 28");
-        expect(serialized).toContain("Corrige la consigna y el total antes de reenviar");
-        expect(serialized).toContain('"text":"Retroalimentación completa sin resumir.","alignment":"justify"');
-        expect(serialized).toContain('"text":"El OA está declarado.","alignment":"justify"');
-        expect(serialized).toContain('"text":"Ejemplo específico: Cambiar Puntaje total: 30 por Puntaje total: 28.","alignment":"justify"');
+        expect(serialized).toContain(
+            "Corrige la consigna y el total antes de reenviar"
+        );
+        expect(serialized).toContain(
+            '"text":"Retroalimentación completa sin resumir.","alignment":"justify"'
+        );
+        expect(serialized).toContain(
+            '"text":"El OA está declarado.","alignment":"justify"'
+        );
+        expect(serialized).toContain(
+            '"text":"Ejemplo específico: Cambiar Puntaje total: 30 por Puntaje total: 28.","alignment":"justify"'
+        );
         expect(definition.pageMargins).toEqual([44, 42, 44, 54]);
         expect(definition.content[0].table.widths).toEqual(["*", 112]);
         expect(JSON.stringify(definition.content[0])).toContain("#143B58");
@@ -121,7 +139,25 @@ describe("informe descargable de retroalimentación documental", () => {
 
     it("usa la fecha local en el nombre del archivo", () => {
         expect(
-            pedagogicalAiReportFilename(instrument, new Date(2026, 7, 26, 23, 30))
+            pedagogicalAiReportFilename(
+                instrument,
+                new Date(2026, 7, 26, 23, 30)
+            )
         ).toBe("informe-retroalimentacion-prueba-de-lenguaje-2026-08-26.pdf");
+    });
+
+    it("identifica como responsable a la coordinadora en una revisión autónoma", () => {
+        const definition = buildPedagogicalAiReportPdfDefinition(
+            {
+                ...instrument,
+                workflow_status: "draft",
+                owner: { name: "Coordinadora de prueba" },
+            },
+            { report }
+        );
+        const serialized = JSON.stringify(definition.content);
+
+        expect(serialized).toContain('"text":"RESPONSABLE"');
+        expect(serialized).not.toContain('"text":"DOCENTE"');
     });
 });

@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\User;
+use App\Services\Admin\UserUsageRecorder;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -13,6 +14,10 @@ use Illuminate\Support\Str;
 
 class APIController extends Controller
 {
+    public function __construct(
+        private readonly UserUsageRecorder $usageRecorder,
+    ) {}
+
     public function sendError($error, $errorMessages = [], $code = 404)
     {
         $response = [
@@ -63,6 +68,12 @@ class APIController extends Controller
         }
 
         $token = $user->createToken('web')->plainTextToken;
+
+        try {
+            $this->usageRecorder->recordLogin($user);
+        } catch (\Throwable) {
+            // El acceso no debe fallar si el registro estadístico no está disponible.
+        }
 
         return $this->sendResponse([
             'user' => $this->userPayload($user),

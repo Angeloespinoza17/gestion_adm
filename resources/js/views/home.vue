@@ -6,7 +6,6 @@ import FullCalendar from "@fullcalendar/vue3";
 import dayGridPlugin from "@fullcalendar/daygrid";
 import timeGridPlugin from "@fullcalendar/timegrid";
 import listPlugin from "@fullcalendar/list";
-import bootstrap5Plugin from "@fullcalendar/bootstrap5";
 import esLocale from "@fullcalendar/core/locales/es";
 
 const emptyDashboard = () => ({
@@ -24,6 +23,12 @@ const emptyDashboard = () => ({
   attention: { items: [], total: 0, critical_count: 0, today_count: 0 },
   news: [],
   internal_announcements: { items: [], unread_count: 0, pending_ack_count: 0 },
+  weather: {
+    provider: "WeatherAPI.com",
+    location: { name: "Valdivia", region: "Región de Los Ríos", country: "Chile" },
+    last_synced_at: null,
+    days: [],
+  },
   quick_links: [],
 });
 
@@ -63,6 +68,14 @@ export default {
       if (hour < 19) return "Buenas tardes";
 
       return "Buenas noches";
+    },
+    greetingIcon() {
+      const hour = new Date().getHours();
+
+      if (hour < 12) return "bx-sun";
+      if (hour < 19) return "bx-sun";
+
+      return "bx-moon";
     },
     agendaToday() {
       return this.dashboard.agenda?.today || [];
@@ -128,6 +141,17 @@ export default {
     attentionCount() {
       return this.dashboard.attention?.total || 0;
     },
+    weatherDays() {
+      return this.dashboard.weather?.days || [];
+    },
+    weatherLocation() {
+      return this.dashboard.weather?.location || {};
+    },
+    attentionSummaryText() {
+      if (!this.attentionCount) return "Sin pendientes prioritarios";
+
+      return `${this.attentionCount} ${this.attentionCount === 1 ? "elemento requiere" : "elementos requieren"} tu atención`;
+    },
     lastUpdatedText() {
       if (!this.dashboard.generated_at) {
         return "Sin actualizar";
@@ -162,25 +186,33 @@ export default {
       }
     },
     buildCalendarOptions(events) {
+      const compact = window.innerWidth < 768;
+
       return {
-        plugins: [dayGridPlugin, timeGridPlugin, listPlugin, bootstrap5Plugin],
+        plugins: [dayGridPlugin, timeGridPlugin, listPlugin],
         locales: [esLocale],
         locale: "es",
         timeZone: "local",
-        themeSystem: "bootstrap5",
-        initialView: "dayGridMonth",
+        themeSystem: "standard",
+        initialView: compact ? "listMonth" : "dayGridMonth",
         firstDay: 1,
         height: "auto",
-        contentHeight: 720,
-        expandRows: true,
+        contentHeight: compact ? "auto" : 560,
+        expandRows: false,
         nowIndicator: true,
-        dayMaxEvents: 4,
+        dayMaxEvents: compact ? 2 : 3,
         eventDisplay: "block",
-        headerToolbar: {
-          left: "prev,next today",
-          center: "title",
-          right: "dayGridMonth,timeGridWeek,listMonth",
-        },
+        headerToolbar: compact
+          ? {
+              left: "prev,next",
+              center: "title",
+              right: "listMonth,dayGridMonth",
+            }
+          : {
+              left: "prev,next today",
+              center: "title",
+              right: "dayGridMonth,timeGridWeek,listMonth",
+            },
         buttonText: {
           today: "Hoy",
           month: "Mes",
@@ -320,6 +352,21 @@ export default {
     attentionClass(urgency) {
       return `inicio-attention-item--${urgency || "normal"}`;
     },
+    normalizedIcon(icon, fallback = "bx-grid-alt") {
+      const value = String(icon || "");
+      const replacements = {
+        "bx-calendar-star": "bx-calendar-event",
+        "bx-message-square-detail": "bx-envelope",
+      };
+
+      return replacements[value] || value || fallback;
+    },
+    attentionIcon(item) {
+      const route = String(item?.route || "");
+      const fallback = route.includes("comunic") ? "bx-envelope" : "bx-bell";
+
+      return this.normalizedIcon(item?.icon, fallback);
+    },
     attentionLabel(item) {
       if (!item.due_at) return item.detail || "Pendiente";
 
@@ -345,6 +392,27 @@ export default {
       return status === "por_vencer"
         ? "bg-warning-subtle text-warning"
         : "bg-success-subtle text-success";
+    },
+    quickLinkIcon(link) {
+      if (link?.icon) return this.normalizedIcon(link.icon);
+
+      const route = String(link?.route || "");
+      const title = String(link?.title || "").toLocaleLowerCase("es");
+
+      if (route.includes("calendar") || title.includes("calendario")) return "bx-calendar-event";
+      if (route.includes("comunic") || title.includes("comunicaciones")) return "bx-message-square-detail";
+      if (route.includes("reservation") || title.includes("reserv")) return "bx-building-house";
+      if (route.includes("permission") || title.includes("permis")) return "bx-calendar-minus";
+      if (route.includes("task") || title.includes("backlog")) return "bx-list-check";
+      if (route.includes("document") || title.includes("document")) return "bx-file";
+      if (route.includes("news") || title.includes("noticia")) return "bx-news";
+      if (route.includes("event") || title.includes("evento")) return "bx-calendar-star";
+      if (route.includes("profile") || title.includes("perfil")) return "bx-user-circle";
+
+      return "bx-grid-alt";
+    },
+    quickLinkToneClass(index) {
+      return `inicio-quick-link--tone-${(index % 5) + 1}`;
     },
     async markInternalAnnouncement(announcement, acknowledged = false) {
       try {
@@ -393,6 +461,24 @@ export default {
         minute: "2-digit",
       }).format(new Date(value));
     },
+    formatWeatherDay(value) {
+      const date = this.parseDateValue(value);
+      const today = new Date();
+      const tomorrow = new Date();
+      tomorrow.setDate(today.getDate() + 1);
+
+      if (date.toDateString() === today.toDateString()) return "Hoy";
+      if (date.toDateString() === tomorrow.toDateString()) return "Mañana";
+
+      const label = new Intl.DateTimeFormat("es-CL", { weekday: "long" }).format(date);
+      return label.charAt(0).toUpperCase() + label.slice(1);
+    },
+    formatWeatherDate(value) {
+      return new Intl.DateTimeFormat("es-CL", {
+        day: "numeric",
+        month: "short",
+      }).format(this.parseDateValue(value)).replace(".", "");
+    },
     parseDateValue(value) {
       const text = String(value || "");
 
@@ -437,26 +523,41 @@ export default {
 <template>
   <Layout>
     <div class="inicio-dashboard">
-      <section class="inicio-hero mb-4">
+      <section class="inicio-hero mb-4" aria-labelledby="inicio-title">
         <div class="inicio-hero__content">
-          <div class="inicio-eyebrow"><i class="bx bx-calendar me-1"></i>{{ currentDateText }}</div>
-          <h1 class="inicio-title">{{ greeting }}, {{ currentUserName }}</h1>
-          <p class="inicio-hero__subtitle">Revisa tu jornada, comunicaciones y fechas institucionales importantes.</p>
+          <div class="inicio-hero__meta">
+            <span class="inicio-hero__badge"><i class="bx bx-command"></i> Centro de operaciones</span>
+            <span class="inicio-eyebrow"><i class="bx bx-calendar"></i>{{ currentDateText }}</span>
+          </div>
+          <h1 id="inicio-title" class="inicio-title">{{ greeting }}, {{ currentUserName }}</h1>
+          <p class="inicio-hero__subtitle">Tu jornada institucional, ordenada para decidir qué atender primero.</p>
+
+          <div class="inicio-hero__signals" aria-label="Estado de la jornada">
+            <span :class="{ 'inicio-hero__signal--alert': attentionCount }">
+              <i class="bx bx-bell"></i>{{ attentionCount }} {{ attentionCount === 1 ? 'pendiente' : 'pendientes' }}
+            </span>
+            <span><i class="bx bx-list-check"></i>{{ dashboard.tasks?.pending_count || 0 }} {{ dashboard.tasks?.pending_count === 1 ? 'tarea' : 'tareas' }}</span>
+            <span><i class="bx bx-envelope"></i>{{ unreadInternalAnnouncements }} {{ unreadInternalAnnouncements === 1 ? 'aviso nuevo' : 'avisos nuevos' }}</span>
+          </div>
         </div>
 
-        <div class="inicio-hero__summary">
-          <div class="inicio-hero__summary-icon"><i class="bx bx-sun"></i></div>
-          <div>
-            <span class="inicio-hero__summary-label">Resumen de hoy</span>
-            <strong>{{ agendaToday.length }} {{ agendaToday.length === 1 ? 'actividad' : 'actividades' }}</strong>
-            <span>{{ attentionCount ? `${attentionCount} elementos requieren tu atención` : 'Todo al día por ahora' }}</span>
+        <aside class="inicio-hero__summary" aria-label="Resumen de hoy">
+          <div class="inicio-hero__summary-main">
+            <div class="inicio-hero__summary-icon"><i class="bx" :class="greetingIcon"></i></div>
+            <div>
+              <span class="inicio-hero__summary-label">Resumen de hoy</span>
+              <strong>{{ agendaToday.length }} {{ agendaToday.length === 1 ? 'actividad' : 'actividades' }}</strong>
+              <span>{{ attentionSummaryText }}</span>
+            </div>
           </div>
-          <button class="inicio-refresh" type="button" :disabled="refreshing" title="Actualizar información" @click="loadDashboard">
-            <i class="bx bx-refresh" :class="{ 'bx-spin': refreshing }"></i>
-            <span class="visually-hidden">Actualizar</span>
-          </button>
-          <small>Actualizado {{ lastUpdatedText }}</small>
-        </div>
+          <div class="inicio-hero__summary-footer">
+            <small><i class="bx bx-time-five"></i> Actualizado {{ lastUpdatedText }}</small>
+            <button class="inicio-refresh" type="button" :disabled="refreshing" @click="loadDashboard">
+              <i class="bx bx-refresh" :class="{ 'bx-spin': refreshing }"></i>
+              <span>{{ refreshing ? 'Actualizando' : 'Actualizar' }}</span>
+            </button>
+          </div>
+        </aside>
       </section>
 
       <BAlert v-if="error" show variant="danger" class="mb-4">
@@ -466,8 +567,8 @@ export default {
       <LoadingState v-if="loading" message="Cargando inicio..." />
 
       <template v-else>
-        <BRow class="g-3 mb-4">
-          <BCol v-for="metric in dashboard.metrics" :key="metric.key" sm="6" xl="3">
+        <BRow class="g-3 mb-4 inicio-metrics-grid">
+          <BCol v-for="metric in dashboard.metrics" :key="metric.key" cols="6" xl="3">
             <BCard no-body class="inicio-metric border-0 h-100" :class="metricToneClass(metric.tone)">
               <BCardBody>
                 <div class="inicio-metric__top">
@@ -482,6 +583,78 @@ export default {
             </BCard>
           </BCol>
         </BRow>
+
+        <section class="inicio-weather mb-4" aria-labelledby="inicio-weather-title">
+          <header class="inicio-weather__header">
+            <div class="inicio-weather__heading">
+              <span class="inicio-weather__heading-icon"><i class="bx bx-cloud-light-rain"></i></span>
+              <div>
+                <span class="inicio-section-label">Pronóstico local</span>
+                <h2 id="inicio-weather-title">Clima en {{ weatherLocation.name || 'Valdivia' }}</h2>
+                <p>{{ weatherLocation.region || 'Región de Los Ríos' }}, {{ weatherLocation.country || 'Chile' }}</p>
+              </div>
+            </div>
+            <div class="inicio-weather__source">
+              <span v-if="dashboard.weather?.last_synced_at">
+                <i class="bx bx-time-five"></i> Actualizado {{ formatDateTime(dashboard.weather.last_synced_at) }}
+              </span>
+              <a href="https://www.weatherapi.com/" target="_blank" rel="noopener noreferrer">
+                Datos de WeatherAPI.com <i class="bx bx-link-external"></i>
+              </a>
+            </div>
+          </header>
+
+          <div v-if="weatherDays.length" class="inicio-weather__days">
+            <article
+              v-for="(day, index) in weatherDays"
+              :key="day.date"
+              class="inicio-weather-day"
+              :class="{ 'inicio-weather-day--today': index === 0 }"
+            >
+              <div class="inicio-weather-day__date">
+                <strong>{{ formatWeatherDay(day.date) }}</strong>
+                <span>{{ formatWeatherDate(day.date) }}</span>
+              </div>
+              <img
+                v-if="day.condition?.icon_url"
+                class="inicio-weather-day__icon"
+                :src="day.condition.icon_url"
+                :alt="day.condition.text || 'Condición meteorológica'"
+                width="64"
+                height="64"
+              >
+              <span v-else class="inicio-weather-day__icon inicio-weather-day__icon--fallback">
+                <i class="bx bx-cloud"></i>
+              </span>
+              <p class="inicio-weather-day__condition">{{ day.condition?.text || 'Sin información' }}</p>
+              <div class="inicio-weather-day__temperature">
+                <strong>{{ Math.round(day.max_temp_c) }}°</strong>
+                <span>{{ Math.round(day.min_temp_c) }}°</span>
+              </div>
+              <div class="inicio-weather-day__details">
+                <span title="Probabilidad de lluvia"><i class="bx bx-droplet"></i>{{ day.chance_of_rain }}%</span>
+                <span title="Humedad promedio"><i class="bx bx-water"></i>{{ day.avg_humidity }}%</span>
+                <span title="Precipitación estimada"><i class="bx bx-cloud-rain"></i>{{ day.total_precip_mm }} mm</span>
+              </div>
+            </article>
+          </div>
+          <div v-else class="inicio-weather__empty">
+            <i class="bx bx-cloud"></i>
+            <div>
+              <strong>Pronóstico pendiente de sincronización</strong>
+              <span>Los datos diarios de Valdivia aparecerán aquí tras la próxima actualización.</span>
+            </div>
+          </div>
+        </section>
+
+        <div class="inicio-section-intro">
+          <div>
+            <span class="inicio-section-label">Prioridad personal</span>
+            <h2>Lo importante ahora</h2>
+            <p>Pendientes y tareas reunidos según tu perfil de acceso.</p>
+          </div>
+          <span class="inicio-section-intro__status"><i class="bx bx-shield-quarter"></i> Vista personalizada</span>
+        </div>
 
         <BRow class="g-4 mb-4">
           <BCol lg="7">
@@ -508,7 +681,7 @@ export default {
                   :class="attentionClass(item.urgency)"
                   @click="openRoute(item.route)"
                 >
-                  <span class="inicio-attention-item__icon"><i :class="['bx', item.icon]"></i></span>
+                  <span class="inicio-attention-item__icon"><i :class="['bx', attentionIcon(item)]"></i></span>
                   <span class="inicio-attention-item__content">
                     <span class="inicio-attention-item__meta">
                       <span>{{ item.type_label }}</span>
@@ -581,14 +754,20 @@ export default {
 
         <BRow v-if="visibleInternalAnnouncements.length" class="g-4 mb-4">
           <BCol cols="12">
-            <BCard no-body class="border-0 shadow-sm">
-              <BCardBody>
-                <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
-                  <div>
-                    <h5 class="mb-1">Comunicaciones internas</h5>
-                    <div class="text-muted small">
-                      <span>{{ unreadInternalAnnouncements }} sin leer</span>
-                      <span v-if="pendingInternalAcknowledgements"> · {{ pendingInternalAcknowledgements }} por confirmar</span>
+            <BCard no-body class="inicio-communications-card border-0">
+              <BCardBody class="p-0">
+                <div class="inicio-communications-card__header">
+                  <div class="inicio-card-heading">
+                    <span class="inicio-card-heading__icon inicio-card-heading__icon--communications">
+                      <i class="bx bx-envelope"></i>
+                    </span>
+                    <div>
+                      <span class="inicio-section-label">Información interna</span>
+                      <h5 class="mb-1">Comunicaciones para ti</h5>
+                      <div class="text-muted small">
+                        <span>{{ unreadInternalAnnouncements }} sin leer</span>
+                        <span v-if="pendingInternalAcknowledgements"> · {{ pendingInternalAcknowledgements }} por confirmar</span>
+                      </div>
                     </div>
                   </div>
                   <BButton
@@ -597,12 +776,12 @@ export default {
                     variant="outline-primary"
                     @click="openRoute('/comunicaciones')"
                   >
-                    <i class="bx bx-message-square-detail me-1"></i>
+                    <i class="bx bx-envelope me-1"></i>
                     Gestionar
                   </BButton>
                 </div>
 
-                <div class="inicio-announcements">
+                <div class="inicio-announcements inicio-communications-card__body">
                   <article
                     v-for="announcement in visibleInternalAnnouncements"
                     :key="announcement.id"
@@ -656,6 +835,7 @@ export default {
             <div class="inicio-card-heading">
               <span class="inicio-card-heading__icon"><i class="bx bx-calendar"></i></span>
               <div>
+                <span class="inicio-section-label">Agenda consolidada</span>
                 <h4 class="mb-1">Calendario maestro institucional</h4>
                 <p class="mb-0">Reúne las fuentes difundibles y la agenda personal visible para ti.</p>
               </div>
@@ -971,13 +1151,14 @@ export default {
               <div class="inicio-information-card__body">
                 <div class="inicio-quick-links">
                   <button
-                    v-for="link in dashboard.quick_links"
+                    v-for="(link, index) in dashboard.quick_links"
                     :key="link.route"
                     type="button"
                     class="inicio-quick-link"
+                    :class="quickLinkToneClass(index)"
                     @click="openRoute(link.route)"
                   >
-                    <span><i :class="['bx', link.icon]"></i></span>
+                    <span><i :class="['bx', quickLinkIcon(link)]"></i></span>
                     <span><strong>{{ link.title }}</strong><small>{{ link.description }}</small></span>
                     <i class="bx bx-chevron-right"></i>
                   </button>
@@ -2202,6 +2383,961 @@ export default {
   :deep(.fc .fc-toolbar-chunk) {
     display: flex;
     justify-content: center;
+  }
+}
+
+/* Refined institutional home workspace */
+.inicio-dashboard {
+  --inicio-primary: #5368dc;
+  --inicio-primary-soft: #eef1ff;
+  --inicio-ink: #202b40;
+  --inicio-muted: #748096;
+  --inicio-line: #e5eaf3;
+  max-width: 1620px;
+  margin: 0 auto;
+}
+
+.inicio-dashboard :where(h2, h3, h4, h5, h6) {
+  color: var(--inicio-ink);
+  letter-spacing: -0.025em;
+}
+
+.inicio-hero {
+  min-height: 250px;
+  align-items: center;
+  gap: clamp(1.5rem, 4vw, 3.5rem);
+  grid-template-columns: minmax(0, 1.45fr) minmax(310px, 0.72fr);
+  padding: clamp(1.65rem, 3.3vw, 2.7rem);
+  border: 1px solid rgba(126, 144, 221, 0.18);
+  border-radius: 1.75rem;
+  background:
+    radial-gradient(circle at 88% 16%, rgba(109, 188, 255, 0.26), transparent 28%),
+    radial-gradient(circle at 56% 105%, rgba(143, 111, 232, 0.16), transparent 34%),
+    linear-gradient(132deg, rgba(255, 255, 255, 0.98), rgba(241, 245, 255, 0.96) 58%, rgba(238, 242, 255, 0.95));
+  color: var(--inicio-ink);
+  box-shadow: 0 22px 48px rgba(50, 67, 112, 0.11);
+}
+
+.inicio-hero::before,
+.inicio-hero::after {
+  position: absolute;
+  border: 1px solid rgba(96, 113, 197, 0.11);
+  border-radius: 50%;
+  background: transparent;
+  content: "";
+  pointer-events: none;
+}
+
+.inicio-hero::before {
+  right: 9%;
+  bottom: -125px;
+  width: 270px;
+  height: 270px;
+}
+
+.inicio-hero::after {
+  top: -155px;
+  right: -90px;
+  width: 310px;
+  height: 310px;
+}
+
+.inicio-hero__meta,
+.inicio-hero__signals,
+.inicio-hero__summary-main,
+.inicio-hero__summary-footer {
+  display: flex;
+  align-items: center;
+}
+
+.inicio-hero__meta {
+  flex-wrap: wrap;
+  gap: 0.65rem;
+  margin-bottom: 0.85rem;
+}
+
+.inicio-hero__badge,
+.inicio-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.38rem;
+  min-height: 2rem;
+  padding: 0.38rem 0.72rem;
+  border-radius: 999px;
+  font-size: 0.64rem;
+  font-weight: 800;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+
+.inicio-hero__badge {
+  border: 1px solid rgba(83, 104, 220, 0.14);
+  background: rgba(255, 255, 255, 0.78);
+  color: #4d63d3;
+  box-shadow: 0 8px 18px rgba(60, 78, 142, 0.06);
+}
+
+.inicio-eyebrow {
+  padding-inline: 0;
+  color: #77849b;
+}
+
+.inicio-title {
+  max-width: 760px;
+  margin-top: 0;
+  color: #1e2940;
+  font-size: clamp(2rem, 4vw, 3rem);
+  font-weight: 820;
+  letter-spacing: -0.055em;
+  line-height: 1.04;
+}
+
+.inicio-hero__subtitle {
+  max-width: 650px;
+  margin-top: 0.72rem;
+  color: #66748a;
+  font-size: 1rem;
+  line-height: 1.55;
+}
+
+.inicio-hero__signals {
+  flex-wrap: wrap;
+  gap: 0.48rem;
+  margin-top: 1.25rem;
+}
+
+.inicio-hero__signals span {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.38rem;
+  min-height: 2rem;
+  padding: 0.4rem 0.68rem;
+  border: 1px solid rgba(112, 128, 181, 0.13);
+  border-radius: 0.7rem;
+  background: rgba(255, 255, 255, 0.66);
+  color: #657188;
+  font-size: 0.69rem;
+  font-weight: 700;
+}
+
+.inicio-hero__signals .inicio-hero__signal--alert {
+  border-color: rgba(220, 91, 102, 0.15);
+  background: rgba(255, 241, 243, 0.82);
+  color: #b34e5a;
+}
+
+.inicio-hero__summary {
+  align-self: stretch;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 1.15rem;
+  padding: 1.3rem;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 1.25rem;
+  background:
+    radial-gradient(circle at 85% 8%, rgba(134, 170, 255, 0.3), transparent 34%),
+    linear-gradient(145deg, #344bb8, #596fda 68%, #687de1);
+  color: #fff;
+  box-shadow: 0 18px 36px rgba(52, 72, 181, 0.2);
+}
+
+.inicio-hero__summary-main {
+  align-items: flex-start;
+  gap: 0.85rem;
+}
+
+.inicio-hero__summary-icon {
+  flex: 0 0 3rem;
+  width: 3rem;
+  height: 3rem;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 0.9rem;
+  background: rgba(255, 255, 255, 0.13);
+  font-size: 1.45rem;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+.inicio-hero__summary strong {
+  margin-top: 0.2rem;
+  color: #fff;
+  font-size: 1.3rem;
+  letter-spacing: -0.03em;
+}
+
+.inicio-hero__summary span:not(.inicio-hero__summary-label) {
+  margin-top: 0.2rem;
+  color: rgba(255, 255, 255, 0.76);
+  font-size: 0.76rem;
+}
+
+.inicio-hero__summary-label {
+  color: rgba(255, 255, 255, 0.68);
+  font-size: 0.62rem;
+  letter-spacing: 0.12em;
+}
+
+.inicio-hero__summary-footer {
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding-top: 0.9rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.14);
+}
+
+.inicio-hero__summary-footer small {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  color: rgba(255, 255, 255, 0.65);
+  font-size: 0.64rem;
+}
+
+.inicio-refresh {
+  width: auto;
+  height: 2.15rem;
+  gap: 0.35rem;
+  padding: 0 0.72rem;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 0.7rem;
+  background: rgba(255, 255, 255, 0.12);
+  font-size: 0.7rem;
+  font-weight: 750;
+}
+
+.inicio-refresh i {
+  font-size: 1rem;
+}
+
+.inicio-refresh:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.inicio-metric {
+  --metric-tone: #6d7ee2;
+  --metric-soft: #eef1ff;
+  min-height: 158px;
+  overflow: hidden;
+  border: 1px solid rgba(225, 231, 241, 0.92) !important;
+  border-radius: 1.15rem;
+  background: linear-gradient(145deg, #fff 58%, var(--metric-soft));
+  box-shadow: 0 10px 28px rgba(39, 54, 91, 0.065);
+}
+
+.inicio-metric::before {
+  position: absolute;
+  top: 0;
+  right: 1rem;
+  left: 1rem;
+  height: 0.2rem;
+  border-radius: 0 0 999px 999px;
+  background: var(--metric-tone);
+  content: "";
+}
+
+.inicio-metric :deep(.card-body) {
+  position: relative;
+  padding: 1.18rem;
+}
+
+.inicio-metric--primary { --metric-tone: #596fda; --metric-soft: #eef1ff; }
+.inicio-metric--warning { --metric-tone: #d99a3c; --metric-soft: #fff7e9; }
+.inicio-metric--danger { --metric-tone: #dd6973; --metric-soft: #fff0f2; }
+.inicio-metric--success { --metric-tone: #38a07b; --metric-soft: #ebf8f3; }
+.inicio-metric--info { --metric-tone: #488fc2; --metric-soft: #ebf6fc; }
+
+.inicio-metric__icon {
+  width: 2.7rem;
+  height: 2.7rem;
+  border-radius: 0.85rem;
+  background: var(--metric-soft);
+  color: var(--metric-tone);
+}
+
+.inicio-metric__value {
+  color: var(--inicio-ink);
+  font-size: 2rem;
+  font-weight: 820;
+  letter-spacing: -0.055em;
+}
+
+.inicio-metric__label {
+  margin-top: 0.8rem;
+  color: #354156;
+  font-size: 0.84rem;
+}
+
+.inicio-metric__detail {
+  color: #7a8699;
+  font-size: 0.72rem;
+  line-height: 1.4;
+}
+
+.inicio-section-intro {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 1rem;
+  margin: 0.2rem 0 1rem;
+  padding-inline: 0.15rem;
+}
+
+.inicio-section-intro h2 {
+  margin: 0.12rem 0 0;
+  font-size: 1.35rem;
+}
+
+.inicio-section-intro p {
+  margin: 0.22rem 0 0;
+  color: var(--inicio-muted);
+  font-size: 0.76rem;
+}
+
+.inicio-section-intro__status {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.42rem 0.68rem;
+  border: 1px solid rgba(65, 151, 119, 0.14);
+  border-radius: 999px;
+  background: #edf8f4;
+  color: #358565;
+  font-size: 0.66rem;
+  font-weight: 750;
+}
+
+.inicio-focus-card,
+.inicio-information-card,
+.inicio-calendar-section,
+.inicio-agenda-card,
+.inicio-communications-card {
+  border: 1px solid var(--inicio-line);
+  border-radius: 1.25rem;
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: 0 12px 32px rgba(37, 52, 88, 0.065);
+}
+
+.inicio-focus-card__header,
+.inicio-information-card__header,
+.inicio-calendar-heading {
+  padding: 1.15rem 1.25rem;
+  border-bottom-color: #edf1f6;
+  background: linear-gradient(120deg, rgba(251, 252, 255, 0.96), rgba(255, 255, 255, 0.96));
+}
+
+.inicio-card-heading__icon {
+  width: 2.75rem;
+  height: 2.75rem;
+  flex-basis: 2.75rem;
+  border-radius: 0.85rem;
+  box-shadow: inset 0 0 0 1px rgba(80, 100, 190, 0.05);
+}
+
+.inicio-card-heading__icon--communications {
+  background: #edf1ff;
+  color: #5368d4;
+}
+
+.inicio-communications-card {
+  overflow: hidden;
+}
+
+.inicio-communications-card__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1.1rem 1.25rem;
+  border-bottom: 1px solid #edf1f6;
+  background:
+    radial-gradient(circle at 92% 0, rgba(114, 138, 231, 0.1), transparent 30%),
+    linear-gradient(120deg, #fbfcff, #fff);
+}
+
+.inicio-communications-card__body {
+  padding: 1rem 1.15rem 1.15rem;
+}
+
+.inicio-announcement {
+  position: relative;
+  padding: 1rem;
+  padding-left: 1.2rem;
+  border: 1px solid #e7ebf3;
+  border-left: 0;
+  border-radius: 0.95rem;
+  background: linear-gradient(145deg, #fff, #fbfcff);
+  box-shadow: 0 8px 20px rgba(38, 52, 89, 0.045);
+}
+
+.inicio-announcement::before {
+  position: absolute;
+  top: 0.85rem;
+  bottom: 0.85rem;
+  left: 0;
+  width: 0.22rem;
+  border-radius: 999px;
+  background: #5d73dc;
+  content: "";
+}
+
+.inicio-announcement--urgent::before { background: #dc6570; }
+.inicio-announcement--important::before { background: #d9a041; }
+
+.inicio-calendar-section {
+  overflow: hidden;
+}
+
+.inicio-calendar-heading {
+  border-radius: 1.25rem 1.25rem 0 0;
+}
+
+.inicio-calendar-wrap {
+  padding: 1rem 1.2rem 1.2rem;
+}
+
+.inicio-calendar-filters {
+  gap: 0.45rem;
+  padding: 0.75rem 1.25rem;
+  background: #fbfcfe;
+}
+
+.inicio-calendar-filter {
+  min-height: 2rem;
+  border-color: #e0e6ef;
+  background: #fff;
+  font-size: 0.7rem;
+}
+
+:deep(.fc) {
+  --fc-border-color: #e8ecf3;
+  --fc-button-bg-color: #f6f8fc;
+  --fc-button-border-color: #e2e7f0;
+  --fc-button-text-color: #606c82;
+  --fc-button-active-bg-color: #596fda;
+  --fc-button-active-border-color: #596fda;
+}
+
+:deep(.fc .fc-button) {
+  border-radius: 0.65rem;
+  font-size: 0.72rem;
+  font-weight: 750;
+}
+
+:deep(.fc .fc-button-primary:not(:disabled):not(.fc-button-active)) {
+  border-color: #dce3f0 !important;
+  background: #f3f5fc !important;
+  color: #59667d !important;
+}
+
+:deep(.fc .fc-button-primary:not(:disabled):not(.fc-button-active):hover) {
+  border-color: #cbd4ec !important;
+  background: #e9edfb !important;
+  color: #354bb9 !important;
+}
+
+:deep(.fc .fc-button-primary:disabled) {
+  border-color: #e1e6ef !important;
+  background: #f6f7fa !important;
+  color: #99a3b4 !important;
+  opacity: 0.82;
+}
+
+:deep(.fc .fc-prev-button),
+:deep(.fc .fc-next-button) {
+  border-color: #dce3f0 !important;
+  background: #f3f5fc !important;
+  color: #465cc9 !important;
+}
+
+:deep(.fc .fc-prev-button:hover),
+:deep(.fc .fc-next-button:hover) {
+  border-color: #cbd4ec !important;
+  background: #e9edfb !important;
+  color: #354bb9 !important;
+}
+
+:deep(.fc .fc-prev-button .fc-icon),
+:deep(.fc .fc-next-button .fc-icon) {
+  color: inherit !important;
+}
+
+:deep(.fc .fc-button-group > .fc-button:not(:first-child)) {
+  margin-left: 0.2rem;
+  border-left-width: 1px;
+  border-radius: 0.65rem;
+}
+
+:deep(.fc .fc-button-group > .fc-button:first-child) {
+  border-radius: 0.65rem;
+}
+
+:deep(.fc .fc-daygrid-day-frame) {
+  min-height: 68px;
+}
+
+.inicio-agenda-card {
+  padding: 1.15rem;
+}
+
+.inicio-agenda-empty,
+.inicio-panel-empty {
+  border-color: #dfe5ef;
+  border-radius: 0.95rem;
+  background: linear-gradient(145deg, #fafbfe, #f6f8fc);
+}
+
+.inicio-information-card__body {
+  padding: 1.05rem 1.15rem 1.15rem;
+}
+
+.inicio-news-item,
+.inicio-public-event,
+.inicio-compact-item,
+.inicio-task-item,
+.inicio-attention-item,
+.inicio-document-item {
+  border-radius: 0.85rem;
+  border-color: #e5eaf2;
+}
+
+.inicio-quick-links {
+  grid-template-columns: repeat(auto-fit, minmax(185px, 1fr));
+  gap: 0.7rem;
+}
+
+.inicio-quick-link {
+  --quick-tone: #5c70d7;
+  --quick-soft: #eef1ff;
+  position: relative;
+  min-height: 98px;
+  align-content: center;
+  gap: 0.7rem;
+  grid-template-columns: 2.6rem minmax(0, 1fr);
+  padding: 0.85rem;
+  border-color: #e4e9f1;
+  border-radius: 0.95rem;
+  background: linear-gradient(145deg, #fff 64%, var(--quick-soft));
+}
+
+.inicio-quick-link--tone-2 { --quick-tone: #2c8b72; --quick-soft: #ebf8f3; }
+.inicio-quick-link--tone-3 { --quick-tone: #b57b2f; --quick-soft: #fff7e8; }
+.inicio-quick-link--tone-4 { --quick-tone: #4b8ebd; --quick-soft: #eaf6fc; }
+.inicio-quick-link--tone-5 { --quick-tone: #9a627f; --quick-soft: #fbf0f6; }
+
+.inicio-quick-link > span:first-child {
+  width: 2.6rem;
+  height: 2.6rem;
+  border-radius: 0.78rem;
+  background: var(--quick-soft);
+  color: var(--quick-tone);
+  font-size: 1.2rem;
+}
+
+.inicio-quick-link > span:nth-child(2) {
+  gap: 0.12rem;
+  padding-right: 0.6rem;
+}
+
+.inicio-quick-link strong {
+  color: #344157;
+  font-size: 0.78rem;
+}
+
+.inicio-quick-link small {
+  color: #7b8799;
+  font-size: 0.66rem;
+  line-height: 1.35;
+}
+
+.inicio-quick-link > .bx {
+  position: absolute;
+  top: 0.7rem;
+  right: 0.65rem;
+  color: color-mix(in srgb, var(--quick-tone) 62%, #a9b2c1);
+}
+
+@media (max-width: 767.98px) {
+  .inicio-hero {
+    min-height: 0;
+    gap: 1.25rem;
+    grid-template-columns: 1fr;
+    padding: 1.25rem;
+    border-radius: 1.3rem;
+  }
+
+  .inicio-hero__meta {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 0.3rem;
+  }
+
+  .inicio-hero__badge,
+  .inicio-eyebrow {
+    min-height: 1.75rem;
+    font-size: 0.57rem;
+  }
+
+  .inicio-title {
+    font-size: clamp(1.75rem, 9vw, 2.15rem);
+    line-height: 1.08;
+  }
+
+  .inicio-hero__subtitle {
+    font-size: 0.84rem;
+  }
+
+  .inicio-hero__signals {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    margin-top: 1rem;
+  }
+
+  .inicio-hero__signals span:last-child {
+    grid-column: 1 / -1;
+  }
+
+  .inicio-hero__summary {
+    padding: 1.05rem;
+    border-radius: 1rem;
+  }
+
+  .inicio-hero__summary-footer {
+    align-items: flex-end;
+  }
+
+  .inicio-hero__summary-footer small {
+    max-width: 55%;
+  }
+
+  .inicio-metrics-grid {
+    --bs-gutter-x: 0.75rem;
+    --bs-gutter-y: 0.75rem;
+  }
+
+  .inicio-metric {
+    min-height: 148px;
+    border-radius: 1rem;
+  }
+
+  .inicio-metric :deep(.card-body) {
+    padding: 1rem 0.85rem;
+  }
+
+  .inicio-metric__icon {
+    width: 2.25rem;
+    height: 2.25rem;
+  }
+
+  .inicio-metric__value {
+    font-size: 1.55rem;
+  }
+
+  .inicio-metric__label {
+    margin-top: 0.68rem;
+    font-size: 0.74rem;
+    line-height: 1.25;
+  }
+
+  .inicio-metric__detail {
+    font-size: 0.64rem;
+  }
+
+  .inicio-section-intro {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .inicio-section-intro__status {
+    align-self: flex-start;
+  }
+
+  .inicio-focus-card,
+  .inicio-information-card,
+  .inicio-calendar-section,
+  .inicio-agenda-card,
+  .inicio-communications-card {
+    border-radius: 1.05rem;
+  }
+
+  .inicio-focus-card__header,
+  .inicio-information-card__header,
+  .inicio-calendar-heading,
+  .inicio-communications-card__header {
+    padding: 1rem;
+  }
+
+  .inicio-communications-card__header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .inicio-communications-card__body {
+    padding: 0.85rem;
+  }
+
+  .inicio-calendar-wrap {
+    padding: 0.8rem;
+  }
+
+  :deep(.fc .fc-toolbar-title) {
+    font-size: 1rem;
+  }
+
+  :deep(.fc .fc-list-empty) {
+    background: #f8f9fc;
+  }
+
+  .inicio-quick-links {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .inicio-quick-link {
+    min-height: 125px;
+    align-content: start;
+    grid-template-columns: 1fr;
+  }
+
+  .inicio-quick-link > span:nth-child(2) {
+    padding-right: 0;
+  }
+
+  .inicio-quick-link strong,
+  .inicio-quick-link small {
+    overflow: visible;
+    text-overflow: clip;
+    white-space: normal;
+  }
+}
+
+.inicio-weather {
+  overflow: hidden;
+  border: 1px solid #dfe8f2;
+  border-radius: 1.25rem;
+  background:
+    radial-gradient(circle at 95% 0, rgba(86, 169, 215, 0.13), transparent 28%),
+    linear-gradient(145deg, #fafdff 0%, #f4f9fd 100%);
+  box-shadow: 0 12px 30px rgba(35, 75, 102, 0.07);
+}
+
+.inicio-weather__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1.1rem 1.25rem;
+  border-bottom: 1px solid rgba(205, 221, 233, 0.75);
+}
+
+.inicio-weather__heading {
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+}
+
+.inicio-weather__heading-icon {
+  display: inline-flex;
+  flex: 0 0 2.8rem;
+  align-items: center;
+  justify-content: center;
+  width: 2.8rem;
+  height: 2.8rem;
+  border-radius: 0.9rem;
+  background: linear-gradient(145deg, #dff2fb, #eaf6fb);
+  color: #2e83ad;
+  font-size: 1.35rem;
+}
+
+.inicio-weather__heading h2 {
+  margin: 0.12rem 0 0;
+  font-size: 1.18rem;
+}
+
+.inicio-weather__heading p {
+  margin: 0.15rem 0 0;
+  color: #718095;
+  font-size: 0.74rem;
+}
+
+.inicio-weather__source {
+  display: flex;
+  align-items: flex-end;
+  flex-direction: column;
+  gap: 0.25rem;
+  color: #758399;
+  font-size: 0.68rem;
+}
+
+.inicio-weather__source span,
+.inicio-weather__source a {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.inicio-weather__source a {
+  color: #397ea3;
+  font-weight: 700;
+}
+
+.inicio-weather__days {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 0.7rem;
+  padding: 1rem 1.15rem 1.15rem;
+}
+
+.inicio-weather-day {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  flex-direction: column;
+  padding: 0.9rem 0.65rem 0.75rem;
+  border: 1px solid rgba(211, 224, 234, 0.88);
+  border-radius: 1rem;
+  background: rgba(255, 255, 255, 0.8);
+  text-align: center;
+}
+
+.inicio-weather-day--today {
+  border-color: rgba(65, 142, 184, 0.32);
+  background: linear-gradient(155deg, #eaf7fd, #fff 68%);
+  box-shadow: 0 8px 18px rgba(46, 122, 160, 0.09);
+}
+
+.inicio-weather-day__date {
+  display: grid;
+  gap: 0.08rem;
+}
+
+.inicio-weather-day__date strong {
+  color: #30465a;
+  font-size: 0.78rem;
+}
+
+.inicio-weather-day__date span {
+  color: #8793a3;
+  font-size: 0.66rem;
+}
+
+.inicio-weather-day__icon {
+  width: 3.4rem;
+  height: 3.4rem;
+  margin: 0.25rem 0 0.05rem;
+  object-fit: contain;
+}
+
+.inicio-weather-day__icon--fallback {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #4b93b7;
+  font-size: 2rem;
+}
+
+.inicio-weather-day__condition {
+  min-height: 2.1em;
+  margin: 0;
+  color: #5f6e80;
+  font-size: 0.67rem;
+  line-height: 1.15;
+}
+
+.inicio-weather-day__temperature {
+  display: flex;
+  align-items: baseline;
+  gap: 0.35rem;
+  margin-top: 0.38rem;
+}
+
+.inicio-weather-day__temperature strong {
+  color: #263c50;
+  font-size: 1.2rem;
+  font-weight: 800;
+}
+
+.inicio-weather-day__temperature span {
+  color: #8a95a4;
+  font-size: 0.82rem;
+}
+
+.inicio-weather-day__details {
+  display: grid;
+  width: 100%;
+  gap: 0.23rem;
+  margin-top: 0.55rem;
+  padding-top: 0.55rem;
+  border-top: 1px solid #e8eef3;
+  color: #708092;
+  font-size: 0.62rem;
+}
+
+.inicio-weather-day__details span {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.2rem;
+}
+
+.inicio-weather-day__details i {
+  color: #3c8fb7;
+}
+
+.inicio-weather__empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  min-height: 125px;
+  padding: 1.2rem;
+  color: #748296;
+}
+
+.inicio-weather__empty > i {
+  color: #4b93b7;
+  font-size: 2rem;
+}
+
+.inicio-weather__empty strong,
+.inicio-weather__empty span {
+  display: block;
+}
+
+.inicio-weather__empty strong {
+  color: #34495c;
+}
+
+.inicio-weather__empty span {
+  margin-top: 0.15rem;
+  font-size: 0.75rem;
+}
+
+@media (max-width: 1199.98px) {
+  .inicio-weather__days {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 767.98px) {
+  .inicio-weather {
+    border-radius: 1.05rem;
+  }
+
+  .inicio-weather__header {
+    align-items: flex-start;
+    flex-direction: column;
+    padding: 1rem;
+  }
+
+  .inicio-weather__source {
+    align-items: flex-start;
+  }
+
+  .inicio-weather__days {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    padding: 0.8rem;
+  }
+
+  .inicio-weather-day:last-child:nth-child(odd) {
+    grid-column: 1 / -1;
   }
 }
 </style>

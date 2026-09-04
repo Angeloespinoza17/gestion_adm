@@ -64,6 +64,12 @@ class AccountingSubsidyImportTest extends TestCase
         $this->assertSame(40.0, $this->amountForLevelType($settlement, 'basica'));
         $this->assertSame(60.0, $this->amountForLevelType($settlement, 'media'));
 
+        $baselineAnnualIncome = (int) AccountingIncome::query()
+            ->whereYear('received_at', 2026)
+            ->where('income_type', 'like', 'subvencion_%')
+            ->where('status', '!=', 'anulado')
+            ->sum('amount');
+
         $this->getJson('/api/contabilidad/subvenciones/dashboard?period=2026-07')
             ->assertOk()
             ->assertJsonPath('metrics.net_liquidated', 120)
@@ -95,7 +101,23 @@ class AccountingSubsidyImportTest extends TestCase
             ->assertJsonCount(0, 'comparison.per_student.by_cycle')
             ->assertJsonPath('annual.6.period', '2026-07')
             ->assertJsonPath('annual.6.net_liquidated', 120)
-            ->assertJsonPath('annual.6.pie_total', 99);
+            ->assertJsonPath('annual.6.pie_total', 99)
+            ->assertJsonPath('annual.6.income_gap', 120)
+            ->assertJsonPath('annual.6.status', 'pendiente')
+            ->assertJsonPath('annual_overview.year', 2026)
+            ->assertJsonPath('annual_overview.metrics.net_liquidated', 120)
+            ->assertJsonPath('annual_overview.metrics.income_total', $baselineAnnualIncome)
+            ->assertJsonPath('annual_overview.metrics.income_gap', 120 - $baselineAnnualIncome)
+            ->assertJsonPath('annual_overview.metrics.settlement_count', 1)
+            ->assertJsonPath('annual_overview.metrics.months_with_data', 1)
+            ->assertJsonPath('annual_overview.metrics.average_active_month', 120)
+            ->assertJsonPath('annual_overview.metrics.pending_transfer_count', 1)
+            ->assertJsonPath('annual_overview.first_period', '2026-07')
+            ->assertJsonPath('annual_overview.last_period', '2026-07')
+            ->assertJsonPath('annual_overview.peak_month.period', '2026-07')
+            ->assertJsonPath('annual_overview.by_family.0.key', 'normal')
+            ->assertJsonPath('annual_overview.by_family.0.net_amount', 120)
+            ->assertJsonPath('annual_overview.by_family.0.percentage', 100);
 
         $this->postJson("/api/contabilidad/subvenciones/{$settlement->id}/aprobar", [
             'transferred_amount' => 120,
@@ -145,7 +167,11 @@ class AccountingSubsidyImportTest extends TestCase
             ->assertOk()
             ->assertJsonPath('metrics.income_total', 120)
             ->assertJsonPath('comparison.metrics.income_total', 0)
-            ->assertJsonPath('comparison.deltas.income_total.amount', 120);
+            ->assertJsonPath('comparison.deltas.income_total.amount', 120)
+            ->assertJsonPath('annual.6.status', 'cuadrado')
+            ->assertJsonPath('annual_overview.metrics.income_total', $baselineAnnualIncome + 120)
+            ->assertJsonPath('annual_overview.metrics.income_gap', -$baselineAnnualIncome)
+            ->assertJsonPath('annual_overview.metrics.pending_transfer_count', 0);
     }
 
     public function test_it_omits_duplicate_files_and_does_not_overwrite_an_imported_settlement_with_manual_gross(): void
@@ -167,6 +193,14 @@ class AccountingSubsidyImportTest extends TestCase
             ->assertCreated()
             ->assertJsonCount(0, 'imports')
             ->assertJsonCount(1, 'duplicates');
+
+        $this->post('/api/contabilidad/subvenciones/importar', [
+            'files' => [UploadedFile::fake()->createWithContent($filename, $content.'<div>Consulta regenerada</div>')],
+        ])
+            ->assertCreated()
+            ->assertJsonCount(0, 'imports')
+            ->assertJsonCount(1, 'duplicates')
+            ->assertJsonPath('duplicates.0.message', 'El contenido ya fue importado anteriormente.');
 
         $this->assertDatabaseCount('accounting_subsidy_imports', 1);
         $this->assertDatabaseCount('accounting_subsidy_settlements', 1);
@@ -280,7 +314,123 @@ class AccountingSubsidyImportTest extends TestCase
             ->assertJsonPath('metrics.unallocated_total', 0)
             ->assertJsonPath('by_level.0.amount', 100)
             ->assertJsonPath('by_level.1.amount', 200)
-            ->assertJsonCount(2, 'by_family');
+            ->assertJsonCount(2, 'by_family')
+            ->assertJsonPath('annual_overview.metrics.net_liquidated', 420)
+            ->assertJsonPath('annual_overview.metrics.settlement_count', 2)
+            ->assertJsonCount(2, 'annual_overview.by_family')
+            ->assertJsonPath('annual_overview.by_family.0.key', 'pro_retention')
+            ->assertJsonPath('annual_overview.by_family.0.percentage', 71.43);
+    }
+
+    public function test_it_imports_maintenance_with_course_level_allocation(): void
+    {
+        Storage::fake('local');
+        $this->seed([EducationLevelSeeder::class, AccountingModuleSeeder::class]);
+        Sanctum::actingAs(User::query()->firstOrFail());
+
+        $this->post('/api/contabilidad/subvenciones/importar', [
+            'period' => '2026-01',
+            'files' => [UploadedFile::fake()->createWithContent(
+                'Listado_Cursos_Establecimiento_Mantenimiento_RBD_6830_Sostenedor_65031932_202601.xls',
+                $this->maintenanceHtml(),
+            )],
+        ])
+            ->assertCreated()
+            ->assertJsonCount(1, 'imports')
+            ->assertJsonPath('settlements.0.subsidy_type', 'maintenance')
+            ->assertJsonPath('settlements.0.net_amount', '300.00')
+            ->assertJsonCount(2, 'settlements.0.lines.0.allocations');
+
+        $this->getJson('/api/contabilidad/subvenciones/dashboard?period=2026-01')
+            ->assertOk()
+            ->assertJsonPath('metrics.net_liquidated', 300)
+            ->assertJsonPath('metrics.allocated_total', 300)
+            ->assertJsonPath('metrics.unallocated_total', 0)
+            ->assertJsonPath('by_family.0.label', 'Subvención de Mantenimiento');
+    }
+
+    public function test_it_imports_staff_bonus_rosters_without_exposing_them_as_unallocated_education(): void
+    {
+        Storage::fake('local');
+        $this->seed([EducationLevelSeeder::class, AccountingModuleSeeder::class]);
+        Sanctum::actingAs(User::query()->firstOrFail());
+
+        $this->post('/api/contabilidad/subvenciones/importar', [
+            'period' => '2026-03',
+            'files' => [
+                UploadedFile::fake()->createWithContent(
+                    'Lista_Trabajadores_Bono_Especial_RBD_6830_202603.xls',
+                    $this->staffBonusHtml('Bono Especial', [100, 200]),
+                ),
+                UploadedFile::fake()->createWithContent(
+                    'Lista_Trabajadores_Bono_Vacaciones_RBD_6830_202603.xls',
+                    $this->staffBonusHtml('Bono Vacaciones', [50, 70]),
+                ),
+            ],
+        ])
+            ->assertCreated()
+            ->assertJsonCount(2, 'imports')
+            ->assertJsonPath('settlements.0.subsidy_type', 'staff_bonuses')
+            ->assertJsonPath('settlements.0.net_amount', '420.00')
+            ->assertJsonCount(2, 'settlements.0.lines');
+
+        $settlement = AccountingSubsidySettlement::query()
+            ->where('subsidy_type', 'staff_bonuses')
+            ->with('lines.allocations')
+            ->firstOrFail();
+        $this->assertSame(4, $settlement->lines->sum(fn ($line) => $line->allocations->count()));
+        $this->assertSame('Trabajador Uno', $settlement->lines->first()->allocations->first()->source_payload['_staff_bonus']['worker_name']);
+
+        $this->getJson('/api/contabilidad/subvenciones/dashboard?period=2026-03')
+            ->assertOk()
+            ->assertJsonPath('metrics.net_liquidated', 420)
+            ->assertJsonPath('metrics.unallocated_total', 0)
+            ->assertJsonPath('by_family.0.label', 'Bonos al personal');
+    }
+
+    public function test_it_imports_signed_reliquidations_for_normal_and_sep_families(): void
+    {
+        Storage::fake('local');
+        $this->seed([EducationLevelSeeder::class, AccountingModuleSeeder::class]);
+        Sanctum::actingAs(User::query()->firstOrFail());
+
+        $this->post('/api/contabilidad/subvenciones/importar', [
+            'period' => '2026-06',
+            'files' => [
+                UploadedFile::fake()->createWithContent(
+                    'Subvencion_Normal_Anexo_Detalle_ReliquidacionMarzoMayo_RBD_6830_202606.xls',
+                    $this->reliquidationHtml('Subvencion Normal', [-100, 250]),
+                ),
+                UploadedFile::fake()->createWithContent(
+                    'Subvencion_Sep_Preferente_Anexo_Detalle_ReliquidacionMarzoMayo_RBD_6830_202606.xls',
+                    $this->reliquidationHtml('Subvencion Sep Preferente', [30, -80]),
+                ),
+                UploadedFile::fake()->createWithContent(
+                    'Subvencion_Sep_Prioritario_Anexo_Detalle_ReliquidacionMarzoMayo_RBD_6830_202606.xls',
+                    $this->reliquidationHtml('Subvencion Sep Prioritario', [-120, -30]),
+                ),
+            ],
+        ])
+            ->assertCreated()
+            ->assertJsonCount(3, 'imports')
+            ->assertJsonCount(3, 'settlements');
+
+        $amounts = AccountingSubsidySettlement::query()
+            ->whereDate('period', '2026-06-01')
+            ->pluck('net_amount', 'subsidy_type');
+        $this->assertSame(150.0, (float) $amounts['normal']);
+        $this->assertSame(-50.0, (float) $amounts['sep_preferente']);
+        $this->assertSame(-150.0, (float) $amounts['sep_prioritario']);
+
+        $negativeLine = AccountingSubsidySettlement::query()
+            ->where('subsidy_type', 'sep_prioritario')
+            ->with('lines.allocations')
+            ->firstOrFail()
+            ->lines
+            ->first();
+        $this->assertSame(-1, $negativeLine->sign);
+        $this->assertSame(150.0, (float) $negativeLine->amount);
+        $this->assertSame([-120.0, -30.0], $negativeLine->allocations->pluck('amount')->map(fn ($amount) => (float) $amount)->all());
     }
 
     public function test_it_accepts_cd_brp_and_assignment_by_tranche_as_predefined_simple_amounts(): void
@@ -416,6 +566,55 @@ class AccountingSubsidyImportTest extends TestCase
         return '<html><body><div>Lista Trabajadores - Bono Escolar Cuota 2</div>'
             .'<div>Establecimiento: 6830 - Colegio</div><div>MES PAGO: JUNIO 2026</div>'
             .'<table>'.$header.$body.'<tr><td colspan="10">Total</td><td>$ 100</td><td>$ 20</td></tr></table></body></html>';
+    }
+
+    private function maintenanceHtml(): string
+    {
+        $headers = [
+            'Periodo', 'Rbd', 'Codigo Ensenanza', 'Nivel', 'Letra Curso', 'Glosa',
+            'Asistencia Promedio Año Anterior', 'Factor Tipo Ensenanza', 'Matricula Promedio Alumno',
+            'Sub Mantenimiento',
+        ];
+        $rows = [
+            ['202601', '6830', '10', '4', 'A', 'NT1', '10,5', '0,5', '12', '$ 100'],
+            ['202601', '6830', '110', '1', 'A', '1° básico', '20,5', '0,8', '25', '$ 200'],
+        ];
+
+        return '<html><head><meta charset="UTF-8"></head><body><div>Listado Cursos del Establecimiento - Mantenimiento</div>'
+            .'<div>MES PAGO: ENERO 2026</div><table><tr><th>'.implode('</th><th>', $headers).'</th></tr>'
+            .collect($rows)->map(fn (array $row): string => '<tr><td>'.implode('</td><td>', $row).'</td></tr>')->implode('')
+            .'<tr><td>Total</td><td>$ 300</td></tr></table><div>Total Pagar $ 300</div></body></html>';
+    }
+
+    /** @param array<int,int> $amounts */
+    private function staffBonusHtml(string $label, array $amounts): string
+    {
+        $headers = ['Periodo', 'Rbd', 'Rut Trabajador', 'Nombre', 'Tipo Persona', 'N° Horas', 'Tramo', 'Tramo Mayor', 'Monto'];
+        $rows = [
+            ['202601', '6830', '11111111-1', 'Trabajador Uno', 'Docente', '44', '1', '1', '$ '.$amounts[0]],
+            ['202601', '6830', '22222222-2', 'Trabajador Dos', 'Asistente', '40', '2', '2', '$ '.$amounts[1]],
+        ];
+
+        return '<html><head><meta charset="UTF-8"></head><body><div>Lista Trabajadores - '.$label.'</div><div>Establecimiento: 6830 - Colegio</div>'
+            .'<div>MES PAGO: MARZO 2026</div><table><tr><th>'.implode('</th><th>', $headers).'</th></tr>'
+            .collect($rows)->map(fn (array $row): string => '<tr><td>'.implode('</td><td>', $row).'</td></tr>')->implode('')
+            .'</table></body></html>';
+    }
+
+    /** @param array<int,int> $differences */
+    private function reliquidationHtml(string $family, array $differences): string
+    {
+        $headers = ['Periodo', 'Rbd', 'Mes', 'Año', 'Monto a Pagar(Rezago)', 'Monto Pagado(NormalMes)', 'Diferencia'];
+        $rows = [
+            ['202603', '6830', 'MARZO', '2026', '$ 1.000', '$ '.(1000 - $differences[0]), '$ '.($differences[0] < 0 ? '-' : '').abs($differences[0])],
+            ['202604', '6830', 'ABRIL', '2026', '$ 1.000', '$ '.(1000 - $differences[1]), '$ '.($differences[1] < 0 ? '-' : '').abs($differences[1])],
+        ];
+
+        return '<html><head><meta charset="UTF-8"></head><body><div>Anexo Detalle Reliquidacion Marzo a Mayo - '.$family.'</div>'
+            .'<div>Establecimiento: 6830 - Colegio</div><div>MES PAGO: JUNIO 2026</div>'
+            .'<table><tr><th>'.implode('</th><th>', $headers).'</th></tr>'
+            .collect($rows)->map(fn (array $row): string => '<tr><td>'.implode('</td><td>', $row).'</td></tr>')->implode('')
+            .'</table></body></html>';
     }
 
     private function amountForLevelType(AccountingSubsidySettlement $settlement, string $type): float

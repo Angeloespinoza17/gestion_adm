@@ -110,7 +110,8 @@ export default {
   <BDropdown
     ref="notificationsDropdown"
     :class="['internal-notifications', { 'internal-notifications--sidebar': sidebar }]"
-    :dropup="sidebar"
+    :container="sidebar ? 'body' : undefined"
+    :dropend="sidebar"
     menu-class="internal-notifications__menu p-0"
     toggle-class="internal-notifications__toggle"
     variant="link"
@@ -124,7 +125,12 @@ export default {
           {{ unreadCount > 99 ? "99+" : unreadCount }}
         </span>
       </span>
-      <span v-if="sidebar" class="internal-notifications__label">Notificaciones</span>
+      <span v-if="sidebar" class="internal-notifications__copy">
+        <strong class="internal-notifications__label">Notificaciones</strong>
+        <small class="internal-notifications__summary">
+          {{ unreadCount ? `${unreadCount} ${unreadCount === 1 ? "pendiente" : "pendientes"}` : "Todo al día" }}
+        </small>
+      </span>
       <span
         v-if="sidebar"
         class="internal-notifications__expand"
@@ -134,7 +140,7 @@ export default {
         aria-label="Ver historial completo de notificaciones"
         @click.stop.prevent="openHistory"
         @keydown.enter.stop.prevent="openHistory"
-      ><i class="bx bx-expand-alt"></i></span>
+      ><i class="bx bx-chevron-right"></i></span>
     </template>
 
     <div class="internal-notifications__header">
@@ -144,7 +150,7 @@ export default {
       </div>
       <div class="internal-notifications__header-actions">
         <button v-if="unreadCount" type="button" @click.stop="markAllAsRead">Marcar todas como leídas</button>
-        <button type="button" class="internal-notifications__history-icon" title="Abrir historial" aria-label="Abrir historial completo" @click.stop="openHistory"><i class="bx bx-expand-alt"></i></button>
+        <button type="button" class="internal-notifications__history-icon" title="Abrir historial" aria-label="Abrir historial completo" @click.stop="openHistory"><i class="bx bx-list-ul"></i></button>
       </div>
     </div>
 
@@ -227,10 +233,19 @@ export default {
 
 :global(.internal-notifications__menu) {
   border: 1px solid var(--bs-border-color);
+  border-radius: 1rem;
   box-shadow: 0 1rem 2.5rem rgba(15, 23, 42, 0.2);
   max-width: calc(100vw - 1.5rem);
   overflow: hidden;
   width: 390px;
+  z-index: 1105;
+}
+
+/* The app's legacy dropdown animation overrides Floating UI coordinates. */
+:global(.internal-notifications__menu.show) {
+  top: 0 !important;
+  left: 0 !important;
+  animation: none !important;
 }
 
 .internal-notifications__header {
@@ -401,31 +416,71 @@ export default {
 
 .internal-notifications--sidebar {
   display: block;
-  margin-bottom: 0.6rem;
+  margin-bottom: 0.7rem;
   width: 100%;
 }
 
 .internal-notifications--sidebar :deep(.dropdown-toggle) {
-  background: rgba(var(--bs-primary-rgb), 0.07);
-  border: 1px solid rgba(var(--bs-primary-rgb), 0.12);
-  border-radius: 0.65rem;
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid rgba(var(--bs-primary-rgb), 0.13);
+  border-radius: 0.95rem;
   color: var(--bs-body-color);
-  gap: 0.65rem;
+  gap: 0.7rem;
   justify-content: flex-start;
-  min-height: 2.55rem;
+  min-height: 4rem;
+  padding: 0.6rem 0.65rem;
   width: 100%;
+  box-shadow: 0 10px 24px rgba(49, 67, 112, 0.06);
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
 }
 
-.internal-notifications--sidebar :deep(.dropdown-toggle:hover) {
-  background: rgba(var(--bs-primary-rgb), 0.12);
+.internal-notifications--sidebar :deep(.dropdown-toggle:hover),
+.internal-notifications--sidebar :deep(.dropdown-toggle:focus-visible),
+.internal-notifications--sidebar :deep(.dropdown-toggle[aria-expanded="true"]) {
+  background: rgba(255, 255, 255, 0.9);
+  border-color: rgba(var(--bs-primary-rgb), 0.27);
   color: var(--bs-primary);
+  box-shadow: 0 14px 28px rgba(49, 67, 112, 0.1);
+  transform: translateY(-1px);
+}
+
+.internal-notifications--sidebar .internal-notifications__bell {
+  align-items: center;
+  background: linear-gradient(145deg, rgba(var(--bs-primary-rgb), 0.14), rgba(var(--bs-primary-rgb), 0.06));
+  border: 1px solid rgba(var(--bs-primary-rgb), 0.1);
+  border-radius: 0.75rem;
+  color: var(--bs-primary);
+  flex: 0 0 2.35rem;
+  height: 2.35rem;
+  justify-content: center;
+  width: 2.35rem;
+}
+
+.internal-notifications--sidebar .internal-notifications__badge {
+  border-color: #fff;
+  right: -0.42rem;
+  top: -0.42rem;
+}
+
+.internal-notifications__copy {
+  display: grid;
+  flex: 1;
+  gap: 0.05rem;
+  min-width: 0;
+  text-align: left;
 }
 
 .internal-notifications__label {
-  flex: 1;
-  font-size: 0.78rem;
+  color: #303b50;
+  font-size: 0.79rem;
+  font-weight: 750;
+  line-height: 1.15;
+}
+
+.internal-notifications__summary {
+  color: #8995aa;
+  font-size: 0.64rem;
   font-weight: 600;
-  text-align: left;
 }
 
 .internal-notifications__expand {
@@ -448,7 +503,7 @@ export default {
   outline: none;
 }
 
-:global(body.vertical-collpsed) .internal-notifications--sidebar :deep(.dropdown-toggle) {
+:global(body.vertical-collpsed .internal-notifications--sidebar .dropdown-toggle) {
   height: 2.95rem;
   justify-content: center;
   margin-inline: auto;
@@ -457,11 +512,29 @@ export default {
   width: 2.95rem;
 }
 
-:global(body.vertical-collpsed) .internal-notifications__label {
+:global(body.vertical-collpsed .internal-notifications__copy) {
   display: none;
 }
 
-:global(body.vertical-collpsed) .internal-notifications__expand {
+:global(body.vertical-collpsed .internal-notifications__expand) {
   display: none;
+}
+
+@media (max-width: 767.98px) {
+  :global(.internal-notifications__menu.show) {
+    position: fixed !important;
+    top: auto !important;
+    right: 0.75rem !important;
+    bottom: 0.75rem !important;
+    left: 0.75rem !important;
+    width: calc(100vw - 1.5rem) !important;
+    max-width: none !important;
+    max-height: calc(100dvh - 1.5rem) !important;
+    transform: none !important;
+  }
+
+  :global(.internal-notifications__menu.show .internal-notifications__list) {
+    max-height: min(430px, calc(100dvh - 9.5rem));
+  }
 }
 </style>

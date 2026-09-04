@@ -48,6 +48,31 @@ const statusCounts = (visits) => {
   ];
 };
 
+export function maintenanceDependencyCalendarDetails(dependency = {}) {
+  const seen = new Set([dependency.code, dependency.name]
+    .map((value) => String(value || "").trim().toLocaleLowerCase("es-CL"))
+    .filter(Boolean));
+  const uniqueDetails = [
+    dependency.distribution,
+    dependency.sector,
+    dependency.zone,
+    dependency.usage,
+  ]
+    .map((value) => String(value || "").trim())
+    .filter((value) => {
+      const normalized = value.toLocaleLowerCase("es-CL");
+      if (!value || seen.has(normalized)) return false;
+      seen.add(normalized);
+      return true;
+    });
+
+  return {
+    code: String(dependency.code || "").trim() || "S/C",
+    name: String(dependency.name || "").trim() || "Dependencia sin nombre",
+    context: uniqueDetails.join(" · "),
+  };
+}
+
 export function buildMaintenanceCalendarDays(calendarMonth, visits) {
   const [year, month] = String(calendarMonth).split("-").map(Number);
   const firstDay = new Date(year, month - 1, 1, 12);
@@ -82,21 +107,39 @@ export function buildMaintenanceCalendarDays(calendarMonth, visits) {
 function calendarCell(day, compactPerson) {
   const visibleLimit = compactPerson ? 3 : 2;
   const events = day.visits.slice(0, visibleLimit).map((visit) => {
+    const dependency = maintenanceDependencyCalendarDetails(visit.dependency);
     const stack = [{
       columns: [
         { text: formatTime(visit.visit_time), width: 31, bold: true, color: statusColor(visit.status) },
-        { text: visit.dependency?.code || "S/C", bold: true, color: COLORS.ink, noWrap: true },
+        { text: dependency.code, bold: true, color: COLORS.ink, noWrap: true },
       ],
       columnGap: 3,
+    }, {
+      text: dependency.name,
+      color: COLORS.ink,
+      bold: true,
+      fontSize: 5.4,
+      noWrap: true,
+      margin: [34, 0.5, 0, 0],
     }];
+
+    if (dependency.context) {
+      stack.push({
+        text: dependency.context,
+        color: COLORS.muted,
+        fontSize: 4.8,
+        noWrap: true,
+        margin: [34, 0.5, 0, 0],
+      });
+    }
 
     if (!compactPerson) {
       stack.push({
         text: visit.responsible || "Sin responsable",
         color: COLORS.muted,
-        fontSize: 5.4,
+        fontSize: 4.8,
         noWrap: true,
-        margin: [34, 0, 0, 0],
+        margin: [34, 0.5, 0, 0],
       });
     }
 
@@ -236,7 +279,7 @@ export function buildMaintenanceVisitsCalendarPdf({
           headerRows: 1,
           keepWithHeaderRows: 1,
           dontBreakRows: true,
-          heights: (row) => (row === 0 ? 18 : 44),
+          heights: (row) => (row === 0 ? 18 : 58),
           widths: ["*", "*", "*", "*", "*", "*", "*"],
           body: [weekdays, ...weeks],
         },

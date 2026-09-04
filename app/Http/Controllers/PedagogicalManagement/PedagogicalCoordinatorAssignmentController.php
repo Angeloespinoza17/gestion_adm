@@ -13,6 +13,7 @@ use App\Services\PedagogicalManagement\PedagogicalCoordinatorAssignmentService;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 class PedagogicalCoordinatorAssignmentController extends Controller
 {
@@ -37,19 +38,30 @@ class PedagogicalCoordinatorAssignmentController extends Controller
         $levels = $courses->pluck('educationLevel')->filter()->unique('id')->sortBy('order')->values()
             ->map(fn ($level): array => ['id' => $level->id, 'name' => $level->name, 'type' => $level->type]);
         $coordinators = User::query()->where('users.active', true)
-            ->whereHas('roles', fn (Builder $roles) => $roles->whereIn('roles.slug', ['coordinadora_academica', 'coordinador_academico'])->where('roles.active', true))
-            ->whereExists(fn ($membership) => $membership->selectRaw('1')
-                ->from('lcd_school_users')
-                ->whereColumn('lcd_school_users.user_id', 'users.id')
-                ->where('lcd_school_users.school_id', $school->id)
-                ->where('lcd_school_users.active', true))
-            ->with(['roles' => fn ($roles) => $roles->whereIn('roles.slug', ['coordinadora_academica', 'coordinador_academico'])->select('roles.id', 'roles.slug', 'roles.name')])
-            ->orderBy('users.name')->get(['users.id', 'users.name', 'users.email'])
+            ->whereHas('roles', fn (Builder $roles) => $roles
+                ->whereIn('roles.slug', PedagogicalCoordinatorAssignmentService::COORDINATOR_ROLE_SLUGS)
+                ->where('roles.active', true))
+            ->with(['roles' => fn ($roles) => $roles
+                ->whereIn('roles.slug', PedagogicalCoordinatorAssignmentService::COORDINATOR_ROLE_SLUGS)
+                ->select('roles.id', 'roles.slug', 'roles.name')])
+            ->orderBy('users.name')
+            ->get(['users.id', 'users.name', 'users.email']);
+        $today = today()->toDateString();
+        $activeSchoolUserIds = DB::table('lcd_school_users')
+            ->where('school_id', $school->id)
+            ->whereIn('user_id', $coordinators->pluck('id'))
+            ->where('active', true)
+            ->where(fn ($dates) => $dates->whereNull('valid_from')->orWhere('valid_from', '<=', $today))
+            ->where(fn ($dates) => $dates->whereNull('valid_to')->orWhere('valid_to', '>=', $today))
+            ->pluck('user_id')
+            ->mapWithKeys(fn ($id): array => [(int) $id => true]);
+        $coordinators = $coordinators
             ->map(fn (User $user): array => [
                 'id' => $user->id,
                 'name' => $user->name,
                 'email' => $user->email,
                 'role' => $user->roles->first()?->name,
+                'has_school_access' => isset($activeSchoolUserIds[(int) $user->id]),
             ]);
 
         $assignments = PedagogicalCoordinatorAssignment::query()

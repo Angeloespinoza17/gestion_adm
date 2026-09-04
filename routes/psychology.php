@@ -27,6 +27,8 @@ Route::middleware(['auth:sanctum', 'permission:psychology.access'])->prefix('psy
     Route::get('/cases', [PsychologyCaseController::class, 'index']);
     Route::post('/cases', [PsychologyCaseController::class, 'store'])->middleware(['permission:psychology.cases.create', 'throttle:30,1']);
     Route::get('/cases/{case}', [PsychologyCaseController::class, 'show']);
+    Route::patch('/cases/{case}', [PsychologyCaseController::class, 'update'])->middleware('throttle:60,1');
+    Route::post('/cases/{case}/export', [PsychologyCaseController::class, 'export'])->middleware('throttle:20,1');
     Route::post('/cases/{case}/assign', [PsychologyCaseController::class, 'assign'])->middleware('permission:psychology.cases.reassign');
     Route::post('/cases/{case}/close', [PsychologyCaseController::class, 'close'])->middleware('permission:psychology.cases.close');
     Route::post('/cases/{case}/reopen', [PsychologyCaseController::class, 'reopen'])->middleware('permission:psychology.cases.reopen');

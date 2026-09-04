@@ -5,6 +5,7 @@ namespace App\Models;
 use App\Models\It\ItEquipment;
 use App\Models\RiskPrevention\RiskPreventionEppItem;
 use App\Models\Security\SecurityIncident;
+use App\Models\Supply\SupplyItem;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -137,5 +138,10 @@ class InventoryItem extends Model
     public function eppItem(): HasOne
     {
         return $this->hasOne(RiskPreventionEppItem::class, 'inventory_item_id');
+    }
+
+    public function supplyItem(): HasOne
+    {
+        return $this->hasOne(SupplyItem::class, 'inventory_item_id');
     }
 }

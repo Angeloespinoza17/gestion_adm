@@ -56,7 +56,8 @@ class PedagogicalInstrumentResource extends JsonResource
             'reviews' => $this->whenLoaded('reviews', fn () => PedagogicalReviewResource::collection($this->reviews)),
             'latest_review' => $this->whenLoaded('latestReview', fn () => $this->latestReview ? new PedagogicalReviewResource($this->latestReview) : null),
             'latest_ai_report' => $this->when(
-                $request->user()?->hasPermission('pedagogical-instruments.ai-report') === true,
+                $request->user()?->hasPermission('pedagogical-instruments.ai-report') === true
+                    || $request->user()?->hasPermission('pedagogical-instruments.ai-workspace') === true,
                 fn () => $this->relationLoaded('latestAiReport') && $this->latestAiReport ? new PedagogicalAiReportResource($this->latestAiReport) : null,
             ),
             'created_at' => $this->created_at?->toIso8601String(), 'updated_at' => $this->updated_at?->toIso8601String(),

@@ -11,6 +11,10 @@ use App\Services\Library\BibliotecaInventoryService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
+use Illuminate\Validation\ValidationException;
+use Throwable;
 
 class BibliotecaInventoryController extends Controller
 {
@@ -119,6 +123,7 @@ class BibliotecaInventoryController extends Controller
     {
         $this->authorize('update', $ejemplar);
 
+        $previousPhotoUrls = (array) ($ejemplar->photo_urls ?? []);
         $changes = $request->validated();
         if (! empty($changes['biblioteca_ubicacion_id'])) {
             $changes['physical_location'] = BibliotecaUbicacion::query()
@@ -143,9 +148,116 @@ class BibliotecaInventoryController extends Controller
             ['movement_date' => now()]
         );
 
+        if (array_key_exists('photo_urls', $changes)) {
+            $this->deleteRemovedManagedPhotos(
+                $ejemplar,
+                $previousPhotoUrls,
+                (array) ($changes['photo_urls'] ?? [])
+            );
+        }
+
         return response()->json([
             'message' => 'Ejemplar actualizado correctamente.',
             'data' => $ejemplar->fresh(['obra']),
+        ]);
+    }
+
+    public function uploadPhotos(Request $request, BibliotecaEjemplar $ejemplar): JsonResponse
+    {
+        $this->authorize('update', $ejemplar);
+        $payload = $request->validate([
+            'photos' => ['required', 'array', 'min:1', 'max:6'],
+            'photos.*' => ['required', 'file', 'max:10240'],
+        ]);
+        $currentUrls = collect((array) ($ejemplar->photo_urls ?? []))
+            ->filter(fn ($url): bool => is_string($url) && $url !== '')
+            ->unique()
+            ->values();
+        $photos = collect($payload['photos']);
+
+        if ($currentUrls->count() + $photos->count() > 12) {
+            throw ValidationException::withMessages([
+                'photos' => 'Cada ejemplar admite un máximo de 12 fotografías de evidencia.',
+            ]);
+        }
+
+        $storedPaths = [];
+        $newUrls = [];
+
+        try {
+            foreach ($photos as $photo) {
+                $extension = $this->extensionForPhotoMime((string) $photo->getMimeType());
+                if (! $extension) {
+                    throw ValidationException::withMessages([
+                        'photos' => 'Las fotografías deben estar en formato JPG, PNG, WebP, HEIC o HEIF.',
+                    ]);
+                }
+
+                $filename = Str::uuid()->toString().'.'.$extension;
+                $directory = 'library/inventory-evidence/'.$ejemplar->id;
+                $path = $photo->storeAs($directory, $filename, 'local');
+                if (! $path) {
+                    throw ValidationException::withMessages([
+                        'photos' => 'No fue posible almacenar una de las fotografías.',
+                    ]);
+                }
+                $storedPaths[] = $path;
+                $newUrls[] = $this->managedPhotoUrl($ejemplar, $filename);
+            }
+
+            DB::transaction(function () use ($ejemplar, $newUrls, $request): void {
+                $locked = BibliotecaEjemplar::query()->lockForUpdate()->findOrFail($ejemplar->id);
+                $lockedUrls = collect((array) ($locked->photo_urls ?? []))
+                    ->filter(fn ($url): bool => is_string($url) && $url !== '')
+                    ->merge($newUrls)
+                    ->unique()
+                    ->values();
+                if ($lockedUrls->count() > 12) {
+                    throw ValidationException::withMessages([
+                        'photos' => 'Cada ejemplar admite un máximo de 12 fotografías de evidencia.',
+                    ]);
+                }
+
+                $this->inventoryService->moveEjemplar(
+                    $locked->fresh(['obra']),
+                    $request->user(),
+                    'ajuste',
+                    ['photo_urls' => $lockedUrls->all()],
+                    count($newUrls) === 1
+                        ? 'Evidencia fotográfica incorporada desde Inventario.'
+                        : 'Evidencias fotográficas incorporadas desde Inventario.',
+                    ['movement_date' => now(), 'photo_count_added' => count($newUrls)]
+                );
+            }, 3);
+        } catch (Throwable $exception) {
+            if ($storedPaths !== []) {
+                Storage::disk('local')->delete($storedPaths);
+            }
+
+            throw $exception;
+        }
+
+        return response()->json([
+            'message' => count($newUrls) === 1
+                ? 'Fotografía incorporada al inventario.'
+                : 'Fotografías incorporadas al inventario.',
+            'data' => $ejemplar->fresh(['obra']),
+        ]);
+    }
+
+    public function photo(BibliotecaEjemplar $ejemplar, string $photo)
+    {
+        $this->authorize('view', $ejemplar);
+        $expectedUrl = $this->managedPhotoUrl($ejemplar, $photo);
+        abort_unless(in_array($expectedUrl, (array) ($ejemplar->photo_urls ?? []), true), 404);
+
+        $path = 'library/inventory-evidence/'.$ejemplar->id.'/'.$photo;
+        abort_unless(Storage::disk('local')->exists($path), 404);
+
+        return Storage::disk('local')->response($path, $photo, [
+            'Cache-Control' => 'private, max-age=3600',
+            'Content-Disposition' => 'inline; filename="'.$photo.'"',
+            'X-Content-Type-Options' => 'nosniff',
         ]);
     }
 
@@ -257,5 +369,44 @@ class BibliotecaInventoryController extends Controller
             'message' => 'Ejemplar dado de baja correctamente.',
             'data' => $ejemplar->fresh(['obra']),
         ]);
+    }
+
+    /** @param array<int, mixed> $previousUrls
+     * @param  array<int, mixed>  $currentUrls
+     */
+    private function deleteRemovedManagedPhotos(BibliotecaEjemplar $ejemplar, array $previousUrls, array $currentUrls): void
+    {
+        collect(array_diff($previousUrls, $currentUrls))
+            ->filter(fn ($url): bool => is_string($url))
+            ->each(function (string $url) use ($ejemplar): void {
+                $prefix = '/api/biblioteca/ejemplares/'.$ejemplar->id.'/photos/';
+                if (! str_starts_with($url, $prefix)) {
+                    return;
+                }
+
+                $filename = basename($url);
+                if (preg_match('/^[a-f0-9-]+\.(?:jpe?g|png|webp|heic|heif)$/i', $filename) !== 1) {
+                    return;
+                }
+
+                Storage::disk('local')->delete('library/inventory-evidence/'.$ejemplar->id.'/'.$filename);
+            });
+    }
+
+    private function managedPhotoUrl(BibliotecaEjemplar $ejemplar, string $filename): string
+    {
+        return '/api/biblioteca/ejemplares/'.$ejemplar->id.'/photos/'.$filename;
+    }
+
+    private function extensionForPhotoMime(string $mime): ?string
+    {
+        return match (strtolower($mime)) {
+            'image/jpeg', 'image/jpg', 'image/pjpeg' => 'jpg',
+            'image/png' => 'png',
+            'image/webp' => 'webp',
+            'image/heic', 'image/x-heic' => 'heic',
+            'image/heif', 'image/x-heif' => 'heif',
+            default => null,
+        };
     }
 }

@@ -12,7 +12,7 @@ use Smalot\PdfParser\Parser as PdfParser;
 
 class MineducSubsidyParser
 {
-    public const VERSION = '1.2';
+    public const VERSION = '1.3';
 
     /**
      * @return array<string, mixed>
@@ -104,6 +104,19 @@ class MineducSubsidyParser
         }
         if (str_contains($documentKey, 'bono escolar') && str_contains($documentKey, 'trabajador')) {
             return $this->parseSchoolBonusRoster($html, $originalName, $rbd, $period);
+        }
+        if (str_contains($documentKey, 'listado cursos') && str_contains($documentKey, 'mantenimiento')) {
+            return $this->parseMaintenanceRoster($html, $plain, $originalName, $rbd, $period);
+        }
+        if (str_contains($documentKey, 'trabajador') && (
+            str_contains($documentKey, 'bono especial')
+            || str_contains($documentKey, 'bono vacaciones')
+            || str_contains($documentKey, 'aguinaldo navidad')
+        )) {
+            return $this->parseStaffBonusRoster($html, $originalName, $rbd, $period);
+        }
+        if (str_contains($documentKey, 'reliquidacion') && str_contains($documentKey, 'monto a pagar')) {
+            return $this->parseReliquidationAnnex($html, $originalName, $rbd, $period);
         }
         $spec = $this->htmlSpec($originalName, $plain);
 
@@ -397,6 +410,328 @@ class MineducSubsidyParser
                 'worker_count' => count($workerRuts),
                 'dependent_count' => count($allocations),
                 'bonus_components' => $components,
+            ],
+        ];
+    }
+
+    /**
+     * Mantenimiento is an annual subsidy paid by course. The annex contains
+     * enough educational detail to preserve the allocation by level.
+     *
+     * @return array<string, mixed>
+     */
+    private function parseMaintenanceRoster(
+        string $html,
+        string $plain,
+        string $originalName,
+        string $rbd,
+        CarbonImmutable $period,
+    ): array {
+        $table = $this->findTableWithHeaders($html, [
+            'periodo',
+            'rbd',
+            'codigo ensenanza',
+            'sub mantenimiento',
+        ]);
+        $headers = $table['headers'];
+        $indexes = [
+            'period' => $this->headerIndex($headers, ['periodo']),
+            'rbd' => $this->headerIndex($headers, ['rbd']),
+            'teaching_code' => $this->headerIndex($headers, ['codigo ensenanza']),
+            'grade' => $this->headerIndex($headers, ['nivel']),
+            'course_letter' => $this->headerIndex($headers, ['letra curso']),
+            'label' => $this->headerIndex($headers, ['glosa']),
+            'attendance' => $this->headerIndex($headers, ['asistencia promedio año anterior']),
+            'enrollment' => $this->headerIndex($headers, ['matricula promedio alumno']),
+            'factor' => $this->headerIndex($headers, ['factor tipo ensenanza']),
+            'amount' => $this->headerIndex($headers, ['sub mantenimiento']),
+        ];
+        $allocations = [];
+
+        foreach ($table['rows'] as $row) {
+            $rowRbd = $this->numericCode($row[$indexes['rbd']] ?? null);
+            $teachingCode = $this->numericCode($row[$indexes['teaching_code']] ?? null);
+            $amount = $this->parseMoney($row[$indexes['amount']] ?? null);
+            if ($rowRbd === null || $teachingCode === null || $amount <= 0) {
+                continue;
+            }
+
+            $payload = $this->rowPayload($headers, $row);
+            $payload['_maintenance'] = [
+                'source_period' => $this->nullableText($row[$indexes['period']] ?? null),
+                'attendance_previous_year' => $this->parseLocalizedDecimal($row[$indexes['attendance']] ?? null),
+                'average_enrollment' => $this->parseLocalizedDecimal($row[$indexes['enrollment']] ?? null),
+                'calculation_factor' => $this->parseLocalizedDecimal($row[$indexes['factor']] ?? null),
+                'amount' => $amount,
+            ];
+
+            $allocations[] = [
+                'teaching_code' => (string) $teachingCode,
+                'grade_code' => ($grade = $this->numericCode($row[$indexes['grade']] ?? null)) === null ? null : (string) $grade,
+                'course_letter' => $this->nullableText($row[$indexes['course_letter']] ?? null),
+                'education_label' => $this->nullableText($row[$indexes['label']] ?? null),
+                'enrollment' => $payload['_maintenance']['average_enrollment'],
+                'attendance_average' => $payload['_maintenance']['attendance_previous_year'],
+                'use_factor' => $payload['_maintenance']['calculation_factor'],
+                'amount' => $amount,
+                'source_payload' => $payload,
+                'source_row_hash' => hash('sha256', 'maintenance|'.json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)),
+            ];
+        }
+
+        if ($allocations === []) {
+            throw new RuntimeException('El anexo de Mantenimiento no contiene cursos reconocibles.');
+        }
+
+        $allocatedTotal = array_sum(array_column($allocations, 'amount'));
+        $declaredTotal = $this->firstMoney($plain, [
+            '/Total\s+Pagar\s*\$\s*([\d.,-]+)/iu',
+            '/Monto\s+Base\s+Mantenimiento(?:\s*\(\d+\))?\s*\$\s*([\d.,-]+)/iu',
+        ]);
+        $total = $declaredTotal > 0 ? $declaredTotal : $allocatedTotal;
+        $warnings = $declaredTotal > 0 && $declaredTotal !== $allocatedTotal
+            ? [sprintf('El total declarado de Mantenimiento difiere en $ %s del detalle por curso.', number_format($declaredTotal - $allocatedTotal, 0, ',', '.'))]
+            : [];
+
+        return [
+            'detected_format' => 'html_xls',
+            'source_type' => 'maintenance_course_roster',
+            'family' => 'maintenance',
+            'rbd' => $rbd,
+            'period' => $period,
+            'declared_total' => $total,
+            'lines' => [$this->line(
+                'maintenance',
+                'Subvención de Mantenimiento',
+                'haber',
+                1,
+                $total,
+                false,
+                true,
+                $allocations,
+                ['row_count' => count($allocations), 'allocated_total' => $allocatedTotal],
+            )],
+            'warnings' => $warnings,
+            'metadata' => [
+                'original_filename' => $originalName,
+                'row_count' => count($allocations),
+                'allocated_total' => $allocatedTotal,
+            ],
+        ];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function parseStaffBonusRoster(
+        string $html,
+        string $originalName,
+        string $rbd,
+        CarbonImmutable $period,
+    ): array {
+        $key = Str::lower(Str::ascii($originalName));
+        [$conceptCode, $conceptName, $sourceType] = match (true) {
+            str_contains($key, 'bono_especial') => ['staff_special_bonus', 'Bono Especial', 'staff_special_bonus_roster'],
+            str_contains($key, 'bono_vacaciones') => ['staff_vacation_bonus', 'Bono de Vacaciones', 'staff_vacation_bonus_roster'],
+            str_contains($key, 'aguinaldo_navidad') => ['staff_christmas_bonus', 'Aguinaldo de Navidad', 'staff_christmas_bonus_roster'],
+            default => throw new RuntimeException('No se pudo identificar el tipo de bono al personal.'),
+        };
+        $table = $this->findTableWithHeaders($html, [
+            'periodo',
+            'rbd',
+            'rut trabajador',
+            'nombre',
+            'tipo persona',
+            'monto',
+        ]);
+        $headers = $table['headers'];
+        $indexes = [
+            'period' => $this->headerIndex($headers, ['periodo']),
+            'rbd' => $this->headerIndex($headers, ['rbd']),
+            'worker_rut' => $this->headerIndex($headers, ['rut trabajador']),
+            'worker_name' => $this->headerIndex($headers, ['nombre']),
+            'worker_type' => $this->headerIndex($headers, ['tipo persona']),
+            'hours' => $this->headerIndex($headers, ['n horas', 'na horas']),
+            'tranche' => $this->headerIndex($headers, ['tramo']),
+            'higher_tranche' => $this->headerIndex($headers, ['tramo mayor']),
+            'amount' => $this->headerIndex($headers, ['monto']),
+        ];
+        $allocations = [];
+        $workerRuts = [];
+
+        foreach ($table['rows'] as $row) {
+            $rowRbd = $this->numericCode($row[$indexes['rbd']] ?? null);
+            $workerRut = $this->nullableText($row[$indexes['worker_rut']] ?? null);
+            $amount = $this->parseMoney($row[$indexes['amount']] ?? null);
+            if ($rowRbd === null || $workerRut === null || $amount <= 0) {
+                continue;
+            }
+
+            $payload = $this->rowPayload($headers, $row);
+            $payload['_staff_bonus'] = [
+                'bonus_type' => $conceptCode,
+                'source_period' => $this->nullableText($row[$indexes['period']] ?? null),
+                'worker_rut' => $workerRut,
+                'worker_name' => $this->nullableText($row[$indexes['worker_name']] ?? null),
+                'worker_type' => $this->nullableText($row[$indexes['worker_type']] ?? null),
+                'hours' => $this->parseLocalizedDecimal($row[$indexes['hours']] ?? null),
+                'tranche' => $this->numericCode($row[$indexes['tranche']] ?? null),
+                'higher_tranche' => $this->numericCode($row[$indexes['higher_tranche']] ?? null),
+                'amount' => $amount,
+            ];
+            $workerRuts[$workerRut] = true;
+
+            $allocations[] = [
+                'teaching_code' => null,
+                'grade_code' => null,
+                'course_letter' => null,
+                'education_label' => $payload['_staff_bonus']['worker_type'],
+                'enrollment' => 1,
+                'attendance_average' => null,
+                'use_factor' => $payload['_staff_bonus']['hours'],
+                'amount' => $amount,
+                'source_payload' => $payload,
+                'source_row_hash' => hash('sha256', $conceptCode.'|'.json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)),
+            ];
+        }
+
+        if ($allocations === []) {
+            throw new RuntimeException('La nómina de bonos no contiene trabajadores reconocibles.');
+        }
+
+        $total = array_sum(array_column($allocations, 'amount'));
+
+        return [
+            'detected_format' => 'html_xls',
+            'source_type' => $sourceType,
+            'family' => 'staff_bonuses',
+            'rbd' => $rbd,
+            'period' => $period,
+            'declared_total' => $total,
+            'lines' => [$this->line(
+                $conceptCode,
+                $conceptName,
+                'haber',
+                1,
+                $total,
+                false,
+                false,
+                $allocations,
+                [
+                    'worker_count' => count($workerRuts),
+                    'row_count' => count($allocations),
+                    'education_distribution_not_applicable' => true,
+                ],
+            )],
+            'warnings' => ['La nómina de bonos se conserva por trabajador y no corresponde distribuirla por nivel educativo.'],
+            'metadata' => [
+                'original_filename' => $originalName,
+                'worker_count' => count($workerRuts),
+                'row_count' => count($allocations),
+            ],
+        ];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function parseReliquidationAnnex(
+        string $html,
+        string $originalName,
+        string $rbd,
+        CarbonImmutable $period,
+    ): array {
+        $key = Str::lower(Str::ascii($originalName));
+        $family = str_contains($key, 'sep_prioritario')
+            ? 'sep_prioritario'
+            : (str_contains($key, 'sep_preferente') ? 'sep_preferente' : 'normal');
+        $table = $this->findTableWithHeaders($html, [
+            'periodo',
+            'rbd',
+            'mes',
+            'año',
+            'monto a pagar rezago',
+            'monto pagado normalmes',
+            'diferencia',
+        ]);
+        $headers = $table['headers'];
+        $indexes = [
+            'period' => $this->headerIndex($headers, ['periodo']),
+            'rbd' => $this->headerIndex($headers, ['rbd']),
+            'month' => $this->headerIndex($headers, ['mes']),
+            'year' => $this->headerIndex($headers, ['año']),
+            'expected' => $this->headerIndex($headers, ['monto a pagar rezago']),
+            'paid' => $this->headerIndex($headers, ['monto pagado normalmes']),
+            'difference' => $this->headerIndex($headers, ['diferencia']),
+        ];
+        $allocations = [];
+
+        foreach ($table['rows'] as $row) {
+            $rowRbd = $this->numericCode($row[$indexes['rbd']] ?? null);
+            $sourcePeriod = $this->numericCode($row[$indexes['period']] ?? null);
+            if ($rowRbd === null || $sourcePeriod === null) {
+                continue;
+            }
+
+            $payload = $this->rowPayload($headers, $row);
+            $payload['_reliquidation'] = [
+                'source_period' => (string) $sourcePeriod,
+                'month' => $this->nullableText($row[$indexes['month']] ?? null),
+                'year' => $this->numericCode($row[$indexes['year']] ?? null),
+                'expected_amount' => $this->parseMoney($row[$indexes['expected']] ?? null),
+                'paid_amount' => $this->parseMoney($row[$indexes['paid']] ?? null),
+                'difference' => $this->parseMoney($row[$indexes['difference']] ?? null),
+            ];
+
+            $allocations[] = [
+                'teaching_code' => null,
+                'grade_code' => null,
+                'course_letter' => null,
+                'education_label' => $payload['_reliquidation']['month'],
+                'enrollment' => null,
+                'attendance_average' => null,
+                'use_factor' => null,
+                'amount' => $payload['_reliquidation']['difference'],
+                'source_payload' => $payload,
+                'source_row_hash' => hash('sha256', $family.'|reliquidation|'.json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)),
+            ];
+        }
+
+        if ($allocations === []) {
+            throw new RuntimeException('El anexo de reliquidación no contiene períodos reconocibles.');
+        }
+
+        $netDifference = array_sum(array_column($allocations, 'amount'));
+
+        return [
+            'detected_format' => 'html_xls',
+            'source_type' => $family.'_reliquidation_annex',
+            'family' => $family,
+            'rbd' => $rbd,
+            'period' => $period,
+            'declared_total' => $netDifference,
+            'lines' => [$this->line(
+                'reliquidation',
+                'Reliquidación marzo a mayo',
+                'reliquidacion',
+                $netDifference < 0 ? -1 : 1,
+                abs($netDifference),
+                false,
+                false,
+                $allocations,
+                [
+                    'row_count' => count($allocations),
+                    'positive_adjustments' => array_sum(array_filter(array_column($allocations, 'amount'), fn ($amount) => $amount > 0)),
+                    'negative_adjustments' => array_sum(array_filter(array_column($allocations, 'amount'), fn ($amount) => $amount < 0)),
+                    'net_difference' => $netDifference,
+                    'education_distribution_not_applicable' => true,
+                ],
+            )],
+            'warnings' => [],
+            'metadata' => [
+                'original_filename' => $originalName,
+                'row_count' => count($allocations),
+                'net_difference' => $netDifference,
             ],
         ];
     }
@@ -1012,7 +1347,8 @@ class MineducSubsidyParser
     private function parseMoney(mixed $value): int
     {
         $text = trim((string) $value);
-        $negative = str_starts_with($text, '-') || (str_starts_with($text, '(') && str_ends_with($text, ')'));
+        $negative = preg_match('/[-−]\s*[\d.]+/u', $text) === 1
+            || (str_starts_with($text, '(') && str_ends_with($text, ')'));
         $digits = preg_replace('/\D/', '', $text);
         $amount = $digits === '' ? 0 : (int) $digits;
 

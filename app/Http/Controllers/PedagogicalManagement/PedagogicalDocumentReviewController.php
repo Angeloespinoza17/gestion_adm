@@ -28,7 +28,10 @@ class PedagogicalDocumentReviewController extends Controller
             'per_page' => ['sometimes', 'integer', 'between:10,100'],
         ]);
         $query = $access->visibleQuery($request->user())
-            ->where('workflow_status', '!=', InstrumentWorkflowStatus::Archived->value)
+            ->whereNotIn('workflow_status', [
+                InstrumentWorkflowStatus::Draft->value,
+                InstrumentWorkflowStatus::Archived->value,
+            ])
             ->with([
                 'school:id,name,rbd', 'academicYear:id,name,year', 'owner:id,name',
                 'subject:id,name,code,color', 'courses:id,display_name,education_level_id',

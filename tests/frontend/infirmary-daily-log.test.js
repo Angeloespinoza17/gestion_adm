@@ -82,6 +82,41 @@ describe("Bitácora diaria de Enfermería", () => {
     expect(wrapper.text()).not.toContain("Cursos asociados");
   });
 
+  it("renders a compact traceability file with clear protected actions", async () => {
+    const entry = {
+      id: 17,
+      student_profile_id: 44,
+      course_section_id: 8,
+      happened_at: "2026-08-21 10:45:00",
+      category: "observacion_general",
+      priority: "media",
+      status: "registrado",
+      title: "Control de jornada",
+      detail: "Se registró el antecedente informado durante la jornada.",
+      action_taken: "Se coordinó la medida correspondiente.",
+      requires_follow_up: false,
+      follow_up_note: null,
+      student: { id: 44, first_name: "Antonia", last_name: "Soto", registered_name: "Antonia Soto", rut: "21.111.222-3" },
+      course_section: { id: 8, display_name: "1° medio A" },
+      registered_by: { id: 2, name: "Enfermería" },
+    };
+    axios.get.mockImplementation((url) => Promise.resolve({
+      data: url.endsWith("/catalogs")
+        ? catalogs
+        : { ...indexResponse, data: [entry], total: 1, from: 1, to: 1 },
+    }));
+
+    const wrapper = mountView();
+    await flushPromises();
+    await wrapper.find('button[title="Ver ficha"]').trigger("click");
+
+    expect(wrapper.find(".log-file__hero").exists()).toBe(true);
+    expect(wrapper.findAll(".log-file__detail")).toHaveLength(2);
+    expect(wrapper.find(".log-file__continuity").text()).toContain("Sin seguimiento pendiente");
+    expect(wrapper.find(".log-file__privacy").text()).toContain("Registro protegido");
+    expect(wrapper.find(".log-file__primary-action").text()).toContain("Editar registro");
+  });
+
   it("uses a student datalist, derives the course and enables follow-up", async () => {
     const wrapper = mountView();
     await flushPromises();

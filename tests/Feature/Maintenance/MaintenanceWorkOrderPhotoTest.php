@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Maintenance;
 
+use App\Models\MaintenanceEvidencePhoto;
 use App\Models\MaintenanceWorkOrder;
 use App\Models\Permission;
 use App\Models\Role;
@@ -21,7 +22,7 @@ class MaintenanceWorkOrderPhotoTest extends TestCase
         parent::setUp();
 
         Storage::fake('public');
-        Sanctum::actingAs($this->authorizedUser('crear_ot'));
+        Sanctum::actingAs($this->authorizedUser(['crear_ot', 'editar_ot']));
     }
 
     public function test_supported_upload_formats_are_normalized_to_jpeg(): void
@@ -66,6 +67,63 @@ class MaintenanceWorkOrderPhotoTest extends TestCase
 
         $this->assertDatabaseCount('maintenance_work_orders', $workOrderCount);
         Storage::disk('public')->assertDirectoryEmpty('maintenance/work-orders');
+    }
+
+    public function test_work_order_accepts_three_photos_across_create_and_update_and_allows_removal(): void
+    {
+        $created = $this->withHeader('Accept', 'application/json')->post(
+            '/api/maintenance/work-orders',
+            $this->validPayload([
+                'photos' => [
+                    $this->fakeImage('jpg'),
+                    $this->fakeImage('png'),
+                ],
+            ])
+        );
+
+        $created
+            ->assertCreated()
+            ->assertJsonCount(2, 'data.evidence_photos')
+            ->assertJsonCount(2, 'data.photo_urls');
+
+        $workOrderId = $created->json('data.id');
+        $primaryPath = $created->json('data.photo_reference');
+
+        $this->withHeader('Accept', 'application/json')->post(
+            "/api/maintenance/work-orders/{$workOrderId}",
+            $this->validPayload([
+                '_method' => 'PUT',
+                'photos' => [$this->fakeImage('webp')],
+            ])
+        )
+            ->assertOk()
+            ->assertJsonCount(3, 'data.evidence_photos')
+            ->assertJsonCount(3, 'data.photo_urls');
+
+        $this->withHeader('Accept', 'application/json')->post(
+            "/api/maintenance/work-orders/{$workOrderId}",
+            $this->validPayload([
+                '_method' => 'PUT',
+                'photos' => [$this->fakeImage('gif')],
+            ])
+        )
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('photos');
+
+        $this->assertSame(3, MaintenanceEvidencePhoto::query()->where('maintenance_work_order_id', $workOrderId)->count());
+
+        $primaryPhoto = MaintenanceEvidencePhoto::query()
+            ->where('maintenance_work_order_id', $workOrderId)
+            ->where('path', $primaryPath)
+            ->firstOrFail();
+
+        $this->deleteJson("/api/maintenance/work-orders/{$workOrderId}/photos/{$primaryPhoto->id}")
+            ->assertOk()
+            ->assertJsonCount(2, 'data.evidence_photos')
+            ->assertJsonCount(2, 'data.photo_urls');
+
+        Storage::disk('public')->assertMissing($primaryPath);
+        $this->assertNotSame($primaryPath, MaintenanceWorkOrder::query()->findOrFail($workOrderId)->photo_reference);
     }
 
     public function test_photo_url_distinguishes_managed_external_and_legacy_references(): void
@@ -119,7 +177,7 @@ class MaintenanceWorkOrderPhotoTest extends TestCase
         return UploadedFile::fake()->createWithContent("foto.{$format}", $contents);
     }
 
-    private function authorizedUser(string $permissionSlug): User
+    private function authorizedUser(array|string $permissionSlugs): User
     {
         $user = User::factory()->create(['active' => true, 'user_type' => 'staff']);
         $role = Role::query()->create([
@@ -127,11 +185,13 @@ class MaintenanceWorkOrderPhotoTest extends TestCase
             'slug' => 'mantencion-fotos',
             'active' => true,
         ]);
-        $permission = Permission::query()->firstOrCreate(
-            ['slug' => $permissionSlug],
-            ['name' => 'Gestionar fotos de mantención', 'active' => true]
-        );
-        $role->permissions()->attach($permission);
+        foreach ((array) $permissionSlugs as $permissionSlug) {
+            $permission = Permission::query()->firstOrCreate(
+                ['slug' => $permissionSlug],
+                ['name' => 'Gestionar fotos de mantención', 'active' => true]
+            );
+            $role->permissions()->attach($permission);
+        }
         $user->roles()->attach($role);
 
         return $user;

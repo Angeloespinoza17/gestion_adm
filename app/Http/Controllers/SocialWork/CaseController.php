@@ -16,6 +16,29 @@ use Illuminate\Validation\Rule;
 
 class CaseController extends Controller
 {
+    private const DETAIL_RELATIONS = [
+        'student',
+        'students',
+        'academicYear:id,name,year',
+        'courseSection:id,display_name',
+        'responsible:id,name,email',
+        'statusHistory.user:id,name',
+        'reopenings.user:id,name',
+        'interventions.responsible:id,name',
+        'interventions.commitments.responsible:id,name',
+        'alerts.responsible:id,name',
+        'referrals.assignedUser:id,name',
+        'protocols.protocol:id,name,code',
+        'protocols.version',
+        'protocols.stepLinks',
+        'reports.versions',
+        'documents',
+        'commitments.responsible:id,name',
+        'protocolZero',
+        'requestedInformation',
+        'riskAssessments',
+    ];
+
     public function index(Request $request, AccessService $access): JsonResponse
     {
         $query = $access->applyCaseVisibility(SocialCase::query(), $request->user())->with(['student:id,first_name,last_name,registered_name,rut', 'courseSection:id,display_name', 'responsible:id,name'])->withCount(['interventions', 'alerts', 'protocols']);
@@ -33,10 +56,33 @@ class CaseController extends Controller
     public function show(Request $request, SocialCase $case, AccessService $access, AuditService $audit): JsonResponse
     {
         abort_unless($access->canViewCase($request->user(), $case), 403);
-        $case->load(['student', 'students', 'academicYear:id,name,year', 'courseSection:id,display_name', 'responsible:id,name,email', 'statusHistory.user:id,name', 'reopenings.user:id,name', 'interventions.responsible:id,name', 'interventions.commitments', 'alerts.responsible:id,name', 'referrals.assignedUser:id,name', 'protocols.protocol:id,name,code', 'protocols.version', 'reports.versions', 'documents']);
-        if (! $request->user()->hasPermission('social_work.highly_confidential.view')) $case->interventions->each->makeHidden(['highly_confidential_notes']);
+        $this->loadCaseDetail($request, $case);
         if ($case->confidentiality === 'altamente_restringido') $audit->record('case.highly_confidential_accessed', $case, $request->user());
         return response()->json(['data' => new SocialCaseResource($case)]);
+    }
+
+    public function export(Request $request, SocialCase $case, AccessService $access, AuditService $audit): JsonResponse
+    {
+        abort_unless($access->canViewCase($request->user(), $case), 403);
+        $this->loadCaseDetail($request, $case);
+        $includeHighlyConfidential = $request->user()->hasPermission('social_work.highly_confidential.view');
+        $audit->record('case.pdf_exported', $case, $request->user(), [], [
+            'included_highly_confidential_content' => $includeHighlyConfidential,
+        ]);
+
+        return response()->json([
+            'message' => 'Expediente social autorizado para exportación.',
+            'generated_at' => now()->toIso8601String(),
+            'data' => (new SocialCaseResource($case))->resolve($request),
+        ]);
+    }
+
+    private function loadCaseDetail(Request $request, SocialCase $case): void
+    {
+        $case->load(self::DETAIL_RELATIONS);
+        if (! $request->user()->hasPermission('social_work.highly_confidential.view')) {
+            $case->interventions->each->makeHidden(['highly_confidential_notes']);
+        }
     }
 
     public function update(Request $request, SocialCase $case, AccessService $access, AuditService $audit): JsonResponse

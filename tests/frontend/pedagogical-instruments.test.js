@@ -4,6 +4,8 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
+    aiWorkspacePolling,
+    aiWorkspacePollingDecision,
     analysisIsStale,
     errorMessage,
     instrumentFileIcon,
@@ -63,6 +65,20 @@ describe("Gestión pedagógica · análisis de instrumentos", () => {
         ).toContain("supera");
     });
 
+    it("accepts exactly 30 MB and rejects the next byte with the configured limit", () => {
+        const base = {
+            name: "instrumento.pdf",
+            type: "application/pdf",
+        };
+
+        expect(
+            validateInstrumentCandidate({ ...base, size: 30 * 1024 * 1024 })
+        ).toBeNull();
+        expect(
+            validateInstrumentCandidate({ ...base, size: 30 * 1024 * 1024 + 1 })
+        ).toBe("El archivo supera el máximo de 30 MB.");
+    });
+
     it("communicates deterministic review states in human language", () => {
         expect(statusPresentation("review_required")).toEqual({
             label: "Con errores",
@@ -103,31 +119,63 @@ describe("Gestión pedagógica · análisis de instrumentos", () => {
 
     it("keeps the new role surfaces and explicit decisions in their own views", () => {
         const teacher = readFileSync(
-            resolve(process.cwd(), "resources/js/views/pedagogical-management/teacher-instruments.vue"),
+            resolve(
+                process.cwd(),
+                "resources/js/views/pedagogical-management/teacher-instruments.vue"
+            ),
             "utf8"
         );
         const review = readFileSync(
-            resolve(process.cwd(), "resources/js/views/pedagogical-management/document-review.vue"),
+            resolve(
+                process.cwd(),
+                "resources/js/views/pedagogical-management/document-review.vue"
+            ),
             "utf8"
         );
         const assignments = readFileSync(
-            resolve(process.cwd(), "resources/js/views/pedagogical-management/coordinator-assignments.vue"),
+            resolve(
+                process.cwd(),
+                "resources/js/views/pedagogical-management/coordinator-assignments.vue"
+            ),
             "utf8"
         );
         const analysis = readFileSync(
-            resolve(process.cwd(), "resources/js/views/pedagogical-management/index.vue"),
+            resolve(
+                process.cwd(),
+                "resources/js/views/pedagogical-management/index.vue"
+            ),
             "utf8"
         );
         const printQueue = readFileSync(
-            resolve(process.cwd(), "resources/js/views/pedagogical-management/print-queue.vue"),
+            resolve(
+                process.cwd(),
+                "resources/js/views/pedagogical-management/print-queue.vue"
+            ),
             "utf8"
         );
         const aiReportContent = readFileSync(
-            resolve(process.cwd(), "resources/js/components/pedagogical-management/PedagogicalAiReportContent.vue"),
+            resolve(
+                process.cwd(),
+                "resources/js/components/pedagogical-management/PedagogicalAiReportContent.vue"
+            ),
             "utf8"
         );
         const statistics = readFileSync(
-            resolve(process.cwd(), "resources/js/views/pedagogical-management/statistics.vue"),
+            resolve(
+                process.cwd(),
+                "resources/js/views/pedagogical-management/statistics.vue"
+            ),
+            "utf8"
+        );
+        const aiWorkspace = readFileSync(
+            resolve(
+                process.cwd(),
+                "resources/js/views/pedagogical-management/ai-workspace.vue"
+            ),
+            "utf8"
+        );
+        const router = readFileSync(
+            resolve(process.cwd(), "resources/js/router/index.js"),
             "utf8"
         );
 
@@ -139,19 +187,32 @@ describe("Gestión pedagógica · análisis de instrumentos", () => {
         expect(teacher).toContain('scope: "mine"');
         expect(teacher).not.toContain('id="submission-school"');
         expect(teacher).toContain("PDF o Word (.docx)");
-        expect(teacher).toContain("application/vnd.openxmlformats-officedocument.wordprocessingml.document");
+        expect(teacher).toContain('import Swal from "sweetalert2"');
+        expect(teacher).toContain('title: "Archivo demasiado grande"');
+        expect(teacher).toContain(
+            'confirmButtonText: "Seleccionar otro archivo"'
+        );
+        expect(teacher).toContain(
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        );
         expect(review).toContain("Solicitar rectificación");
-        expect(review).toContain("Enviar informe de retroalimentación completo");
+        expect(review).toContain(
+            "Enviar informe de retroalimentación completo"
+        );
         expect(review).toContain("downloadPedagogicalAiReportPdf");
         expect(review).toContain("Gestionar documentos");
         expect(review).toContain("PedagogicalAiReportContent");
         expect(aiReportContent).toContain("text-align:justify");
         expect(aiReportContent).toContain("--report-navy");
         expect(aiReportContent).toContain("box-shadow");
-        expect(teacher).toContain("Corresponde exactamente al informe revisado por coordinación");
+        expect(teacher).toContain(
+            "Corresponde exactamente al informe revisado por coordinación"
+        );
         expect(teacher).toContain("can_download_ai_report");
         expect(teacher).toContain("Descargar informe");
-        expect(aiReportContent).toContain("Evaluación de criterios y consideraciones");
+        expect(aiReportContent).toContain(
+            "Evaluación de criterios y consideraciones"
+        );
         expect(aiReportContent).toContain("criteria_assessment");
         expect(aiReportContent).toContain("criteriaGroups");
         expect(aiReportContent).toContain("item.applicability");
@@ -174,11 +235,23 @@ describe("Gestión pedagógica · análisis de instrumentos", () => {
         expect(statistics).toContain("Historial todavía insuficiente");
         expect(statistics).toContain("No evidenciado");
         expect(statistics).toContain("HALLAZGOS MISCELÁNEOS");
-        expect(statistics).toContain("pedagogicalManagementApi.instrumentStatistics");
+        expect(statistics).toContain(
+            "pedagogicalManagementApi.instrumentStatistics"
+        );
         expect(statistics).toContain("downloadPedagogicalStatisticsPdf");
         expect(statistics).toContain("Exportar informe PDF");
         expect(statistics).toContain("ALCANCE APLICADO AL TABLERO Y AL PDF");
         expect(statistics).toContain("LECTURA EJECUTIVA");
+        expect(aiWorkspace).toContain("Revisión de instrumentos con IA");
+        expect(aiWorkspace).toMatch(/Sin envío al\s+docente/);
+        expect(aiWorkspace).toContain("no entra a Revisión documental");
+        expect(aiWorkspace).toContain("PedagogicalAiReportContent");
+        expect(aiWorkspace).toContain("downloadPedagogicalAiReportPdf");
+        expect(aiWorkspace).toContain("aiWorkspacePollingDecision");
+        expect(router).toContain('path: "/gestion-pedagogica/revision-ia"');
+        expect(router).toContain(
+            'permission: "pedagogical-instruments.ai-workspace"'
+        );
     });
 
     it("builds a filtered executive PDF with the full pedagogical evidence trail", () => {
@@ -193,9 +266,11 @@ describe("Gestión pedagógica · análisis de instrumentos", () => {
                 rubric_versions: ["institutional-review-v1.0.0"],
                 prompt_versions: ["document-review-v1.3.0"],
                 methodology: {
-                    official_source: "Informe completado vinculado a una resolución.",
+                    official_source:
+                        "Informe completado vinculado a una resolución.",
                     compliance_formula: "Fórmula institucional.",
-                    comparison_rule: "Versiones consecutivas con la misma pauta.",
+                    comparison_rule:
+                        "Versiones consecutivas con la misma pauta.",
                 },
             },
             summary: {
@@ -211,14 +286,87 @@ describe("Gestión pedagógica · análisis de instrumentos", () => {
                 rectification_closure_rate: 75,
                 rectification_rate: 50,
             },
-            trend: [{ label: "ago 2026", reports: 8, median_compliance: 81.5, evidence_coverage: 91 }],
+            trend: [
+                {
+                    label: "ago 2026",
+                    reports: 8,
+                    median_compliance: 81.5,
+                    evidence_coverage: 91,
+                },
+            ],
             decisions: [{ decision: "approved", label: "Aprobados", count: 5 }],
-            dimensions: [{ dimension: "Alineación curricular", first_score: 72, latest_score: 84 }],
-            priorities: [{ code: "2.1", criterion: "Alineación con objetivos", dimension: "Alineación curricular", attention_rate: 40, persistence_rate: 25, reach_rate: 50, opportunity_index: 37.5, sample_sufficient: true }],
-            criteria: [{ code: "2.1", criterion: "Alineación con objetivos", dimension: "Alineación curricular", applicable: 8, meets: 5, partially_meets: 2, does_not_meet: 1, not_evidenced: 0, persistence_rate: 25, resolution_rate: 75, opportunity_index: 37.5, sample_sufficient: true }],
-            miscellaneous: [{ label: "Puntajes y cálculos", findings: 1, affected_reports: 1, affected_teachers: 1, incidence_rate: 12.5, critical: 0, important: 1, suggestion: 0 }],
-            teachers: [{ name: "Docente Ejemplo", reports: 4, instruments: 2, first_score: 70, latest_score: 84, improvement_pp: 14, first_pass_approval_rate: 50, persistent_criteria: ["3.1"] }],
-            instruments: [{ title: "Prueba unidad 1", teacher: { name: "Docente Ejemplo" }, subject: { name: "Lenguaje" }, courses: [{ name: "7° Básico A" }], reviewed_versions: 2, latest_score: 84, improvement_pp: 14, rubric_compatible: true, latest_decision: "approved_with_observations" }],
+            dimensions: [
+                {
+                    dimension: "Alineación curricular",
+                    first_score: 72,
+                    latest_score: 84,
+                },
+            ],
+            priorities: [
+                {
+                    code: "2.1",
+                    criterion: "Alineación con objetivos",
+                    dimension: "Alineación curricular",
+                    attention_rate: 40,
+                    persistence_rate: 25,
+                    reach_rate: 50,
+                    opportunity_index: 37.5,
+                    sample_sufficient: true,
+                },
+            ],
+            criteria: [
+                {
+                    code: "2.1",
+                    criterion: "Alineación con objetivos",
+                    dimension: "Alineación curricular",
+                    applicable: 8,
+                    meets: 5,
+                    partially_meets: 2,
+                    does_not_meet: 1,
+                    not_evidenced: 0,
+                    persistence_rate: 25,
+                    resolution_rate: 75,
+                    opportunity_index: 37.5,
+                    sample_sufficient: true,
+                },
+            ],
+            miscellaneous: [
+                {
+                    label: "Puntajes y cálculos",
+                    findings: 1,
+                    affected_reports: 1,
+                    affected_teachers: 1,
+                    incidence_rate: 12.5,
+                    critical: 0,
+                    important: 1,
+                    suggestion: 0,
+                },
+            ],
+            teachers: [
+                {
+                    name: "Docente Ejemplo",
+                    reports: 4,
+                    instruments: 2,
+                    first_score: 70,
+                    latest_score: 84,
+                    improvement_pp: 14,
+                    first_pass_approval_rate: 50,
+                    persistent_criteria: ["3.1"],
+                },
+            ],
+            instruments: [
+                {
+                    title: "Prueba unidad 1",
+                    teacher: { name: "Docente Ejemplo" },
+                    subject: { name: "Lenguaje" },
+                    courses: [{ name: "7° Básico A" }],
+                    reviewed_versions: 2,
+                    latest_score: 84,
+                    improvement_pp: 14,
+                    rubric_compatible: true,
+                    latest_decision: "approved_with_observations",
+                },
+            ],
         };
         const definition = buildPedagogicalStatisticsPdfDefinition(dashboard, {
             filter_labels: ["Año 2026", "Asignatura: Lenguaje"],
@@ -233,7 +381,9 @@ describe("Gestión pedagógica · análisis de instrumentos", () => {
         expect(serialized).toContain("Hallazgos misceláneos");
         expect(serialized).toContain("TRAYECTORIA DOCENTE");
         expect(serialized).toContain('"alignment":"justify"');
-        expect(pedagogicalStatisticsPdfFilename(dashboard, new Date(2026, 7, 26))).toBe(
+        expect(
+            pedagogicalStatisticsPdfFilename(dashboard, new Date(2026, 7, 26))
+        ).toBe(
             "informe-evolucion-documental-escuela-estadisticas-2026-08-26.pdf"
         );
     });
@@ -270,6 +420,18 @@ describe("Gestión pedagógica · análisis de instrumentos", () => {
         expect(pollingDecision({ pending: false, attempts: 2 })).toBe(
             "complete"
         );
+        expect(
+            aiWorkspacePollingDecision({ status: "processing", attempts: 1 })
+        ).toBe("continue");
+        expect(
+            aiWorkspacePollingDecision({
+                status: "pending",
+                attempts: aiWorkspacePolling.maxAttempts,
+            })
+        ).toBe("pause");
+        expect(
+            aiWorkspacePollingDecision({ status: "completed", attempts: 2 })
+        ).toBe("complete");
         expect(
             analysisIsStale(
                 {
@@ -318,7 +480,10 @@ describe("Gestión pedagógica · análisis de instrumentos", () => {
             "utf8"
         );
         const horizontalNav = readFileSync(
-            resolve(process.cwd(), "resources/js/components/horizontal-nav.vue"),
+            resolve(
+                process.cwd(),
+                "resources/js/components/horizontal-nav.vue"
+            ),
             "utf8"
         );
 

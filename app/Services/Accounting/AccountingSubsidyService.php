@@ -50,6 +50,7 @@ class AccountingSubsidyService
         $duplicates = [];
         $pendingFiles = [];
         $seenHashes = [];
+        $seenFingerprints = [];
 
         foreach ($files as $index => $file) {
             $sha256 = hash_file('sha256', $file->getRealPath());
@@ -94,7 +95,30 @@ class AccountingSubsidyService
                 ]);
             }
 
-            $pendingFiles[] = compact('file', 'sha256', 'parsed');
+            $contentFingerprint = $this->contentFingerprint($parsed);
+            if (isset($seenFingerprints[$contentFingerprint])) {
+                $duplicates[] = [
+                    'filename' => $file->getClientOriginalName(),
+                    'import_id' => null,
+                    'message' => 'El contenido está repetido dentro de esta carga.',
+                ];
+
+                continue;
+            }
+            $seenFingerprints[$contentFingerprint] = true;
+
+            $semanticDuplicate = $this->findSemanticDuplicate($parsed, $contentFingerprint);
+            if ($semanticDuplicate) {
+                $duplicates[] = [
+                    'filename' => $file->getClientOriginalName(),
+                    'import_id' => $semanticDuplicate->id,
+                    'message' => 'El contenido ya fue importado anteriormente.',
+                ];
+
+                continue;
+            }
+
+            $pendingFiles[] = compact('file', 'sha256', 'parsed', 'contentFingerprint');
         }
 
         foreach ($pendingFiles as $pendingFile) {
@@ -102,6 +126,7 @@ class AccountingSubsidyService
             $file = $pendingFile['file'];
             $sha256 = $pendingFile['sha256'];
             $parsed = $pendingFile['parsed'];
+            $contentFingerprint = $pendingFile['contentFingerprint'];
             $storagePath = sprintf(
                 'accounting/subsidies/%s/%s/%s.%s',
                 $parsed['period']->format('Ym'),
@@ -112,7 +137,7 @@ class AccountingSubsidyService
             Storage::disk('local')->put($storagePath, file_get_contents($file->getRealPath()));
 
             try {
-                [$import, $settlement] = DB::transaction(function () use ($parsed, $file, $sha256, $storagePath, $user) {
+                [$import, $settlement] = DB::transaction(function () use ($parsed, $file, $sha256, $contentFingerprint, $storagePath, $user) {
                     $import = AccountingSubsidyImport::query()->create([
                         'rbd' => $parsed['rbd'],
                         'period' => $parsed['period'],
@@ -128,6 +153,7 @@ class AccountingSubsidyService
                             'declared_total' => $parsed['declared_total'],
                             'line_count' => count($parsed['lines']),
                             'metadata' => $parsed['metadata'],
+                            'content_fingerprint' => $contentFingerprint,
                         ],
                         'warnings' => $parsed['warnings'],
                         'errors' => [],
@@ -388,6 +414,7 @@ class AccountingSubsidyService
             ->unique()
             ->sortDesc()
             ->values();
+        $annual = $this->annualDashboard($date->year);
 
         return [
             ...$current,
@@ -401,7 +428,8 @@ class AccountingSubsidyService
                 'settlement_count' => $comparison['settlement_count'],
                 'deltas' => $deltas,
             ],
-            'annual' => $this->annualSummary($date->year),
+            'annual' => $annual['months'],
+            'annual_overview' => $annual['overview'],
             'available_years' => $availableYears,
             'attendance_reconciliation' => $this->attendanceReconciliationService->calculate($date, $calculationOptions),
         ];
@@ -542,12 +570,24 @@ class AccountingSubsidyService
         ];
     }
 
-    private function annualSummary(int $year): array
+    /** @return array{months: array<int, array<string, mixed>>, overview: array<string, mixed>} */
+    private function annualDashboard(int $year): array
     {
         $settlements = AccountingSubsidySettlement::query()
-            ->with(['lines:id,settlement_id,concept_code,amount'])
+            ->with(['lines' => fn ($query) => $query
+                ->select(['id', 'settlement_id', 'amount'])
+                ->where('concept_code', 'pie_breakdown')])
             ->whereYear('period', $year)
-            ->get(['id', 'period', 'net_amount', 'transferred_amount'])
+            ->get([
+                'id',
+                'period',
+                'subsidy_type',
+                'status',
+                'net_amount',
+                'transferred_amount',
+                'difference_amount',
+            ]);
+        $settlementsByMonth = $settlements
             ->groupBy(fn (AccountingSubsidySettlement $settlement) => $settlement->period->format('Y-m'));
         $incomes = AccountingIncome::query()
             ->whereYear('received_at', $year)
@@ -556,24 +596,90 @@ class AccountingSubsidyService
             ->get(['received_at', 'amount'])
             ->groupBy(fn (AccountingIncome $income) => $income->received_at->format('Y-m'));
 
-        return collect(range(1, 12))->map(function (int $month) use ($year, $settlements, $incomes) {
+        $months = collect(range(1, 12))->map(function (int $month) use ($year, $settlementsByMonth, $incomes) {
             $period = CarbonImmutable::create($year, $month, 1);
             $key = $period->format('Y-m');
-            $monthSettlements = $settlements->get($key, collect());
+            $monthSettlements = $settlementsByMonth->get($key, collect());
+            $netLiquidated = round((float) $monthSettlements->sum('net_amount'), 2);
+            $transferredTotal = round((float) $monthSettlements->sum(fn ($item) => $item->transferred_amount ?? 0), 2);
+            $incomeTotal = round((float) $incomes->get($key, collect())->sum('amount'), 2);
+            $observedCount = $monthSettlements->where('status', 'observado')->count();
+            $pendingTransferCount = $monthSettlements->whereNull('transferred_amount')->count();
+            $status = match (true) {
+                $monthSettlements->isEmpty() => 'sin_datos',
+                $observedCount > 0 => 'revisar',
+                $pendingTransferCount > 0 => 'pendiente',
+                abs($transferredTotal - $netLiquidated) > 1 => 'diferencia',
+                default => 'cuadrado',
+            };
 
             return [
                 'period' => $key,
                 'label' => ucfirst($period->locale('es')->translatedFormat('M')),
-                'net_liquidated' => round((float) $monthSettlements->sum('net_amount'), 2),
-                'transferred_total' => round((float) $monthSettlements->sum(fn ($item) => $item->transferred_amount ?? 0), 2),
-                'income_total' => round((float) $incomes->get($key, collect())->sum('amount'), 2),
+                'net_liquidated' => $netLiquidated,
+                'transferred_total' => $transferredTotal,
+                'income_total' => $incomeTotal,
                 'pie_total' => round((float) $monthSettlements
                     ->flatMap->lines
-                    ->where('concept_code', 'pie_breakdown')
                     ->sum('amount'), 2),
                 'settlement_count' => $monthSettlements->count(),
+                'observed_count' => $observedCount,
+                'pending_transfer_count' => $pendingTransferCount,
+                'income_gap' => round($netLiquidated - $incomeTotal, 2),
+                'status' => $status,
             ];
-        })->all();
+        });
+
+        $monthsWithData = $months->where('settlement_count', '>', 0);
+        $netLiquidated = round((float) $months->sum('net_liquidated'), 2);
+        $incomeTotal = round((float) $months->sum('income_total'), 2);
+        $peakMonth = $monthsWithData->sortByDesc('net_liquidated')->first();
+        $byFamily = $settlements
+            ->groupBy('subsidy_type')
+            ->map(function (Collection $items, string $family) use ($netLiquidated): array {
+                $amount = round((float) $items->sum('net_amount'), 2);
+
+                return [
+                    'key' => $family,
+                    'label' => $this->familyLabel($family),
+                    'net_amount' => $amount,
+                    'percentage' => $netLiquidated > 0 ? round(($amount / $netLiquidated) * 100, 2) : 0,
+                    'settlement_count' => $items->count(),
+                    'months_count' => $items->pluck('period')->map->format('Y-m')->unique()->count(),
+                    'observed_count' => $items->where('status', 'observado')->count(),
+                ];
+            })
+            ->sortByDesc('net_amount')
+            ->values();
+
+        return [
+            'months' => $months->all(),
+            'overview' => [
+                'year' => $year,
+                'metrics' => [
+                    'net_liquidated' => $netLiquidated,
+                    'transferred_total' => round((float) $months->sum('transferred_total'), 2),
+                    'income_total' => $incomeTotal,
+                    'income_gap' => round($netLiquidated - $incomeTotal, 2),
+                    'pie_total' => round((float) $months->sum('pie_total'), 2),
+                    'settlement_count' => $settlements->count(),
+                    'months_with_data' => $monthsWithData->count(),
+                    'average_active_month' => $monthsWithData->isNotEmpty()
+                        ? round($netLiquidated / $monthsWithData->count(), 2)
+                        : 0,
+                    'observed_count' => $settlements->where('status', 'observado')->count(),
+                    'pending_transfer_count' => $settlements->whereNull('transferred_amount')->count(),
+                ],
+                'first_period' => $monthsWithData->first()['period'] ?? null,
+                'last_period' => $monthsWithData->last()['period'] ?? null,
+                'peak_month' => $peakMonth ? [
+                    'period' => $peakMonth['period'],
+                    'label' => $peakMonth['label'],
+                    'amount' => $peakMonth['net_liquidated'],
+                ] : null,
+                'by_family' => $byFamily->all(),
+            ],
+        ];
     }
 
     /**
@@ -795,9 +901,12 @@ class AccountingSubsidyService
 
     private function fundingSourceId(string $family): ?int
     {
-        $codes = in_array($family, ['sep_prioritario', 'sep_preferente'], true)
-            ? ['FS-SEP']
-            : ['FS-GRAL'];
+        $codes = match ($family) {
+            'sep_prioritario', 'sep_preferente' => ['FS-SEP'],
+            'pro_retention' => ['FS-PRORET'],
+            'maintenance' => ['FS-MANT'],
+            default => ['FS-GRAL'],
+        };
 
         return AccountingFundingSource::query()->whereIn('code', $codes)->value('id');
     }
@@ -815,11 +924,91 @@ class AccountingSubsidyService
             'sep_preferente' => 'SEP Preferente',
             'pro_retention' => 'Subvención Pro-Retención',
             'school_bonus' => 'Bono Escolar',
+            'maintenance' => 'Subvención de Mantenimiento',
+            'staff_bonuses' => 'Bonos al personal',
             'cd_brp' => 'CD-BRP',
             'cd_asignacion_tramo' => 'CD-ASIGNACIÓN POR TRAMO',
             'otro' => 'Otra subvención',
             default => str_replace('_', ' ', ucfirst($family)),
         };
+    }
+
+    /** @param array<string,mixed> $parsed */
+    private function contentFingerprint(array $parsed): string
+    {
+        $lines = collect($parsed['lines'] ?? [])
+            ->map(fn (array $line): array => [
+                'concept_code' => $line['concept_code'] ?? null,
+                'classification' => $line['classification'] ?? null,
+                'sign' => (int) ($line['sign'] ?? 1),
+                'amount' => (float) ($line['amount'] ?? 0),
+                'informative' => (bool) ($line['informative'] ?? false),
+                'education_allocable' => (bool) ($line['education_allocable'] ?? false),
+                'allocation_hashes' => collect($line['allocations'] ?? [])
+                    ->pluck('source_row_hash')
+                    ->filter()
+                    ->sort()
+                    ->values()
+                    ->all(),
+                'metadata' => $this->sortFingerprintValue($line['metadata'] ?? []),
+            ])
+            ->sortBy('concept_code')
+            ->values()
+            ->all();
+
+        return hash('sha256', json_encode([
+            'rbd' => (string) ($parsed['rbd'] ?? ''),
+            'period' => CarbonImmutable::parse($parsed['period'])->format('Y-m'),
+            'family' => (string) ($parsed['family'] ?? ''),
+            'source_type' => (string) ($parsed['source_type'] ?? ''),
+            'declared_total' => (float) ($parsed['declared_total'] ?? 0),
+            'lines' => $lines,
+        ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
+    }
+
+    /** @param array<string,mixed> $parsed */
+    private function findSemanticDuplicate(array $parsed, string $contentFingerprint): ?AccountingSubsidyImport
+    {
+        $candidates = AccountingSubsidyImport::query()
+            ->where('rbd', $parsed['rbd'])
+            ->whereDate('period', $parsed['period'])
+            ->where('source_type', $parsed['source_type'])
+            ->get();
+
+        foreach ($candidates as $candidate) {
+            if (data_get($candidate->summary, 'content_fingerprint') === $contentFingerprint) {
+                return $candidate;
+            }
+            if (! $candidate->storage_path || ! Storage::disk('local')->exists($candidate->storage_path)) {
+                continue;
+            }
+
+            try {
+                $stored = $this->parser->parse(
+                    Storage::disk('local')->path($candidate->storage_path),
+                    $candidate->original_filename,
+                );
+                if ($this->contentFingerprint($stored) === $contentFingerprint) {
+                    return $candidate;
+                }
+            } catch (Throwable) {
+                // A legacy source that can no longer be parsed must not block a new import.
+            }
+        }
+
+        return null;
+    }
+
+    private function sortFingerprintValue(mixed $value): mixed
+    {
+        if (! is_array($value)) {
+            return $value;
+        }
+        if (! array_is_list($value)) {
+            ksort($value);
+        }
+
+        return array_map(fn (mixed $item): mixed => $this->sortFingerprintValue($item), $value);
     }
 
     private function levelLabel(string $type): string

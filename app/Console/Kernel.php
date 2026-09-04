@@ -63,6 +63,12 @@ class Kernel extends ConsoleKernel
             ->dailyAt('07:15')
             ->onOneServer()
             ->withoutOverlapping();
+        $schedule->command('weather:sync-valdivia --days=7')
+            ->dailyAt('06:15')
+            ->timezone(config('app.timezone'))
+            ->onOneServer()
+            ->withoutOverlapping(10)
+            ->when(fn (): bool => filled(config('services.weatherapi.key')));
     }
 
     /**

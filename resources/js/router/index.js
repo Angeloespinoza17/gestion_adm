@@ -98,6 +98,17 @@ const routes = [
         component: () => import("../views/home.vue"),
     },
     {
+        path: "/gestion-pedagogica/generador-clases",
+        name: "class-presentation-generator",
+        meta: {
+            authRequired: true,
+            title: "Generador de clases",
+            permission: "class-presentations.view",
+        },
+        component: () =>
+            import("../views/pedagogical-management/class-presentations.vue"),
+    },
+    {
         path: "/gestion-pedagogica/instrumentos",
         name: "pedagogical-my-instruments",
         meta: {
@@ -142,6 +153,17 @@ const routes = [
             import("../views/pedagogical-management/statistics.vue"),
     },
     {
+        path: "/gestion-pedagogica/revision-ia",
+        name: "pedagogical-ai-workspace",
+        meta: {
+            authRequired: true,
+            title: "Revisión con IA",
+            permission: "pedagogical-instruments.ai-workspace",
+        },
+        component: () =>
+            import("../views/pedagogical-management/ai-workspace.vue"),
+    },
+    {
         path: "/gestion-pedagogica/analisis-instrumentos/:instrumentId?",
         name: "pedagogical-instrument-analysis",
         meta: {
@@ -178,6 +200,16 @@ const routes = [
         name: "notification-history",
         meta: { authRequired: true, title: "Mis notificaciones" },
         component: () => import("../views/notifications/index.vue"),
+    },
+    {
+        path: "/documentation",
+        name: "documentation",
+        meta: {
+            authRequired: true,
+            title: "Documentación",
+            permission: "documentation.view",
+        },
+        component: () => import("../views/documentation/index.vue"),
     },
     {
         path: "/mis-coordinaciones",
@@ -634,6 +666,46 @@ const routes = [
         component: () => import("../views/admin/backups.vue"),
     },
     {
+        path: "/superadmin/bitacoras",
+        name: "superadmin-logbook-review",
+        meta: {
+            authRequired: true,
+            title: "Revisión de bitácoras",
+            superAdminOnly: true,
+        },
+        component: () => import("../views/superadmin/logbook-review.vue"),
+    },
+    {
+        path: "/superadmin/reloj-control",
+        name: "superadmin-reloj-control",
+        meta: {
+            authRequired: true,
+            title: "Reloj Control",
+            superAdminOnly: true,
+        },
+        component: () => import("../views/superadmin/reloj-control.vue"),
+    },
+    {
+        path: "/superadmin/solicitudes-abastecimiento",
+        name: "superadmin-supply-requests",
+        meta: {
+            authRequired: true,
+            title: "Solicitudes de abastecimiento",
+            superAdminOnly: true,
+        },
+        component: () => import("../views/superadmin/supply-requests.vue"),
+    },
+    {
+        path: "/superadmin/nivel-uso",
+        name: "superadmin-usage-level",
+        meta: {
+            authRequired: true,
+            title: "Nivel de uso",
+            superAdminOnly: true,
+        },
+        component: () => import("../views/superadmin/usage-level.vue"),
+    },
+    {
         path: "/admin/noticias",
         meta: {
             authRequired: true,
@@ -650,6 +722,66 @@ const routes = [
             permission: "ver_eventos",
         },
         component: () => import("../views/admin/events.vue"),
+    },
+    {
+        path: "/admin/testimonios",
+        name: "admin-testimonials",
+        meta: {
+            authRequired: true,
+            title: "Testimonios del sitio web",
+            permission: "ver_testimonios",
+        },
+        component: () => import("../views/admin/testimonials.vue"),
+    },
+    {
+        path: "/admin/vida-estudiantil",
+        name: "admin-student-life",
+        meta: {
+            authRequired: true,
+            title: "Vida estudiantil del sitio web",
+            permission: "ver_vida_estudiantil",
+        },
+        component: () => import("../views/admin/student-life.vue"),
+    },
+    {
+        path: "/admin/instalaciones",
+        name: "admin-installations",
+        meta: {
+            authRequired: true,
+            title: "Instalaciones del sitio web",
+            permission: "ver_instalaciones_sitio",
+        },
+        component: () => import("../views/admin/installations.vue"),
+    },
+    {
+        path: "/admin/cgpa",
+        name: "admin-site-cgpa",
+        meta: {
+            authRequired: true,
+            title: "CGPA del sitio web",
+            permission: "ver_cgpa_sitio",
+        },
+        component: () => import("../views/admin/cgpa.vue"),
+    },
+    {
+        path: "/admin/cde",
+        name: "admin-site-cde",
+        meta: {
+            authRequired: true,
+            title: "CDE del sitio web",
+            permission: "ver_cde_sitio",
+        },
+        component: () => import("../views/admin/cde.vue"),
+    },
+    {
+        path: "/admin/comite-paritario",
+        name: "admin-site-joint-committee",
+        meta: {
+            authRequired: true,
+            title: "Comité Paritario del sitio web",
+            permission: "ver_comite_paritario_sitio",
+        },
+        component: () => import("../views/admin/site-joint-committee.vue"),
     },
     {
         path: "/admin/contactos",
@@ -1509,11 +1641,21 @@ const routes = [
         "Gestión Funcionarios",
         "remuneraciones.trabajadores.gestionar"
     ),
-    remunerationRoute(
-        "/remuneraciones/control-documental",
-        "Control Documental RR.HH.",
-        "remuneraciones.rrhh.gestionar"
-    ),
+    {
+        path: "/remuneraciones/documentos",
+        alias: "/remuneraciones/control-documental",
+        meta: {
+            authRequired: true,
+            title: "Documentos Remuneraciones",
+            permission: "remuneraciones.rrhh.gestionar",
+            permissionsAll: [
+                "remuneraciones.acceso_confidencial",
+                "remuneraciones.ver",
+                "remuneraciones.rrhh.gestionar",
+            ],
+        },
+        component: () => import("../views/remuneration/documents.vue"),
+    },
     remunerationRoute(
         "/remuneraciones/induccion",
         "Inducción Funcionarios",
@@ -1674,6 +1816,46 @@ const routes = [
         "Reportes Contables",
         "contabilidad.balance.ver"
     ),
+    {
+        path: "/orientation/plan-anual",
+        name: "orientation-annual-plan",
+        meta: {
+            authRequired: true,
+            title: "Plan Anual de Orientación",
+            permission: "orientation.view",
+        },
+        component: () => import("../views/orientation/index.vue"),
+    },
+    {
+        path: "/orientation/calendarizacion",
+        name: "orientation-calendarization",
+        meta: {
+            authRequired: true,
+            title: "Calendarización de Orientación",
+            permission: "orientation.view",
+        },
+        component: () => import("../views/orientation/calendarization.vue"),
+    },
+    {
+        path: "/orientation/calendario",
+        name: "orientation-calendar",
+        meta: {
+            authRequired: true,
+            title: "Calendario de Orientación",
+            permission: "orientation.view",
+        },
+        component: () => import("../views/orientation/index.vue"),
+    },
+    {
+        path: "/orientation/estadisticas",
+        name: "orientation-statistics",
+        meta: {
+            authRequired: true,
+            title: "Estadísticas de Orientación",
+            permission: "orientation.view",
+        },
+        component: () => import("../views/orientation/index.vue"),
+    },
     {
         path: "/convivencia",
         meta: {
@@ -2163,6 +2345,49 @@ const routes = [
             permission: "ver_contratos",
         },
         component: () => import("../views/contracts/form.vue"),
+    },
+    {
+        path: "/supplies/cleaning",
+        name: "supplies-cleaning",
+        meta: {
+            authRequired: true,
+            title: "Abastecimiento · Insumos de aseo",
+            permission: "ver_abastecimiento",
+            supplySection: "cleaning",
+        },
+        component: () => import("../views/supplies/index.vue"),
+    },
+    {
+        path: "/supplies/requests",
+        name: "supplies-requests",
+        meta: {
+            authRequired: true,
+            title: "Abastecimiento · Solicitudes",
+            permission: "ver_solicitudes_abastecimiento",
+        },
+        component: () => import("../views/supplies/requests.vue"),
+    },
+    {
+        path: "/supplies/heating",
+        name: "supplies-heating",
+        meta: {
+            authRequired: true,
+            title: "Abastecimiento · Combustibles y calefacción",
+            permission: "ver_abastecimiento",
+            supplySection: "heating",
+        },
+        component: () => import("../views/supplies/index.vue"),
+    },
+    {
+        path: "/supplies/maintenance-storeroom",
+        name: "supplies-maintenance-storeroom",
+        meta: {
+            authRequired: true,
+            title: "Abastecimiento · Pañol de mantenimiento",
+            permission: "ver_abastecimiento",
+            supplySection: "maintenance_storeroom",
+        },
+        component: () => import("../views/supplies/index.vue"),
     },
     {
         path: "/inventory/items",

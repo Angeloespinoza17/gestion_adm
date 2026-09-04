@@ -1,1 +1,0 @@
-/* empty css                                                                               */import{c as e,i as a,aN as s,am as n,ab as r,h as c}from"../js/app-BhKUBuaa.js";const p={};function l(u,t,_,i,d,f){const o=n("Layout");return r(),a(o,null,{default:s(()=>[...t[0]||(t[0]=[c("div",null,"ok",-1)])]),_:1})}const $=e(p,[["render",l]]);export{$ as default};

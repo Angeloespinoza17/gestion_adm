@@ -3,6 +3,8 @@
 namespace App\Http\Controllers;
 
 use App\Models\NewsPost;
+use App\Models\StudentLifePost;
+use App\Models\Testimonial;
 use Illuminate\Contracts\View\View;
 use Illuminate\Http\Request;
 use Illuminate\Pagination\LengthAwarePaginator;
@@ -21,6 +23,20 @@ class PublicNewsController extends Controller
                     ->latest('created_at')
                     ->latest('id')
                     ->limit(5)
+                    ->get()
+                : collect(),
+            'testimonials' => Schema::hasTable('testimonials')
+                ? Testimonial::query()
+                    ->published()
+                    ->orderedForPublic()
+                    ->limit(6)
+                    ->get()
+                : collect(),
+            'studentLifeHighlights' => Schema::hasTable('student_life_posts')
+                ? StudentLifePost::query()
+                    ->published()
+                    ->orderedForPublic()
+                    ->limit(4)
                     ->get()
                 : collect(),
         ]);

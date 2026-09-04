@@ -142,6 +142,7 @@ class RemunerationAccessService
             'remuneration_payment_proposal_items',
             'remuneration_payment_proposal_allocations',
             'hr_document_controls',
+            'hr_document_requirements',
             'hr_medical_leaves',
             'hr_job_profiles',
             'hr_onboarding_processes',

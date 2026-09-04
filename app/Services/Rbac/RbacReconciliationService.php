@@ -143,6 +143,43 @@ class RbacReconciliationService
             $this->frontendRoutePermissions(),
             fn (string $slug) => ! isset($activePermissionLookup[$slug]),
         ));
+        $missingCodePermissions = array_values(array_filter(
+            $this->directSourcePermissionReferences(),
+            fn (string $slug) => ! isset($activePermissionLookup[$slug]),
+        ));
+
+        $superAdmin = Role::query()->where('slug', 'super_admin')->first();
+        $superAdminMissingPermissions = $superAdmin
+            ? Permission::query()
+                ->where('active', true)
+                ->whereDoesntHave('roles', fn ($query) => $query->whereKey($superAdmin->id))
+                ->orderBy('slug')
+                ->pluck('slug')
+                ->all()
+            : [];
+        $superAdminMissingModules = $superAdmin
+            ? SystemModule::query()
+                ->where('active', true)
+                ->whereDoesntHave('roles', fn ($query) => $query->whereKey($superAdmin->id))
+                ->orderBy('slug')
+                ->pluck('slug')
+                ->all()
+            : [];
+
+        $rolesWithInactivePermissions = Role::query()
+            ->whereHas('permissions', fn ($query) => $query->where('permissions.active', false))
+            ->with(['permissions' => fn ($query) => $query->where('permissions.active', false)->orderBy('slug')])
+            ->orderBy('slug')
+            ->get()
+            ->mapWithKeys(fn (Role $role) => [$role->slug => $role->permissions->pluck('slug')->values()->all()])
+            ->all();
+        $rolesWithInactiveModules = Role::query()
+            ->whereHas('modules', fn ($query) => $query->where('system_modules.active', false))
+            ->with(['modules' => fn ($query) => $query->where('system_modules.active', false)->orderBy('slug')])
+            ->orderBy('slug')
+            ->get()
+            ->mapWithKeys(fn (Role $role) => [$role->slug => $role->modules->pluck('slug')->values()->all()])
+            ->all();
 
         $ungroupedPermissions = Permission::query()
             ->where('active', true)
@@ -190,10 +227,16 @@ class RbacReconciliationService
             ->pluck('slug')
             ->all();
 
-        $criticalIssueCount = count($missingBackendPermissions)
-            + count($missingFrontendPermissions)
+        $missingReferencedPermissions = array_unique([
+            ...$missingBackendPermissions,
+            ...$missingFrontendPermissions,
+            ...$missingCodePermissions,
+        ]);
+        $criticalIssueCount = count($missingReferencedPermissions)
             + count($ungroupedPermissions)
             + count($groupsWithoutModule)
+            + count($superAdminMissingPermissions)
+            + count($superAdminMissingModules)
             + count($contaminatedRoles)
             + count($nurseMissingPermissions)
             + count($nurseMissingModules)
@@ -209,8 +252,13 @@ class RbacReconciliationService
             ],
             'missing_backend_permissions' => $missingBackendPermissions,
             'missing_frontend_permissions' => $missingFrontendPermissions,
+            'missing_code_permissions' => $missingCodePermissions,
             'ungrouped_permissions' => $ungroupedPermissions,
             'groups_without_active_module' => $groupsWithoutModule,
+            'super_admin_missing_permissions' => $superAdminMissingPermissions,
+            'super_admin_missing_modules' => $superAdminMissingModules,
+            'roles_with_inactive_permissions' => $rolesWithInactivePermissions,
+            'roles_with_inactive_modules' => $rolesWithInactiveModules,
             'contaminated_roles' => $contaminatedRoles,
             'nurse_missing_permissions' => $nurseMissingPermissions,
             'nurse_missing_modules' => $nurseMissingModules,
@@ -503,6 +551,62 @@ class RbacReconciliationService
         $contents = file_get_contents($routerPath) ?: '';
         preg_match_all("/permission\\s*:\\s*['\"]([^'\"]+)['\"]/", $contents, $matches);
         $permissions = array_values(array_unique($matches[1] ?? []));
+        sort($permissions);
+
+        return $permissions;
+    }
+
+    /** @return array<int, string> */
+    private function directSourcePermissionReferences(): array
+    {
+        $paths = [app_path(), base_path('routes'), resource_path('js')];
+        $permissions = [];
+        $literalPatterns = [
+            "/hasPermission\\(\\s*['\"]([^'\"]+)['\"]/",
+            "/hasExplicitPermission\\(\\s*[^,]+,\\s*['\"]([^'\"]+)['\"]/",
+            "/permission\\s*:\\s*['\"]([^'\"]+)['\"]/",
+            '/permission:([a-z0-9_.-]+)/',
+        ];
+
+        foreach ($paths as $path) {
+            if (! is_dir($path)) {
+                continue;
+            }
+
+            $iterator = new \RecursiveIteratorIterator(
+                new \RecursiveDirectoryIterator($path, \FilesystemIterator::SKIP_DOTS),
+            );
+
+            foreach ($iterator as $file) {
+                if (! $file->isFile() || ! in_array($file->getExtension(), ['php', 'js', 'vue'], true)) {
+                    continue;
+                }
+
+                if ($file->getRealPath() === __FILE__) {
+                    continue;
+                }
+
+                $contents = file_get_contents($file->getPathname()) ?: '';
+
+                foreach ($literalPatterns as $pattern) {
+                    preg_match_all($pattern, $contents, $matches);
+                    $permissions = [...$permissions, ...($matches[1] ?? [])];
+                }
+
+                preg_match_all('/hasAny(?:Explicit)?Permissions?\\s*\\([^\\[]*\\[([^\\]]*)\\]/s', $contents, $arrayMatches);
+
+                foreach ($arrayMatches[1] ?? [] as $arrayContents) {
+                    preg_match_all("/['\"]([a-z0-9_.-]+)['\"]/", $arrayContents, $literalMatches);
+                    $permissions = [...$permissions, ...($literalMatches[1] ?? [])];
+                }
+            }
+        }
+
+        $permissions = array_values(array_unique(array_filter(
+            $permissions,
+            fn ($permission) => is_string($permission)
+                && preg_match('/^[a-z0-9]+(?:[_.-][a-z0-9]+)+$/', $permission) === 1,
+        )));
         sort($permissions);
 
         return $permissions;

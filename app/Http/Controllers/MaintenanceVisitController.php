@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\MaintenanceChecklistItem;
 use App\Models\MaintenanceDependency;
+use App\Models\MaintenanceEvidencePhoto;
 use App\Models\MaintenanceVisit;
 use App\Models\MaintenanceVisitChecklistResponse;
 use App\Models\MaintenanceWorkOrder;
@@ -12,8 +13,11 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
+use Throwable;
 
 class MaintenanceVisitController extends Controller
 {
@@ -69,7 +73,8 @@ class MaintenanceVisitController extends Controller
                         ->orWhere('name', 'like', "%{$search}%")
                         ->orWhere('distribution', 'like', "%{$search}%")
                         ->orWhere('sector', 'like', "%{$search}%")
-                        ->orWhere('zone', 'like', "%{$search}%");
+                        ->orWhere('zone', 'like', "%{$search}%")
+                        ->orWhere('usage', 'like', "%{$search}%");
                 });
             });
 
@@ -148,6 +153,7 @@ class MaintenanceVisitController extends Controller
                     'distribution',
                     'sector',
                     'zone',
+                    'usage',
                     'is_reservable',
                     'is_maintenance_location',
                 ]),
@@ -164,7 +170,10 @@ class MaintenanceVisitController extends Controller
             ->get(['id', 'system', 'subdimension', 'review']);
 
         $responses = $maintenanceVisit->checklistResponses()
-            ->with('item:id,system,subdimension,review')
+            ->with([
+                'item:id,system,subdimension,review',
+                'photos:id,maintenance_visit_checklist_response_id,maintenance_work_order_id,path,original_name,mime_type,size_bytes,created_at',
+            ])
             ->get()
             ->keyBy('maintenance_checklist_item_id');
 
@@ -208,44 +217,135 @@ class MaintenanceVisitController extends Controller
 
     public function uploadChecklistPhoto(Request $request, MaintenanceVisit $maintenanceVisit): JsonResponse
     {
-        $validated = $request->validate([
+        $request->validate([
             'maintenance_checklist_item_id' => ['required', 'integer', 'exists:maintenance_checklist_items,id'],
-            'photo' => ['required', 'file', 'image', 'max:5120'],
+            'photo' => ['nullable', 'file', 'image', 'mimes:jpg,jpeg,png,gif,bmp,webp', 'max:5120', 'required_without:photos'],
+            'photos' => ['nullable', 'array', 'min:1', 'max:3', 'required_without:photo'],
+            'photos.*' => ['required', 'file', 'image', 'mimes:jpg,jpeg,png,gif,bmp,webp', 'max:5120'],
         ]);
+
+        $itemId = (int) $request->input('maintenance_checklist_item_id');
+        $files = collect($request->file('photos', []));
+
+        if ($request->hasFile('photo')) {
+            $files->push($request->file('photo'));
+        }
 
         $response = MaintenanceVisitChecklistResponse::firstOrCreate(
             [
                 'maintenance_visit_id' => $maintenanceVisit->id,
-                'maintenance_checklist_item_id' => $validated['maintenance_checklist_item_id'],
+                'maintenance_checklist_item_id' => $itemId,
             ]
         );
 
-        $path = $request->file('photo')->store("maintenance/visits/{$maintenanceVisit->id}", 'public');
-
-        if ($response->photo_reference) {
-            Storage::disk('public')->delete($response->photo_reference);
+        $currentCount = $response->photos()->count() + ($response->photo_reference ? 1 : 0);
+        if ($currentCount + $files->count() > 3) {
+            throw ValidationException::withMessages([
+                'photos' => 'Cada hallazgo u OT admite un máximo de 3 fotografías.',
+            ]);
         }
 
-        $response->update([
-            'photo_reference' => $path,
-        ]);
+        $storedPaths = [];
+
+        try {
+            DB::transaction(function () use ($files, $maintenanceVisit, $request, $response, &$storedPaths): void {
+                $lockedResponse = MaintenanceVisitChecklistResponse::query()
+                    ->lockForUpdate()
+                    ->findOrFail($response->id);
+                $lockedCount = $lockedResponse->photos()->count() + ($lockedResponse->photo_reference ? 1 : 0);
+
+                if ($lockedCount + $files->count() > 3) {
+                    throw ValidationException::withMessages([
+                        'photos' => 'Cada hallazgo u OT admite un máximo de 3 fotografías.',
+                    ]);
+                }
+
+                foreach ($files as $file) {
+                    $path = $file->store("maintenance/visits/{$maintenanceVisit->id}", 'public');
+                    $storedPaths[] = $path;
+
+                    $lockedResponse->photos()->create([
+                        'maintenance_work_order_id' => $lockedResponse->work_order_id,
+                        'path' => $path,
+                        'original_name' => $file->getClientOriginalName(),
+                        'mime_type' => $file->getMimeType(),
+                        'size_bytes' => $file->getSize(),
+                        'uploaded_by_user_id' => $request->user()?->id,
+                    ]);
+                }
+
+                if ($lockedResponse->work_order_id && $storedPaths !== []) {
+                    MaintenanceWorkOrder::query()
+                        ->whereKey($lockedResponse->work_order_id)
+                        ->where(function ($query) {
+                            $query->whereNull('photo_reference')->orWhere('photo_reference', '');
+                        })
+                        ->update(['photo_reference' => $storedPaths[0]]);
+                }
+            });
+        } catch (Throwable $exception) {
+            Storage::disk('public')->delete($storedPaths);
+            throw $exception;
+        }
 
         return response()->json([
-            'message' => 'Foto guardada correctamente.',
-            'data' => $response->fresh(),
+            'message' => $files->count() === 1
+                ? 'Foto agregada correctamente.'
+                : "{$files->count()} fotos agregadas correctamente.",
+            'data' => $response->fresh()->load('photos'),
+        ]);
+    }
+
+    public function deleteChecklistPhoto(
+        MaintenanceVisit $maintenanceVisit,
+        MaintenanceEvidencePhoto $photo
+    ): JsonResponse {
+        $photo->loadMissing('checklistResponse:id,maintenance_visit_id');
+
+        abort_unless(
+            (int) $photo->checklistResponse?->maintenance_visit_id === (int) $maintenanceVisit->id,
+            404
+        );
+
+        $path = $photo->path;
+        $response = $photo->checklistResponse;
+
+        DB::transaction(function () use ($photo, $path, $response): void {
+            $workOrderId = $photo->maintenance_work_order_id;
+            $photo->delete();
+
+            if (! $workOrderId) {
+                return;
+            }
+
+            $workOrder = MaintenanceWorkOrder::query()->lockForUpdate()->find($workOrderId);
+            if (! $workOrder || $workOrder->photo_reference !== $path) {
+                return;
+            }
+
+            $replacement = $response->photo_reference
+                ?: $response->photos()->oldest('id')->value('path');
+            $workOrder->update(['photo_reference' => $replacement]);
+        });
+
+        Storage::disk('public')->delete($path);
+
+        return response()->json([
+            'message' => 'Foto eliminada correctamente.',
+            'data' => $response->fresh()->load('photos'),
         ]);
     }
 
     public function createWorkOrderFromFinding(Request $request, MaintenanceVisitChecklistResponse $checklistResponse): JsonResponse
     {
-        $checklistResponse->load('visit.dependency', 'item');
+        $checklistResponse->load('visit.dependency', 'item', 'photos');
 
         $visit = $checklistResponse->visit;
-        if (!$visit) {
+        if (! $visit) {
             return response()->json(['message' => 'Visita no encontrada.'], 404);
         }
 
-        if (!$checklistResponse->finding_description) {
+        if (! $checklistResponse->finding_description) {
             return response()->json(['message' => 'No hay hallazgo para generar OT.'], 422);
         }
 
@@ -260,25 +360,51 @@ class MaintenanceVisitController extends Controller
             ? "Checklist: {$checklistResponse->item->system} / {$checklistResponse->item->subdimension} - {$checklistResponse->item->review}"
             : null;
 
-        $workOrder = MaintenanceWorkOrder::create([
-            'maintenance_dependency_id' => $visit->maintenance_dependency_id,
-            'reported_at' => Carbon::now(),
-            'requested_by' => $visit->responsible,
-            'assigned_to' => $visit->responsible,
-            'priority' => $validated['priority'] ?? 'Media',
-            'status' => $validated['status'] ?? 'Sin comenzar',
-            'due_date' => $validated['due_date'] ?? null,
-            'description' => $description,
-            'resolution_notes' => $detail,
-        ]);
+        $workOrder = DB::transaction(function () use ($checklistResponse, $description, $detail, $request, $validated, $visit) {
+            $lockedResponse = MaintenanceVisitChecklistResponse::query()
+                ->lockForUpdate()
+                ->findOrFail($checklistResponse->id);
 
-        $checklistResponse->update([
-            'work_order_id' => $workOrder->id,
-        ]);
+            if ($lockedResponse->work_order_id) {
+                return MaintenanceWorkOrder::query()->findOrFail($lockedResponse->work_order_id);
+            }
+
+            $photoCount = $lockedResponse->photos()->count() + ($lockedResponse->photo_reference ? 1 : 0);
+            if ($photoCount > 3) {
+                throw ValidationException::withMessages([
+                    'photos' => 'El hallazgo supera el máximo de 3 fotografías permitido para una OT.',
+                ]);
+            }
+
+            $firstPhotoPath = $lockedResponse->photo_reference
+                ?: $lockedResponse->photos()->oldest('id')->value('path');
+
+            $workOrder = MaintenanceWorkOrder::create([
+                'maintenance_dependency_id' => $visit->maintenance_dependency_id,
+                'reported_at' => Carbon::now(),
+                'requested_by' => $visit->responsible,
+                'created_by_user_id' => $request->user()?->id,
+                'assigned_to' => $visit->responsible,
+                'priority' => $validated['priority'] ?? 'Media',
+                'status' => $validated['status'] ?? 'Sin comenzar',
+                'due_date' => $validated['due_date'] ?? null,
+                'description' => $description,
+                'resolution_notes' => $detail,
+                'photo_reference' => $firstPhotoPath,
+            ]);
+
+            $lockedResponse->update(['work_order_id' => $workOrder->id]);
+            $lockedResponse->photos()->update(['maintenance_work_order_id' => $workOrder->id]);
+
+            return $workOrder;
+        });
 
         return response()->json([
             'message' => 'OT creada desde hallazgo.',
-            'data' => $workOrder->load('dependency:id,code,name,distribution,sector,zone,usage'),
+            'data' => $workOrder->load(
+                'dependency:id,code,name,distribution,sector,zone,usage',
+                'evidencePhotos'
+            ),
         ], 201);
     }
 
@@ -380,7 +506,7 @@ class MaintenanceVisitController extends Controller
                 'label' => trim(sprintf(
                     '%s%s',
                     $staff->full_name,
-                    $staff->maintenance_role_label ? ' · ' . $staff->maintenance_role_label : ''
+                    $staff->maintenance_role_label ? ' · '.$staff->maintenance_role_label : ''
                 )),
                 'value' => $staff->full_name,
             ])

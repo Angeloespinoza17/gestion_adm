@@ -14,6 +14,7 @@ use App\Http\Middleware\InjectAuthorizationHeader;
 use App\Http\Middleware\LibroDigitalCorrelationId;
 use App\Http\Middleware\LibroDigitalIdempotency;
 use App\Http\Middleware\PreventRequestsDuringMaintenance;
+use App\Http\Middleware\RecordAuthenticatedUsage;
 use App\Http\Middleware\RedirectIfAuthenticated;
 use App\Http\Middleware\TrimStrings;
 use App\Http\Middleware\TrustProxies;
@@ -51,6 +52,7 @@ class Kernel extends HttpKernel
         ValidatePostSize::class,
         TrimStrings::class,
         ConvertEmptyStringsToNull::class,
+        RecordAuthenticatedUsage::class,
     ];
 
     /**

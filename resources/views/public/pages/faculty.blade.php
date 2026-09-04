@@ -2,6 +2,7 @@
 
 @section('title', 'Equipo | Colegio Nuestra Señora del Carmen')
 @section('description', 'Equipo directivo, docentes, asistentes y estamentos de apoyo del Colegio Nuestra Señora del Carmen.')
+@section('body_class', 'team-page-public')
 
 @php
   $teamFilters = $teamFilters ?? [
@@ -15,6 +16,9 @@
       ['key' => 'formacion-convivencia', 'label' => 'Formación y Convivencia Escolar'],
       ['key' => 'docentes', 'label' => 'Equipo Docente'],
   ];
+
+  // Never expose template/demo people when the controller provides no directory data.
+  $teamGroups = $teamGroups ?? [];
 
   $teamGroups = $teamGroups ?? [
       [
@@ -414,20 +418,23 @@
 
 @section('content')
   <section class="team-hero">
-    <div class="container text-center">
-      <div class="hero-kicker">
-        <span class="line"></span>
-        <span>Comunidad educativa</span>
-        <span class="line"></span>
+    <div class="container">
+      <div class="page-title__content">
+        <span class="page-title__kicker"><i class="bi bi-people" aria-hidden="true"></i> Comunidad educativa</span>
+        <h1>Nuestro equipo</h1>
+        <p>
+          @if (!empty($staffCount) && !empty($departmentCount))
+            {{ $staffCount }} funcionarios organizados en {{ $departmentCount }} departamentos al servicio de la comunidad educativa.
+          @else
+            Personas comprometidas con la formación integral de nuestros estudiantes.
+          @endif
+        </p>
+        <nav class="page-title__trail" aria-label="Ruta de navegación">
+          <a href="{{ route('public.home') }}">Inicio</a>
+          <i class="bi bi-chevron-right" aria-hidden="true"></i>
+          <span aria-current="page">Equipo</span>
+        </nav>
       </div>
-      <h1>Nuestro Equipo</h1>
-      <p>
-        @if (!empty($staffCount) && !empty($departmentCount))
-          {{ $staffCount }} funcionarios organizados en {{ $departmentCount }} departamentos al servicio de la comunidad educativa.
-        @else
-          Personas comprometidas con la formación integral de nuestros estudiantes.
-        @endif
-      </p>
     </div>
   </section>
 
@@ -449,60 +456,65 @@
       </div>
 
       @forelse ($teamGroups as $group)
-        <section class="team-group" data-group="{{ $group['key'] }}">
-          <div class="team-group-header">
-            <span class="eyebrow">{{ $group['eyebrow'] }}</span>
-            <h2>{{ $group['title'] }}</h2>
-            <p>{{ $group['description'] }}</p>
-          </div>
+        <details class="team-group" data-group="{{ $group['key'] }}" {{ $loop->first ? 'open' : '' }}>
+          <summary class="team-group-header">
+            <span class="team-group-header__copy">
+              <span class="eyebrow">{{ $group['eyebrow'] }}</span>
+              <span class="team-group-title">{{ $group['title'] }}</span>
+              <span class="team-group-description">{{ $group['description'] }}</span>
+            </span>
+            <span class="team-group-count">
+              {{ count($group['cards']) }} {{ count($group['cards']) === 1 ? 'integrante' : 'integrantes' }}
+              <i class="bi bi-chevron-down" aria-hidden="true"></i>
+            </span>
+          </summary>
 
-          <div class="row g-4">
+          <h2 class="visually-hidden">{{ $group['title'] }}</h2>
+
+          <div class="team-people-grid">
             @foreach ($group['cards'] as $person)
-              <div class="col-12 col-md-6 col-lg-4">
-                <article class="team-card" data-estamento="{{ $group['key'] }}" tabindex="0" role="button" aria-label="{{ $person['name'] }}, {{ $person['role'] }}">
+              @php
+                $hasPhoto = !empty($person['image']);
+                $personInitials = collect(preg_split('/\s+/', trim($person['name'])))
+                    ->filter()
+                    ->take(2)
+                    ->map(fn ($part) => mb_strtoupper(mb_substr($part, 0, 1)))
+                    ->implode('');
+              @endphp
+              <div class="team-person-slot">
+                <article class="team-card {{ $hasPhoto ? 'team-card--with-photo' : 'team-card--placeholder' }}" data-estamento="{{ $group['key'] }}">
                   <div class="photo-shell">
-                    @if (!empty($person['image']))
-                      <img src="{{ $person['image'] }}" alt="{{ $person['name'] }}">
+                    @if ($hasPhoto)
+                      <img src="{{ $person['image'] }}" alt="{{ $person['name'] }}" loading="lazy" decoding="async">
                     @else
-                      <div class="team-empty-photo" aria-hidden="true"></div>
-                    @endif
-                    <div class="overlay-layer" aria-hidden="true">
-                      <div class="overlay-box">
-                        <div class="overlay-kicker">{{ $group['label'] }}</div>
-                        <h4>{{ $person['name'] }}</h4>
-                        <p class="overlay-role">{{ $person['role'] }}</p>
-                        @if (!empty($person['department']))
-                          <p class="overlay-department">{{ $person['department'] }}</p>
-                        @endif
-                        @if (!empty($person['email']))
-                          <div class="overlay-contact">
-                            <a href="mailto:{{ $person['email'] }}">
-                              <i class="bi bi-envelope"></i>
-                              <span>{{ $person['email'] }}</span>
-                            </a>
-                          </div>
-                        @endif
+                      <div class="team-empty-photo" aria-hidden="true">
+                        <span>{{ $personInitials ?: 'CNSC' }}</span>
                       </div>
-                    </div>
+                    @endif
+                    <span class="team-photo-label">{{ $group['label'] }}</span>
                   </div>
 
                   <div class="card-body-front">
-                    <span class="team-label">{{ $group['label'] }}</span>
                     <h3 class="team-name">{{ $person['name'] }}</h3>
                     <p class="team-role">{{ $person['role'] }}</p>
                     @if (!empty($person['department']))
                       <p class="team-department">{{ $person['department'] }}</p>
                     @endif
-                    <div class="card-footer-hint">
-                      <span>Pasa el cursor o haz clic</span>
-                      <span class="flip-hint"><i class="bi bi-info-circle"></i> Contacto</span>
-                    </div>
+                    @if (!empty($person['phrase']))
+                      <p class="team-summary">{{ $person['phrase'] }}</p>
+                    @endif
+                    @if (!empty($person['email']))
+                      <a class="team-contact-link" href="mailto:{{ $person['email'] }}" aria-label="Escribir a {{ $person['name'] }} por correo electrónico">
+                        <i class="bi bi-envelope" aria-hidden="true"></i>
+                        <span>Escribir por correo</span>
+                      </a>
+                    @endif
                   </div>
                 </article>
               </div>
             @endforeach
           </div>
-        </section>
+        </details>
       @empty
         <section class="team-group">
           <div class="team-group-header">
@@ -526,12 +538,17 @@
         cards.forEach((card) => {
           const visible = filter === 'all' || card.dataset.estamento === filter;
           card.classList.toggle('is-hidden', !visible);
-          card.classList.remove('is-revealed');
         });
 
-        groups.forEach((group) => {
+        groups.forEach((group, index) => {
           const visibleCards = group.querySelectorAll('.team-card:not(.is-hidden)');
           group.classList.toggle('d-none', visibleCards.length === 0);
+
+          if (filter === 'all') {
+            group.open = index === 0;
+          } else if (visibleCards.length > 0) {
+            group.open = true;
+          }
         });
       };
 
@@ -545,20 +562,6 @@
           button.classList.add('active');
           button.setAttribute('aria-pressed', 'true');
           applyFilter(button.dataset.filter);
-        });
-      });
-
-      cards.forEach((card) => {
-        card.addEventListener('click', (event) => {
-          if (event.target.closest('a, button')) return;
-          card.classList.toggle('is-revealed');
-        });
-
-        card.addEventListener('keydown', (event) => {
-          if (event.key !== 'Enter' && event.key !== ' ') return;
-
-          event.preventDefault();
-          card.classList.toggle('is-revealed');
         });
       });
 

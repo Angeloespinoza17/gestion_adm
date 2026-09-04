@@ -14,8 +14,12 @@ use App\Services\Library\BibliotecaCodeService;
 use App\Services\Library\BibliotecaInventoryService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
+use Throwable;
 
 class BibliotecaCatalogController extends Controller
 {
@@ -80,22 +84,41 @@ class BibliotecaCatalogController extends Controller
         $this->authorize('create', BibliotecaObra::class);
 
         $validated = $request->validated();
+        $coverImage = $request->file('cover_image');
+        unset($validated['cover_image']);
         $validated = $this->normalizeRelations($validated);
         $quantity = (int) ($validated['quantity'] ?? 1);
         unset($validated['quantity'], $validated['additional_quantity']);
 
-        $obra = DB::transaction(function () use ($request, $validated, $quantity) {
-            $validated['internal_code'] = ($validated['internal_code'] ?? null) ?: $this->codeService->next('OBR');
+        $storedCoverPath = null;
 
-            $obra = BibliotecaObra::query()->create(array_merge($validated, [
-                'created_by' => $request->user()->id,
-                'updated_by' => $request->user()->id,
-            ]));
+        try {
+            $obra = DB::transaction(function () use ($request, $validated, $quantity, $coverImage, &$storedCoverPath) {
+                $validated['internal_code'] = ($validated['internal_code'] ?? null) ?: $this->codeService->next('OBR');
 
-            $this->inventoryService->addCopies($obra, $quantity, $request->user());
+                $obra = BibliotecaObra::query()->create(array_merge($validated, [
+                    'created_by' => $request->user()->id,
+                    'updated_by' => $request->user()->id,
+                ]));
 
-            return $obra;
-        });
+                if ($coverImage instanceof UploadedFile) {
+                    $storedCoverPath = $this->storeCoverImage($obra, $coverImage);
+                    $obra->forceFill([
+                        'cover_image_url' => $this->managedCoverUrl($obra, basename($storedCoverPath)),
+                    ])->save();
+                }
+
+                $this->inventoryService->addCopies($obra, $quantity, $request->user());
+
+                return $obra;
+            });
+        } catch (Throwable $exception) {
+            if ($storedCoverPath) {
+                Storage::disk('local')->delete($storedCoverPath);
+            }
+
+            throw $exception;
+        }
 
         return response()->json([
             'message' => 'Obra bibliográfica registrada correctamente.',
@@ -154,15 +177,37 @@ class BibliotecaCatalogController extends Controller
         $this->authorize('update', $obra);
 
         $validated = $request->validated();
+        $coverImage = $request->file('cover_image');
+        unset($validated['cover_image']);
         $validated = $this->normalizeRelations($validated);
         $additionalQuantity = (int) ($validated['additional_quantity'] ?? 0);
         unset($validated['quantity'], $validated['additional_quantity']);
+        $previousCoverUrl = $obra->cover_image_url;
+        $storedCoverPath = null;
 
-        DB::transaction(function () use ($obra, $validated, $additionalQuantity, $request) {
-            $validated['internal_code'] = ($validated['internal_code'] ?? null) ?: $obra->internal_code;
-            $obra->fill(array_merge($validated, ['updated_by' => $request->user()->id]))->save();
-            $this->inventoryService->addCopies($obra, $additionalQuantity, $request->user());
-        });
+        try {
+            DB::transaction(function () use ($obra, $validated, $additionalQuantity, $request, $coverImage, &$storedCoverPath) {
+                $validated['internal_code'] = ($validated['internal_code'] ?? null) ?: $obra->internal_code;
+
+                if ($coverImage instanceof UploadedFile) {
+                    $storedCoverPath = $this->storeCoverImage($obra, $coverImage);
+                    $validated['cover_image_url'] = $this->managedCoverUrl($obra, basename($storedCoverPath));
+                }
+
+                $obra->fill(array_merge($validated, ['updated_by' => $request->user()->id]))->save();
+                $this->inventoryService->addCopies($obra, $additionalQuantity, $request->user());
+            });
+        } catch (Throwable $exception) {
+            if ($storedCoverPath) {
+                Storage::disk('local')->delete($storedCoverPath);
+            }
+
+            throw $exception;
+        }
+
+        if ($previousCoverUrl !== $obra->cover_image_url) {
+            $this->deleteManagedCover($obra, $previousCoverUrl);
+        }
 
         return response()->json([
             'message' => 'Obra bibliográfica actualizada correctamente.',
@@ -180,10 +225,27 @@ class BibliotecaCatalogController extends Controller
             ]);
         }
 
+        $coverUrl = $obra->cover_image_url;
         $obra->delete();
+        $this->deleteManagedCover($obra, $coverUrl);
 
         return response()->json([
             'message' => 'Obra bibliográfica eliminada correctamente.',
+        ]);
+    }
+
+    public function cover(BibliotecaObra $obra, string $cover)
+    {
+        $this->authorize('view', $obra);
+        abort_unless($obra->cover_image_url === $this->managedCoverUrl($obra, $cover), 404);
+
+        $path = 'library/catalog-covers/'.$obra->id.'/'.$cover;
+        abort_unless(Storage::disk('local')->exists($path), 404);
+
+        return Storage::disk('local')->response($path, $cover, [
+            'Cache-Control' => 'private, max-age=3600',
+            'Content-Disposition' => 'inline; filename="'.$cover.'"',
+            'X-Content-Type-Options' => 'nosniff',
         ]);
     }
 
@@ -211,5 +273,58 @@ class BibliotecaCatalogController extends Controller
         }
 
         return $payload;
+    }
+
+    private function storeCoverImage(BibliotecaObra $obra, UploadedFile $coverImage): string
+    {
+        $extension = $this->extensionForCoverMime((string) $coverImage->getMimeType());
+        if (! $extension) {
+            throw ValidationException::withMessages([
+                'cover_image' => 'La portada debe estar en formato JPG, PNG, WebP, HEIC o HEIF.',
+            ]);
+        }
+
+        $filename = Str::uuid()->toString().'.'.$extension;
+        $path = $coverImage->storeAs('library/catalog-covers/'.$obra->id, $filename, 'local');
+
+        if (! $path) {
+            throw ValidationException::withMessages([
+                'cover_image' => 'No fue posible almacenar la imagen de portada.',
+            ]);
+        }
+
+        return $path;
+    }
+
+    private function deleteManagedCover(BibliotecaObra $obra, ?string $coverUrl): void
+    {
+        $prefix = '/api/biblioteca/obras/'.$obra->id.'/cover/';
+        if (! is_string($coverUrl) || ! str_starts_with($coverUrl, $prefix)) {
+            return;
+        }
+
+        $filename = basename($coverUrl);
+        if (preg_match('/^[a-f0-9-]+\.(?:jpe?g|png|webp|heic|heif)$/i', $filename) !== 1) {
+            return;
+        }
+
+        Storage::disk('local')->delete('library/catalog-covers/'.$obra->id.'/'.$filename);
+    }
+
+    private function managedCoverUrl(BibliotecaObra $obra, string $filename): string
+    {
+        return '/api/biblioteca/obras/'.$obra->id.'/cover/'.$filename;
+    }
+
+    private function extensionForCoverMime(string $mime): ?string
+    {
+        return match (strtolower($mime)) {
+            'image/jpeg', 'image/jpg', 'image/pjpeg' => 'jpg',
+            'image/png' => 'png',
+            'image/webp' => 'webp',
+            'image/heic', 'image/x-heic' => 'heic',
+            'image/heif', 'image/x-heif' => 'heif',
+            default => null,
+        };
     }
 }

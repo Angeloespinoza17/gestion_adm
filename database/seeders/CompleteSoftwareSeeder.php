@@ -14,6 +14,7 @@ use Database\Seeders\Modules\SpacesModuleSeeder;
 use Database\Seeders\Modules\StaffModuleSeeder;
 use Database\Seeders\Modules\StaffPermissionModuleSeeder;
 use Database\Seeders\Modules\StudentModuleSeeder;
+use Database\Seeders\Modules\SupplyModuleSeeder;
 use Database\Seeders\Support\PreventsProductionSeeding;
 use Illuminate\Database\Seeder;
 
@@ -52,8 +53,10 @@ class CompleteSoftwareSeeder extends Seeder
             AccountingModuleSeeder::class,
             RemunerationSeeder::class,
             InformaticaSeeder::class,
+            DocumentationSeeder::class,
             PermissionBackfillSeeder::class,
             PermissionGroupSeeder::class,
+            SupplyModuleSeeder::class,
             AttendancePermissionSeeder::class,
             SocialWorkSeeder::class,
             NavigationModuleBackfillSeeder::class,

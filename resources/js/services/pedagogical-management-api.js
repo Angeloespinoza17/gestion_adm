@@ -9,6 +9,22 @@ export const pedagogicalPolling = Object.freeze({
     staleAfterMs: 120000,
 });
 
+export const aiWorkspacePolling = Object.freeze({
+    intervalMs: 4000,
+    maxAttempts: 45,
+});
+
+export function aiWorkspacePollingDecision({
+    status,
+    attempts,
+    requestFailed = false,
+}) {
+    if (!["pending", "processing"].includes(status)) return "complete";
+    if (requestFailed || attempts >= aiWorkspacePolling.maxAttempts)
+        return "pause";
+    return "continue";
+}
+
 export function analysisIsStale(instrument, now = Date.now()) {
     if (!["pending_analysis", "processing"].includes(instrument?.status))
         return false;
@@ -154,6 +170,35 @@ export const pedagogicalManagementApi = {
         axios
             .get(`${base}/statistics/instruments/${instrumentId}`, readOptions)
             .then(({ data }) => data.data),
+    aiWorkspaceCatalogs: (params = {}) =>
+        axios
+            .get(`${base}/ai-workspace/catalogs`, { ...readOptions, params })
+            .then(({ data }) => data.data),
+    aiWorkspaceList: (params = {}) =>
+        axios
+            .get(`${base}/ai-workspace/reviews`, { ...readOptions, params })
+            .then(({ data }) => data),
+    createAiWorkspaceReview: (formData) =>
+        axios
+            .post(`${base}/ai-workspace/reviews`, formData, {
+                headers: { "Content-Type": "multipart/form-data" },
+                timeout: 60000,
+            })
+            .then(({ data }) => data.data),
+    aiWorkspaceReview: (instrumentId) =>
+        axios
+            .get(`${base}/ai-workspace/reviews/${instrumentId}`, readOptions)
+            .then(({ data }) => data.data),
+    regenerateAiWorkspaceReview: (instrumentId) =>
+        axios
+            .post(
+                `${base}/ai-workspace/reviews/${instrumentId}/reports`,
+                null,
+                {
+                    timeout: 20000,
+                }
+            )
+            .then(({ data }) => data.data),
 };
 
 const printBase = "/api/pedagogical-print-center";
@@ -177,6 +222,7 @@ export const pedagogicalPrintApi = {
 };
 
 export const workflowStatus = {
+    draft: ["Espacio privado", "neutral"],
     submitted: ["En revisión", "info"],
     rectification_requested: ["Rectificación solicitada", "danger"],
     resubmitted: ["Rectificación enviada", "warning"],
@@ -257,7 +303,10 @@ const acceptedInstrumentMimes = {
 
 export function instrumentFileExtension(fileOrName) {
     const name = typeof fileOrName === "string" ? fileOrName : fileOrName?.name;
-    return String(name || "").toLowerCase().split(".").pop();
+    return String(name || "")
+        .toLowerCase()
+        .split(".")
+        .pop();
 }
 
 export function instrumentFileIcon(fileOrName) {
@@ -266,7 +315,7 @@ export function instrumentFileIcon(fileOrName) {
         : "bx-file";
 }
 
-export function validateInstrumentCandidate(file, maxKb = 20480) {
+export function validateInstrumentCandidate(file, maxKb = 30720) {
     if (!file) return "Selecciona un archivo PDF o Word (.docx).";
     const extension = String(file.name || "")
         .toLowerCase()
@@ -278,9 +327,11 @@ export function validateInstrumentCandidate(file, maxKb = 20480) {
         file.type &&
         !acceptedInstrumentMimes[extension].includes(file.type.toLowerCase())
     )
-        return "El navegador no reconoce el contenido como un "
-            + (extension === "docx" ? "Word .docx" : "PDF")
-            + " válido.";
+        return (
+            "El navegador no reconoce el contenido como un " +
+            (extension === "docx" ? "Word .docx" : "PDF") +
+            " válido."
+        );
     if (file.size <= 0) return "El archivo está vacío.";
     if (file.size > Number(maxKb) * 1024)
         return `El archivo supera el máximo de ${Math.round(

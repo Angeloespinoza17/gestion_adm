@@ -8,7 +8,19 @@ use Illuminate\Support\Facades\DB;
 
 class PsychologyAuditService
 {
-    private const REDACTED = ['observed_facts', 'internal_decision_note', 'private_note', 'professional_rationale', 'content', 'private_path', 'information_response'];
+    private const REDACTED = [
+        'observed_facts',
+        'internal_decision_note',
+        'private_note',
+        'professional_rationale',
+        'content',
+        'private_path',
+        'information_response',
+        'general_reason',
+        'categories',
+        'objectives',
+        'next_action',
+    ];
 
     public function record(string $action, Model $model, ?User $user, array $old = [], array $new = [], ?string $reason = null): void
     {

@@ -42,6 +42,7 @@ class LibroDigitalSeeder extends Seeder
         'libro_digital.coexistence.manage' => 'Gestionar registros de convivencia',
         'libro_digital.pie.view' => 'Consultar registros PIE autorizados',
         'libro_digital.pie.manage' => 'Gestionar registros PIE autorizados',
+        'libro_digital.withdrawals.view' => 'Consultar salidas y retiros',
         'libro_digital.withdrawals.manage' => 'Gestionar salidas y retiros',
         'libro_digital.absence.manage' => 'Gestionar ausencias prolongadas',
         'libro_digital.parvularia.manage' => 'Gestionar Libro Tecnico Pedagogico',

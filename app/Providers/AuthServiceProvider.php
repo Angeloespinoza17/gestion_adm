@@ -48,6 +48,7 @@ use App\Models\Messaging\Message as MessagingMessage;
 use App\Models\Messaging\MessageAttachment as MessagingMessageAttachment;
 use App\Models\Operational\OperationalTransferRequest;
 use App\Models\PedagogicalManagement\PedagogicalInstrument;
+use App\Models\PedagogicalManagement\ClassPresentation;
 use App\Models\PermissionRequest;
 use App\Models\Pme\PmeAction;
 use App\Models\Pme\PmeActivity;
@@ -124,6 +125,7 @@ use App\Policies\MessageAttachmentPolicy as MessagingMessageAttachmentPolicy;
 use App\Policies\MessagePolicy as MessagingMessagePolicy;
 use App\Policies\OperationalTransferRequestPolicy;
 use App\Policies\PedagogicalManagement\PedagogicalInstrumentPolicy;
+use App\Policies\PedagogicalManagement\ClassPresentationPolicy;
 use App\Policies\PanolEntregaPolicy;
 use App\Policies\PanolInsumoPolicy;
 use App\Policies\PanolMovimientoPolicy;
@@ -150,6 +152,7 @@ class AuthServiceProvider extends ServiceProvider
      * @var array<class-string, class-string>
      */
     protected $policies = [
+        ClassPresentation::class => ClassPresentationPolicy::class,
         PedagogicalInstrument::class => PedagogicalInstrumentPolicy::class,
         PsychologyReferral::class => PsychologyReferralPolicy::class,
         PsychologyCase::class => PsychologyCasePolicy::class,

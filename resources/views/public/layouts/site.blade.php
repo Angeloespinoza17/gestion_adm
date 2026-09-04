@@ -12,10 +12,11 @@
 
   <link href="https://fonts.googleapis.com" rel="preconnect">
   <link href="https://fonts.gstatic.com" rel="preconnect" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&family=Poppins:wght@400;500;600;700;800&family=Raleway:wght@500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Poppins:wght@500;600;700;800&display=swap" rel="stylesheet">
 
   @php
     $siteCssPath = 'niceschool/assets/css/main.css';
+    $premiumCssPath = 'niceschool/assets/css/cnsc-premium.css';
     $bootstrapCssPath = 'niceschool/assets/vendor/bootstrap/css/bootstrap.min.css';
     $bootstrapJsPath = 'niceschool/assets/vendor/bootstrap/js/bootstrap.bundle.min.js';
 
@@ -27,6 +28,9 @@
       : $siteAssetVersion;
     $bootstrapJsAssetVersion = file_exists(public_path($bootstrapJsPath))
       ? filemtime(public_path($bootstrapJsPath))
+      : $siteAssetVersion;
+    $premiumAssetVersion = file_exists(public_path($premiumCssPath))
+      ? filemtime(public_path($premiumCssPath))
       : $siteAssetVersion;
   @endphp
 
@@ -150,7 +154,22 @@
       width: 100%;
     }
 
+    .col-6 {
+      flex: 0 0 auto;
+      width: 50%;
+    }
+
+    .row-cols-1 > * {
+      flex: 0 0 auto;
+      width: 100%;
+    }
+
     @media (min-width: 768px) {
+      .col-md-3 {
+        flex: 0 0 auto;
+        width: 25%;
+      }
+
       .col-md-4 {
         flex: 0 0 auto;
         width: 33.33333333%;
@@ -160,9 +179,24 @@
         flex: 0 0 auto;
         width: 50%;
       }
+
+      .row-cols-md-2 > * {
+        flex: 0 0 auto;
+        width: 50%;
+      }
     }
 
     @media (min-width: 992px) {
+      .col-lg-3 {
+        flex: 0 0 auto;
+        width: 25%;
+      }
+
+      .col-lg-4 {
+        flex: 0 0 auto;
+        width: 33.33333333%;
+      }
+
       .col-lg-5 {
         flex: 0 0 auto;
         width: 41.66666667%;
@@ -176,6 +210,21 @@
       .col-lg-7 {
         flex: 0 0 auto;
         width: 58.33333333%;
+      }
+
+      .col-lg-8 {
+        flex: 0 0 auto;
+        width: 66.66666667%;
+      }
+
+      .col-lg-10 {
+        flex: 0 0 auto;
+        width: 83.33333333%;
+      }
+
+      .row-cols-lg-3 > * {
+        flex: 0 0 auto;
+        width: 33.33333333%;
       }
     }
 
@@ -1642,53 +1691,83 @@
 
     }
   </style>
+  <link href="{{ asset($premiumCssPath) }}?v={{ $premiumAssetVersion }}" rel="stylesheet">
 </head>
 
-<body class="@yield('body_class', 'inner-page')">
+<body class="public-site @yield('body_class', 'inner-page')">
+  <a class="site-skip-link" href="#main-content">Saltar al contenido principal</a>
 
-  <header id="header" class="header d-flex align-items-center fixed-top">
-    <div class="container-fluid container-xl position-relative d-flex align-items-center justify-content-between">
-      <a href="{{ route('public.home') }}" class="logo d-flex align-items-center">
-        <img src="{{ asset('brand/logo-cnsc.png') }}" alt="Escudo Colegio Nuestra Señora del Carmen" class="brand-logo">
+  <header id="header" class="header site-header d-flex align-items-center fixed-top">
+    <div class="container-fluid container-xl site-header__shell position-relative d-flex align-items-center justify-content-between">
+      <a href="{{ route('public.home') }}" class="logo site-brand d-flex align-items-center" aria-label="Ir al inicio del Colegio Nuestra Señora del Carmen">
+        <img src="{{ asset('brand/logo-cnsc-web.webp') }}" alt="Escudo Colegio Nuestra Señora del Carmen" class="brand-logo" width="300" height="322">
         <span class="brand-wordmark">
           <strong>Colegio Nuestra Señora del Carmen</strong>
           <span>Valdivia</span>
         </span>
       </a>
 
-      <nav id="navmenu" class="navmenu">
+      <nav id="navmenu" class="navmenu" aria-label="Navegación principal">
         <ul>
           <li><a href="{{ route('public.home') }}" class="{{ request()->routeIs('public.home') ? 'active' : '' }}">Inicio</a></li>
           <li class="dropdown">
-            <a href="#" class="{{ request()->routeIs('public.about', 'public.admissions', 'public.faculty', 'public.campus') ? 'active' : '' }}"><span>Colegio</span> <i class="bi bi-chevron-down toggle-dropdown"></i></a>
-            <ul>
+            <a href="{{ route('public.about') }}" class="{{ request()->routeIs('public.about', 'public.admissions', 'public.faculty', 'public.campus*', 'public.cgpa', 'public.cde', 'public.joint-committee') ? 'active' : '' }}" aria-haspopup="true" aria-expanded="false"><span>Colegio</span> <i class="bi bi-chevron-down toggle-dropdown" aria-label="Abrir opciones de Colegio"></i></a>
+            <ul class="school-menu-dropdown">
               <li><a href="{{ route('public.about') }}">Nosotros</a></li>
-              <li><a href="{{ route('public.admissions') }}">Admisión</a></li>
+              <li><a href="{{ route('public.cgpa') }}">CGPA · Centro General de Padres y Apoderados</a></li>
+              <li><a href="{{ route('public.cde') }}" aria-label="Centro de Estudiantes">CDE · Centro de Estudiantes</a></li>
+              <li><a href="{{ route('public.joint-committee') }}">Comité Paritario</a></li>
+              <li class="school-menu-dropdown__separator"><a href="{{ route('public.admissions') }}">Admisión</a></li>
               <li><a href="{{ route('public.faculty') }}">Equipo</a></li>
               <li><a href="{{ route('public.campus') }}">Instalaciones</a></li>
             </ul>
           </li>
-          <li><a href="{{ route('public.students-life') }}" class="{{ request()->routeIs('public.students-life') ? 'active' : '' }}">Vida estudiantil</a></li>
+          <li><a href="{{ route('public.educational-project') }}" class="{{ request()->routeIs('public.educational-project*') ? 'active' : '' }}">Proyecto educativo</a></li>
+          <li><a href="{{ route('public.students-life') }}" class="{{ request()->routeIs('public.students-life', 'public.student-life.*') ? 'active' : '' }}">Vida estudiantil</a></li>
           <li><a href="{{ route('public.news') }}" class="{{ request()->routeIs('public.news*') ? 'active' : '' }}">Noticias</a></li>
           <li><a href="{{ route('public.events') }}" class="{{ request()->routeIs('public.events*') ? 'active' : '' }}">Eventos</a></li>
           <li><a href="{{ route('public.contact') }}" class="{{ request()->routeIs('public.contact') ? 'active' : '' }}">Contacto</a></li>
-          <li><a href="{{ url('/login') }}" class="home-login-link">Sistema interno</a></li>
+          <li><a href="{{ url('/login') }}" class="home-login-link"><i class="bi bi-shield-lock" aria-hidden="true"></i><span>Sistema interno</span></a></li>
         </ul>
-        <i class="mobile-nav-toggle d-xl-none bi bi-list"></i>
+        <button type="button" class="mobile-nav-toggle d-xl-none" aria-label="Abrir menú" aria-controls="navmenu" aria-expanded="false">
+          <i class="bi bi-list" aria-hidden="true"></i>
+        </button>
       </nav>
     </div>
   </header>
 
-  <main class="main">
+  <main id="main-content" class="main">
     @yield('content')
   </main>
 
-  <footer id="contacto" class="footer position-relative dark-background">
+  @unless(request()->routeIs('public.contact', 'public.educational-project*', 'public.students-life', 'public.campus*'))
+    <section class="site-invitation" aria-labelledby="site-invitation-title">
+      <div class="container">
+        <div class="site-invitation__panel">
+          <div class="site-invitation__mark" aria-hidden="true">
+            <img src="{{ asset('brand/logo-cnsc-web.webp') }}" alt="" width="300" height="322" loading="lazy" decoding="async">
+          </div>
+          <div class="site-invitation__copy">
+            <span class="site-invitation__eyebrow">Comunidad CNSC</span>
+            <h2 id="site-invitation-title">Conversemos sobre el camino educativo de tu familia</h2>
+            <p>Conoce nuestro proyecto, resuelve tus dudas y descubre una comunidad que acompaña cada etapa.</p>
+          </div>
+          <div class="site-invitation__actions">
+            <a href="{{ route('public.educational-project') }}" class="btn btn-light">Conoce nuestro proyecto educativo <i class="bi bi-arrow-up-right"></i></a>
+            <a href="{{ route('public.contact') }}" class="btn site-invitation__secondary">Contactar al colegio</a>
+          </div>
+        </div>
+      </div>
+    </section>
+  @endunless
+
+  <footer id="contacto" class="footer site-footer position-relative dark-background">
     <div class="container footer-top">
       <div class="row gy-4">
         <div class="col-lg-5 col-md-6 footer-about">
+          <span class="site-footer__eyebrow">Desde 1907 · Valdivia</span>
           <a href="{{ route('public.home') }}" class="logo d-flex align-items-center">
-            <img src="{{ asset('brand/logo-cnsc.png') }}" alt="Escudo CNSC" class="brand-logo">
+            <img src="{{ asset('brand/logo-cnsc-web.webp') }}" alt="Escudo CNSC" class="brand-logo" width="300" height="322" loading="lazy" decoding="async">
             <span class="sitename">Colegio Nuestra Señora del Carmen</span>
           </a>
           <div class="footer-contact pt-3">
@@ -1704,16 +1783,17 @@
           </div>
         </div>
         <div class="col-lg-3 col-md-3 footer-links">
-          <h4>Colegio</h4>
+          <h4>Conoce el colegio</h4>
           <ul>
             <li><a href="{{ route('public.about') }}">Nosotros</a></li>
+            <li><a href="{{ route('public.educational-project') }}">Proyecto educativo</a></li>
             <li><a href="{{ route('public.admissions') }}">Admisión</a></li>
             <li><a href="{{ route('public.faculty') }}">Equipo</a></li>
             <li><a href="{{ route('public.campus') }}">Instalaciones</a></li>
           </ul>
         </div>
         <div class="col-lg-4 col-md-3 footer-links">
-          <h4>Accesos</h4>
+          <h4>Explora</h4>
           <ul>
             <li><a href="{{ route('public.students-life') }}">Vida estudiantil</a></li>
             <li><a href="{{ route('public.news') }}">Noticias</a></li>
@@ -1729,7 +1809,7 @@
     </div>
   </footer>
 
-  <a href="#" id="scroll-top" class="scroll-top d-flex align-items-center justify-content-center"><i class="bi bi-arrow-up-short"></i></a>
+  <a href="#" id="scroll-top" class="scroll-top d-flex align-items-center justify-content-center" aria-label="Volver al inicio"><i class="bi bi-arrow-up-short"></i></a>
   <div id="preloader"></div>
 
   @if(file_exists(public_path($bootstrapJsPath)))

@@ -6,7 +6,7 @@ return [
         'root' => trim((string) env('PEDAGOGICAL_INSTRUMENTS_ROOT', 'private/pedagogical-management/instruments'), '/'),
         'max_file_kb' => (int) env(
             'PEDAGOGICAL_INSTRUMENTS_MAX_FILE_KB',
-            env('PEDAGOGICAL_INSTRUMENTS_MAX_PDF_KB', 20480),
+            env('PEDAGOGICAL_INSTRUMENTS_MAX_PDF_KB', 30720),
         ),
     ],
 

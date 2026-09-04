@@ -634,8 +634,39 @@ export default {
     dependencyLabel(dep) {
       if (!dep) return "-";
 
-      const detail = [dep.distribution, dep.sector, dep.zone].filter(Boolean).join(" · ");
-      return `${dep.code} · ${dep.name}${detail ? ` · ${detail}` : ""}`;
+      const detail = this.dependencyContext(dep);
+      return `${this.dependencyCode(dep)} · ${this.dependencyName(dep)}${detail ? ` · ${detail}` : ""}`;
+    },
+    dependencyName(dep) {
+      return String(dep?.name || "").trim() || "Dependencia sin nombre";
+    },
+    dependencyCode(dep) {
+      return String(dep?.code || "").trim() || "Sin código";
+    },
+    dependencyContext(dep) {
+      if (!dep) return "";
+
+      const seen = new Set([dep.code, dep.name]
+        .map((value) => String(value || "").trim().toLocaleLowerCase("es-CL"))
+        .filter(Boolean));
+
+      return [dep.distribution, dep.sector, dep.zone, dep.usage]
+        .map((value) => String(value || "").trim())
+        .filter((value) => {
+          const normalized = value.toLocaleLowerCase("es-CL");
+          if (!value || seen.has(normalized)) return false;
+          seen.add(normalized);
+          return true;
+        })
+        .join(" · ");
+    },
+    calendarVisitTitle(visit) {
+      return [
+        `${this.formatTime(visit.visit_time)} · ${this.dependencyCode(visit.dependency)}`,
+        this.dependencyName(visit.dependency),
+        this.dependencyContext(visit.dependency),
+        `Responsable: ${visit.responsible || "Sin responsable"}`,
+      ].filter(Boolean).join("\n");
     },
     monthTitle(monthValue = this.calendarMonth) {
       const [year, month] = String(monthValue).split("-").map(Number);
@@ -956,12 +987,22 @@ export default {
                   type="button"
                   class="visits-calendar-event"
                   :class="statusClass(visit.status)"
-                  :title="`${formatTime(visit.visit_time)} · ${visit.responsible}`"
+                  :title="calendarVisitTitle(visit)"
                   @click="editVisit(visit)"
                 >
-                  <strong>{{ formatTime(visit.visit_time) }}</strong>
-                  <span>{{ visit.responsible }}</span>
-                  <small>{{ visit.dependency?.code || "Sin código" }}</small>
+                  <span class="visits-calendar-event__head">
+                    <strong>{{ formatTime(visit.visit_time) }}</strong>
+                    <em>{{ dependencyCode(visit.dependency) }}</em>
+                  </span>
+                  <span class="visits-calendar-event__name">{{ dependencyName(visit.dependency) }}</span>
+                  <small v-if="dependencyContext(visit.dependency)" class="visits-calendar-event__location">
+                    <i class="mdi mdi-map-marker-outline"></i>
+                    <span>{{ dependencyContext(visit.dependency) }}</span>
+                  </small>
+                  <small class="visits-calendar-event__responsible">
+                    <i class="mdi mdi-account-outline"></i>
+                    <span>{{ visit.responsible || "Sin responsable" }}</span>
+                  </small>
                 </button>
               </div>
             </div>
@@ -995,7 +1036,12 @@ export default {
                   </div>
                   <h6>{{ visit.dependency?.name || "Dependencia sin nombre" }}</h6>
                   <p><i class="mdi mdi-account-outline"></i>{{ visit.responsible || "Sin responsable" }}</p>
-                  <small><i class="mdi mdi-map-marker-outline"></i>{{ visit.dependency?.code || "Sin código" }}</small>
+                  <small class="visits-mobile-card__code">
+                    <i class="mdi mdi-pound"></i>{{ dependencyCode(visit.dependency) }}
+                  </small>
+                  <small v-if="dependencyContext(visit.dependency)" class="visits-mobile-card__location">
+                    <i class="mdi mdi-map-marker-outline"></i>{{ dependencyContext(visit.dependency) }}
+                  </small>
                   <div class="visits-mobile-card__actions">
                     <button type="button" @click="goChecklist(visit)"><i class="mdi mdi-clipboard-check-outline"></i>Checklist</button>
                     <button type="button" @click="editVisit(visit)"><i class="mdi mdi-pencil-outline"></i>Editar</button>
@@ -1933,7 +1979,7 @@ export default {
 }
 
 .visits-calendar-day {
-  min-height: 132px;
+  min-height: 156px;
   padding: 10px;
   border-right: 1px solid #e5edf9;
   border-bottom: 1px solid #e5edf9;
@@ -1996,38 +2042,102 @@ export default {
 .visits-calendar-event {
   width: 100%;
   min-width: 0;
-  padding: 8px;
-  border-radius: 8px;
+  min-height: 104px;
+  padding: 8px 9px;
+  border-radius: 10px;
   border: 1px solid #dce5f4;
   background: #f8fafc;
   text-align: left;
+  transition: border-color 0.16s ease, box-shadow 0.16s ease, transform 0.16s ease;
 }
 
-.visits-calendar-event strong,
-.visits-calendar-event span,
-.visits-calendar-event small {
-  display: block;
+.visits-calendar-event:hover {
+  z-index: 1;
+  box-shadow: 0 7px 18px rgba(31, 46, 86, 0.12);
+  transform: translateY(-1px);
+}
+
+.visits-calendar-event__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  min-width: 0;
+}
+
+.visits-calendar-event__head strong,
+.visits-calendar-event__head em,
+.visits-calendar-event__name,
+.visits-calendar-event__location span,
+.visits-calendar-event__responsible span {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.visits-calendar-event strong {
+.visits-calendar-event__head strong {
+  flex: 0 0 auto;
   font-size: 12px;
-  font-weight: 700;
+  font-weight: 800;
 }
 
-.visits-calendar-event span {
-  margin-top: 2px;
+.visits-calendar-event__head em {
+  padding: 2px 6px;
+  border-radius: 999px;
+  color: #5f6b82;
+  background: rgba(255, 255, 255, 0.7);
+  border: 1px solid rgba(128, 142, 170, 0.24);
+  font-size: 9px;
+  font-style: normal;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+}
+
+.visits-calendar-event__name {
+  display: -webkit-box;
+  margin-top: 5px;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  white-space: normal;
   color: #303848;
   font-size: 12px;
-  font-weight: 600;
+  font-weight: 750;
+  line-height: 1.2;
 }
 
-.visits-calendar-event small {
-  color: #778199;
+.visits-calendar-event__location,
+.visits-calendar-event__responsible {
+  display: grid;
+  grid-template-columns: 12px minmax(0, 1fr);
+  align-items: center;
+  gap: 3px;
+  margin-top: 4px;
+  color: #6b758b;
+  font-size: 9.5px;
+  font-weight: 550;
+  line-height: 1.2;
+}
+
+.visits-calendar-event__location i,
+.visits-calendar-event__responsible i {
+  color: #8390a6;
   font-size: 11px;
-  font-weight: 500;
+}
+
+.visits-calendar-event__responsible {
+  margin-top: 3px;
+  color: #7b8598;
+}
+
+.visits-calendar-event__location {
+  align-items: start;
+}
+
+.visits-calendar-event__location span {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  white-space: normal;
 }
 
 .visits-calendar-event.visit-pill--planned {
@@ -2729,6 +2839,29 @@ export default {
   .visits-mobile-card small {
     margin-top: 4px;
     color: #8490a4;
+  }
+
+  .visits-mobile-card__code {
+    width: fit-content;
+    padding: 3px 7px;
+    border: 1px solid #dce4f1;
+    border-radius: 999px;
+    color: #536179 !important;
+    background: #f7f9fc;
+    font-size: 9px !important;
+    font-weight: 750;
+  }
+
+  .visits-mobile-card__location {
+    align-items: flex-start !important;
+    margin-top: 7px !important;
+    color: #66748c !important;
+    font-size: 10px !important;
+    line-height: 1.4;
+  }
+
+  .visits-mobile-card__location i {
+    margin-top: 1px;
   }
 
   .visits-mobile-card__actions {

@@ -234,6 +234,63 @@ class SocialWorkModuleTest extends TestCase
         $this->assertDatabaseHas('social_work_audit_events', ['action' => 'student_support.updated', 'auditable_id' => $this->student->id]);
     }
 
+    public function test_junaeb_student_options_use_current_enrollments_without_requiring_general_student_permission(): void
+    {
+        $year = AcademicYear::query()->create([
+            'name' => 'Año escolar 2026', 'year' => 2026, 'starts_at' => '2026-03-01',
+            'ends_at' => '2026-12-31', 'is_active' => true, 'is_closed' => false,
+        ]);
+        $eligibleLevel = EducationLevel::query()->create([
+            'name' => '5° básico catálogo JUNAEB', 'type' => 'basica', 'order' => 996,
+        ]);
+        $ineligibleLevel = EducationLevel::query()->create([
+            'name' => '4° básico catálogo JUNAEB', 'type' => 'basica', 'order' => 997,
+        ]);
+        $eligibleCourse = CourseSection::query()->create([
+            'academic_year_id' => $year->id, 'education_level_id' => $eligibleLevel->id,
+            'section_name' => 'A', 'display_name' => '5° básico A', 'active' => true,
+        ]);
+        $ineligibleCourse = CourseSection::query()->create([
+            'academic_year_id' => $year->id, 'education_level_id' => $ineligibleLevel->id,
+            'section_name' => 'B', 'display_name' => '4° básico B', 'active' => true,
+        ]);
+
+        $this->student->update(['general_status' => 'activo', 'guardian_phone' => '+56 9 1111 2222']);
+        $otherStudent = StudentProfile::factory()->create([
+            'first_name' => 'Amanda', 'last_name' => 'Rojas', 'general_status' => 'activo',
+        ]);
+        foreach ([[$this->student, $eligibleCourse, 'regular'], [$otherStudent, $ineligibleCourse, 'matriculada']] as [$student, $course, $status]) {
+            StudentEnrollment::query()->create([
+                'student_profile_id' => $student->id, 'academic_year_id' => $year->id,
+                'course_section_id' => $course->id, 'enrollment_status' => $status,
+                'enrolled_at' => '2026-03-01', 'snapshot_year_name' => $year->name,
+                'snapshot_level_name' => $course->educationLevel->name,
+                'snapshot_section_name' => $course->section_name,
+                'snapshot_course_display_name' => $course->display_name,
+            ]);
+        }
+
+        $junaebPermission = Permission::query()->where('slug', 'social_work.junaeb.manage')->firstOrFail();
+        $limitedRole = Role::query()->create(['slug' => 'junaeb_options_test', 'name' => 'JUNAEB prueba', 'active' => true]);
+        $limitedRole->permissions()->attach($junaebPermission->id);
+        $limitedUser = User::factory()->create(['active' => true, 'user_type' => 'staff']);
+        $limitedUser->roles()->attach($limitedRole);
+        Sanctum::actingAs($limitedUser);
+
+        $this->getJson('/api/social-work/junaeb/student-options')
+            ->assertOk()
+            ->assertJsonCount(2, 'data')
+            ->assertJsonPath('academic_year.year', 2026)
+            ->assertJsonPath('data.0.id', $otherStudent->id)
+            ->assertJsonPath('data.0.transport_pass_eligible', false)
+            ->assertJsonPath('data.1.id', $this->student->id)
+            ->assertJsonPath('data.1.current_enrollment.course_section.display_name', '5° básico A')
+            ->assertJsonPath('data.1.transport_pass_eligible', true)
+            ->assertJsonMissingPath('data.1.guardian_phone');
+
+        $this->getJson('/api/social-work/students')->assertForbidden();
+    }
+
     public function test_inspectoria_coordination_can_submit_referrals_without_accessing_other_senders_records(): void
     {
         Referral::query()->create([
@@ -306,6 +363,36 @@ class SocialWorkModuleTest extends TestCase
             ->assertJsonPath('total', 1)
             ->assertJsonPath('data.0.id', $assigned->id)
             ->assertJsonPath('data.0.assigned_user.id', $professional->id);
+    }
+
+    public function test_historical_intervention_can_predate_case_opening_and_complete_export_is_audited(): void
+    {
+        $case = $this->createCase(['opened_on' => today()->toDateString()]);
+        $historicalDate = today()->subYears(3)->toDateString();
+
+        $this->postJson("/api/social-work/cases/{$case->id}/interventions", [
+            'kind' => 'accion',
+            'activity_date' => $historicalDate,
+            'objective' => 'Incorporar antecedente histórico del acompañamiento.',
+            'description' => 'Actuación anterior a la apertura administrativa del caso.',
+            'status' => 'finalizada',
+            'confidentiality' => 'restringido',
+            'participant_types' => ['student'],
+        ])->assertCreated()
+            ->assertJsonPath('data.activity_date', $historicalDate);
+
+        $this->postJson("/api/social-work/cases/{$case->id}/export")
+            ->assertOk()
+            ->assertJsonPath('data.id', $case->id)
+            ->assertJsonPath('data.interventions.0.activity_date', $historicalDate)
+            ->assertJsonPath('data.interventions.0.description', 'Actuación anterior a la apertura administrativa del caso.')
+            ->assertJsonStructure(['data' => ['status_history', 'reopenings', 'interventions', 'alerts', 'referrals', 'protocols', 'reports', 'documents', 'commitments', 'requested_information', 'risk_assessments']]);
+
+        $this->assertDatabaseHas('social_work_audit_events', [
+            'action' => 'case.pdf_exported',
+            'auditable_id' => $case->id,
+            'user_id' => $this->socialWorker->id,
+        ]);
     }
 
     private function createCase(array $overrides = []): SocialCase

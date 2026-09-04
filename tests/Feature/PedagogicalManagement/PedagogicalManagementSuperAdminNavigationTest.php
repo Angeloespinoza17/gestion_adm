@@ -29,6 +29,7 @@ class PedagogicalManagementSuperAdminNavigationTest extends TestCase
         $teacherModule = $modules->firstWhere('slug', 'pedagogical_my_instruments');
         $reviewModule = $modules->firstWhere('slug', 'pedagogical_document_review');
         $assignmentModule = $modules->firstWhere('slug', 'pedagogical_coordinator_assignments');
+        $aiWorkspaceModule = $modules->firstWhere('slug', 'pedagogical_ai_workspace');
         $printModule = $modules->firstWhere('slug', 'centro_apuntes_pedagogical_queue');
         $this->assertNotNull($parent);
         $this->assertNotNull($child);
@@ -40,6 +41,7 @@ class PedagogicalManagementSuperAdminNavigationTest extends TestCase
         $this->assertSame('/gestion-pedagogica/instrumentos', $teacherModule['frontend_route']);
         $this->assertSame('/gestion-pedagogica/revision-documental', $reviewModule['frontend_route']);
         $this->assertSame('/gestion-pedagogica/asignaciones', $assignmentModule['frontend_route']);
+        $this->assertSame('/gestion-pedagogica/revision-ia', $aiWorkspaceModule['frontend_route']);
         $this->assertSame('/centro-apuntes/instrumentos-aprobados', $printModule['frontend_route']);
 
         $permissionSlugs = $this->actingAs($user)->getJson('/api/me/permissions')
@@ -59,6 +61,7 @@ class PedagogicalManagementSuperAdminNavigationTest extends TestCase
             'pedagogical-instruments.review-assigned',
             'pedagogical-instruments.decide',
             'pedagogical-instruments.ai-report',
+            'pedagogical-instruments.ai-workspace',
             'pedagogical-guidance.manage',
             'pedagogical-coordinators.configure',
             'pedagogical-print-requests.view',

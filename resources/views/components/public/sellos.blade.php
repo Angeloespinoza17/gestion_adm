@@ -1,4 +1,4 @@
-<div class="col-lg-4 col-md-6" data-aos="fade-up" data-aos-delay="100">
+<div class="col-lg-4 col-md-6">
   <article class="seal-card">
     <div class="seal-card-head">
       <div class="seal-card-icon">
@@ -12,7 +12,7 @@
   </article>
 </div>
 
-<div class="col-lg-4 col-md-6" data-aos="fade-up" data-aos-delay="200">
+<div class="col-lg-4 col-md-6">
   <article class="seal-card">
     <div class="seal-card-head">
       <div class="seal-card-icon">
@@ -26,7 +26,7 @@
   </article>
 </div>
 
-<div class="col-lg-4 col-md-6" data-aos="fade-up" data-aos-delay="300">
+<div class="col-lg-4 col-md-6">
   <article class="seal-card">
     <div class="seal-card-head">
       <div class="seal-card-icon">

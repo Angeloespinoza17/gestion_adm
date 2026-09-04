@@ -144,15 +144,45 @@ class RoleController extends Controller
     public function update(Request $request, Role $role): JsonResponse
     {
         $this->normalizeSlug($request);
+        $existingInactivePermissionIds = $role->permissions()
+            ->where('permissions.active', false)
+            ->pluck('permissions.id')
+            ->map(fn ($id) => (int) $id)
+            ->all();
+        $existingInactiveModuleIds = $role->modules()
+            ->where('system_modules.active', false)
+            ->pluck('system_modules.id')
+            ->map(fn ($id) => (int) $id)
+            ->all();
         $payload = $request->validate([
             'name' => ['sometimes', 'string', 'max:191'],
             'slug' => ['sometimes', 'string', 'max:191', 'regex:/^[a-z0-9]+(?:_[a-z0-9]+)*$/', Rule::unique('roles', 'slug')->ignore($role->id)],
             'description' => ['nullable', 'string'],
             'active' => ['sometimes', 'boolean'],
             'permissions' => ['sometimes', 'array'],
-            'permissions.*' => ['integer', Rule::exists('permissions', 'id')->where('active', true)],
+            'permissions.*' => [
+                'integer',
+                Rule::exists('permissions', 'id')->where(
+                    fn ($query) => $query
+                        ->where('active', true)
+                        ->when(
+                            $existingInactivePermissionIds !== [],
+                            fn ($allowedQuery) => $allowedQuery->orWhereIn('id', $existingInactivePermissionIds),
+                        ),
+                ),
+            ],
             'modules' => ['sometimes', 'array'],
-            'modules.*' => ['integer', Rule::exists('system_modules', 'id')->where('active', true)],
+            'modules.*' => [
+                'integer',
+                Rule::exists('system_modules', 'id')->where(
+                    fn ($query) => $query
+                        ->where('active', true)
+                        ->when(
+                            $existingInactiveModuleIds !== [],
+                            fn ($allowedQuery) => $allowedQuery->orWhereIn('id', $existingInactiveModuleIds),
+                        ),
+                ),
+            ],
         ]);
 
         $this->assertRoleMutationIsSafe($role, $payload);

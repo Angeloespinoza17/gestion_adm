@@ -20,6 +20,10 @@ export function useSocialWork() {
             return 'La solicitud tardó demasiado. Comprueba la conexión y vuelve a intentar.'
         }
 
+        if (exception.response?.status === 429) {
+            return 'Se alcanzó temporalmente el límite de consultas. Espera unos segundos y vuelve a intentar.'
+        }
+
         if (validationMessage) return validationMessage.trim()
         if (typeof responseMessage === 'string' && responseMessage.trim()) return responseMessage.trim()
         if (exception.response?.status === 403) return 'No tienes autorización para consultar esta información.'

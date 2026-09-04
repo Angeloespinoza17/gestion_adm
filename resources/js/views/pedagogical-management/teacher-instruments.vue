@@ -1,5 +1,6 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from "vue";
+import Swal from "sweetalert2";
 import Layout from "../../layouts/main.vue";
 import LoadingState from "../../components/ui/loading-state.vue";
 import PedagogicalAiReportContent from "../../components/pedagogical-management/PedagogicalAiReportContent.vue";
@@ -27,7 +28,7 @@ const list = ref([]);
 const detail = ref(null);
 const searchTerm = ref("");
 const statusFilter = ref("");
-const catalogs = ref({ schools: [], owners: [], subjects: [], courses: [], max_file_kb: 20480 });
+const catalogs = ref({ schools: [], owners: [], subjects: [], courses: [], max_file_kb: 30720 });
 const form = reactive({ owner_user_id: "", subject_id: "", course_id: "" });
 const message = reactive({ tone: "", text: "" });
 
@@ -120,11 +121,31 @@ function closeDetail() {
     if (!submitting.value) showDetailModal.value = false;
 }
 
-function chooseFile(file) {
+function fileExceedsConfiguredLimit(file) {
+    return Number(file?.size || 0) > Number(catalogs.value.max_file_kb || 30720) * 1024;
+}
+
+async function showFileValidation(file, validation) {
+    if (fileExceedsConfiguredLimit(file)) {
+        const maxMb = Math.round(Number(catalogs.value.max_file_kb || 30720) / 1024);
+        await Swal.fire({
+            icon: "warning",
+            title: "Archivo demasiado grande",
+            text: `El instrumento supera el máximo permitido de ${maxMb} MB. Selecciona un archivo más liviano.`,
+            confirmButtonText: "Seleccionar otro archivo",
+            confirmButtonColor: "#546de5",
+        });
+        return;
+    }
+    notify("danger", validation);
+}
+
+async function chooseFile(file) {
     const validation = validateInstrumentCandidate(file, catalogs.value.max_file_kb);
     if (validation) {
         selectedFile.value = null;
-        notify("danger", validation);
+        if (fileInput.value) fileInput.value.value = "";
+        await showFileValidation(file, validation);
         return;
     }
     selectedFile.value = file;
@@ -132,6 +153,10 @@ function chooseFile(file) {
 
 async function submitInstrument() {
     const validation = validateInstrumentCandidate(selectedFile.value, catalogs.value.max_file_kb);
+    if (validation && fileExceedsConfiguredLimit(selectedFile.value)) {
+        await showFileValidation(selectedFile.value, validation);
+        return;
+    }
     if (!selectedSchoolId.value || !form.owner_user_id || !form.subject_id || !form.course_id || validation) {
         notify("danger", validation || "Completa la asignatura, el curso y el archivo del instrumento.");
         return;
@@ -171,7 +196,10 @@ async function uploadRectification(event) {
     const file = event.target.files?.[0];
     event.target.value = "";
     const validation = validateInstrumentCandidate(file, catalogs.value.max_file_kb);
-    if (validation) return notify("danger", validation);
+    if (validation) {
+        await showFileValidation(file, validation);
+        return;
+    }
     submitting.value = true;
     try {
         const payload = new FormData();

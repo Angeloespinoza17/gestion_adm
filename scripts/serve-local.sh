@@ -7,16 +7,16 @@ TASK_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$TASK_ROOT"
 
 php artisan queue:work database \
-    --queue=pedagogical-instruments \
+    --queue=class-presentations,pedagogical-instruments \
     --tries=3 \
-    --timeout=600 \
+    --timeout=900 \
     --sleep=1 &
-PEDAGOGICAL_WORKER_PID=$!
+LOCAL_WORKER_PID=$!
 
 stop_worker() {
-    if kill -0 "$PEDAGOGICAL_WORKER_PID" 2>/dev/null; then
-        kill "$PEDAGOGICAL_WORKER_PID" 2>/dev/null || true
-        wait "$PEDAGOGICAL_WORKER_PID" 2>/dev/null || true
+    if kill -0 "$LOCAL_WORKER_PID" 2>/dev/null; then
+        kill "$LOCAL_WORKER_PID" 2>/dev/null || true
+        wait "$LOCAL_WORKER_PID" 2>/dev/null || true
     fi
 }
 

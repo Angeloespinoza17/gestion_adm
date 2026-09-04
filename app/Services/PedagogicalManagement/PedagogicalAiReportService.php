@@ -3,6 +3,7 @@
 namespace App\Services\PedagogicalManagement;
 
 use App\Enums\PedagogicalManagement\AiReportStatus;
+use App\Enums\PedagogicalManagement\InstrumentWorkflowStatus;
 use App\Exceptions\PedagogicalManagement\PedagogicalInstrumentException;
 use App\Jobs\PedagogicalManagement\GeneratePedagogicalAiReportJob;
 use App\Models\PedagogicalManagement\PedagogicalInstrument;
@@ -218,9 +219,18 @@ class PedagogicalAiReportService
             ))
             ->implode("\n");
         $criteriaCount = count($criteria);
+        $responsibleContext = $instrument->workflow_status === InstrumentWorkflowStatus::Draft
+            ? sprintf(
+                'Revisión autónoma de coordinación. Responsable: %s.',
+                $instrument->owner?->name ?? 'No informado',
+            )
+            : sprintf(
+                'Docente: %s.',
+                $instrument->owner?->name ?? 'No informado',
+            );
         $context = sprintf(
-            'Docente: %s. Asignatura: %s. Curso(s): %s. Título declarado: %s. Formato: %s.',
-            $instrument->owner?->name ?? 'No informado',
+            '%s Asignatura: %s. Curso(s): %s. Título declarado: %s. Formato: %s.',
+            $responsibleContext,
             $instrument->subject?->resolvedDisplayName() ?? 'No informada',
             $instrument->courses->pluck('display_name')->join(', '),
             $instrument->title,

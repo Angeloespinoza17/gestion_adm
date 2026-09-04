@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Facades\Storage;
 
 class MaintenanceVisitChecklistResponse extends Model
@@ -12,6 +13,7 @@ class MaintenanceVisitChecklistResponse extends Model
 
     protected $appends = [
         'photo_url',
+        'photo_urls',
     ];
 
     protected $fillable = [
@@ -26,17 +28,33 @@ class MaintenanceVisitChecklistResponse extends Model
 
     public function getPhotoUrlAttribute(): ?string
     {
-        if (!$this->photo_reference) {
+        if (! $this->photo_reference) {
             return null;
         }
 
         $url = Storage::disk('public')->url($this->photo_reference);
         $parts = parse_url((string) $url);
         if (is_array($parts) && isset($parts['path'])) {
-            return $parts['path'] . (isset($parts['query']) ? '?' . $parts['query'] : '');
+            return $parts['path'].(isset($parts['query']) ? '?'.$parts['query'] : '');
         }
 
         return $url;
+    }
+
+    /** @return array<int, string> */
+    public function getPhotoUrlsAttribute(): array
+    {
+        $urls = collect([$this->photo_url]);
+
+        if ($this->relationLoaded('photos')) {
+            $urls = $urls->concat($this->photos->pluck('url'));
+        }
+
+        return $urls
+            ->filter(fn ($url) => is_string($url) && $url !== '')
+            ->unique()
+            ->values()
+            ->all();
     }
 
     public function visit()
@@ -53,5 +71,12 @@ class MaintenanceVisitChecklistResponse extends Model
     {
         return $this->belongsTo(MaintenanceWorkOrder::class, 'work_order_id');
     }
-}
 
+    public function photos(): HasMany
+    {
+        return $this->hasMany(
+            MaintenanceEvidencePhoto::class,
+            'maintenance_visit_checklist_response_id'
+        )->oldest('id');
+    }
+}

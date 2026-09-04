@@ -76,6 +76,11 @@ class RoleModuleSyncService
      */
     public function syncRoleModulesFromPermissions(Role $role, ?array $requestedModuleIds = null): array
     {
+        $inactiveExistingModuleIds = $role->modules()
+            ->where('system_modules.active', false)
+            ->pluck('system_modules.id')
+            ->map(fn ($id) => (int) $id)
+            ->all();
         $baseModuleIds = $this->expandModuleIds(
             $requestedModuleIds ?? $role->modules()->pluck('system_modules.id')->all(),
             includeDescendants: false,
@@ -86,6 +91,7 @@ class RoleModuleSyncService
             ->map(fn ($id) => (int) $id)
             ->filter()
             ->merge($this->moduleIdsForRolePermissions($role))
+            ->merge($inactiveExistingModuleIds)
             ->unique()
             ->values()
             ->all();

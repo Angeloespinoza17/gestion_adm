@@ -13,6 +13,18 @@ class SaveBibliotecaObraRequest extends FormRequest
         return true;
     }
 
+    protected function prepareForValidation(): void
+    {
+        if (! $this->hasFile('cover_image')) {
+            return;
+        }
+
+        $this->merge([
+            'secondary_authors' => $this->has('secondary_authors') ? $this->input('secondary_authors') : [],
+            'keywords' => $this->has('keywords') ? $this->input('keywords') : [],
+        ]);
+    }
+
     public function rules(): array
     {
         $obraId = $this->route('obra')?->id;
@@ -49,6 +61,7 @@ class SaveBibliotecaObraRequest extends FormRequest
             'keywords' => ['nullable', 'array'],
             'keywords.*' => ['string', 'max:80'],
             'cover_image_url' => ['nullable', 'string', 'max:2048'],
+            'cover_image' => ['nullable', 'file', 'max:10240'],
             'internal_code' => ['nullable', 'string', 'max:80', Rule::unique('biblioteca_obras', 'internal_code')->ignore($obraId)],
             'barcode' => ['nullable', 'string', 'max:120', Rule::unique('biblioteca_obras', 'barcode')->ignore($obraId)],
             'biblioteca_ubicacion_id' => ['nullable', 'integer', 'exists:biblioteca_ubicaciones,id'],

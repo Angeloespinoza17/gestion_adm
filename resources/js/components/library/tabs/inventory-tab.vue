@@ -4,6 +4,12 @@ import LibraryHelpButton from "../help-button.vue";
 import LibraryStatusBadge from "../status-badge.vue";
 import LoadingState from "../../ui/loading-state.vue";
 import {
+  canUseLiveCamera,
+  captureCameraPhoto,
+  openRearCamera,
+  stopMediaStream,
+} from "../../../utils/camera-capture";
+import {
   confirmLibraryAction,
   confirmLibraryCancel,
   formatLibraryDate,
@@ -24,7 +30,7 @@ const emptyForm = () => ({
   physical_state: "bueno",
   availability_status: "disponible",
   registered_by: null,
-  photo_urls_text: "",
+  photo_urls: [],
   observations: "",
   last_inventory_checked_at: "",
   is_active: true,
@@ -70,6 +76,11 @@ export default {
       actionItem: null,
       selectedHistory: null,
       form: emptyForm(),
+      pendingPhotos: [],
+      removedPhotoUrls: [],
+      cameraStream: null,
+      cameraActive: false,
+      cameraError: null,
     };
   },
   computed: {
@@ -132,10 +143,28 @@ export default {
     selectedWork() {
       return (this.catalogs.works || []).find((item) => Number(item.id) === Number(this.form.biblioteca_obra_id)) || null;
     },
+    storedPhotoUrls() {
+      return (this.form.photo_urls || []).filter((url) => !this.removedPhotoUrls.includes(url));
+    },
+    evidencePhotoCount() {
+      return this.storedPhotoUrls.length + this.pendingPhotos.length;
+    },
+    canAddEvidencePhotos() {
+      return this.evidencePhotoCount < 12;
+    },
   },
   mounted() {
     this.load();
     this.consumeRouteFocus();
+  },
+  beforeUnmount() {
+    this.stopCamera();
+    this.clearPendingPhotos();
+  },
+  watch: {
+    showModal(visible) {
+      if (!visible) this.stopCamera();
+    },
   },
   methods: {
     formatLibraryDate,
@@ -197,14 +226,17 @@ export default {
         physical_state: this.form.physical_state,
         availability_status: this.form.availability_status,
         registered_by: this.form.registered_by || null,
-        photo_urls: this.form.photo_urls_text.split(",").map((item) => item.trim()).filter(Boolean),
+        photo_urls: this.storedPhotoUrls,
         observations: this.form.observations || null,
         last_inventory_checked_at: this.form.last_inventory_checked_at || null,
         is_active: this.form.is_active,
       };
     },
     openCreate() {
+      this.stopCamera();
+      this.clearPendingPhotos();
       this.form = emptyForm();
+      this.removedPhotoUrls = [];
       this.selectedHistory = null;
       this.showModal = true;
     },
@@ -212,6 +244,9 @@ export default {
       await this.openEditById(item.id);
     },
     async openEditById(id) {
+      this.stopCamera();
+      this.clearPendingPhotos();
+      this.removedPhotoUrls = [];
       const response = await axios.get(`/api/biblioteca/ejemplares/${id}`);
       const ejemplar = response.data.data;
       this.selectedHistory = ejemplar.movimientos || [];
@@ -229,7 +264,7 @@ export default {
         physical_state: ejemplar.physical_state,
         availability_status: ejemplar.availability_status,
         registered_by: ejemplar.registered_by || null,
-        photo_urls_text: (ejemplar.photo_urls || []).join(", "),
+        photo_urls: ejemplar.photo_urls || [],
         observations: ejemplar.observations || "",
         last_inventory_checked_at: ejemplar.last_inventory_checked_at || "",
         is_active: Boolean(ejemplar.is_active),
@@ -250,11 +285,16 @@ export default {
       this.saving = true;
       try {
         const payload = this.buildPayload();
+        let response;
         if (this.form.id) {
-          await axios.put(`/api/biblioteca/ejemplares/${this.form.id}`, payload);
+          response = await axios.put(`/api/biblioteca/ejemplares/${this.form.id}`, payload);
         } else {
-          await axios.post("/api/biblioteca/ejemplares", payload);
+          response = await axios.post("/api/biblioteca/ejemplares", payload);
         }
+        this.form.id = response.data.data.id;
+        await this.uploadPendingPhotos(this.form.id);
+        this.clearPendingPhotos();
+        this.removedPhotoUrls = [];
         this.showModal = false;
         this.$emit("refresh-catalogs");
         await this.load(this.pagination.current_page);
@@ -264,6 +304,126 @@ export default {
       } finally {
         this.saving = false;
       }
+    },
+    async openCamera() {
+      if (!this.canAddEvidencePhotos) return;
+      this.cameraError = null;
+
+      if (!canUseLiveCamera()) {
+        this.$refs.cameraInput?.click?.();
+        return;
+      }
+
+      this.stopCamera(false);
+
+      try {
+        const stream = await openRearCamera();
+        if (!this.showModal) {
+          stopMediaStream(stream);
+          return;
+        }
+
+        this.cameraStream = stream;
+        this.cameraActive = true;
+        await this.$nextTick();
+
+        const video = this.$refs.cameraVideo;
+        if (video) {
+          video.srcObject = stream;
+          await video.play().catch(() => {});
+        }
+      } catch (_) {
+        this.cameraStream = null;
+        this.cameraActive = false;
+        this.cameraError = "No se pudo abrir la cámara. Revisa el permiso del navegador o utiliza Elegir de galería.";
+      }
+    },
+    stopCamera(clearError = true) {
+      if (this.cameraStream) stopMediaStream(this.cameraStream);
+      this.cameraStream = null;
+      this.cameraActive = false;
+
+      const video = this.$refs.cameraVideo;
+      if (video) video.srcObject = null;
+      if (clearError) this.cameraError = null;
+    },
+    async capturePhoto() {
+      const photo = await captureCameraPhoto(
+        this.$refs.cameraVideo,
+        this.$refs.cameraCanvas,
+        "ejemplar-biblioteca"
+      );
+      if (!photo) {
+        this.cameraError = "La cámara aún no está lista para capturar la fotografía.";
+        return;
+      }
+
+      this.queuePhotos([photo]);
+      this.stopCamera();
+    },
+    openGallery() {
+      if (this.canAddEvidencePhotos) this.$refs.galleryInput?.click();
+    },
+    selectPhotos(event) {
+      const files = Array.from(event.target.files || []);
+      event.target.value = "";
+      if (!files.length) return;
+
+      this.queuePhotos(files);
+    },
+    queuePhotos(files) {
+      if (!files.length) return;
+
+      const supportedMimes = ["image/jpeg", "image/jpg", "image/png", "image/webp", "image/heic", "image/heif"];
+      const availableSlots = Math.max(0, 12 - this.evidencePhotoCount);
+      const selected = files.slice(0, availableSlots);
+      const invalid = selected.find((file) => !supportedMimes.includes(file.type.toLowerCase()) || file.size > 10 * 1024 * 1024);
+      if (invalid) {
+        this.error = "Cada fotografía debe ser JPG, PNG, WebP, HEIC o HEIF y pesar como máximo 10 MB.";
+        return;
+      }
+      if (files.length > availableSlots) {
+        this.error = "Puedes conservar hasta 12 fotografías por ejemplar.";
+      } else {
+        this.error = null;
+      }
+
+      this.pendingPhotos.push(...selected.map((file) => ({
+        id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+        file,
+        name: file.name || "Fotografía desde teléfono",
+        preview: URL.createObjectURL(file),
+      })));
+    },
+    removePendingPhoto(id) {
+      const photo = this.pendingPhotos.find((item) => item.id === id);
+      if (photo?.preview) URL.revokeObjectURL(photo.preview);
+      this.pendingPhotos = this.pendingPhotos.filter((item) => item.id !== id);
+    },
+    removeStoredPhoto(url) {
+      if (!this.removedPhotoUrls.includes(url)) this.removedPhotoUrls.push(url);
+    },
+    clearPendingPhotos() {
+      this.pendingPhotos.forEach((photo) => {
+        if (photo.preview) URL.revokeObjectURL(photo.preview);
+      });
+      this.pendingPhotos = [];
+    },
+    async uploadPendingPhotos(ejemplarId) {
+      while (this.pendingPhotos.length) {
+        const batch = this.pendingPhotos.slice(0, 6);
+        const data = new FormData();
+        batch.forEach((photo) => data.append("photos[]", photo.file, photo.name));
+        await axios.post(`/api/biblioteca/ejemplares/${ejemplarId}/photos`, data);
+        batch.forEach((photo) => {
+          if (photo.preview) URL.revokeObjectURL(photo.preview);
+        });
+        this.pendingPhotos.splice(0, batch.length);
+      }
+    },
+    evidencePhotoName(url, index) {
+      const filename = String(url || "").split("/").pop();
+      return filename && filename.includes(".") ? filename : `Evidencia ${index + 1}`;
     },
     async askNotes(title, text, action) {
       const result = await confirmLibraryAction({
@@ -325,7 +485,12 @@ export default {
     },
     async closeModal() {
       const confirmed = await confirmLibraryCancel("los cambios del ejemplar");
-      if (confirmed.isConfirmed) this.showModal = false;
+      if (confirmed.isConfirmed) {
+        this.stopCamera();
+        this.clearPendingPhotos();
+        this.removedPhotoUrls = [];
+        this.showModal = false;
+      }
     },
   },
 };
@@ -578,7 +743,58 @@ export default {
           <div class="col-md-3"><label class="form-label">Disponibilidad</label><BFormSelect v-model="form.availability_status" :options="(catalogs.ejemplar_availability_statuses || []).map((item) => ({ value: item.value, text: item.label }))" /></div>
           <div class="col-md-3"><label class="form-label">Último inventario</label><BFormInput v-model="form.last_inventory_checked_at" type="date" /></div>
           <div class="col-md-3 inventory-active-check"><BFormCheckbox v-model="form.is_active">Activo en inventario</BFormCheckbox></div>
-          <div class="col-12"><label class="form-label">Fotografías de evidencia</label><BFormInput v-model="form.photo_urls_text" placeholder="Pega una o más URLs separadas por coma" /></div>
+          <div class="col-12">
+            <div class="inventory-evidence">
+              <div class="inventory-evidence__heading">
+                <div>
+                  <span class="inventory-evidence__icon"><i class="bx bx-camera"></i></span>
+                  <div><label class="form-label mb-0">Fotografías de evidencia</label><small>Toma fotos con la cámara trasera o selecciónalas desde la galería. Máximo 12 fotos, 10 MB cada una.</small></div>
+                </div>
+                <span class="inventory-evidence__count">{{ evidencePhotoCount }} / 12</span>
+              </div>
+
+              <input ref="cameraInput" class="inventory-evidence__input" type="file" accept="image/*" capture="environment" multiple @change="selectPhotos" />
+              <input ref="galleryInput" class="inventory-evidence__input" type="file" accept="image/jpeg,image/png,image/webp,image/heic,image/heif" multiple @change="selectPhotos" />
+
+              <div class="inventory-evidence__actions">
+                <button type="button" class="inventory-evidence__camera" :disabled="saving || !canAddEvidencePhotos" @click="openCamera"><i class="bx bx-camera"></i><span><strong>Tomar foto</strong><small>Abre la cámara del dispositivo</small></span></button>
+                <button type="button" class="inventory-evidence__gallery" :disabled="saving || !canAddEvidencePhotos" @click="openGallery"><i class="bx bx-images"></i><span><strong>Elegir de galería</strong><small>JPG, PNG, WebP, HEIC o HEIF</small></span></button>
+              </div>
+
+              <section v-if="cameraActive || cameraError" class="inventory-camera" aria-label="Cámara para fotografiar el ejemplar">
+                <div v-if="cameraError" class="inventory-camera__error">
+                  <i class="bx bx-error-circle"></i>
+                  <div><strong>No se pudo iniciar la cámara</strong><span>{{ cameraError }}</span></div>
+                </div>
+                <template v-else>
+                  <div class="inventory-camera__viewport">
+                    <video ref="cameraVideo" autoplay muted playsinline></video>
+                    <div class="inventory-camera__guide"><span></span><small>Centra el ejemplar y mantén el dispositivo firme</small></div>
+                    <em><i class="bx bx-camera"></i> Cámara activa</em>
+                  </div>
+                  <canvas ref="cameraCanvas" class="d-none"></canvas>
+                  <div class="inventory-camera__actions">
+                    <button type="button" class="inventory-camera__close" @click="stopCamera"><i class="bx bx-x"></i>Cerrar cámara</button>
+                    <button type="button" class="inventory-camera__capture" @click="capturePhoto"><i class="bx bx-camera"></i>Capturar fotografía</button>
+                  </div>
+                </template>
+              </section>
+
+              <div v-if="storedPhotoUrls.length || pendingPhotos.length" class="inventory-evidence__grid">
+                <figure v-for="(url, index) in storedPhotoUrls" :key="url" class="inventory-evidence__photo">
+                  <img :src="url" :alt="`Fotografía de inventario ${index + 1}`" loading="lazy" />
+                  <figcaption><span><i class="bx bx-check-shield"></i>Guardada</span><small>{{ evidencePhotoName(url, index) }}</small></figcaption>
+                  <button type="button" :aria-label="`Quitar fotografía ${index + 1}`" @click="removeStoredPhoto(url)"><i class="bx bx-trash"></i></button>
+                </figure>
+                <figure v-for="(photo, index) in pendingPhotos" :key="photo.id" class="inventory-evidence__photo is-pending">
+                  <img :src="photo.preview" :alt="`Nueva fotografía ${index + 1}`" />
+                  <figcaption><span><i class="bx bx-time-five"></i>Lista para guardar</span><small>{{ photo.name }}</small></figcaption>
+                  <button type="button" :aria-label="`Descartar nueva fotografía ${index + 1}`" @click="removePendingPhoto(photo.id)"><i class="bx bx-x"></i></button>
+                </figure>
+              </div>
+              <div v-else class="inventory-evidence__empty"><i class="bx bx-image-add"></i><span><strong>Sin evidencia fotográfica</strong><small>Desde el teléfono, usa “Tomar foto” para abrir directamente la cámara.</small></span></div>
+            </div>
+          </div>
           <div class="col-12"><label class="form-label">Observaciones</label><BFormTextarea v-model="form.observations" rows="3" placeholder="Condición, marcas, reparaciones u otra información relevante" /></div>
         </div>
       </section>
@@ -1598,6 +1814,353 @@ export default {
   padding-top: 1.45rem;
 }
 
+.inventory-evidence {
+  padding: .9rem;
+  border: 1px solid #dce5f1;
+  border-radius: 14px;
+  background: linear-gradient(145deg, #f8faff, #f3faf8);
+}
+
+.inventory-evidence__heading,
+.inventory-evidence__heading > div,
+.inventory-evidence__actions,
+.inventory-evidence__camera,
+.inventory-evidence__gallery,
+.inventory-evidence__empty {
+  display: flex;
+  align-items: center;
+}
+
+.inventory-evidence__heading {
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.inventory-evidence__heading > div {
+  gap: .65rem;
+}
+
+.inventory-evidence__heading > div > div {
+  display: flex;
+  flex-direction: column;
+}
+
+.inventory-evidence__heading small {
+  margin-top: .12rem;
+  color: #7d8ca0;
+  font-size: .61rem;
+}
+
+.inventory-evidence__icon {
+  width: 40px;
+  height: 40px;
+  flex: 0 0 40px;
+  display: grid;
+  place-items: center;
+  border-radius: 12px;
+  color: #fff;
+  background: linear-gradient(135deg, #456ad8, #278b80);
+  box-shadow: 0 7px 16px rgba(53, 105, 158, .18);
+  font-size: 1.15rem;
+}
+
+.inventory-evidence__count {
+  flex: 0 0 auto;
+  padding: .35rem .55rem;
+  border: 1px solid #d7e1ee;
+  border-radius: 999px;
+  color: #597083;
+  background: #fff;
+  font-size: .62rem;
+  font-weight: 800;
+}
+
+.inventory-evidence__input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.inventory-evidence__actions {
+  gap: .55rem;
+  margin-top: .8rem;
+}
+
+.inventory-evidence__camera,
+.inventory-evidence__gallery {
+  min-height: 58px;
+  flex: 1;
+  gap: .58rem;
+  padding: .65rem .75rem;
+  border-radius: 12px;
+  text-align: left;
+  transition: .18s ease;
+}
+
+.inventory-evidence__camera {
+  border: 1px solid #bcded9;
+  color: #176d64;
+  background: #eaf7f4;
+}
+
+.inventory-evidence__gallery {
+  border: 1px solid #cfdaef;
+  color: #425fba;
+  background: #eef2ff;
+}
+
+.inventory-evidence__camera:hover,
+.inventory-evidence__gallery:hover {
+  box-shadow: 0 8px 18px rgba(48, 80, 120, .1);
+  transform: translateY(-1px);
+}
+
+.inventory-evidence__camera:disabled,
+.inventory-evidence__gallery:disabled {
+  cursor: not-allowed;
+  opacity: .52;
+  transform: none;
+}
+
+.inventory-camera {
+  margin-top: .75rem;
+  padding: .75rem;
+  border: 1px solid #cfdbea;
+  border-radius: 14px;
+  background: #edf3f8;
+}
+
+.inventory-camera__viewport {
+  position: relative;
+  width: min(100%, 720px);
+  aspect-ratio: 16 / 9;
+  margin: 0 auto;
+  overflow: hidden;
+  border: 1px solid #263b50;
+  border-radius: 13px;
+  background: #102333;
+  box-shadow: 0 12px 28px rgba(20, 42, 59, .18);
+}
+
+.inventory-camera__viewport video {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: cover;
+}
+
+.inventory-camera__viewport > em {
+  position: absolute;
+  top: .65rem;
+  left: .65rem;
+  padding: .32rem .56rem;
+  border-radius: 999px;
+  color: #fff;
+  background: rgba(13, 39, 53, .78);
+  font-size: .59rem;
+  font-style: normal;
+  font-weight: 750;
+  backdrop-filter: blur(5px);
+}
+
+.inventory-camera__guide {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.inventory-camera__guide > span {
+  position: absolute;
+  inset: 12% 10%;
+  border: 2px solid rgba(255, 255, 255, .82);
+  border-radius: 13px;
+  box-shadow: 0 0 0 999px rgba(7, 23, 34, .2);
+}
+
+.inventory-camera__guide small {
+  position: absolute;
+  bottom: .7rem;
+  left: 50%;
+  padding: .32rem .65rem;
+  border-radius: 999px;
+  color: #fff;
+  background: rgba(13, 39, 53, .8);
+  font-size: .58rem;
+  transform: translateX(-50%);
+  white-space: nowrap;
+  backdrop-filter: blur(5px);
+}
+
+.inventory-camera__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: .55rem;
+  margin-top: .7rem;
+}
+
+.inventory-camera__actions button {
+  min-height: 40px;
+  padding: .5rem .75rem;
+  border-radius: 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: .38rem;
+  font-size: .67rem;
+  font-weight: 750;
+}
+
+.inventory-camera__close {
+  border: 1px solid #d2dce7;
+  color: #52657a;
+  background: #fff;
+}
+
+.inventory-camera__capture {
+  border: 1px solid #2e8177;
+  color: #fff;
+  background: linear-gradient(135deg, #3765cd, #278b80);
+  box-shadow: 0 7px 16px rgba(45, 108, 133, .2);
+}
+
+.inventory-camera__error {
+  display: flex;
+  align-items: center;
+  gap: .65rem;
+  padding: .65rem;
+  color: #894b57;
+  background: #fff5f6;
+  border: 1px solid #efd4d9;
+  border-radius: 11px;
+}
+
+.inventory-camera__error > i {
+  font-size: 1.35rem;
+}
+
+.inventory-camera__error > div {
+  display: flex;
+  flex-direction: column;
+}
+
+.inventory-camera__error strong {
+  font-size: .68rem;
+}
+
+.inventory-camera__error span {
+  font-size: .59rem;
+}
+
+.inventory-evidence__camera > i,
+.inventory-evidence__gallery > i {
+  font-size: 1.35rem;
+}
+
+.inventory-evidence__camera span,
+.inventory-evidence__gallery span,
+.inventory-evidence__empty span {
+  display: flex;
+  flex-direction: column;
+}
+
+.inventory-evidence__camera strong,
+.inventory-evidence__gallery strong,
+.inventory-evidence__empty strong {
+  font-size: .69rem;
+}
+
+.inventory-evidence__camera small,
+.inventory-evidence__gallery small,
+.inventory-evidence__empty small {
+  font-size: .57rem;
+  opacity: .75;
+}
+
+.inventory-evidence__grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: .55rem;
+  margin-top: .75rem;
+}
+
+.inventory-evidence__photo {
+  position: relative;
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  border: 1px solid #dbe3ec;
+  border-radius: 12px;
+  background: #fff;
+}
+
+.inventory-evidence__photo.is-pending {
+  border-color: #a9d7cf;
+  box-shadow: inset 0 0 0 2px rgba(39, 139, 128, .08);
+}
+
+.inventory-evidence__photo img {
+  width: 100%;
+  height: 108px;
+  display: block;
+  object-fit: cover;
+  background: #edf1f5;
+}
+
+.inventory-evidence__photo figcaption {
+  min-width: 0;
+  padding: .48rem .55rem;
+  display: flex;
+  flex-direction: column;
+}
+
+.inventory-evidence__photo figcaption span {
+  color: #248073;
+  font-size: .56rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.inventory-evidence__photo figcaption small {
+  overflow: hidden;
+  color: #7b899a;
+  font-size: .55rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.inventory-evidence__photo > button {
+  position: absolute;
+  top: .38rem;
+  right: .38rem;
+  width: 29px;
+  height: 29px;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(255, 255, 255, .65);
+  border-radius: 9px;
+  color: #fff;
+  background: rgba(27, 43, 63, .72);
+  backdrop-filter: blur(4px);
+}
+
+.inventory-evidence__empty {
+  gap: .55rem;
+  margin-top: .75rem;
+  padding: .65rem .75rem;
+  border: 1px dashed #cfd9e5;
+  border-radius: 11px;
+  color: #77879a;
+  background: rgba(255, 255, 255, .65);
+}
+
+.inventory-evidence__empty > i {
+  color: #6680ce;
+  font-size: 1.35rem;
+}
+
 .movement-history {
   background: #fbfcfe;
 }
@@ -1728,6 +2291,10 @@ export default {
   .inventory-active-check {
     padding-top: 0;
   }
+
+  .inventory-evidence__grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 @media (max-width: 430px) {
@@ -1750,6 +2317,43 @@ export default {
   }
 
   .inventory-form-actions {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .inventory-evidence {
+    padding: .75rem;
+  }
+
+  .inventory-evidence__heading {
+    align-items: flex-start;
+  }
+
+  .inventory-evidence__actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .inventory-evidence__camera,
+  .inventory-evidence__gallery {
+    width: 100%;
+  }
+
+  .inventory-camera__viewport {
+    aspect-ratio: 3 / 4;
+  }
+
+  .inventory-camera__guide > span {
+    inset: 10% 7%;
+  }
+
+  .inventory-camera__guide small {
+    max-width: calc(100% - 1rem);
+    text-align: center;
+    white-space: normal;
+  }
+
+  .inventory-camera__actions {
     display: grid;
     grid-template-columns: 1fr;
   }

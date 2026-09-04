@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\HumanResources\HrDocumentControl;
 use App\Models\Remuneration\RemunerationContractSetting;
 use App\Models\Remuneration\RemunerationEmployeeProfile;
 use App\Models\Remuneration\RemunerationPayroll;
@@ -172,6 +173,11 @@ class Staff extends Model
         return $this->hasMany(StaffDocument::class);
     }
 
+    public function hrDocumentControls(): HasMany
+    {
+        return $this->hasMany(HrDocumentControl::class);
+    }
+
     public function preventiveCompliances(): HasMany
     {
         return $this->hasMany(RiskPreventionStaffCompliance::class);
@@ -185,12 +191,18 @@ class Staff extends Model
             'staff_id',
             'committee_id',
         )->withPivot([
+            'id',
             'representation',
             'member_role',
             'position_name',
+            'section',
+            'sort_order',
             'joined_on',
             'ended_on',
             'active',
+            'public_name_authorized',
+            'public_name_authorized_at',
+            'public_name_authorized_by',
         ])->withTimestamps();
     }
 

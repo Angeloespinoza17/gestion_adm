@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Psychology\AssignPsychologyRequest;
 use App\Http\Requests\Psychology\OpenPsychologyCaseRequest;
 use App\Http\Requests\Psychology\StoreDirectPsychologyCaseRequest;
+use App\Http\Requests\Psychology\UpdatePsychologyCaseRequest;
 use App\Http\Resources\Psychology\PsychologyCaseResource;
 use App\Models\Psychology\PsychologyCase;
 use App\Models\Psychology\PsychologyReferral;
@@ -15,10 +16,34 @@ use App\Services\Psychology\PsychologyAuditService;
 use App\Services\Psychology\PsychologyWorkflowService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
 class PsychologyCaseController extends Controller
 {
+    private const DETAIL_RELATIONS = [
+        'student.enrollments',
+        'responsibleUser',
+        'assignments.user:id,name',
+        'collaborators:id,name',
+        'referrals.student',
+        'plans.responsibleUser:id,name',
+        'plans.versions.author:id,name',
+        'activities.responsibleUser:id,name',
+        'activities.addenda.author:id,name',
+        'coordinationRequests.requester:id,name',
+        'coordinationRequests.recipient:id,name',
+        'coordinationRequests.responder:id,name',
+        'riskAssessments.actions.responsibleUser:id,name',
+        'tasks.responsibleUser:id,name',
+        'documents.uploadedBy:id,name',
+        'consents',
+        'externalReferrals',
+        'sharedFeedback.author:id,name',
+        'closures.author:id,name',
+        'reopenings.author:id,name',
+    ];
+
     public function __construct(private readonly PsychologyAccessService $access, private readonly PsychologyWorkflowService $workflow, private readonly PsychologyAuditService $audit) {}
 
     public function index(Request $request): JsonResponse
@@ -55,7 +80,52 @@ class PsychologyCaseController extends Controller
         $this->authorize('view', $case);
         $this->audit->record('case.viewed', $case, request()->user());
 
-        return new PsychologyCaseResource($case->load(['student.enrollments', 'responsibleUser', 'assignments.user:id,name', 'collaborators:id,name', 'referrals.student', 'plans.responsibleUser:id,name', 'plans.versions.author:id,name', 'activities.responsibleUser:id,name', 'activities.addenda.author:id,name', 'coordinationRequests.requester:id,name', 'coordinationRequests.recipient:id,name', 'coordinationRequests.responder:id,name', 'riskAssessments.actions.responsibleUser:id,name', 'tasks.responsibleUser:id,name', 'documents.uploadedBy:id,name', 'consents', 'externalReferrals', 'sharedFeedback.author:id,name', 'closures.author:id,name', 'reopenings.author:id,name']));
+        return new PsychologyCaseResource($case->load(self::DETAIL_RELATIONS));
+    }
+
+    public function update(UpdatePsychologyCaseRequest $request, PsychologyCase $case): PsychologyCaseResource
+    {
+        $this->authorize('update', $case);
+
+        $updated = DB::transaction(function () use ($request, $case) {
+            $payload = $request->safe()->except('change_reason');
+            $old = $case->only(array_keys($payload));
+
+            $case->fill($payload)->forceFill(['updated_by' => $request->user()->id])->save();
+            $new = $case->only(array_keys($payload));
+
+            $this->audit->record(
+                'case.updated',
+                $case,
+                $request->user(),
+                $old,
+                $new,
+                $request->string('change_reason')->toString(),
+            );
+
+            return $case->refresh();
+        });
+
+        return new PsychologyCaseResource($updated->load(self::DETAIL_RELATIONS));
+    }
+
+    public function export(Request $request, PsychologyCase $case): JsonResponse
+    {
+        $this->authorize('view', $case);
+        $case->load(self::DETAIL_RELATIONS);
+        $includePrivate = $this->access->canViewPrivateNotes($request->user(), $case);
+        $includeRisk = $this->access->canViewRisk($request->user(), $case);
+
+        $this->audit->record('case.pdf_exported', $case, $request->user(), [], [
+            'included_private_content' => $includePrivate,
+            'included_risk_content' => $includeRisk,
+        ]);
+
+        return response()->json([
+            'message' => 'Expediente autorizado para exportación.',
+            'generated_at' => now()->toIso8601String(),
+            'data' => (new PsychologyCaseResource($case))->resolve($request),
+        ]);
     }
 
     public function assign(AssignPsychologyRequest $request, PsychologyCase $case): PsychologyCaseResource

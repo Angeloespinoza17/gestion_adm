@@ -13,7 +13,7 @@ class TechnicalPdfValidationRule implements InstrumentValidationRule
     {
         $file = $context->file;
         $meta = (array) $file->technical_metadata;
-        $maxBytes = (int) config('pedagogical_management.storage.max_file_kb', 20480) * 1024;
+        $maxBytes = (int) config('pedagogical_management.storage.max_file_kb', 30720) * 1024;
         $characters = (int) data_get($context->extractedData, 'text_character_count', 0);
 
         return [

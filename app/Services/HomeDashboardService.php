@@ -15,6 +15,7 @@ use App\Services\RelevantCalendar\CalendarEventAccessService;
 use App\Services\RelevantCalendar\CalendarRecurrenceService;
 use App\Services\Rbac\SensitiveModuleAccessService;
 use App\Services\Tasks\TaskAccessService;
+use App\Services\Weather\ValdiviaWeatherService;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
@@ -27,6 +28,7 @@ class HomeDashboardService
         private readonly CalendarRecurrenceService $recurrenceService,
         private readonly SensitiveModuleAccessService $sensitiveModuleAccessService,
         private readonly TaskAccessService $taskAccess,
+        private readonly ValdiviaWeatherService $weather,
     ) {
     }
 
@@ -127,6 +129,7 @@ class HomeDashboardService
             'attention' => $attention,
             'news' => $news,
             'internal_announcements' => $internalAnnouncements,
+            'weather' => $this->weather->dashboard(),
             'quick_links' => $this->quickLinks($user),
         ];
     }

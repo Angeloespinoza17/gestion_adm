@@ -3,6 +3,7 @@ import axios from "axios";
 import Layout from "../../layouts/main.vue";
 import LoadingState from "../../components/ui/loading-state.vue";
 import Multiselect from "@vueform/multiselect";
+import { formatRoleApiError, normalizeRoleAccessIds } from "../../utils/role-permissions";
 
 const emptyForm = () => ({
   id: null,
@@ -185,10 +186,19 @@ export default {
       return (this.catalogs.permissions || []).filter((permission) => !this.groupedPermissionIds.has(Number(permission.id)));
     },
     selectedPermissionsCount() {
-      return this.selectedPermissionSet.size;
+      return (this.catalogs.permissions || []).filter((permission) => this.selectedPermissionSet.has(Number(permission.id))).length;
     },
     selectedModulesCount() {
-      return this.selectedModuleSet.size;
+      return (this.catalogs.modules || []).filter((module) => this.selectedModuleSet.has(Number(module.id))).length;
+    },
+    unavailableSelectedPermissions() {
+      return this.normalizeIdList(this.form.permissions).filter((id) => !this.permissionLookup[id]);
+    },
+    unavailableSelectedModules() {
+      return this.normalizeIdList(this.form.modules).filter((id) => !this.moduleLookup[id]);
+    },
+    unavailableAccessCount() {
+      return this.unavailableSelectedPermissions.length + this.unavailableSelectedModules.length;
     },
     modalSummary() {
       return [
@@ -218,11 +228,7 @@ export default {
     this.loadRoles();
   },
   methods: {
-    normalizeIdList(values) {
-      return (values || [])
-        .map((value) => Number(value))
-        .filter((value) => Number.isInteger(value) && value > 0);
-    },
+    normalizeIdList: normalizeRoleAccessIds,
     async loadCatalogs() {
       const response = await axios.get("/api/admin/roles/catalogs");
       this.catalogs = {
@@ -331,9 +337,7 @@ export default {
         this.removingUserId = null;
       }
     },
-    formatError(error) {
-      return error?.response?.data?.message || error?.message || "Error desconocido";
-    },
+    formatError: formatRoleApiError,
     isPermissionSelected(permissionId) {
       return this.selectedPermissionSet.has(Number(permissionId));
     },
@@ -646,6 +650,11 @@ export default {
 
       <BModal v-model="showModal" :title="isEditing ? 'Editar rol' : 'Nuevo rol'" size="xl" hide-footer>
         <BAlert v-if="error" variant="danger" show class="mb-3">{{ error }}</BAlert>
+        <BAlert v-if="unavailableAccessCount" variant="warning" show class="mb-3">
+          Este rol conserva {{ unavailableAccessCount }}
+          {{ unavailableAccessCount === 1 ? "acceso histórico inactivo" : "accesos históricos inactivos" }}.
+          No aparecen en el catálogo actual y se preservarán al guardar.
+        </BAlert>
 
         <div class="role-form-grid">
           <section class="role-panel">

@@ -1,17 +1,30 @@
 <?php
 
-use App\Http\Controllers\PedagogicalManagement\PedagogicalCatalogController;
+use App\Http\Controllers\PedagogicalManagement\CanvaConnectionController;
+use App\Http\Controllers\PedagogicalManagement\CanvaOAuthCallbackController;
+use App\Http\Controllers\PedagogicalManagement\CanvaTemplateController;
+use App\Http\Controllers\PedagogicalManagement\ClassPresentationActionController;
+use App\Http\Controllers\PedagogicalManagement\ClassPresentationCanvaController;
+use App\Http\Controllers\PedagogicalManagement\ClassPresentationCatalogController;
+use App\Http\Controllers\PedagogicalManagement\ClassPresentationController;
+use App\Http\Controllers\PedagogicalManagement\ClassPresentationFileController;
 use App\Http\Controllers\PedagogicalManagement\PedagogicalAiReportController;
+use App\Http\Controllers\PedagogicalManagement\PedagogicalAiWorkspaceController;
+use App\Http\Controllers\PedagogicalManagement\PedagogicalCatalogController;
 use App\Http\Controllers\PedagogicalManagement\PedagogicalCoordinatorAssignmentController;
 use App\Http\Controllers\PedagogicalManagement\PedagogicalDocumentReviewController;
 use App\Http\Controllers\PedagogicalManagement\PedagogicalGuidanceDocumentController;
 use App\Http\Controllers\PedagogicalManagement\PedagogicalInstrumentAnalysisController;
 use App\Http\Controllers\PedagogicalManagement\PedagogicalInstrumentController;
 use App\Http\Controllers\PedagogicalManagement\PedagogicalInstrumentFileController;
-use App\Http\Controllers\PedagogicalManagement\PedagogicalValidationResultController;
 use App\Http\Controllers\PedagogicalManagement\PedagogicalPrintRequestController;
 use App\Http\Controllers\PedagogicalManagement\PedagogicalStatisticsController;
+use App\Http\Controllers\PedagogicalManagement\PedagogicalValidationResultController;
 use Illuminate\Support\Facades\Route;
+
+Route::get('/integraciones/canva/callback', CanvaOAuthCallbackController::class)
+    ->middleware('throttle:20,1')
+    ->name('api.canva.oauth.callback');
 
 Route::prefix('pedagogical-management')
     ->middleware(['auth:sanctum', 'permission:pedagogical-instruments.view'])
@@ -46,6 +59,18 @@ Route::prefix('pedagogical-management')
             ->middleware('permission:pedagogical-instruments.statistics')->name('statistics.index');
         Route::get('/statistics/instruments/{instrument}', [PedagogicalStatisticsController::class, 'instrument'])
             ->middleware('permission:pedagogical-instruments.statistics')->name('statistics.instruments.show');
+        Route::prefix('ai-workspace')
+            ->middleware('permission:pedagogical-instruments.ai-workspace')
+            ->name('ai-workspace.')
+            ->group(function (): void {
+                Route::get('/catalogs', [PedagogicalAiWorkspaceController::class, 'catalogs'])->name('catalogs');
+                Route::get('/reviews', [PedagogicalAiWorkspaceController::class, 'index'])->name('index');
+                Route::post('/reviews', [PedagogicalAiWorkspaceController::class, 'store'])
+                    ->middleware('throttle:10,1')->name('store');
+                Route::get('/reviews/{instrument}', [PedagogicalAiWorkspaceController::class, 'show'])->name('show');
+                Route::post('/reviews/{instrument}/reports', [PedagogicalAiWorkspaceController::class, 'regenerate'])
+                    ->middleware('throttle:10,1')->name('reports.store');
+            });
         Route::post('/instruments/{instrument}/reviews', [PedagogicalDocumentReviewController::class, 'store'])
             ->middleware('permission:pedagogical-instruments.decide')->name('instruments.reviews.store');
         Route::get('/guidance-documents', [PedagogicalGuidanceDocumentController::class, 'index'])
@@ -71,4 +96,44 @@ Route::prefix('pedagogical-print-center')
         Route::get('/requests', [PedagogicalPrintRequestController::class, 'index'])->name('requests.index');
         Route::get('/requests/{printRequest}/file', [PedagogicalPrintRequestController::class, 'file'])->name('requests.file');
         Route::post('/requests/{printRequest}/actions', [PedagogicalPrintRequestController::class, 'action'])->name('requests.actions');
+    });
+
+Route::prefix('gestion-pedagogica')
+    ->middleware(['auth:sanctum', 'permission:class-presentations.view'])
+    ->name('api.class-presentations.')
+    ->group(function (): void {
+        Route::get('/generador-clases/opciones', [ClassPresentationCatalogController::class, 'options'])->name('options');
+        Route::get('/cursos/{course}/asignaturas', [ClassPresentationCatalogController::class, 'subjects'])->name('subjects');
+        Route::get('/asignaturas/{subject}/unidades', [ClassPresentationCatalogController::class, 'units'])->name('units');
+        Route::get('/unidades/{unit}/objetivos', [ClassPresentationCatalogController::class, 'objectives'])->name('objectives');
+        Route::post('/generador-clases/titulos', [ClassPresentationCatalogController::class, 'titles'])
+            ->middleware('permission:class-presentations.create')->name('titles');
+        Route::get('/canva/conexion', [CanvaConnectionController::class, 'show'])
+            ->middleware('permission:class-presentations.create')->name('canva.connection.show');
+        Route::post('/canva/autorizacion', [CanvaConnectionController::class, 'begin'])
+            ->middleware(['permission:class-presentations.create', 'throttle:10,1'])->name('canva.authorization.begin');
+        Route::delete('/canva/conexion', [CanvaConnectionController::class, 'destroy'])
+            ->middleware(['permission:class-presentations.create', 'throttle:10,1'])->name('canva.connection.destroy');
+        Route::get('/canva/plantillas', [CanvaTemplateController::class, 'index'])
+            ->middleware(['permission:class-presentations.create', 'throttle:30,1'])->name('canva.templates.index');
+        Route::post('/canva/plantillas/{brandTemplateId}/validar', [CanvaTemplateController::class, 'validateTemplate'])
+            ->where('brandTemplateId', '[A-Za-z0-9_-]+')
+            ->middleware(['permission:class-presentations.create', 'throttle:30,1'])->name('canva.templates.validate');
+        Route::get('/presentaciones', [ClassPresentationController::class, 'index'])->name('index');
+        Route::post('/presentaciones', [ClassPresentationController::class, 'store'])
+            ->middleware(['permission:class-presentations.create', 'throttle:5,1'])->name('store');
+        Route::get('/presentaciones/{presentation}', [ClassPresentationController::class, 'show'])->name('show');
+        Route::get('/presentaciones/{presentation}/estado', [ClassPresentationController::class, 'status'])->name('status');
+        Route::post('/presentaciones/{presentation}/canva/sincronizar', [ClassPresentationCanvaController::class, 'sync'])
+            ->middleware(['permission:class-presentations.create', 'throttle:10,1'])->name('canva.sync');
+        Route::post('/presentaciones/{presentation}/canva/enlace-edicion', [ClassPresentationCanvaController::class, 'editLink'])
+            ->middleware(['permission:class-presentations.create', 'throttle:30,1'])->name('canva.edit-link');
+        Route::post('/presentaciones/{presentation}/regenerar', [ClassPresentationActionController::class, 'regenerate'])
+            ->middleware(['permission:class-presentations.regenerate', 'throttle:5,1'])->name('regenerate');
+        Route::post('/presentaciones/{presentation}/reintentar', [ClassPresentationActionController::class, 'retry'])
+            ->middleware(['permission:class-presentations.regenerate', 'throttle:5,1'])->name('retry');
+        Route::post('/presentaciones/{presentation}/archivar', [ClassPresentationActionController::class, 'archive'])
+            ->middleware('permission:class-presentations.archive')->name('archive');
+        Route::get('/presentaciones/{presentation}/archivos/{file}/descargar', [ClassPresentationFileController::class, 'download'])
+            ->middleware('permission:class-presentations.download')->name('files.download');
     });

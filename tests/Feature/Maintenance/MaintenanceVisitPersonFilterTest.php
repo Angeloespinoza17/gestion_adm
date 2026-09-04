@@ -22,6 +22,10 @@ class MaintenanceVisitPersonFilterTest extends TestCase
             'dependency_kind' => MaintenanceDependency::KIND_SPACE,
             'code' => 'DEP-CAL-01',
             'name' => 'Edificio calendario',
+            'distribution' => 'Pabellón central',
+            'sector' => 'Primer piso',
+            'zone' => 'Zona norte',
+            'usage' => 'Administrativo',
             'active' => true,
             'is_maintenance_location' => true,
         ]);
@@ -58,6 +62,11 @@ class MaintenanceVisitPersonFilterTest extends TestCase
             ->assertOk()
             ->assertJsonPath('total', 2)
             ->assertJsonPath('status_totals.Programada', 2)
+            ->assertJsonPath('data.0.dependency.name', 'Edificio calendario')
+            ->assertJsonPath('data.0.dependency.distribution', 'Pabellón central')
+            ->assertJsonPath('data.0.dependency.sector', 'Primer piso')
+            ->assertJsonPath('data.0.dependency.zone', 'Zona norte')
+            ->assertJsonPath('data.0.dependency.usage', 'Administrativo')
             ->assertJsonCount(2, 'data');
         $this->assertEqualsCanonicalizing(
             [$linkedVisit->id, $legacyVisit->id],

@@ -50,7 +50,7 @@ const catalogs = ref({
     courses: [],
     owners: [],
     academic_year: null,
-    max_file_kb: 20480,
+    max_file_kb: 30720,
     analysis_configured: false,
     analysis_engine: "",
 });

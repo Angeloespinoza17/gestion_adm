@@ -10,6 +10,7 @@ use App\Contracts\LibroDigital\Curriculum\PdfOcrExtractorInterface;
 use App\Contracts\LibroDigital\Curriculum\PdfTextExtractorInterface;
 use App\Contracts\PedagogicalManagement\PdfTextExtractorInterface as PedagogicalPdfTextExtractorInterface;
 use App\Contracts\PedagogicalManagement\PedagogicalInstrumentReviewerInterface;
+use App\Contracts\PedagogicalManagement\ClassPresentationContentGenerator;
 use App\Services\Attendance\AttendanceParserRegistry;
 use App\Services\Attendance\LirmiAttendancePdfParser;
 use App\Services\LibroDigital\Identity\DisabledIdentityVerifier;
@@ -29,6 +30,7 @@ use App\Services\LibroDigital\Curriculum\StudyPlanDocumentParser;
 use App\Services\LibroDigital\Curriculum\UnavailablePdfOcrExtractor;
 use App\Services\PedagogicalManagement\DeterministicPedagogicalInstrumentReviewer;
 use App\Services\PedagogicalManagement\SmalotPedagogicalPdfTextExtractor;
+use App\Services\PedagogicalManagement\ClassPresentations\OpenAiClassPresentationService;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\ServiceProvider;
 use Laravel\Sanctum\Sanctum;
@@ -45,6 +47,7 @@ class AppServiceProvider extends ServiceProvider
         $this->app->singleton(PdfTextExtractorInterface::class, SmalotPdfTextExtractor::class);
         $this->app->singleton(PedagogicalPdfTextExtractorInterface::class, SmalotPedagogicalPdfTextExtractor::class);
         $this->app->singleton(PedagogicalInstrumentReviewerInterface::class, DeterministicPedagogicalInstrumentReviewer::class);
+        $this->app->singleton(ClassPresentationContentGenerator::class, OpenAiClassPresentationService::class);
         $this->app->singleton(PdfOcrExtractorInterface::class, UnavailablePdfOcrExtractor::class);
         $this->app->singleton(CurriculumDocumentClassifierInterface::class, HeuristicCurriculumDocumentClassifier::class);
         $this->app->singleton(CurriculumDocumentParserRegistry::class, fn ($app) => new CurriculumDocumentParserRegistry([

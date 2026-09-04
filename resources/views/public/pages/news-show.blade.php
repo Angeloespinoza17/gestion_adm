@@ -47,9 +47,9 @@
 
   $slugAnchor = fn (?string $value, string $fallback) => Str::slug(trim((string) $value) ?: $fallback) ?: $fallback;
 
-  $featuredImage = $assetUrl($post->image_url, 'niceschool/assets/img/blog/blog-hero-1.webp');
-  $headerImage = $assetUrl($post->header_image_url ?: $post->image_url, 'niceschool/assets/img/education/showcase-1.webp');
-  $authorImage = $assetUrl($post->author_image_url, 'niceschool/assets/img/person/person-m-6.webp');
+  $featuredImage = $assetUrl($post->image_url);
+  $headerImage = $assetUrl($post->header_image_url);
+  $authorImage = $assetUrl($post->author_image_url);
   $secondaryImage = $assetUrl($post->secondary_image_url);
   $secondaryImagePosition = in_array($post->secondary_image_position, ['left', 'right', 'full'], true) ? $post->secondary_image_position : 'right';
   $readingMinutes = $post->reading_minutes ?: max(1, (int) ceil(str_word_count(strip_tags(($post->excerpt ?? '') . ' ' . ($bodyHtml ?? ''))) / 200));
@@ -106,75 +106,127 @@
   $shareTitle = urlencode($post->title);
 @endphp
 
-@section('body_class', 'news-details-page')
+@section('body_class', 'inner-page public-detail-page news-details-page')
 @section('title', $post->title . ' | Noticias')
 @section('description', $description)
 
 @section('content')
-  <div class="page-title dark-background" style="background-image: url('{{ $headerImage }}');">
+  <header
+    class="detail-hero detail-hero--news {{ $headerImage ? 'detail-hero--with-media' : 'detail-hero--institutional' }}"
+    @if($headerImage) style="--detail-hero-image: url('{{ $headerImage }}');" @endif
+  >
     <div class="container position-relative">
-      <h1>{{ $post->title }}</h1>
-      @if($post->excerpt)
-        <p>{{ $post->excerpt }}</p>
-      @endif
-      <nav class="breadcrumbs">
-        <ol>
-          <li><a href="{{ route('public.home') }}">Inicio</a></li>
-          <li><a href="{{ route('public.news') }}">Noticias</a></li>
-          <li class="current">{{ $post->title }}</li>
-        </ol>
-      </nav>
-    </div>
-  </div>
+      <div class="detail-hero__layout">
+        <div class="detail-hero__content">
+          <span class="detail-hero__kicker">
+            <i class="bi bi-newspaper" aria-hidden="true"></i>
+            Actualidad CNSC
+          </span>
 
-  <section id="blog-details" class="blog-details section">
-    <div class="container" data-aos="fade-up">
-      <article class="article">
-        <div class="article-header">
           @if($categories->isNotEmpty())
-            <div class="meta-categories" data-aos="fade-up">
+            <div class="detail-hero__categories" aria-label="Categorías de la noticia">
               @foreach($categories as $category)
-                <a href="{{ route('public.news') }}" class="category">{{ $category }}</a>
+                <span>{{ $category }}</span>
               @endforeach
             </div>
           @endif
 
-          <h1 class="title" data-aos="fade-up" data-aos-delay="100">{{ $post->title }}</h1>
+          <h1>{{ $post->title }}</h1>
 
-          <div class="article-meta" data-aos="fade-up" data-aos-delay="200">
-            <div class="author">
-              <img src="{{ $authorImage }}" alt="{{ $post->author_image_alt ?: $post->author_name ?: 'Autor' }}" class="author-img">
-              <div class="author-info">
-                <h4>{{ $post->author_name ?: 'Colegio Nuestra Señora del Carmen' }}</h4>
-                @if($post->author_role)
-                  <span>{{ $post->author_role }}</span>
-                @endif
-              </div>
-            </div>
-            <div class="post-info">
-              <span>
-                <i class="bi bi-calendar4-week"></i>
-                <time datetime="{{ $post->published_at?->toDateString() }}">
-                  {{ $publishedAt ? $publishedAt->translatedFormat('j F Y') : 'Sin fecha' }}
-                </time>
-              </span>
-              <span><i class="bi bi-clock"></i> {{ $readingMinutes }} min lectura</span>
-              @if($post->comments_label)
-                <span><i class="bi bi-chat-square-text"></i> {{ $post->comments_label }}</span>
+          @if($post->excerpt)
+            <p class="detail-hero__summary">{{ $post->excerpt }}</p>
+          @endif
+
+          <div class="detail-hero__meta" aria-label="Información de publicación">
+            <div class="detail-author">
+              @if($authorImage)
+                <img
+                  src="{{ $authorImage }}"
+                  alt="{{ $post->author_image_alt ?: $post->author_name ?: 'Autor de la noticia' }}"
+                  class="detail-author__avatar"
+                  width="48"
+                  height="48"
+                >
+              @else
+                <span class="detail-author__avatar detail-author__avatar--institutional" aria-hidden="true">
+                  <img src="{{ asset('brand/logo-cnsc-web.webp') }}" alt="" width="300" height="322">
+                </span>
               @endif
+              <span class="detail-author__copy">
+                <strong>{{ $post->author_name ?: 'Colegio Nuestra Señora del Carmen' }}</strong>
+                @if($post->author_role)
+                  <small>{{ $post->author_role }}</small>
+                @endif
+              </span>
             </div>
+
+            <ul class="detail-meta-list">
+              <li>
+                <i class="bi bi-calendar3" aria-hidden="true"></i>
+                @if($publishedAt)
+                  <time datetime="{{ $post->published_at->toDateString() }}">{{ $publishedAt->translatedFormat('j F Y') }}</time>
+                @else
+                  <span>Fecha por confirmar</span>
+                @endif
+              </li>
+              <li><i class="bi bi-clock" aria-hidden="true"></i><span>{{ $readingMinutes }} min de lectura</span></li>
+              @if($post->comments_label)
+                <li><i class="bi bi-chat-square-text" aria-hidden="true"></i><span>{{ $post->comments_label }}</span></li>
+              @endif
+            </ul>
           </div>
+
+          <nav class="page-title__trail detail-hero__trail" aria-label="Ruta de navegación">
+            <ol>
+              <li><a href="{{ route('public.home') }}">Inicio</a></li>
+              <li><a href="{{ route('public.news') }}">Noticias</a></li>
+              <li aria-current="page">Detalle</li>
+            </ol>
+          </nav>
         </div>
 
-        <div class="article-featured-image" data-aos="zoom-in">
-          <img src="{{ $featuredImage }}" alt="{{ $post->image_alt ?: $post->title }}" class="img-fluid">
+        @unless($headerImage)
+          <div class="detail-hero__fallback" aria-hidden="true">
+            <span class="detail-hero__crest">
+              <img src="{{ asset('brand/logo-cnsc-web.webp') }}" alt="" width="300" height="322">
+            </span>
+            <span>Identidad · Fe · Servicio</span>
+          </div>
+        @endunless
+      </div>
+    </div>
+  </header>
+
+  <section id="blog-details" class="blog-details detail-article-section section">
+    <div class="container" data-aos="fade-up">
+      <article class="article detail-article">
+        <div class="article-featured-image detail-featured-media" data-aos="fade-up">
+          @if($featuredImage)
+            <img
+              src="{{ $featuredImage }}"
+              alt="{{ $post->image_alt ?: $post->title }}"
+              class="img-fluid"
+              decoding="async"
+            >
+          @else
+            <div class="detail-media-placeholder" role="img" aria-label="Identidad institucional del Colegio Nuestra Señora del Carmen">
+              <span class="detail-media-placeholder__mark" aria-hidden="true">
+                <img src="{{ asset('brand/logo-cnsc-web.webp') }}" alt="" width="300" height="322">
+              </span>
+              <span class="detail-media-placeholder__copy">
+                <strong>Noticia institucional</strong>
+                <small>Comunidad educativa pastoral CNSC</small>
+              </span>
+            </div>
+          @endif
         </div>
 
-        <div class="article-wrapper">
+        <div class="article-wrapper detail-shell {{ $tocItems->isEmpty() ? 'detail-shell--single' : '' }}">
           @if($tocItems->isNotEmpty())
-            <aside class="table-of-contents" data-aos="fade-left">
-              <h3>Índice</h3>
-              <nav>
+            <aside class="table-of-contents detail-toc" data-aos="fade-right">
+              <span class="detail-toc__eyebrow">Navegación</span>
+              <h2>En esta noticia</h2>
+              <nav aria-label="Índice de la noticia">
                 <ul>
                   @foreach($tocItems as $item)
                     <li><a href="#{{ $item['anchor'] }}" class="{{ $loop->first ? 'active' : '' }}">{{ $item['label'] }}</a></li>
@@ -184,7 +236,7 @@
             </aside>
           @endif
 
-          <div class="article-content">
+          <div class="article-content detail-prose">
             @if($hasIntro)
               <div class="content-section" id="introduccion" data-aos="fade-up">
                 @if($post->excerpt)
@@ -225,7 +277,7 @@
                   <div class="feature-points">
                     @foreach($featurePoints as $point)
                       <div class="point">
-                        <i class="{{ $iconClass($point['icon'] ?? null) }}"></i>
+                        <i class="{{ $iconClass($point['icon'] ?? null) }}" aria-hidden="true"></i>
                         <div>
                           @if(filled($point['title'] ?? null))
                             <h4>{{ $point['title'] }}</h4>
@@ -249,7 +301,7 @@
                     @foreach($comparisonCards as $card)
                       <div class="col-md-6">
                         <div class="comparison-card">
-                          <div class="icon"><i class="{{ $iconClass($card['icon'] ?? null, 'bi bi-check-circle') }}"></i></div>
+                          <div class="icon"><i class="{{ $iconClass($card['icon'] ?? null, 'bi bi-check-circle') }}" aria-hidden="true"></i></div>
                           @if(filled($card['title'] ?? null))
                             <h4>{{ $card['title'] }}</h4>
                           @endif
@@ -291,7 +343,7 @@
               <div class="content-section" id="informacion" data-aos="fade-up">
                 <div class="info-box">
                   <div class="icon">
-                    <i class="{{ $iconClass($post->info_box_icon, 'bi bi-info-circle') }}"></i>
+                    <i class="{{ $iconClass($post->info_box_icon, 'bi bi-info-circle') }}" aria-hidden="true"></i>
                   </div>
                   <div class="content">
                     @if($post->info_box_title)
@@ -311,7 +363,7 @@
                 <div class="future-trends">
                   @foreach($futureTrends as $trend)
                     <div class="trend">
-                      <i class="{{ $iconClass($trend['icon'] ?? null, 'bi bi-arrow-right-circle') }}"></i>
+                      <i class="{{ $iconClass($trend['icon'] ?? null, 'bi bi-arrow-right-circle') }}" aria-hidden="true"></i>
                       @if(filled($trend['title'] ?? null))
                         <h4>{{ $trend['title'] }}</h4>
                       @endif
@@ -330,18 +382,19 @@
           <div class="article-footer" data-aos="fade-up">
             @if($post->share_enabled)
               <div class="share-article">
-                <h4>Compartir esta noticia</h4>
+                <span class="article-footer__eyebrow">Difunde la información</span>
+                <h2>Compartir esta noticia</h2>
                 <div class="share-buttons">
-                  <a href="https://twitter.com/intent/tweet?url={{ $shareUrl }}&text={{ $shareTitle }}" class="share-button twitter" target="_blank" rel="noopener noreferrer">
-                    <i class="bi bi-twitter-x"></i>
+                  <a href="https://twitter.com/intent/tweet?url={{ $shareUrl }}&text={{ $shareTitle }}" class="share-button twitter" target="_blank" rel="noopener noreferrer" aria-label="Compartir en X, se abre en una pestaña nueva">
+                    <i class="bi bi-twitter-x" aria-hidden="true"></i>
                     <span>Compartir en X</span>
                   </a>
-                  <a href="https://www.facebook.com/sharer/sharer.php?u={{ $shareUrl }}" class="share-button facebook" target="_blank" rel="noopener noreferrer">
-                    <i class="bi bi-facebook"></i>
+                  <a href="https://www.facebook.com/sharer/sharer.php?u={{ $shareUrl }}" class="share-button facebook" target="_blank" rel="noopener noreferrer" aria-label="Compartir en Facebook, se abre en una pestaña nueva">
+                    <i class="bi bi-facebook" aria-hidden="true"></i>
                     <span>Compartir en Facebook</span>
                   </a>
-                  <a href="https://www.linkedin.com/sharing/share-offsite/?url={{ $shareUrl }}" class="share-button linkedin" target="_blank" rel="noopener noreferrer">
-                    <i class="bi bi-linkedin"></i>
+                  <a href="https://www.linkedin.com/sharing/share-offsite/?url={{ $shareUrl }}" class="share-button linkedin" target="_blank" rel="noopener noreferrer" aria-label="Compartir en LinkedIn, se abre en una pestaña nueva">
+                    <i class="bi bi-linkedin" aria-hidden="true"></i>
                     <span>Compartir en LinkedIn</span>
                   </a>
                 </div>
@@ -350,7 +403,8 @@
 
             @if($tags->isNotEmpty())
               <div class="article-tags">
-                <h4>Temas relacionados</h4>
+                <span class="article-footer__eyebrow">Explora</span>
+                <h2>Temas relacionados</h2>
                 <div class="tags">
                   @foreach($tags as $tag)
                     <a href="{{ route('public.news') }}" class="tag">{{ $tag }}</a>
@@ -361,6 +415,53 @@
           </div>
         @endif
       </article>
+
+      @if($relatedNews->isNotEmpty())
+        <section class="detail-related" aria-labelledby="related-news-title" data-aos="fade-up">
+          <div class="detail-related__heading">
+            <div>
+              <span class="detail-related__eyebrow">Sigue explorando</span>
+              <h2 id="related-news-title">Más noticias de nuestra comunidad</h2>
+            </div>
+            <a href="{{ route('public.news') }}" class="detail-related__all">
+              Ver todas las noticias
+              <i class="bi bi-arrow-right" aria-hidden="true"></i>
+            </a>
+          </div>
+
+          <div class="detail-related__grid">
+            @foreach($relatedNews as $related)
+              @php
+                $relatedImage = $assetUrl($related->image_url);
+                $relatedDate = $related->published_at?->copy()->locale('es');
+                $relatedSummary = Str::limit(strip_tags($related->excerpt ?: $related->body_html ?: ''), 120);
+              @endphp
+              <article class="detail-related-card">
+                <a href="{{ route('public.news.show', $related) }}" class="detail-related-card__media" aria-label="Leer noticia: {{ $related->title }}">
+                  @if($relatedImage)
+                    <img src="{{ $relatedImage }}" alt="{{ $related->image_alt ?: $related->title }}" loading="lazy" decoding="async">
+                  @else
+                    <span class="detail-related-card__placeholder" aria-hidden="true">
+                      <img src="{{ asset('brand/logo-cnsc-web.webp') }}" alt="" width="300" height="322" loading="lazy">
+                    </span>
+                  @endif
+                </a>
+                <div class="detail-related-card__body">
+                  @if($relatedDate)
+                    <time datetime="{{ $related->published_at->toDateString() }}">{{ $relatedDate->translatedFormat('j F Y') }}</time>
+                  @endif
+                  <h3><a href="{{ route('public.news.show', $related) }}">{{ $related->title }}</a></h3>
+                  <p>{{ $relatedSummary ?: 'Conoce los detalles de esta noticia institucional.' }}</p>
+                  <a href="{{ route('public.news.show', $related) }}" class="detail-related-card__action" aria-label="Leer noticia completa: {{ $related->title }}">
+                    Leer noticia
+                    <i class="bi bi-arrow-right" aria-hidden="true"></i>
+                  </a>
+                </div>
+              </article>
+            @endforeach
+          </div>
+        </section>
+      @endif
     </div>
   </section>
 @endsection

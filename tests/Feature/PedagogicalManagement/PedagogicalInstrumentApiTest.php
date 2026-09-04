@@ -96,6 +96,7 @@ class PedagogicalInstrumentApiTest extends TestCase
             ->assertOk()
             ->assertJsonPath('data.analysis_configured', true)
             ->assertJsonPath('data.analysis_engine', 'Reglas determinísticas Laravel · smalot/pdfparser')
+            ->assertJsonPath('data.max_file_kb', 30720)
             ->assertJsonPath('data.academic_year.id', $year->id)
             ->assertJsonCount(1, 'data.courses');
 
@@ -229,7 +230,19 @@ class PedagogicalInstrumentApiTest extends TestCase
         $message = (string) ($errors['file'][0] ?? '');
         $this->assertStringContainsString('El servidor no recibió el archivo completo.', $message);
         $this->assertStringContainsString('upload_max_filesize', $message);
-        $this->assertStringContainsString('20 MB', $message);
+        $this->assertStringContainsString('30 MB', $message);
+    }
+
+    public function test_instrument_larger_than_thirty_megabytes_is_rejected_by_the_backend(): void
+    {
+        [$user, $school, $year, $course, $subject] = $this->context();
+
+        $this->actingAs($user)->post('/api/pedagogical-management/instruments', [
+            ...$this->payload($user, $school, $course, $subject),
+            'file' => UploadedFile::fake()->create('instrumento-grande.pdf', 30721, 'application/pdf'),
+        ])->assertUnprocessable()
+            ->assertJsonValidationErrors('file')
+            ->assertJsonPath('errors.file.0', 'El archivo puede pesar como máximo 30 MB.');
     }
 
     public function test_word_is_accepted_and_owner_and_school_privacy_are_preserved(): void

@@ -76,6 +76,7 @@ class BibliotecaInventoryService
                 'physical_state' => $changes['physical_state'] ?? $ejemplar->physical_state,
                 'availability_status' => $changes['availability_status'] ?? $ejemplar->availability_status,
                 'observations' => $changes['observations'] ?? $ejemplar->observations,
+                'photo_urls' => array_key_exists('photo_urls', $changes) ? $changes['photo_urls'] : $ejemplar->photo_urls,
                 'last_inventory_checked_at' => $changes['last_inventory_checked_at'] ?? $ejemplar->last_inventory_checked_at,
                 'is_active' => $changes['is_active'] ?? $ejemplar->is_active,
                 'lost_at' => $changes['lost_at'] ?? $ejemplar->lost_at,
