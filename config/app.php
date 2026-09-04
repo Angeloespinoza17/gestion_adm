@@ -86,6 +86,21 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Trusted Hosts
+    |--------------------------------------------------------------------------
+    |
+    | The application URL host is always trusted. Add only explicit additional
+    | hostnames here; each entry is matched exactly and never as a wildcard.
+    |
+    */
+
+    'trusted_hosts' => array_values(array_filter(array_map(
+        static fn (string $host): string => trim($host),
+        explode(',', (string) env('APP_TRUSTED_HOSTS', ''))
+    ))),
+
+    /*
+    |--------------------------------------------------------------------------
     | Application Timezone
     |--------------------------------------------------------------------------
     |

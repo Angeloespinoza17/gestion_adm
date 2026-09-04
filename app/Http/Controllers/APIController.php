@@ -125,8 +125,7 @@ class APIController extends Controller
 
         try {
             //code...
-            $url = env('APP_URL');
-            $token = $url."reset-password/".$token_str;
+            $token = rtrim((string) config('app.url'), '/').'/reset-password/'.$token_str;
             Mail::send('email.forgetPassword', ['token' => $token], function ($message) use ($request) {
                 $message->to($request->email);
                 $message->subject('Reset Password');

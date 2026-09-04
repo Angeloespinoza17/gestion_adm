@@ -132,14 +132,18 @@ La activación en producción debe realizarse en una ventana controlada. Antes d
 
 Configuración sugerida:
 
+> Aplicar este bloque solo después de aprovisionar `ws.cnscvaldivia.cl` con
+> DNS, proxy WebSocket y certificado TLS válidos. El VPS actual mantiene
+> broadcasting en `log` y no publica un servicio Reverb.
+
 ```dotenv
 BROADCAST_DRIVER=reverb
 QUEUE_CONNECTION=redis
 MESSAGING_REALTIME_ENABLED=true
-REVERB_HOST=ws.cnscgestion.cl
+REVERB_HOST=ws.cnscvaldivia.cl
 REVERB_PORT=443
 REVERB_SCHEME=https
-REVERB_ALLOWED_ORIGINS=www.cnscgestion.cl,cnscgestion.cl
+REVERB_ALLOWED_ORIGINS=www.cnscvaldivia.cl,cnscvaldivia.cl
 ```
 
 Reverb y los workers deben quedar bajo Supervisor o systemd, con reinicio automático, usuario sin privilegios y logs rotados. Separar las colas permite priorizar los broadcasts:

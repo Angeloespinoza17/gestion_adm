@@ -5,10 +5,17 @@
 
     RewriteEngine On
 
-    # Production must always run under HTTPS.
-    RewriteCond %{HTTP_HOST} ^(?:www\.)?cnscgestion\.cl$ [NC]
+    # Canonical production host. Keep the original path and query string while
+    # permanently moving the legacy domain and both www aliases to the new apex.
+    RewriteCond %{HTTP_HOST} ^(?:www\.)?cnscgestion\.cl$ [NC,OR]
+    RewriteCond %{HTTP_HOST} ^www\.cnscvaldivia\.cl$ [NC]
+    RewriteRule ^ https://cnscvaldivia.cl%{REQUEST_URI} [R=308,L]
+
+    # Force HTTPS on the canonical apex. Cloudflare connects to this origin
+    # over HTTPS, so never trust a client-supplied forwarded-proto header here.
+    RewriteCond %{HTTP_HOST} ^cnscvaldivia\.cl$ [NC]
     RewriteCond %{HTTPS} !=on
-    RewriteRule ^ https://cnscgestion.cl%{REQUEST_URI} [R=301,L]
+    RewriteRule ^ https://cnscvaldivia.cl%{REQUEST_URI} [R=308,L]
 
     # Ensure Authorization header reaches PHP under CGI/FastCGI.
     <IfModule mod_core.c>
