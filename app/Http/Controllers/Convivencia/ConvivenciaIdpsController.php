@@ -8,6 +8,9 @@ use App\Models\Convivencia\ConvivenciaIdpsDimension;
 use App\Models\Convivencia\ConvivenciaIdpsInstrument;
 use App\Models\Convivencia\ConvivenciaIdpsPeriod;
 use App\Models\Convivencia\ConvivenciaIdpsResult;
+use App\Models\CourseSection;
+use App\Models\EducationLevel;
+use App\Services\Convivencia\ConvivenciaAccessService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -17,7 +20,10 @@ class ConvivenciaIdpsController extends Controller
     {
         abort_unless($this->canView($request), 403);
 
-        $results = ConvivenciaIdpsResult::query()
+        $canManage = $this->canManage($request);
+        $access = app(ConvivenciaAccessService::class);
+
+        $results = $access->applyIdpsResultVisibility(ConvivenciaIdpsResult::query(), $request->user())
             ->with([
                 'period:id,name,status',
                 'dimension:id,code,name',
@@ -34,7 +40,7 @@ class ConvivenciaIdpsController extends Controller
             ->when($request->query('course_section_id'), fn ($builder, $value) => $builder->where('course_section_id', $value))
             ->when($request->query('education_level_id'), fn ($builder, $value) => $builder->where('education_level_id', $value))
             ->latest('id')
-            ->paginate((int) $request->query('per_page', 12));
+            ->paginate(min(100, max(1, (int) $request->query('per_page', 12))));
 
         return response()->json([
             'periods' => ConvivenciaIdpsPeriod::query()
@@ -43,8 +49,10 @@ class ConvivenciaIdpsController extends Controller
                 ->orderByDesc('id')
                 ->get(),
             'dimensions' => ConvivenciaIdpsDimension::query()
-                ->with('instruments')
-                ->where('active', true)
+                ->with(['instruments' => fn ($builder) => $builder
+                    ->when(! $canManage, fn ($query) => $query->where('active', true))
+                    ->orderBy('name')])
+                ->when(! $canManage, fn ($builder) => $builder->where('active', true))
                 ->orderBy('name')
                 ->get(),
             'results' => $results,
@@ -126,7 +134,7 @@ class ConvivenciaIdpsController extends Controller
         abort_unless($this->canManage($request), 403);
 
         $payload = $request->validate([
-            'code' => ['sometimes', 'string', 'max:80', 'unique:convivencia_idps_dimensions,code,' . $dimension->id],
+            'code' => ['sometimes', 'string', 'max:80', 'unique:convivencia_idps_dimensions,code,'.$dimension->id],
             'name' => ['sometimes', 'string', 'max:160'],
             'description' => ['nullable', 'string'],
             'active' => ['sometimes', 'boolean'],
@@ -194,7 +202,7 @@ class ConvivenciaIdpsController extends Controller
     {
         abort_unless($this->canManage($request), 403);
 
-        $result = new ConvivenciaIdpsResult();
+        $result = new ConvivenciaIdpsResult;
         $this->fillResult($result, $request->validated(), $request->user()->id, true);
 
         return response()->json([
@@ -205,7 +213,8 @@ class ConvivenciaIdpsController extends Controller
 
     public function updateResult(SaveConvivenciaIdpsResultRequest $request, ConvivenciaIdpsResult $result): JsonResponse
     {
-        abort_unless($this->canManage($request), 403);
+        $access = app(ConvivenciaAccessService::class);
+        abort_unless($this->canManage($request) && $access->canViewIdpsResult($request->user(), $result), 403);
 
         $this->fillResult($result, $request->validated(), $request->user()->id, false);
 
@@ -219,9 +228,9 @@ class ConvivenciaIdpsController extends Controller
     {
         $referenceLabel = $payload['reference_label']
             ?? ($payload['course_section_id']
-                ? optional(\App\Models\CourseSection::query()->find($payload['course_section_id']))->display_name
+                ? optional(CourseSection::query()->find($payload['course_section_id']))->display_name
                 : ($payload['education_level_id']
-                    ? optional(\App\Models\EducationLevel::query()->find($payload['education_level_id']))->name
+                    ? optional(EducationLevel::query()->find($payload['education_level_id']))->name
                     : null));
 
         $result->fill(array_merge($payload, [
@@ -253,7 +262,7 @@ class ConvivenciaIdpsController extends Controller
 
     private function canView(Request $request): bool
     {
-        $access = app(\App\Services\Convivencia\ConvivenciaAccessService::class);
+        $access = app(ConvivenciaAccessService::class);
 
         return $access->canViewCourseReports($request->user())
             || $access->canManagePlans($request->user())
@@ -263,7 +272,7 @@ class ConvivenciaIdpsController extends Controller
 
     private function canManage(Request $request): bool
     {
-        $access = app(\App\Services\Convivencia\ConvivenciaAccessService::class);
+        $access = app(ConvivenciaAccessService::class);
 
         return $access->canManagePlans($request->user()) || $access->canManageSettings($request->user());
     }

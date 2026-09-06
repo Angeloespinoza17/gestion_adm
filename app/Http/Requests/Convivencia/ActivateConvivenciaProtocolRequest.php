@@ -29,8 +29,13 @@ class ActivateConvivenciaProtocolRequest extends FormRequest
 
     public function rules(): array
     {
+        $revisionRules = $this->route('activation')
+            ? ['required', 'integer', 'min:1']
+            : ['nullable', 'integer', 'min:1'];
+
         return [
             'protocol_id' => ['required', 'integer', 'exists:convivencia_protocols,id'],
+            'revision' => $revisionRules,
             'case_id' => ['nullable', 'integer', 'exists:convivencia_cases,id'],
             'complaint_id' => ['nullable', 'integer', 'exists:convivencia_complaints,id'],
             'current_step_id' => ['nullable', 'integer', 'exists:convivencia_protocol_steps,id'],
@@ -50,8 +55,14 @@ class ActivateConvivenciaProtocolRequest extends FormRequest
     public function withValidator($validator): void
     {
         $validator->after(function ($validator) {
-            if (!$this->filled('case_id') && !$this->filled('complaint_id')) {
-                $validator->errors()->add('case_id', 'Debes asociar la activación a un caso o una denuncia.');
+            $hasCase = $this->filled('case_id');
+            $hasComplaint = $this->filled('complaint_id');
+            if ($hasCase === $hasComplaint) {
+                $message = $hasCase
+                    ? 'Asocia la activación solo a un caso o solo a una denuncia, no a ambos.'
+                    : 'Debes asociar la activación a un caso o una denuncia.';
+                $validator->errors()->add('case_id', $message);
+                $validator->errors()->add('complaint_id', $message);
             }
         });
     }

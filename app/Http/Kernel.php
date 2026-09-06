@@ -4,8 +4,10 @@ namespace App\Http;
 
 use App\Http\Middleware\Authenticate;
 use App\Http\Middleware\EncryptCookies;
+use App\Http\Middleware\EnsureConvivenciaAccess;
 use App\Http\Middleware\EnsureConvivenciaInstalled;
 use App\Http\Middleware\EnsureLibroDigitalEnabled;
+use App\Http\Middleware\EnsureMessagingAvailable;
 use App\Http\Middleware\EnsurePermission;
 use App\Http\Middleware\EnsureRiskMatrixInstalled;
 use App\Http\Middleware\EnsureRiskPreventionInstalled;
@@ -92,10 +94,12 @@ class Kernel extends HttpKernel
         'auth.basic' => AuthenticateWithBasicAuth::class,
         'cache.headers' => SetCacheHeaders::class,
         'can' => Authorize::class,
+        'convivencia.access' => EnsureConvivenciaAccess::class,
         'convivencia.installed' => EnsureConvivenciaInstalled::class,
         'lcd.correlation' => LibroDigitalCorrelationId::class,
         'lcd.enabled' => EnsureLibroDigitalEnabled::class,
         'lcd.idempotency' => LibroDigitalIdempotency::class,
+        'messaging.available' => EnsureMessagingAvailable::class,
         'guest' => RedirectIfAuthenticated::class,
         'password.confirm' => RequirePassword::class,
         'permission' => EnsurePermission::class,

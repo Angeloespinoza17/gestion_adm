@@ -31,7 +31,7 @@ class MeController extends Controller
                 ->orderBy('sort_order')
                 ->get(['id', 'parent_id', 'name', 'slug', 'frontend_route', 'icon', 'sort_order']);
 
-            return $this->noStoreResponse($this->normalizeHomeModule($modules));
+            return $this->noStoreResponse($this->normalizeHomeModule($this->filterMessagingModule($user, $modules)));
         }
 
         $directModules = SystemModule::query()
@@ -58,6 +58,23 @@ class MeController extends Controller
             )));
         }
 
+        if ($user->canUseMessaging()) {
+            $messagingModuleIds = SystemModule::query()
+                ->where('active', true)
+                ->where('slug', 'messaging')
+                ->pluck('id')
+                ->map(fn ($id) => (int) $id)
+                ->all();
+            $moduleIds = array_values(array_unique(array_merge(
+                $moduleIds,
+                $this->roleModuleSyncService->expandModuleIds(
+                    $messagingModuleIds,
+                    includeDescendants: false,
+                    includeAncestors: true
+                ),
+            )));
+        }
+
         $modules = SystemModule::query()
             ->whereIn('id', $moduleIds)
             ->orderByRaw('CASE WHEN parent_id IS NULL THEN 0 ELSE 1 END')
@@ -66,6 +83,7 @@ class MeController extends Controller
             ->get(['id', 'parent_id', 'name', 'slug', 'frontend_route', 'icon', 'sort_order']);
 
         $modules = $this->sensitiveModuleAccessService->filterModules($user, $modules);
+        $modules = $this->filterMessagingModule($user, $modules);
 
         return $this->noStoreResponse($this->normalizeHomeModule($modules));
     }
@@ -78,10 +96,16 @@ class MeController extends Controller
             return response()->json(['message' => 'Unauthenticated.'], 401);
         }
 
+        $markers = [];
+        if ($user->isSuperAdmin()) {
+            $markers[] = '__superadmin__';
+        }
+        if ($user->canUseMessaging()) {
+            $markers[] = '__staff__';
+        }
+
         return response()->json([
-            'data' => $user->isSuperAdmin()
-                ? array_values(array_unique(array_merge(['__superadmin__'], $user->permissionSlugs())))
-                : $user->permissionSlugs(),
+            'data' => array_values(array_unique(array_merge($markers, $user->permissionSlugs()))),
         ])->header('Cache-Control', 'no-store, no-cache, must-revalidate, private');
     }
 
@@ -95,6 +119,30 @@ class MeController extends Controller
 
             return $module;
         });
+    }
+
+    private function filterMessagingModule($user, $modules)
+    {
+        if ($user->canUseMessaging()) {
+            return $modules;
+        }
+
+        $blockedIds = $modules
+            ->where('slug', 'messaging')
+            ->pluck('id')
+            ->map(fn ($id) => (int) $id);
+
+        do {
+            $previousCount = $blockedIds->count();
+            $blockedIds = $blockedIds
+                ->merge($modules->whereIn('parent_id', $blockedIds)->pluck('id')->map(fn ($id) => (int) $id))
+                ->unique()
+                ->values();
+        } while ($blockedIds->count() > $previousCount);
+
+        return $modules
+            ->reject(fn (SystemModule $module) => $blockedIds->contains((int) $module->id))
+            ->values();
     }
 
     private function noStoreResponse($modules): JsonResponse

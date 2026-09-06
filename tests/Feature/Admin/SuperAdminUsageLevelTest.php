@@ -39,7 +39,10 @@ class SuperAdminUsageLevelTest extends TestCase
         $this->postJson('/api/login', [
             'email' => $user->email,
             'password' => 'password',
-        ])->assertOk()->assertJsonPath('success', true);
+        ])->assertOk()
+            ->assertJsonPath('success', true)
+            ->assertJsonPath('data.user.user_type', 'staff')
+            ->assertJsonPath('data.user.is_staff', true);
 
         $this->assertDatabaseHas('user_usage_daily', [
             'user_id' => $user->id,

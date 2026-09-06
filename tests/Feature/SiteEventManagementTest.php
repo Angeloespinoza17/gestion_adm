@@ -6,14 +6,14 @@ use App\Models\Permission;
 use App\Models\Role;
 use App\Models\SiteEvent;
 use App\Models\User;
-use Illuminate\Foundation\Testing\DatabaseTransactions;
+use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Str;
 use Laravel\Sanctum\Sanctum;
 use Tests\TestCase;
 
 class SiteEventManagementTest extends TestCase
 {
-    use DatabaseTransactions;
+    use RefreshDatabase;
 
     public function test_public_events_page_only_shows_published_events(): void
     {
@@ -187,6 +187,15 @@ class SiteEventManagementTest extends TestCase
             ->assertOk();
 
         $this->assertDatabaseMissing('site_events', ['id' => $eventId]);
+    }
+
+    public function test_event_catalog_reports_read_only_capability(): void
+    {
+        Sanctum::actingAs($this->userWithPermissions(['ver_eventos']));
+
+        $this->getJson('/api/admin/events/catalogs')
+            ->assertOk()
+            ->assertJsonPath('capabilities.can_manage', false);
     }
 
     private function userWithPermissions(array $permissionSlugs): User

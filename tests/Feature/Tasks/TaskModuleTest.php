@@ -20,7 +20,7 @@ class TaskModuleTest extends TestCase
 {
     use RefreshDatabase;
 
-    public function test_every_active_staff_user_gets_only_the_base_task_workspace_access(): void
+    public function test_every_active_staff_user_gets_the_base_task_workspace_without_privileged_task_modules(): void
     {
         $tasksModule = SystemModule::query()->create([
             'slug' => 'tasks',
@@ -55,7 +55,11 @@ class TaskModuleTest extends TestCase
         $this->assertNotContains('ver_reportes_tareas', $permissions);
 
         $moduleSlugs = collect($this->getJson('/api/me/modules')->assertOk()->json('data'))->pluck('slug');
-        $this->assertSame(['tasks', 'tasks_backlog'], $moduleSlugs->all());
+        $this->assertContains('tasks', $moduleSlugs);
+        $this->assertContains('tasks_backlog', $moduleSlugs);
+        $this->assertContains('messaging', $moduleSlugs);
+        $this->assertNotContains('tasks_assigners', $moduleSlugs);
+        $this->assertNotContains('tasks_reports', $moduleSlugs);
 
         $this->getJson('/api/tasks')->assertOk();
         $this->postJson('/api/tasks', $this->taskPayload($staffUser))->assertCreated();

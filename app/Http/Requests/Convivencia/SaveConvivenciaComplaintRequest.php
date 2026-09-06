@@ -2,9 +2,12 @@
 
 namespace App\Http\Requests\Convivencia;
 
+use App\Models\Convivencia\ConvivenciaCase;
 use App\Models\Convivencia\ConvivenciaComplaint;
+use App\Services\Convivencia\ConvivenciaAccessService;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\Validator;
 
 class SaveConvivenciaComplaintRequest extends FormRequest
 {
@@ -43,5 +46,19 @@ class SaveConvivenciaComplaintRequest extends FormRequest
             'status' => ['required', Rule::in(array_column(ConvivenciaComplaint::STATUS_OPTIONS, 'value'))],
             'admissibility_result' => ['nullable', 'string'],
         ];
+    }
+
+    public function withValidator(Validator $validator): void
+    {
+        $validator->after(function (Validator $validator): void {
+            if (! $this->filled('case_id') || $validator->errors()->has('case_id')) {
+                return;
+            }
+
+            $case = ConvivenciaCase::query()->find($this->integer('case_id'));
+            if ($case && ! app(ConvivenciaAccessService::class)->canViewCase($this->user(), $case)) {
+                $validator->errors()->add('case_id', 'No tienes acceso al caso seleccionado.');
+            }
+        });
     }
 }

@@ -16,8 +16,7 @@ class SecurityDashboardController extends Controller
 {
     public function __construct(
         private readonly SecurityAccessService $accessService,
-    ) {
-    }
+    ) {}
 
     public function index(Request $request): JsonResponse
     {
@@ -29,16 +28,16 @@ class SecurityDashboardController extends Controller
         $roundsQuery = SecurityRound::query()->whereIn('security_shift_id', $visibleShiftIds);
         $incidentsBase = (clone $visibleIncidentQuery);
 
-        $respondedIncidents = (clone $incidentsBase)
+        $averageExpression = match (DB::connection()->getDriverName()) {
+            'mysql', 'mariadb' => 'AVG(TIMESTAMPDIFF(MINUTE, created_at, responded_at))',
+            'pgsql' => 'AVG(EXTRACT(EPOCH FROM (responded_at - created_at)) / 60)',
+            default => 'AVG((julianday(responded_at) - julianday(created_at)) * 1440)',
+        };
+        $averageResponseMinutes = (clone $incidentsBase)
             ->whereNotNull('responded_at')
-            ->get(['created_at', 'responded_at']);
-
-        $averageResponseMinutes = $respondedIncidents->isEmpty()
-            ? null
-            : round(
-                $respondedIncidents->avg(fn ($incident) => $incident->created_at?->diffInMinutes($incident->responded_at)),
-                1
-            );
+            ->selectRaw($averageExpression.' as average_minutes')
+            ->first()?->average_minutes;
+        $averageResponseMinutes = $averageResponseMinutes === null ? null : round((float) $averageResponseMinutes, 1);
 
         $pendingStatusIds = DB::table('security_incident_statuses')
             ->whereIn('code', ['pendiente', 'en_revision', 'derivada'])
@@ -47,6 +46,11 @@ class SecurityDashboardController extends Controller
         return response()->json([
             'totals' => [
                 'rounds_total' => (clone $roundsQuery)->count(),
+                'rounds_today' => (clone $roundsQuery)->whereDate('recorded_at', today())->count(),
+                'attention_rounds' => (clone $roundsQuery)->where('overall_status', SecurityRound::STATUS_REQUIERE_ATENCION)->count(),
+                'active_shifts' => $this->accessService->visibleShiftsQuery($request->user())
+                    ->where('status', SecurityShift::STATUS_EN_CURSO)
+                    ->count(),
                 'incidents_total' => (clone $incidentsBase)->count(),
                 'pending_incidents' => (clone $incidentsBase)->whereIn('status_id', $pendingStatusIds)->count(),
                 'critical_incidents' => (clone $incidentsBase)->where('priority', 'critica')->count(),
@@ -83,6 +87,26 @@ class SecurityDashboardController extends Controller
                 ->latest('id')
                 ->limit(8)
                 ->get(['id', 'title', 'message', 'priority', 'read_at', 'created_at', 'action_url', 'security_incident_id']),
+            'recent_rounds' => SecurityRound::query()
+                ->whereIn('security_shift_id', clone $visibleShiftIds)
+                ->with([
+                    'shift:id,staff_id,scheduled_start_at,scheduled_end_at,status',
+                    'shift.staff:id,full_name',
+                    'recordedBy:id,name',
+                ])
+                ->withCount([
+                    'sectors',
+                    'incidents',
+                    'incidents as pending_incidents_count' => fn ($query) => $query
+                        ->whereHas('status', fn ($statusQuery) => $statusQuery->where('is_closed', false)),
+                ])
+                ->latest('recorded_at')
+                ->latest('id')
+                ->limit(8)
+                ->get([
+                    'id', 'security_shift_id', 'recorded_by_user_id', 'round_number', 'recorded_at',
+                    'overall_status', 'observations', 'act_number',
+                ]),
             'upcoming_shifts' => $this->accessService->visibleShiftsQuery($request->user())
                 ->with(['staff:id,full_name'])
                 ->whereIn('status', [SecurityShift::STATUS_PROGRAMADO, SecurityShift::STATUS_EN_CURSO])

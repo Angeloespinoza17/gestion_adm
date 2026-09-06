@@ -12,7 +12,7 @@ export const menuItems = [
     },
     {
         id: 3,
-        label: "Mensajería",
+        label: "Mensajería de funcionarios",
         icon: "bx-message-rounded-dots",
         link: "/mensajeria"
     },
@@ -461,6 +461,12 @@ export const menuItems = [
                 parentId: 9150
             }
         ]
+    },
+    {
+        id: 91557,
+        label: "Bitácora",
+        icon: "bx-notepad",
+        link: "/bitacora"
     },
     {
         id: 9155,

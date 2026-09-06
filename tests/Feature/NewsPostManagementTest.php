@@ -6,7 +6,7 @@ use App\Models\NewsPost;
 use App\Models\Permission;
 use App\Models\Role;
 use App\Models\User;
-use Illuminate\Foundation\Testing\DatabaseTransactions;
+use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
@@ -15,7 +15,7 @@ use Tests\TestCase;
 
 class NewsPostManagementTest extends TestCase
 {
-    use DatabaseTransactions;
+    use RefreshDatabase;
 
     public function test_public_news_page_only_shows_published_posts(): void
     {
@@ -265,6 +265,15 @@ class NewsPostManagementTest extends TestCase
             ->assertOk();
 
         $this->assertDatabaseMissing('news_posts', ['id' => $postId]);
+    }
+
+    public function test_news_catalog_reports_read_only_capability(): void
+    {
+        Sanctum::actingAs($this->userWithPermissions(['ver_noticias']));
+
+        $this->getJson('/api/admin/news/catalogs')
+            ->assertOk()
+            ->assertJsonPath('capabilities.can_manage', false);
     }
 
     private function userWithPermissions(array $permissionSlugs): User

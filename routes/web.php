@@ -68,6 +68,6 @@ Route::get('/testimonios/{testimonial}/imagen', [PublicSiteContentMediaControlle
     ->middleware('throttle:120,1')
     ->name('public.testimonials.image');
 Route::view('/contacto', 'public.pages.contact')->name('public.contact');
-Route::post('/contacto', [PublicContactMessageController::class, 'store'])->middleware('throttle:6,1')->name('public.contact.store');
+Route::post('/contacto', [PublicContactMessageController::class, 'store'])->middleware('throttle:public-contact')->name('public.contact.store');
 
 Route::get('/{any}', [HomeController::class, 'show'])->where('any', '^(?!api\/)[\/\w\.-]*');

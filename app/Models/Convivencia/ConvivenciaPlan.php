@@ -3,7 +3,6 @@
 namespace App\Models\Convivencia;
 
 use App\Models\AcademicYear;
-use App\Models\StudentProfile;
 use App\Models\Staff;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -30,6 +29,8 @@ class ConvivenciaPlan extends Model
 
     protected $fillable = [
         'academic_year_id',
+        'calendar_year',
+        'previous_plan_id',
         'responsible_user_id',
         'responsible_staff_id',
         'name',
@@ -44,6 +45,16 @@ class ConvivenciaPlan extends Model
         'ends_on',
         'observations',
         'final_evaluation',
+        'version_number',
+        'revision',
+        'source_document_name',
+        'source_document_sha256',
+        'institutional_protocol',
+        'evaluation_indicators',
+        'regulatory_linkage_text',
+        'regulatory_review_required',
+        'approved_at',
+        'approved_by',
         'is_sensitive',
         'created_by',
         'updated_by',
@@ -51,15 +62,32 @@ class ConvivenciaPlan extends Model
 
     protected $casts = [
         'specific_objectives' => 'array',
+        'calendar_year' => 'integer',
         'advance_percentage' => 'decimal:2',
         'starts_on' => 'date:Y-m-d',
         'ends_on' => 'date:Y-m-d',
+        'version_number' => 'integer',
+        'revision' => 'integer',
+        'institutional_protocol' => 'array',
+        'evaluation_indicators' => 'array',
+        'regulatory_review_required' => 'boolean',
+        'approved_at' => 'datetime',
         'is_sensitive' => 'boolean',
     ];
 
     public function academicYear(): BelongsTo
     {
         return $this->belongsTo(AcademicYear::class);
+    }
+
+    public function previousPlan(): BelongsTo
+    {
+        return $this->belongsTo(self::class, 'previous_plan_id');
+    }
+
+    public function subsequentPlans(): HasMany
+    {
+        return $this->hasMany(self::class, 'previous_plan_id')->orderBy('calendar_year');
     }
 
     public function responsibleUser(): BelongsTo
@@ -74,7 +102,17 @@ class ConvivenciaPlan extends Model
 
     public function actions(): HasMany
     {
-        return $this->hasMany(ConvivenciaPlanAction::class, 'plan_id')->orderBy('starts_on')->orderBy('id');
+        return $this->hasMany(ConvivenciaPlanAction::class, 'plan_id')->orderBy('sort_order')->orderBy('id');
+    }
+
+    public function versions(): HasMany
+    {
+        return $this->hasMany(ConvivenciaPlanVersion::class, 'plan_id')->latest('version_number');
+    }
+
+    public function approvedBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'approved_by');
     }
 
     public function idpsResults(): HasMany

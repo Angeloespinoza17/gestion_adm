@@ -4,15 +4,33 @@ export default {
         title: { type: String, required: true },
         subtitle: { type: String, default: '' },
         icon: { type: String, default: 'bx bx-grid-alt' },
+        sectionLabel: { type: String, default: 'Gestión Operativa' },
+        showTools: { type: Boolean, default: true },
     },
     data() {
         return {
             tools: [
-                { label: 'Traslados', description: 'Solicitudes y gestión', to: '/operational/transfers', icon: 'bx bx-bus' },
-                { label: 'Ausencias', description: 'Permisos y saldos', to: '/human-resources/absences', icon: 'bx bx-calendar-check' },
-                { label: 'Selección', description: 'Talento y entrevistas', to: '/human-resources/recruitment', icon: 'bx bx-group' },
+                { label: 'Traslados', description: 'Solicitudes y gestión', to: '/operational/transfers', icon: 'bx bx-bus', permissions: ['ver_traslados_operativos'] },
+                { label: 'Ausencias', description: 'Permisos y saldos', to: '/human-resources/absences', icon: 'bx bx-calendar-check', permissions: ['rrhh.ausencias.ver'] },
+                { label: 'Selección', description: 'Talento y entrevistas', to: '/human-resources/recruitment', icon: 'bx bx-group', permissions: ['rrhh.seleccion.ver'] },
             ],
         }
+    },
+    computed: {
+        visibleTools() {
+            let permissions = []
+            try {
+                permissions = JSON.parse(localStorage.getItem('permissions') || '[]')
+            } catch (error) {
+                permissions = []
+            }
+
+            if (permissions.includes('__superadmin__')) return this.tools
+
+            return this.tools.filter((tool) =>
+                tool.permissions.some((permission) => permissions.includes(permission))
+            )
+        },
     },
     methods: {
         isActive(tool) {
@@ -31,7 +49,7 @@ export default {
             <div class="op-hero-heading">
                 <div class="op-hero-icon"><i :class="icon"></i></div>
                 <div>
-                    <div class="op-eyebrow"><span></span> Gestión Operativa</div>
+                    <div class="op-eyebrow"><span></span> {{ sectionLabel }}</div>
                     <h2>{{ title }}</h2>
                     <p v-if="subtitle">{{ subtitle }}</p>
                 </div>
@@ -41,9 +59,9 @@ export default {
             </div>
         </div>
 
-        <nav class="op-tool-nav" aria-label="Herramientas de gestión operativa">
+        <nav v-if="showTools && visibleTools.length" class="op-tool-nav" aria-label="Herramientas de gestión operativa">
             <router-link
-                v-for="tool in tools"
+                v-for="tool in visibleTools"
                 :key="tool.to"
                 :to="tool.to"
                 class="op-tool-link"

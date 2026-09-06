@@ -18,9 +18,17 @@ class UploadConvivenciaAttachmentRequest extends FormRequest
         return [
             'student_profile_id' => ['nullable', 'integer', 'exists:student_profiles,id'],
             'category' => ['nullable', Rule::in(array_column(ConvivenciaAttachment::CATEGORY_OPTIONS, 'value'))],
-            'confidentiality_level' => ['nullable', 'string', 'max:50'],
+            'confidentiality_level' => [
+                'nullable',
+                Rule::in(array_column(ConvivenciaAttachment::CONFIDENTIALITY_OPTIONS, 'value')),
+            ],
             'notes' => ['nullable', 'string'],
-            'document' => ['required', 'file', 'max:10240'],
+            'document' => [
+                'required',
+                'file',
+                'mimes:pdf,jpg,jpeg,png,webp,doc,docx,xls,xlsx,txt,csv',
+                'max:10240',
+            ],
         ];
     }
 }

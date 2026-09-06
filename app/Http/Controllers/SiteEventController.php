@@ -48,7 +48,7 @@ class SiteEventController extends Controller
         return response()->json($items);
     }
 
-    public function catalogs(): JsonResponse
+    public function catalogs(Request $request): JsonResponse
     {
         return response()->json([
             'statuses' => [
@@ -68,6 +68,9 @@ class SiteEventController extends Controller
                 'published' => SiteEvent::query()->where('status', SiteEvent::STATUS_PUBLISHED)->count(),
                 'draft' => SiteEvent::query()->where('status', SiteEvent::STATUS_DRAFT)->count(),
                 'featured' => SiteEvent::query()->where('featured', true)->count(),
+            ],
+            'capabilities' => [
+                'can_manage' => (bool) $request->user()?->hasPermission('gestionar_eventos'),
             ],
         ]);
     }

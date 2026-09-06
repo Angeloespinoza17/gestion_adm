@@ -22,6 +22,7 @@ const permissionTooltipBySlug = {
   gestionar_eventos: "Permite crear, editar y eliminar eventos del sitio web.",
   ver_contactos_sitio: "Permite ver mensajes recibidos desde el formulario de contacto del sitio web.",
   gestionar_contactos_sitio: "Permite actualizar el estado, notas o eliminación de mensajes de contacto del sitio web.",
+  ver_metricas_sitio: "Permite consultar métricas anónimas de visitas, permanencia, interacción, fuentes y contenidos del sitio web.",
 
   // Generales y permisos heredados
   ver_dashboard: "Permiso general heredado para dashboards. En las rutas actuales no encontré un guard directo con este slug.",

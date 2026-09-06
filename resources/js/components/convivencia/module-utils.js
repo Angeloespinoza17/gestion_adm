@@ -1,6 +1,13 @@
 import axios from "axios";
 import Swal from "sweetalert2";
 import { getPdfMake } from "../../utils/pdfmake";
+import {
+  buildConvivenciaPdfDefinition,
+  CONVIVENCIA_PDF_COLORS,
+  pdfDate,
+  pdfSection,
+  pdfText,
+} from "./pdf/convivencia-pdf-theme";
 
 const convivenciaSwalClasses = {
   popup: "convivencia-swal",
@@ -212,7 +219,7 @@ export function toInputDateTime(value) {
 export function normalizeOptions(options, includeEmpty = false, emptyLabel = "Todos") {
   const items = (options || []).map((item) => ({
     value: item.value ?? item.id,
-    text: item.label ?? item.name ?? item.display_name ?? humanizeConvivenciaStatus(item.value ?? item.id),
+    text: item.label ?? item.name ?? item.full_name ?? item.display_name ?? humanizeConvivenciaStatus(item.value ?? item.id),
   }));
 
   return includeEmpty ? [{ value: null, text: emptyLabel }].concat(items) : items;
@@ -274,28 +281,141 @@ export function downloadExcelWorkbook(fileName, sections) {
 
 export async function downloadPdfReport(fileName, title, subtitle, sections) {
   const pdfMake = await getPdfMake();
-  const content = [{ text: title, style: "title" }];
-  if (subtitle) content.push({ text: subtitle, style: "subtitle" });
+  const generatedAt = new Date().toISOString();
+  const colors = CONVIVENCIA_PDF_COLORS;
+  const content = [
+    {
+      table: {
+        widths: ["*", "auto"],
+        body: [[
+          {
+            text: "Documento consolidado de gestión escolar",
+            bold: true,
+            color: colors.navy,
+            fillColor: "#F1F4FF",
+            margin: [9, 7, 9, 7],
+          },
+          {
+            text: `Emitido ${pdfDate(generatedAt, true)}`,
+            color: colors.muted,
+            alignment: "right",
+            fillColor: "#F1F4FF",
+            margin: [9, 7, 9, 7],
+          },
+        ]],
+      },
+      layout: "noBorders",
+      margin: [0, 0, 0, 4],
+    },
+    {
+      text: "La información incluida respeta los filtros aplicados y el ámbito de acceso del usuario que emitió este documento.",
+      color: colors.muted,
+      fontSize: 6.8,
+      margin: [2, 2, 2, 4],
+    },
+  ];
 
-  (sections || []).forEach((section) => {
-    content.push({ text: section.title, style: "section" });
+  (sections || []).forEach((section, sectionIndex) => {
+    const headers = Array.isArray(section.headers) ? section.headers : [];
+    const rows = Array.isArray(section.rows) ? section.rows : [];
+    const columnCount = Math.max(1, headers.length, ...rows.map((row) => (Array.isArray(row) ? row.length : 1)));
+    const normalizedHeaders = Array.from({ length: columnCount }, (_, index) => pdfText(headers[index], ""));
+    const flexibleColumnPattern = /indicador|descripci[oó]n|clasificaci[oó]n|destino|motivo|tipo/i;
+    const widths = normalizedHeaders.map((header) => (flexibleColumnPattern.test(header) ? "*" : "auto"));
+    if (!widths.includes("*")) widths[Math.max(0, widths.length - 1)] = "*";
+
+    const body = headers.length
+      ? [normalizedHeaders.map((header) => ({
+        text: header || "Dato",
+        bold: true,
+        color: "#FFFFFF",
+        fillColor: colors.navy,
+        margin: [5, 5, 5, 5],
+      }))]
+      : [];
+
+    if (rows.length) {
+      rows.forEach((row, rowIndex) => {
+        const values = Array.isArray(row) ? row : [row];
+        body.push(Array.from({ length: columnCount }, (_, columnIndex) => ({
+          text: pdfText(values[columnIndex]),
+          color: colors.text,
+          fillColor: rowIndex % 2 === 0 ? "#F8FAFD" : "#FFFFFF",
+          margin: [5, 4, 5, 4],
+        })));
+      });
+    } else {
+      body.push([{
+        text: "Sin registros para los filtros aplicados.",
+        colSpan: columnCount,
+        italics: true,
+        color: colors.muted,
+        fillColor: "#F8FAFD",
+        margin: [7, 7, 7, 7],
+      }, ...Array.from({ length: columnCount - 1 }, () => ({}))]);
+    }
+
+    const detail = sectionIndex === 0
+      ? "Indicadores consolidados para el período seleccionado."
+      : `${rows.length} ${rows.length === 1 ? "registro incluido" : "registros incluidos"} en esta exportación.`;
+    content.push(pdfSection(sectionIndex + 1, pdfText(section.title, `Sección ${sectionIndex + 1}`), detail));
+    if (!rows.length && sectionIndex > 0) {
+      content.push({
+        unbreakable: true,
+        table: {
+          widths: ["*"],
+          body: [[{
+            text: "Sin registros para los filtros aplicados.",
+            italics: true,
+            color: colors.muted,
+            fillColor: "#F8FAFD",
+            margin: [7, 6, 7, 6],
+          }]],
+        },
+        layout: {
+          hLineWidth: () => 0.45,
+          vLineWidth: () => 0,
+          hLineColor: () => colors.line,
+        },
+        margin: [0, 0, 0, 5],
+      });
+      return;
+    }
     content.push({
       table: {
-        headerRows: section.headers?.length ? 1 : 0,
-        body: [].concat(section.headers?.length ? [section.headers] : []).concat(section.rows || []),
+        headerRows: headers.length ? 1 : 0,
+        widths,
+        dontBreakRows: true,
+        keepWithHeaderRows: headers.length ? 1 : 0,
+        body,
       },
-      layout: "lightHorizontalLines",
-      margin: [0, 0, 0, 10],
+      layout: {
+        hLineWidth: (index) => (index === 0 || index === body.length ? 0.7 : 0.35),
+        vLineWidth: () => 0,
+        hLineColor: () => colors.line,
+        paddingLeft: () => 0,
+        paddingRight: () => 0,
+        paddingTop: () => 0,
+        paddingBottom: () => 0,
+      },
+      margin: [0, 0, 0, 7],
     });
   });
 
-  pdfMake.createPdf({
+  const definition = buildConvivenciaPdfDefinition({
+    title,
+    kicker: "CONVIVENCIA ESCOLAR · REPORTE",
+    code: "REPORTE CONSOLIDADO",
+    status: "Documento reservado",
+    subtitle,
+    sensitive: true,
+    generatedAt,
     content,
-    styles: {
-      title: { fontSize: 18, bold: true, color: "#2a3042" },
-      subtitle: { fontSize: 10, color: "#74788d", margin: [0, 0, 0, 10] },
-      section: { fontSize: 12, bold: true, margin: [0, 10, 0, 6] },
+    info: {
+      subject: subtitle || "Reporte consolidado de Convivencia Escolar",
+      keywords: "convivencia escolar, reporte, casos, seguimiento, RICE",
     },
-    defaultStyle: { fontSize: 9 },
-  }).download(fileName.endsWith(".pdf") ? fileName : `${fileName}.pdf`);
+  });
+
+  pdfMake.createPdf(definition).download(fileName.endsWith(".pdf") ? fileName : `${fileName}.pdf`);
 }

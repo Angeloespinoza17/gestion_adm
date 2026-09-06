@@ -7,9 +7,17 @@
 @section('content')
   <section id="hero" class="hero section dark-background">
     <div class="hero-container">
-      <video autoplay muted loop playsinline preload="metadata" poster="{{ asset('niceschool/assets/img/education/hero-poster.webp') }}" class="video-background" aria-hidden="true" tabindex="-1">
-        <source src="{{ asset('niceschool/assets/img/education/video-2-web.mp4') }}" type="video/mp4" media="(min-width: 768px)">
-      </video>
+      <img
+        src="{{ asset('niceschool/assets/img/education/school-facade-hero.webp') }}"
+        class="hero-background-image"
+        alt=""
+        width="2002"
+        height="1000"
+        loading="eager"
+        fetchpriority="high"
+        decoding="async"
+        aria-hidden="true"
+      >
       <div class="overlay" aria-hidden="true"></div>
       <div class="container">
         <div class="row align-items-center hero-grid">

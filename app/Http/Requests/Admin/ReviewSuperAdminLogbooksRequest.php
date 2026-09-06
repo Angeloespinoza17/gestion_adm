@@ -17,11 +17,11 @@ class ReviewSuperAdminLogbooksRequest extends FormRequest
     {
         return [
             'search' => ['nullable', 'string', 'max:120'],
-            'source' => ['nullable', Rule::in(['inspectoria', 'porter', 'infirmary', 'convivencia'])],
+            'source' => ['nullable', Rule::in(['inspectoria', 'porter', 'infirmary', 'convivencia', 'staff_logbook', 'security_rounds', 'security_incidents'])],
             'date_from' => ['nullable', 'date_format:Y-m-d'],
             'date_to' => ['nullable', 'date_format:Y-m-d', 'after_or_equal:date_from'],
             'category' => ['nullable', 'string', 'max:160'],
-            'priority' => ['nullable', Rule::in(['baja', 'media', 'alta', 'urgente'])],
+            'priority' => ['nullable', Rule::in(['baja', 'media', 'alta', 'urgente', 'critica'])],
             'status' => ['nullable', 'string', 'max:50'],
             'per_page' => ['nullable', 'integer', 'min:10', 'max:50'],
             'page' => ['nullable', 'integer', 'min:1'],

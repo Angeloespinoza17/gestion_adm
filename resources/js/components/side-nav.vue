@@ -7,6 +7,11 @@ import { sortSidebarMenuItems } from "./sidebar-menu-order";
 import { useAuthStore } from "@/state/pinia";
 import LoadingState from "@/components/ui/loading-state.vue";
 import InternalNotifications from "@/components/internal-notifications.vue";
+import {
+  loadMessagingAccess,
+  messagingAccess,
+  STAFF_ACCESS_MARKER,
+} from "@/modules/messaging/services/messagingAccess";
 
 const cnscLogo = "/brand/logo-cnsc.png";
 
@@ -24,20 +29,7 @@ const fetchMenuModules = (token) => {
 };
 
 const fetchMenuPermissions = (token) => {
-  const auth = `Bearer ${token}`;
-  return axios
-    .get("/api/me/permissions", {
-      headers: {
-        Authorization: auth,
-        "X-Authorization": auth,
-        "X-Api-Token": token,
-      },
-    })
-    .then((response) => {
-      const permissions = response.data.data || [];
-      localStorage.setItem("permissions", JSON.stringify(permissions));
-      return permissions;
-    });
+  return loadMessagingAccess({ token });
 };
 
 const MENU_ICON_BY_SLUG = {
@@ -78,6 +70,7 @@ const MENU_ICON_BY_SLUG = {
   centro_apuntes_pedagogical_queue: "bx-printer",
   documentation: "bx-folder-open",
   public_site: "bx-globe",
+  public_site_analytics: "bx-line-chart",
   public_site_news: "bx-news",
   public_site_events: "bx-calendar-event",
   public_site_testimonials: "bx-message-rounded-dots",
@@ -126,6 +119,8 @@ const MENU_ICON_BY_LABEL = {
   "generador de clases": "bx-slideshow",
   documentacion: "bx-folder-open",
   "sitio web": "bx-globe",
+  "metricas web": "bx-line-chart",
+  "métricas web": "bx-line-chart",
   testimonios: "bx-message-rounded-dots",
   "vida estudiantil": "bx-images",
   cgpa: "bx-group",
@@ -160,6 +155,7 @@ const MENU_ICON_BY_ROUTE = {
   "/gestion-pedagogica/generador-clases": "bx-slideshow",
   "/centro-apuntes/instrumentos-aprobados": "bx-printer",
   "/documentation": "bx-folder-open",
+  "/admin/metricas-web": "bx-line-chart",
   "/admin/noticias": "bx-news",
   "/admin/eventos": "bx-calendar-event",
   "/admin/testimonios": "bx-message-rounded-dots",
@@ -250,6 +246,11 @@ export default {
     },
     sidebarAvatarUrl() {
       this.sidebarAvatarFailed = false;
+    },
+    messagingAllowed(allowed) {
+      if (!allowed) {
+        this.menuItems = this.withoutMessagingItems(this.menuItems);
+      }
     },
   },
   async mounted() {
@@ -674,43 +675,57 @@ export default {
         subItems: [
           {
             id: "fallback-convivencia-overview",
-            label: "Resumen",
+            label: "Análisis e informes",
+            link: "/convivencia",
             parentId,
-            subItems: [
-              { id: "fallback-convivencia-dashboard", label: "Panel general", link: "/convivencia", parentId: "fallback-convivencia-overview" },
-              { id: "fallback-convivencia-reports", label: "Reportes por curso", link: "/convivencia/reportes", parentId: "fallback-convivencia-overview" },
-            ],
           },
           {
             id: "fallback-convivencia-management",
-            label: "Gestión de casos",
+            label: "Expedientes",
+            link: "/convivencia/casos",
             parentId,
-            subItems: [
-              { id: "fallback-convivencia-cases", label: "Casos", link: "/convivencia/casos", parentId: "fallback-convivencia-management" },
-              { id: "fallback-convivencia-complaints", label: "Denuncias", link: "/convivencia/denuncias", parentId: "fallback-convivencia-management" },
-              { id: "fallback-convivencia-derivations", label: "Derivaciones", link: "/convivencia/derivaciones", parentId: "fallback-convivencia-management" },
-            ],
           },
           {
-            id: "fallback-convivencia-follow-up",
-            label: "Intervención y seguimiento",
+            id: "fallback-convivencia-protocols",
+            label: "Protocolos",
+            link: "/convivencia/protocolos",
             parentId,
-            subItems: [
-              { id: "fallback-convivencia-protocols", label: "Protocolos", link: "/convivencia/protocolos", parentId: "fallback-convivencia-follow-up" },
-              { id: "fallback-convivencia-interviews", label: "Entrevistas", link: "/convivencia/entrevistas", parentId: "fallback-convivencia-follow-up" },
-              { id: "fallback-convivencia-measures", label: "Medidas formativas", link: "/convivencia/medidas", parentId: "fallback-convivencia-follow-up" },
-              { id: "fallback-convivencia-daily-log", label: "Bitácora", link: "/convivencia/bitacora", parentId: "fallback-convivencia-follow-up" },
-            ],
           },
           {
-            id: "fallback-convivencia-prevention",
-            label: "Prevención y análisis",
+            id: "fallback-convivencia-interviews",
+            label: "Entrevistas",
+            link: "/convivencia/entrevistas",
             parentId,
-            subItems: [
-              { id: "fallback-convivencia-plan", label: "Plan de gestión", link: "/convivencia/planes", parentId: "fallback-convivencia-prevention" },
-              { id: "fallback-convivencia-sociograms", label: "Sociogramas", link: "/convivencia/sociogramas", parentId: "fallback-convivencia-prevention" },
-              { id: "fallback-convivencia-idps", label: "Indicadores IDPS", link: "/convivencia/idps", parentId: "fallback-convivencia-prevention" },
-            ],
+          },
+          {
+            id: "fallback-convivencia-measures",
+            label: "Medidas formativas",
+            link: "/convivencia/medidas",
+            parentId,
+          },
+          {
+            id: "fallback-convivencia-daily-log",
+            label: "Bitácora",
+            link: "/convivencia/bitacora",
+            parentId,
+          },
+          {
+            id: "fallback-convivencia-plan",
+            label: "Plan de gestión",
+            link: "/convivencia/planes",
+            parentId,
+          },
+          {
+            id: "fallback-convivencia-sociograms",
+            label: "Sociogramas",
+            link: "/convivencia/sociogramas",
+            parentId,
+          },
+          {
+            id: "fallback-convivencia-idps",
+            label: "Indicadores IDPS",
+            link: "/convivencia/idps",
+            parentId,
           },
         ],
       };
@@ -795,6 +810,26 @@ export default {
         )
       );
     },
+    withoutMessagingItems(items = []) {
+      return items.reduce((visibleItems, item) => {
+        if (
+          normalizeMenuKey(item.slug) === "messaging"
+          || item.link === "/mensajeria"
+        ) {
+          return visibleItems;
+        }
+
+        const visibleItem = { ...item };
+        if (Array.isArray(item.subItems)) {
+          visibleItem.subItems = this.withoutMessagingItems(item.subItems);
+          if (!visibleItem.subItems.length && !item.link) {
+            return visibleItems;
+          }
+        }
+        visibleItems.push(visibleItem);
+        return visibleItems;
+      }, []);
+    },
     deduplicateHomeMenuItems(items = []) {
       let homeFound = false;
 
@@ -825,12 +860,32 @@ export default {
           }
         }
 
-        if (item.link && !isSuperAdmin) {
+        if (item.link) {
           const resolved = this.$router.resolve(item.link);
           const superAdminOnly = resolved?.matched?.some((route) => route.meta.superAdminOnly);
-          const requiredPermission = resolved?.meta?.permission;
+          const staffOnly = resolved?.matched?.some((route) => route.meta.staffOnly);
+          const routeMeta = resolved?.meta || {};
 
-          if (superAdminOnly || (requiredPermission && !granted.has(requiredPermission))) {
+          if (staffOnly && !granted.has(STAFF_ACCESS_MARKER)) {
+            return visibleItems;
+          }
+
+          if (isSuperAdmin) {
+            visibleItems.push(visibleItem);
+            return visibleItems;
+          }
+
+          const requiredPermissions = Array.from(new Set(
+            (routeMeta.permissionsAll || [routeMeta.permission]).filter(Boolean)
+          ));
+          const alternativePermissions = Array.from(new Set(
+            (routeMeta.permissionsAny || []).filter(Boolean)
+          ));
+          const missingRequired = requiredPermissions.some((permission) => !granted.has(permission));
+          const missingAlternative = alternativePermissions.length > 0
+            && !alternativePermissions.some((permission) => granted.has(permission));
+
+          if (superAdminOnly || missingRequired || missingAlternative) {
             return visibleItems;
           }
         }
@@ -900,7 +955,11 @@ export default {
           const subItems = buildItems(mod.id);
           const item = {
             id: mod.id,
-            label: normalizeMenuKey(mod.slug) === "remuneration_documents" ? "Documentos" : mod.name,
+            label: normalizeMenuKey(mod.slug) === "remuneration_documents"
+              ? "Documentos"
+              : normalizeMenuKey(mod.slug) === "messaging"
+                ? "Mensajería de funcionarios"
+                : mod.name,
             slug: mod.slug,
             icon: this.resolveMenuIcon(mod),
           };
@@ -920,18 +979,7 @@ export default {
         }, []);
       };
 
-      const items = buildItems(null);
-      if (!items.some((item) => item.link === "/mensajeria")) {
-        const homeIndex = items.findIndex((item) => this.isDashboardMenuItem(item));
-        items.splice(homeIndex >= 0 ? homeIndex + 1 : 0, 0, {
-          id: "messaging-for-all-users",
-          label: "Mensajería",
-          slug: "messaging",
-          icon: "bx-message-rounded-dots",
-          link: "/mensajeria",
-        });
-      }
-      return items;
+      return buildItems(null);
     },
     resolveModuleLandingLink(item) {
       if (normalizeMenuKey(item.slug) === "remuneration_documents") {
@@ -945,7 +993,10 @@ export default {
       return MENU_LANDING_ROUTE_BY_SLUG[normalizeMenuKey(item.slug)] || null;
     },
     shouldHideMenuItem(item = {}) {
-      return normalizeMenuKey(item.slug) === "pedagogical_instrument_analysis";
+      const slug = normalizeMenuKey(item.slug);
+
+      return slug === "pedagogical_instrument_analysis"
+        || (slug === "messaging" && !messagingAccess.allowed);
     },
     resolveMenuIcon(item) {
       const slug = normalizeMenuKey(item.slug);
@@ -1528,6 +1579,9 @@ export default {
     },
   },
   computed: {
+    messagingAllowed() {
+      return messagingAccess.allowed;
+    },
     sidebarUser() {
       const storedUser = this.auth.currentUser;
       if (storedUser?.name || storedUser?.email) {

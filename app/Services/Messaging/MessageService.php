@@ -2,12 +2,12 @@
 
 namespace App\Services\Messaging;
 
+use App\Jobs\Messaging\StoreNewMessageNotifications;
 use App\Models\Messaging\Conversation;
 use App\Models\Messaging\Message;
 use App\Models\Messaging\MessageAttachment;
 use App\Models\Messaging\TemporaryUpload;
 use App\Models\User;
-use App\Notifications\Messaging\NewMessageNotification;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
@@ -18,6 +18,8 @@ class MessageService
 
     public function send(Conversation $conversation, User $actor, array $data): Message
     {
+        abort_unless($actor->canUseMessaging(), 403, 'La mensajería institucional está disponible exclusivamente para funcionarios.');
+
         return DB::transaction(function () use ($conversation, $actor, $data) {
             $participant = $conversation->participants()->where('user_id', $actor->id)->whereNull('left_at')->lockForUpdate()->firstOrFail();
             abort_if($conversation->is_locked || ! $participant->can_write || ($conversation->only_admins_can_write && ! in_array($participant->role, ['owner', 'admin'], true)), 409, 'No es posible enviar en esta conversación.');
@@ -26,14 +28,48 @@ class MessageService
                 abort_if(! $reply->allow_replies, 409, 'Esta comunicación no permite respuestas.');
                 $data['reply_to_id'] = $reply->id;
             }
-            $recipients = $conversation->participants()->whereNull('left_at')->where('user_id', '!=', $actor->id)->with('user:id,name,email')->get();
-            $ackIds = collect($data['acknowledgement_user_ids'] ?? [])->map(fn ($id) => (int) $id);
-            $requiresAck = (bool) ($data['requires_acknowledgement'] ?? false);
-            $message = Message::query()->create(['public_id' => (string) Str::ulid(), 'conversation_id' => $conversation->id, 'sender_id' => $actor->id, 'sender_display_name_snapshot' => $actor->name, 'kind' => ($data['formal'] ?? false) || $requiresAck ? 'notice' : 'chat', 'subject' => $data['subject'] ?? null, 'body' => trim((string) ($data['body'] ?? '')), 'priority' => $data['priority'] ?? 'normal', 'reply_to_id' => $data['reply_to_id'] ?? null, 'requires_acknowledgement' => $requiresAck, 'acknowledgement_due_at' => $requiresAck ? ($data['acknowledgement_due_at'] ?? null) : null, 'acknowledgement_comment_required' => $requiresAck && ($data['acknowledgement_comment_required'] ?? false), 'allow_replies' => $data['allow_replies'] ?? true, 'recipient_count' => $recipients->count(), 'sent_at' => now()]);
-            foreach ($recipients as $recipient) {
-                $required = $requiresAck && ($ackIds->isEmpty() || $ackIds->contains($recipient->user_id));
-                $message->recipients()->create(['user_id' => $recipient->user_id, 'recipient_display_name_snapshot' => $recipient->user->name, 'recipient_reference_snapshot' => $recipient->user->email, 'acknowledgement_required' => $required]);
+            $chunkSize = max(1, (int) config('messaging.announcements.chunk_size', 500));
+            $recipientQuery = DB::table('conversation_participants as cp')
+                ->join('users as u', 'u.id', '=', 'cp.user_id')
+                ->where('cp.conversation_id', $conversation->id)
+                ->whereNull('cp.left_at')
+                ->whereIn('u.id', User::query()->messagingStaff()->select('id'))
+                ->where('cp.user_id', '!=', $actor->id);
+            $recipientCount = (clone $recipientQuery)->count('cp.id');
+            abort_if($recipientCount === 0, 409, 'La conversación no tiene otros funcionarios habilitados.');
+            $acknowledgementUserIds = [];
+            foreach ($data['acknowledgement_user_ids'] ?? [] as $userId) {
+                $acknowledgementUserIds[(int) $userId] = true;
             }
+            $requiresAck = (bool) ($data['requires_acknowledgement'] ?? false);
+            $message = Message::query()->create(['public_id' => (string) Str::ulid(), 'conversation_id' => $conversation->id, 'sender_id' => $actor->id, 'sender_display_name_snapshot' => $actor->name, 'kind' => ($data['formal'] ?? false) || $requiresAck ? 'notice' : 'chat', 'subject' => $data['subject'] ?? null, 'body' => trim((string) ($data['body'] ?? '')), 'priority' => $data['priority'] ?? 'normal', 'reply_to_id' => $data['reply_to_id'] ?? null, 'requires_acknowledgement' => $requiresAck, 'acknowledgement_due_at' => $requiresAck ? ($data['acknowledgement_due_at'] ?? null) : null, 'acknowledgement_comment_required' => $requiresAck && ($data['acknowledgement_comment_required'] ?? false), 'allow_replies' => $data['allow_replies'] ?? true, 'recipient_count' => $recipientCount, 'sent_at' => now()]);
+            $recipientTimestamp = now();
+            $recipientQuery
+                ->select(['cp.user_id as user_id', 'u.name', 'u.email'])
+                ->orderBy('cp.user_id')
+                ->chunkById($chunkSize, function ($recipients) use ($message, $requiresAck, $acknowledgementUserIds, $recipientTimestamp): void {
+                    $rows = $recipients->map(function ($recipient) use ($message, $requiresAck, $acknowledgementUserIds, $recipientTimestamp): array {
+                        $userId = (int) $recipient->user_id;
+
+                        return [
+                            'message_id' => $message->id,
+                            'user_id' => $userId,
+                            'recipient_display_name_snapshot' => $recipient->name,
+                            'recipient_reference_snapshot' => $recipient->email,
+                            'acknowledgement_required' => $requiresAck && ($acknowledgementUserIds === [] || isset($acknowledgementUserIds[$userId])),
+                            'created_at' => $recipientTimestamp,
+                            'updated_at' => $recipientTimestamp,
+                        ];
+                    })->all();
+
+                    DB::table('message_recipients')->insert($rows);
+
+                    StoreNewMessageNotifications::dispatch(
+                        $message->id,
+                        (int) $recipients->first()->user_id,
+                        (int) $recipients->last()->user_id,
+                    )->onQueue('notifications')->afterCommit();
+                }, 'cp.user_id', 'user_id');
             $uploads = TemporaryUpload::query()->where('user_id', $actor->id)->whereNull('consumed_at')->where('expires_at', '>', now())->whereIn('public_id', $data['upload_tokens'] ?? [])->lockForUpdate()->get();
             abort_if($uploads->count() !== count($data['upload_tokens'] ?? []), 409, 'Una carga temporal no es válida o ya fue utilizada.');
             foreach ($uploads as $upload) {
@@ -50,15 +86,12 @@ class MessageService
             if ($requiresAck) {
                 $this->audit->record('acknowledgement_requested', $actor->id, $conversation->id, $message->id);
             }
-            DB::afterCommit(function () use ($message, $recipients, $actor) {
+            DB::afterCommit(function () use ($message, $actor) {
                 $message->load('conversation');
-                foreach ($recipients as $recipient) {
-                    $recipient->user->notify(new NewMessageNotification($message));
-                }
                 $this->broadcaster->messageCreated($message, $actor->id);
             });
 
-            return $message->load(['sender:id,name,profile_photo_path', 'attachments', 'reactions']);
+            return $message->load(['sender:id,name,profile_photo_path', 'attachments']);
         });
     }
 

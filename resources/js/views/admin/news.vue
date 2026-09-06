@@ -5,6 +5,7 @@ import { markRaw } from "vue";
 import Swal from "sweetalert2";
 import Layout from "../../layouts/main.vue";
 import LoadingState from "../../components/ui/loading-state.vue";
+import SiteAdminNavigation from "../../components/public-site/site-admin-navigation.vue";
 
 const emptyTocItem = () => ({
   label: "",
@@ -71,7 +72,7 @@ const emptyForm = () => ({
 });
 
 export default {
-  components: { Ckeditor, Layout, LoadingState },
+  components: { Ckeditor, Layout, LoadingState, SiteAdminNavigation },
   data() {
     return {
       editor: null,
@@ -117,6 +118,23 @@ export default {
     };
   },
   computed: {
+    permissions() {
+      try {
+        const stored = JSON.parse(localStorage.getItem("permissions") || "[]");
+        return Array.isArray(stored) ? stored : [];
+      } catch (error) {
+        return [];
+      }
+    },
+    canManage() {
+      const serverValue = this.catalogs.capabilities?.can_manage;
+      if (typeof serverValue === "boolean") return serverValue;
+      return this.permissions.includes("__superadmin__") || this.permissions.includes("gestionar_noticias");
+    },
+    activeFilterCount() {
+      return [this.search, this.statusFilter, this.categoryFilter, this.featuredFilter]
+        .filter((value) => String(value).trim() !== "").length;
+    },
     isEditing() {
       return Boolean(this.form.id);
     },
@@ -154,6 +172,14 @@ export default {
     this.load();
   },
   methods: {
+    applyStatusFilter(status = "") {
+      this.statusFilter = status;
+      this.load(1);
+    },
+    applyFeaturedFilter(value = "") {
+      this.featuredFilter = value;
+      this.load(1);
+    },
     async ensureEditor() {
       if (this.editor || this.editorLoading) return;
       this.editorLoading = true;
@@ -658,58 +684,48 @@ export default {
 
 <template>
   <Layout>
-    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
-      <div>
-        <h4 class="mb-0">Noticias del sitio web</h4>
-        <div class="text-muted">Gestión de las publicaciones visibles en /noticias y en la portada.</div>
-      </div>
-      <BButton variant="primary" @click="openCreate">
-        <i class="bx bx-plus me-1"></i>
-        Nueva noticia
-      </BButton>
-    </div>
+    <main class="site-admin-page site-admin-page--news">
+      <SiteAdminNavigation />
 
-    <BAlert v-if="error" variant="danger" show class="mb-3">{{ error }}</BAlert>
-    <BAlert v-if="success" variant="success" show class="mb-3">{{ success }}</BAlert>
+      <section class="site-admin-hero" aria-labelledby="news-admin-title">
+        <div class="site-admin-hero__copy">
+          <span class="site-admin-eyebrow"><i class="bx bx-news"></i> Contenido editorial</span>
+          <h1 id="news-admin-title">Noticias</h1>
+          <p>Administra las historias que aparecen en la portada y en la sección pública de noticias.</p>
+          <BButton v-if="canManage" class="site-admin-primary-action" @click="openCreate">
+            <i class="bx bx-plus"></i>
+            Nueva noticia
+          </BButton>
+        </div>
 
-    <div class="row g-3 mb-3">
-      <div class="col-md-6 col-xl">
-        <BCard class="h-100">
-          <div class="text-muted small">Total</div>
-          <div class="fs-4 fw-semibold">{{ formatNumber(catalogs.stats?.total) }}</div>
-        </BCard>
-      </div>
-      <div class="col-md-6 col-xl">
-        <BCard class="h-100">
-          <div class="text-muted small">Publicadas</div>
-          <div class="fs-4 fw-semibold text-success">{{ formatNumber(catalogs.stats?.published) }}</div>
-        </BCard>
-      </div>
-      <div class="col-md-6 col-xl">
-        <BCard class="h-100">
-          <div class="text-muted small">Borradores</div>
-          <div class="fs-4 fw-semibold">{{ formatNumber(catalogs.stats?.draft) }}</div>
-        </BCard>
-      </div>
-      <div class="col-md-6 col-xl">
-        <BCard class="h-100">
-          <div class="text-muted small">Destacadas</div>
-          <div class="fs-4 fw-semibold text-primary">{{ formatNumber(catalogs.stats?.featured) }}</div>
-        </BCard>
-      </div>
-      <div class="col-md-6 col-xl">
-        <BCard class="h-100">
-          <div class="text-muted small">Visualizaciones</div>
-          <div class="fs-4 fw-semibold text-info">{{ formatNumber(catalogs.stats?.views) }}</div>
-        </BCard>
-      </div>
-    </div>
+        <div class="site-admin-metrics" aria-label="Resumen de noticias">
+          <button type="button" :class="{ active: !activeFilterCount }" @click="resetFilters">
+            <span>Total</span><strong>{{ formatNumber(catalogs.stats?.total) }}</strong><small>publicaciones</small>
+          </button>
+          <button type="button" :class="{ active: statusFilter === 'published' }" @click="applyStatusFilter('published')">
+            <span>En línea</span><strong>{{ formatNumber(catalogs.stats?.published) }}</strong><small>publicadas</small>
+          </button>
+          <button type="button" :class="{ active: statusFilter === 'draft' }" @click="applyStatusFilter('draft')">
+            <span>Pendientes</span><strong>{{ formatNumber(catalogs.stats?.draft) }}</strong><small>borradores</small>
+          </button>
+          <button type="button" :class="{ active: featuredFilter === '1' }" @click="applyFeaturedFilter('1')">
+            <span>Portada</span><strong>{{ formatNumber(catalogs.stats?.featured) }}</strong><small>destacadas</small>
+          </button>
+          <article><span>Alcance</span><strong>{{ formatNumber(catalogs.stats?.views) }}</strong><small>visualizaciones</small></article>
+        </div>
+      </section>
 
-    <BCard class="mb-3">
+      <BAlert v-if="error" variant="danger" show class="site-admin-alert">{{ error }}</BAlert>
+      <BAlert v-if="success" variant="success" show class="site-admin-alert">{{ success }}</BAlert>
+
+    <BCard class="site-admin-filter-card">
       <div class="row g-3 align-items-end">
         <div class="col-lg-4">
-          <label class="form-label">Buscar</label>
-          <BFormInput v-model="search" placeholder="Título, resumen, categoría o autor" @keyup.enter="load" />
+          <label class="form-label">Buscar contenido</label>
+          <div class="site-admin-search">
+            <i class="bx bx-search"></i>
+            <BFormInput v-model="search" placeholder="Título, resumen, categoría o autor" @keyup.enter="load" />
+          </div>
         </div>
         <div class="col-md-3 col-lg-2">
           <label class="form-label">Estado</label>
@@ -723,19 +739,28 @@ export default {
           <label class="form-label">Destacada</label>
           <BFormSelect v-model="featuredFilter" :options="featuredOptions" />
         </div>
-        <div class="col-md-3 col-lg-2 d-flex gap-2">
-          <BButton variant="secondary" @click="load()">Filtrar</BButton>
-          <BButton variant="light" @click="resetFilters">Limpiar</BButton>
+        <div class="col-md-3 col-lg-2 d-flex gap-2 site-admin-filter-actions">
+          <BButton class="site-admin-filter-button" @click="load(1)"><i class="bx bx-filter-alt"></i> Aplicar</BButton>
+          <BButton v-if="activeFilterCount" variant="light" class="site-admin-clear-button" :aria-label="`Limpiar ${activeFilterCount} filtros`" @click="resetFilters">
+            Limpiar <span>{{ activeFilterCount }}</span>
+          </BButton>
         </div>
       </div>
     </BCard>
 
-    <BCard>
+    <BCard class="site-admin-table-card">
+      <header class="site-admin-table-heading">
+        <div><span>Biblioteca editorial</span><strong>{{ pagination.total }} noticia(s)</strong></div>
+        <p><i class="bx bx-info-circle"></i> La portada y el estado determinan su visibilidad pública.</p>
+      </header>
       <BTable
         :items="items"
         :busy="loading"
         responsive
+        hover
         small
+        show-empty
+        table-class="site-admin-table align-middle mb-0"
         :fields="[
           { key: 'title', label: 'Noticia' },
           { key: 'status', label: 'Estado' },
@@ -747,6 +772,9 @@ export default {
       >
         <template #table-busy>
           <LoadingState message="Cargando noticias..." compact />
+        </template>
+        <template #empty>
+          <div class="site-admin-empty"><i class="bx bx-news"></i><span>No hay noticias para los filtros seleccionados.</span></div>
         </template>
         <template #cell(title)="{ item }">
           <div class="d-flex align-items-center gap-3 news-title-cell">
@@ -764,7 +792,7 @@ export default {
           </div>
         </template>
         <template #cell(status)="{ item }">
-          <BBadge :variant="statusVariant(item.status)">{{ statusLabel(item.status) }}</BBadge>
+          <span :class="['site-status-chip', `is-${item.status || 'draft'}`]">{{ statusLabel(item.status) }}</span>
         </template>
         <template #cell(published_at)="{ item }">
           <span class="small">{{ formatDate(item.published_at) }}</span>
@@ -773,38 +801,42 @@ export default {
           <span class="fw-semibold">{{ formatNumber(item.views_count) }}</span>
         </template>
         <template #cell(featured)="{ item }">
-          <BBadge :variant="item.featured ? 'primary' : 'secondary'">{{ item.featured ? "Sí" : "No" }}</BBadge>
+          <span :class="['site-featured-chip', { active: item.featured }]"><i class="bx" :class="item.featured ? 'bxs-star' : 'bx-star'"></i>{{ item.featured ? "Destacada" : "Regular" }}</span>
         </template>
         <template #cell(actions)="{ item }">
-          <div class="d-flex flex-wrap gap-2">
-            <BButton v-if="item.status === 'published'" size="sm" variant="outline-secondary" :href="publicUrl(item)" target="_blank">Ver</BButton>
-            <BButton size="sm" variant="outline-primary" @click="openEdit(item)">Editar</BButton>
+          <div class="site-row-actions">
+            <BButton v-if="item.status === 'published'" size="sm" variant="outline-secondary" class="site-row-action" :href="publicUrl(item)" target="_blank" rel="noopener" :aria-label="`Ver ${item.title} en el sitio web`" title="Ver en el sitio web"><i class="bx bx-link-external"></i><span>Ver</span></BButton>
+            <BButton v-if="canManage" size="sm" variant="outline-primary" class="site-row-action" title="Editar" :aria-label="`Editar ${item.title}`" @click="openEdit(item)"><i class="bx bx-edit-alt"></i><span>Editar</span></BButton>
             <BButton
+              v-if="canManage"
               size="sm"
               :variant="item.status === 'published' ? 'outline-warning' : 'outline-success'"
+              class="site-row-action"
+              :title="item.status === 'published' ? 'Archivar' : 'Publicar'"
+              :aria-label="`${item.status === 'published' ? 'Archivar' : 'Publicar'} ${item.title}`"
               @click="togglePublished(item)"
             >
-              {{ item.status === "published" ? "Archivar" : "Publicar" }}
+              <i class="bx" :class="item.status === 'published' ? 'bx-archive' : 'bx-world'"></i><span>{{ item.status === "published" ? "Archivar" : "Publicar" }}</span>
             </BButton>
-            <BButton size="sm" variant="outline-danger" @click="remove(item)">Eliminar</BButton>
+            <BButton v-if="canManage" size="sm" variant="outline-danger" class="site-row-action is-danger" title="Eliminar" :aria-label="`Eliminar ${item.title}`" @click="remove(item)"><i class="bx bx-trash"></i><span>Eliminar</span></BButton>
           </div>
         </template>
       </BTable>
 
-      <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mt-3">
+      <div class="site-admin-pagination">
         <div class="text-muted small">{{ pagination.total }} noticia(s)</div>
         <div class="d-flex align-items-center gap-2">
-          <BButton size="sm" variant="light" :disabled="pagination.current_page <= 1" @click="load(pagination.current_page - 1)">
-            Anterior
+          <BButton size="sm" variant="outline-secondary" :disabled="pagination.current_page <= 1" @click="load(pagination.current_page - 1)">
+            <i class="bx bx-chevron-left"></i> Anterior
           </BButton>
           <span class="small">Página {{ pagination.current_page }} de {{ pagination.last_page }}</span>
           <BButton
             size="sm"
-            variant="light"
+            variant="outline-secondary"
             :disabled="pagination.current_page >= pagination.last_page"
             @click="load(pagination.current_page + 1)"
           >
-            Siguiente
+            Siguiente <i class="bx bx-chevron-right"></i>
           </BButton>
         </div>
       </div>
@@ -1199,6 +1231,7 @@ export default {
         </BButton>
       </div>
     </BModal>
+    </main>
   </Layout>
 </template>
 
@@ -1288,5 +1321,496 @@ export default {
 :deep(.news-editor .ck-content) {
   font-size: 0.95rem;
   line-height: 1.6;
+}
+
+.site-admin-page {
+  --site-navy: #062f43;
+  --site-blue: #0b6678;
+  --site-green: #789978;
+  --site-gold: #efc77f;
+  --site-ink: #203f50;
+  --site-muted: #718690;
+  min-height: 100vh;
+  padding: 1rem 1rem 2.5rem;
+  background: linear-gradient(180deg, #edf4f5 0, #f8fafb 330px, #fbfcfc 100%);
+  color: var(--site-ink);
+}
+
+.site-admin-hero {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(330px, 0.82fr) minmax(0, 1.18fr);
+  align-items: center;
+  gap: 1.35rem;
+  overflow: hidden;
+  margin-bottom: 0.9rem;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 26px;
+  background: radial-gradient(circle at 88% -30%, rgba(128, 162, 123, 0.7), transparent 43%), linear-gradient(116deg, #062f43, #0b6073 70%, #456f6a);
+  padding: clamp(1.3rem, 2.3vw, 1.8rem);
+  color: #fff;
+  box-shadow: 0 22px 48px rgba(7, 52, 70, 0.16);
+}
+
+.site-admin-hero::after {
+  position: absolute;
+  right: -70px;
+  bottom: -125px;
+  width: 270px;
+  height: 270px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 50%;
+  content: "";
+  pointer-events: none;
+}
+
+.site-admin-hero__copy,
+.site-admin-metrics {
+  position: relative;
+  z-index: 1;
+}
+
+.site-admin-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  color: var(--site-gold);
+  font-size: 0.62rem;
+  font-weight: 850;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.site-admin-hero h1 {
+  margin: 0.42rem 0 0.25rem;
+  color: #fff;
+  font-size: clamp(2rem, 3.2vw, 2.8rem);
+  font-weight: 850;
+  letter-spacing: -0.045em;
+  line-height: 1;
+}
+
+.site-admin-hero p {
+  max-width: 620px;
+  margin: 0;
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 0.73rem;
+  line-height: 1.6;
+}
+
+.site-admin-primary-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.42rem;
+  min-height: 40px;
+  margin-top: 0.9rem;
+  border: 1px solid rgba(255, 255, 255, 0.24);
+  border-radius: 999px;
+  background: #fff;
+  padding: 0.48rem 0.85rem;
+  color: #075d70;
+  font-size: 0.65rem;
+  font-weight: 850;
+  box-shadow: 0 10px 24px rgba(1, 31, 43, 0.2);
+}
+
+.site-admin-primary-action:hover,
+.site-admin-primary-action:focus {
+  border-color: #fff;
+  background: #f5fbfb;
+  color: #064f60;
+}
+
+.site-admin-metrics {
+  display: grid;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 20px;
+  background: rgba(3, 39, 54, 0.3);
+  backdrop-filter: blur(12px);
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+.site-admin-metrics > * {
+  display: grid;
+  min-width: 0;
+  min-height: 104px;
+  align-content: center;
+  border: 0;
+  border-right: 1px solid rgba(255, 255, 255, 0.11);
+  background: transparent;
+  padding: 0.8rem 0.62rem;
+  color: #fff;
+  text-align: left;
+  transition: background-color 0.18s ease;
+}
+
+.site-admin-metrics > *:last-child {
+  border-right: 0;
+}
+
+.site-admin-metrics button:hover,
+.site-admin-metrics button.active {
+  background: rgba(255, 255, 255, 0.11);
+}
+
+.site-admin-metrics button.active {
+  box-shadow: inset 0 -3px 0 var(--site-gold);
+}
+
+.site-admin-metrics span {
+  color: rgba(255, 255, 255, 0.61);
+  font-size: 0.51rem;
+  font-weight: 850;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.site-admin-metrics strong {
+  margin: 0.14rem 0 0.08rem;
+  color: #fff;
+  font-size: 1.35rem;
+  line-height: 1;
+}
+
+.site-admin-metrics small {
+  overflow: hidden;
+  color: rgba(255, 255, 255, 0.58);
+  font-size: 0.52rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.site-admin-alert {
+  margin-bottom: 0.9rem;
+  border-radius: 14px;
+}
+
+.site-admin-filter-card,
+.site-admin-table-card {
+  margin-bottom: 0.9rem;
+  overflow: hidden;
+  border: 1px solid #dce7ea;
+  border-radius: 18px;
+  box-shadow: 0 12px 30px rgba(18, 58, 73, 0.055);
+}
+
+.site-admin-filter-card :deep(.card-body) {
+  padding: 0.9rem 1rem;
+}
+
+.site-admin-filter-card .form-label {
+  margin-bottom: 0.3rem;
+  color: #667d88;
+  font-size: 0.58rem;
+  font-weight: 850;
+  letter-spacing: 0.045em;
+  text-transform: uppercase;
+}
+
+.site-admin-filter-card :deep(.form-control),
+.site-admin-filter-card :deep(.form-select) {
+  min-height: 40px;
+  border-color: #d5e2e5;
+  border-radius: 11px;
+  background-color: #fbfcfd;
+  color: #2c4e5e;
+  font-size: 0.7rem;
+}
+
+.site-admin-search {
+  position: relative;
+}
+
+.site-admin-search > i {
+  position: absolute;
+  z-index: 2;
+  top: 50%;
+  left: 0.72rem;
+  color: #77909a;
+  font-size: 1rem;
+  transform: translateY(-50%);
+  pointer-events: none;
+}
+
+.site-admin-search :deep(input) {
+  padding-left: 2.25rem;
+}
+
+.site-admin-filter-actions .btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.32rem;
+  min-height: 40px;
+  border-radius: 11px;
+  font-size: 0.64rem;
+  font-weight: 800;
+}
+
+.site-admin-filter-button {
+  border-color: transparent;
+  background: linear-gradient(115deg, #07546a, #0c7280);
+  color: #fff;
+}
+
+.site-admin-clear-button span {
+  display: inline-grid;
+  min-width: 19px;
+  height: 19px;
+  place-items: center;
+  border-radius: 999px;
+  background: #e6eef0;
+  color: #46636f;
+  font-size: 0.54rem;
+}
+
+.site-admin-table-card :deep(.card-body) {
+  padding: 0;
+}
+
+.site-admin-table-heading {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 0.8rem;
+  border-bottom: 1px solid #e5edef;
+  padding: 0.9rem 1rem;
+}
+
+.site-admin-table-heading div {
+  display: grid;
+}
+
+.site-admin-table-heading span {
+  color: #84959e;
+  font-size: 0.53rem;
+  font-weight: 850;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+
+.site-admin-table-heading strong {
+  color: #284a5a;
+  font-size: 0.8rem;
+}
+
+.site-admin-table-heading p {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  margin: 0;
+  color: #7b8e98;
+  font-size: 0.62rem;
+}
+
+:deep(.site-admin-table th) {
+  border-bottom: 1px solid #e2eaed;
+  background: #f5f8f9;
+  padding: 0.72rem 0.75rem;
+  color: #738893;
+  font-size: 0.56rem;
+  font-weight: 850;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+:deep(.site-admin-table td) {
+  border-bottom: 1px solid #e9eff1;
+  padding: 0.82rem 0.75rem;
+  vertical-align: middle;
+}
+
+:deep(.site-admin-table tbody tr:hover) {
+  background: #f9fcfc;
+}
+
+.news-thumb {
+  width: 76px;
+  height: 58px;
+  border: 3px solid #edf3f4;
+  border-radius: 12px;
+  box-shadow: 0 6px 14px rgba(20, 63, 79, 0.08);
+}
+
+.site-status-chip,
+.site-featured-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.24rem;
+  min-height: 28px;
+  border-radius: 999px;
+  padding: 0.38rem 0.58rem;
+  font-size: 0.58rem;
+  font-weight: 850;
+  white-space: nowrap;
+}
+
+.site-status-chip.is-published {
+  background: #e4f5ef;
+  color: #197c64;
+}
+
+.site-status-chip.is-draft {
+  background: #eef2f4;
+  color: #647781;
+}
+
+.site-status-chip.is-archived {
+  background: #fff1df;
+  color: #9a671f;
+}
+
+.site-featured-chip {
+  border: 1px solid #e0e8ea;
+  background: #f7f9fa;
+  color: #788a93;
+}
+
+.site-featured-chip.active {
+  border-color: #eed9a8;
+  background: #fff5dd;
+  color: #936516;
+}
+
+.site-row-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.3rem;
+  min-width: 245px;
+}
+
+.site-row-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.25rem;
+  min-height: 36px;
+  border-radius: 10px;
+  padding: 0.38rem 0.52rem;
+  font-size: 0.58rem;
+  font-weight: 800;
+}
+
+.site-row-action i {
+  font-size: 0.88rem;
+}
+
+.site-row-action.is-danger:hover {
+  background: #fff0f1;
+}
+
+.site-admin-empty {
+  display: grid;
+  min-height: 180px;
+  place-items: center;
+  align-content: center;
+  gap: 0.45rem;
+  color: #7b8e98;
+  font-size: 0.68rem;
+}
+
+.site-admin-empty i {
+  color: #98afb7;
+  font-size: 2rem;
+}
+
+.site-admin-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  border-top: 1px solid #e5edef;
+  padding: 0.85rem 1rem;
+}
+
+.site-admin-pagination .btn {
+  min-height: 35px;
+  border-radius: 10px;
+  font-size: 0.6rem;
+  font-weight: 750;
+}
+
+.news-form-section {
+  border-color: #dce7ea;
+  border-radius: 15px;
+  background: #fbfdfd;
+  padding: 1.05rem;
+}
+
+.news-form-section-title {
+  color: #284b5b;
+}
+
+.news-card-editor {
+  border-color: #dfe9ec;
+  border-radius: 13px;
+  background: #f5f9fa;
+}
+
+@media (max-width: 1499.98px) {
+  .site-row-actions {
+    min-width: 168px;
+  }
+
+  .site-row-action {
+    width: 38px;
+    min-width: 38px;
+    padding: 0;
+  }
+
+  .site-row-action span {
+    display: none;
+  }
+}
+
+@media (max-width: 1199.98px) {
+  .site-admin-hero {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 767.98px) {
+  .site-admin-page {
+    padding: 0.7rem 0.6rem 1.8rem;
+  }
+
+  .site-admin-hero {
+    border-radius: 21px;
+    padding: 1.2rem;
+  }
+
+  .site-admin-metrics {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .site-admin-metrics > * {
+    min-height: 88px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.11);
+  }
+
+  .site-admin-primary-action,
+  .site-admin-filter-actions,
+  .site-admin-filter-actions .btn {
+    width: 100%;
+  }
+
+  .site-admin-table-heading,
+  .site-admin-pagination {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .site-admin-table-heading p {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .site-admin-page * {
+    transition: none !important;
+  }
 }
 </style>

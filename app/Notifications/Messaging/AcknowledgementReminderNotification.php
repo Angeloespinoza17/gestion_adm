@@ -3,6 +3,7 @@
 namespace App\Notifications\Messaging;
 
 use App\Models\Messaging\Message;
+use App\Models\User;
 use Illuminate\Notifications\Notification;
 
 class AcknowledgementReminderNotification extends Notification
@@ -11,7 +12,9 @@ class AcknowledgementReminderNotification extends Notification
 
     public function via(object $notifiable): array
     {
-        return ['database'];
+        return config('messaging.enabled') && $notifiable instanceof User && $notifiable->canUseMessaging()
+            ? ['database']
+            : [];
     }
 
     public function toArray(object $notifiable): array

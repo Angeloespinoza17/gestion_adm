@@ -2,6 +2,7 @@
 import Swal from "sweetalert2";
 import Layout from "../../layouts/main.vue";
 import LoadingState from "../ui/loading-state.vue";
+import SiteAdminNavigation from "./site-admin-navigation.vue";
 import {
   archiveSiteOrganization,
   createSiteOrganization,
@@ -73,7 +74,7 @@ const normalizeMember = (member = {}, index = 0) => ({
 });
 
 export default {
-  components: { Layout, LoadingState },
+  components: { Layout, LoadingState, SiteAdminNavigation },
   props: {
     organizationType: {
       type: String,
@@ -668,16 +669,12 @@ export default {
 <template>
   <Layout>
     <main ref="managerRoot" class="organization-manager">
+      <SiteAdminNavigation />
       <section class="organization-hero">
         <div class="organization-hero__copy">
           <span class="organization-eyebrow"><i class="bx" :class="config.icon"></i> Sitio web · {{ config.eyebrow }}</span>
           <h1>{{ config.title }}</h1>
           <p>{{ config.description }}</p>
-          <nav class="organization-switcher" aria-label="Secciones de representación institucional">
-            <router-link to="/admin/cgpa" :class="{ active: organizationType === 'cgpa' }">CGPA</router-link>
-            <router-link to="/admin/cde" :class="{ active: organizationType === 'cde' }">CDE</router-link>
-            <router-link to="/admin/comite-paritario" :class="{ active: organizationType === 'joint_committee' }">Comité Paritario</router-link>
-          </nav>
         </div>
         <div class="organization-hero__metrics" aria-label="Resumen de versiones">
           <article v-for="metric in metrics" :key="metric.label" :class="`tone-${metric.tone}`">

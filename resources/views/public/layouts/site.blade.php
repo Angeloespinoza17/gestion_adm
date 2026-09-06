@@ -1694,7 +1694,12 @@
   <link href="{{ asset($premiumCssPath) }}?v={{ $premiumAssetVersion }}" rel="stylesheet">
 </head>
 
-<body class="public-site @yield('body_class', 'inner-page')">
+<body class="public-site @yield('body_class', 'inner-page')"
+  data-analytics-page-type="@yield('analytics_page_type', 'page')"
+  data-analytics-content-type="@yield('analytics_content_type')"
+  data-analytics-content-id="@yield('analytics_content_id')"
+  data-analytics-content-slug="@yield('analytics_content_slug')"
+>
   <a class="site-skip-link" href="#main-content">Saltar al contenido principal</a>
 
   <header id="header" class="header site-header d-flex align-items-center fixed-top">
@@ -1824,6 +1829,7 @@
   <script src="{{ asset('niceschool/assets/vendor/swiper/swiper-bundle.min.js') }}"></script>
   <script src="{{ asset('niceschool/assets/vendor/glightbox/js/glightbox.min.js') }}"></script>
   <script src="{{ asset('niceschool/assets/js/main.js') }}"></script>
+  <script src="{{ asset('niceschool/assets/js/cnsc-analytics.js') }}" defer></script>
 </body>
 
 </html>

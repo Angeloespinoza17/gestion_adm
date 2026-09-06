@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Convivencia;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Convivencia\SaveConvivenciaSociogramRequest;
 use App\Models\Convivencia\ConvivenciaSociogram;
+use App\Services\Convivencia\ConvivenciaAccessService;
 use App\Services\Convivencia\ConvivenciaSociogramService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -13,20 +14,25 @@ class ConvivenciaSociogramController extends Controller
 {
     public function __construct(
         private readonly ConvivenciaSociogramService $sociogramService,
-    ) {
-    }
+    ) {}
 
     public function index(Request $request): JsonResponse
     {
         $this->authorize('viewAny', ConvivenciaSociogram::class);
 
-        $query = app(\App\Services\Convivencia\ConvivenciaAccessService::class)
+        $query = app(ConvivenciaAccessService::class)
             ->applySociogramVisibility(
-                ConvivenciaSociogram::query()->with([
-                    'academicYear:id,name,year',
-                    'courseSection:id,display_name',
-                    'createdBy:id,name',
-                ])->withCount(['questions', 'answers']),
+                ConvivenciaSociogram::query()
+                    ->select([
+                        'id', 'academic_year_id', 'course_section_id', 'title', 'applied_on',
+                        'status', 'confidentiality_level', 'is_sensitive', 'created_by',
+                        'updated_by', 'created_at', 'updated_at',
+                    ])
+                    ->with([
+                        'academicYear:id,name,year',
+                        'courseSection:id,display_name',
+                        'createdBy:id,name',
+                    ])->withCount(['questions', 'answers']),
                 $request->user(),
             );
 
@@ -37,7 +43,9 @@ class ConvivenciaSociogramController extends Controller
             ->when($request->query('from'), fn ($builder, $value) => $builder->whereDate('applied_on', '>=', $value))
             ->when($request->query('to'), fn ($builder, $value) => $builder->whereDate('applied_on', '<=', $value));
 
-        return response()->json($query->latest('applied_on')->paginate((int) $request->query('per_page', 12)));
+        $perPage = max(1, min(50, (int) $request->query('per_page', 12)));
+
+        return response()->json($query->latest('applied_on')->paginate($perPage));
     }
 
     public function store(SaveConvivenciaSociogramRequest $request): JsonResponse
@@ -56,16 +64,19 @@ class ConvivenciaSociogramController extends Controller
     {
         $this->authorize('view', $sociogram);
 
+        $sociogram->load([
+            'academicYear:id,name,year',
+            'courseSection:id,academic_year_id,display_name',
+            'questions',
+            'answers.respondentStudent:id,first_name,last_name,registered_name',
+            'answers.selectedStudent:id,first_name,last_name,registered_name',
+            'createdBy:id,name',
+            'updatedBy:id,name',
+        ]);
+        $sociogram->setAttribute('analysis', $this->sociogramService->analysisForDisplay($sociogram));
+
         return response()->json([
-            'data' => $sociogram->load([
-                'academicYear:id,name,year',
-                'courseSection:id,display_name',
-                'questions',
-                'answers.respondentStudent:id,first_name,last_name,registered_name,rut',
-                'answers.selectedStudent:id,first_name,last_name,registered_name,rut',
-                'createdBy:id,name',
-                'updatedBy:id,name',
-            ]),
+            'data' => $sociogram,
         ]);
     }
 

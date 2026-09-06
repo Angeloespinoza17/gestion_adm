@@ -20,8 +20,7 @@ class SecurityCatalogController extends Controller
 {
     public function __construct(
         private readonly SecurityAccessService $accessService,
-    ) {
-    }
+    ) {}
 
     public function __invoke(Request $request): JsonResponse
     {
@@ -38,8 +37,16 @@ class SecurityCatalogController extends Controller
                 ->orderBy('sort_order')
                 ->get(['id', 'code', 'name', 'color', 'is_closed']),
             'staff' => Staff::query()
-                ->with('cargo:id,name')
+                ->with([
+                    'cargo:id,name,slug',
+                    'user:id,staff_id,active',
+                ])
                 ->where('active', true)
+                ->where(function ($query) {
+                    $query
+                        ->whereHas('cargo', fn ($cargoQuery) => $cargoQuery->where('slug', 'nochero'))
+                        ->orWhereHas('user.roles', fn ($roleQuery) => $roleQuery->where('slug', 'nochero'));
+                })
                 ->orderBy('full_name')
                 ->get(['id', 'full_name', 'rut', 'cargo_id']),
             'dependencies' => MaintenanceDependency::query()
@@ -63,6 +70,7 @@ class SecurityCatalogController extends Controller
                 'id' => $request->user()->id,
                 'name' => $request->user()->name,
                 'staff_id' => $request->user()->staff_id,
+                'is_superadmin' => $request->user()->isSuperAdmin(),
             ],
             'capabilities' => [
                 'can_manage_shifts' => $this->accessService->canManageShifts($request->user()),

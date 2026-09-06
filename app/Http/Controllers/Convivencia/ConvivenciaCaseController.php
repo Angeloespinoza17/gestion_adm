@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Convivencia;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Convivencia\SaveConvivenciaCaseRequest;
 use App\Models\Convivencia\ConvivenciaCase;
+use App\Services\Convivencia\ConvivenciaAccessService;
 use App\Services\Convivencia\ConvivenciaCaseService;
 use App\Services\Convivencia\ConvivenciaStudentContextService;
 use Illuminate\Http\JsonResponse;
@@ -15,14 +16,14 @@ class ConvivenciaCaseController extends Controller
     public function __construct(
         private readonly ConvivenciaCaseService $caseService,
         private readonly ConvivenciaStudentContextService $studentContextService,
-    ) {
-    }
+        private readonly ConvivenciaAccessService $accessService,
+    ) {}
 
     public function index(Request $request): JsonResponse
     {
         $this->authorize('viewAny', ConvivenciaCase::class);
 
-        $query = app(\App\Services\Convivencia\ConvivenciaAccessService::class)
+        $query = app(ConvivenciaAccessService::class)
             ->applyCaseVisibility(
                 ConvivenciaCase::query()
                     ->with([
@@ -61,7 +62,9 @@ class ConvivenciaCaseController extends Controller
             ->when($request->query('from'), fn ($builder, $value) => $builder->whereDate('opened_at', '>=', $value))
             ->when($request->query('to'), fn ($builder, $value) => $builder->whereDate('opened_at', '<=', $value));
 
-        return response()->json($query->latest('opened_at')->paginate((int) $request->query('per_page', 12)));
+        $perPage = min(max((int) $request->query('per_page', 12), 1), 50);
+
+        return response()->json($query->latest('opened_at')->paginate($perPage));
     }
 
     public function store(SaveConvivenciaCaseRequest $request): JsonResponse
@@ -84,6 +87,8 @@ class ConvivenciaCaseController extends Controller
         $this->authorize('view', $case);
 
         $case->load('student');
+        $accessService = app(ConvivenciaAccessService::class);
+        $user = request()->user();
 
         return response()->json([
             'data' => $case->load([
@@ -110,12 +115,25 @@ class ConvivenciaCaseController extends Controller
                 'interviews.responsibleUser:id,name',
                 'protocolActivations.protocol:id,name',
                 'protocolActivations.currentStep:id,stage_name',
-                'attachments.uploadedBy:id,name',
+                'attachments' => fn ($query) => $accessService
+                    ->applyAttachmentVisibility($query, $user)
+                    ->with('uploadedBy:id,name'),
                 'statusLogs.changedBy:id,name',
             ]),
             'student_context' => $case->student
                 ? $this->studentContextService->studentSummary($case->student, $case->opened_at, request()->user())
                 : null,
+        ]);
+    }
+
+    public function exportData(Request $request, ConvivenciaCase $case): JsonResponse
+    {
+        $this->authorize('view', $case);
+        abort_unless($this->accessService->canExportReports($request->user()), 403);
+
+        return response()->json([
+            'data' => $this->caseService->loadForExport($case, $request->user()),
+            'generated_at' => now()->toIso8601String(),
         ]);
     }
 
@@ -147,7 +165,7 @@ class ConvivenciaCaseController extends Controller
 
     public function close(Request $request, ConvivenciaCase $case): JsonResponse
     {
-        abort_unless(app(\App\Services\Convivencia\ConvivenciaAccessService::class)->canCloseCases($request->user()), 403);
+        abort_unless(app(ConvivenciaAccessService::class)->canCloseCases($request->user()), 403);
         $this->authorize('update', $case);
 
         $payload = $request->validate([
@@ -184,7 +202,7 @@ class ConvivenciaCaseController extends Controller
             'next_follow_up_at' => $payload['next_follow_up_at'] ?? null,
         ]);
 
-        if (!empty($payload['next_follow_up_at'])) {
+        if (! empty($payload['next_follow_up_at'])) {
             $case->forceFill([
                 'follow_up_due_at' => $payload['next_follow_up_at'],
                 'updated_by' => $request->user()->id,

@@ -52,7 +52,7 @@ class NewsPostController extends Controller
         return response()->json($items);
     }
 
-    public function catalogs(): JsonResponse
+    public function catalogs(Request $request): JsonResponse
     {
         return response()->json([
             'statuses' => [
@@ -73,6 +73,9 @@ class NewsPostController extends Controller
                 'draft' => NewsPost::query()->where('status', NewsPost::STATUS_DRAFT)->count(),
                 'featured' => NewsPost::query()->where('featured', true)->count(),
                 'views' => (int) NewsPost::query()->sum('views_count'),
+            ],
+            'capabilities' => [
+                'can_manage' => (bool) $request->user()?->hasPermission('gestionar_noticias'),
             ],
         ]);
     }

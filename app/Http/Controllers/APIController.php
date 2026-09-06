@@ -196,6 +196,11 @@ class APIController extends Controller
             'id' => $user->id,
             'name' => $user->name,
             'email' => $user->email,
+            'user_type' => $user->user_type,
+            'staff_id' => $user->staff_id,
+            'student_id' => $user->student_id,
+            'guardian_id' => $user->guardian_id,
+            'is_staff' => $user->canUseMessaging(),
             'profile_photo_url' => $user->profile_photo_url,
         ];
     }

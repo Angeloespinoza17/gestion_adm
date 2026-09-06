@@ -3,9 +3,11 @@ import axios from "axios";
 import Swal from "sweetalert2";
 import Layout from "../../layouts/main.vue";
 import LoadingState from "../../components/ui/loading-state.vue";
+import SiteAdminNavigation from "../../components/public-site/site-admin-navigation.vue";
+import "../../components/public-site/site-admin-legacy.css";
 
 export default {
-  components: { Layout, LoadingState },
+  components: { Layout, LoadingState, SiteAdminNavigation },
   data() {
     return {
       loading: false,
@@ -33,6 +35,22 @@ export default {
     };
   },
   computed: {
+    permissions() {
+      try {
+        const stored = JSON.parse(localStorage.getItem("permissions") || "[]");
+        return Array.isArray(stored) ? stored : [];
+      } catch (error) {
+        return [];
+      }
+    },
+    canManage() {
+      const serverValue = this.catalogs.capabilities?.can_manage;
+      if (typeof serverValue === "boolean") return serverValue;
+      return this.permissions.includes("__superadmin__") || this.permissions.includes("gestionar_contactos_sitio");
+    },
+    activeFilterCount() {
+      return [this.search, this.statusFilter].filter((value) => String(value).trim() !== "").length;
+    },
     statusOptions() {
       return [{ value: "", text: "Todos" }].concat(
         (this.catalogs.statuses || []).map((status) => ({ value: status.value, text: status.label }))
@@ -47,6 +65,10 @@ export default {
     this.load();
   },
   methods: {
+    applyStatusFilter(status = "") {
+      this.statusFilter = status;
+      this.load(1);
+    },
     async loadCatalogs() {
       try {
         const response = await axios.get("/api/admin/contact-messages/catalogs");
@@ -236,76 +258,69 @@ export default {
 
 <template>
   <Layout>
-    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
-      <div>
-        <h4 class="mb-0">Contactos del sitio web</h4>
-        <div class="text-muted">Registro de mensajes enviados desde /contacto.</div>
-      </div>
-    </div>
+    <main class="site-admin-page site-admin-page--contacts">
+      <SiteAdminNavigation />
 
-    <BAlert v-if="error" variant="danger" show class="mb-3">{{ error }}</BAlert>
-    <BAlert v-if="success" variant="success" show class="mb-3">{{ success }}</BAlert>
+      <section class="site-admin-hero" aria-labelledby="contacts-admin-title">
+        <div class="site-admin-hero__copy">
+          <span class="site-admin-eyebrow"><i class="bx bx-envelope"></i> Bandeja institucional</span>
+          <h1 id="contacts-admin-title">Contactos</h1>
+          <p>Revisa los mensajes enviados desde /contacto, registra la gestión interna y mantén una bandeja ordenada.</p>
+          <span class="contact-protection-badge"><i class="bx bx-shield-quarter"></i> Protección antibot activa</span>
+        </div>
 
-    <div class="row g-3 mb-3 contact-stat-grid">
-      <div class="col-md-6 col-xl-3">
-        <BCard class="h-100 contact-stat-card">
-          <div class="contact-stat-icon contact-stat-icon-danger"><i class="bx bx-envelope"></i></div>
-          <div>
-            <div class="contact-stat-label">Nuevos</div>
-            <div class="contact-stat-value text-danger">{{ formatNumber(catalogs.stats?.new) }}</div>
-          </div>
-        </BCard>
-      </div>
-      <div class="col-md-6 col-xl-3">
-        <BCard class="h-100 contact-stat-card">
-          <div class="contact-stat-icon contact-stat-icon-primary"><i class="bx bx-show"></i></div>
-          <div>
-            <div class="contact-stat-label">Leídos</div>
-            <div class="contact-stat-value text-primary">{{ formatNumber(catalogs.stats?.read) }}</div>
-          </div>
-        </BCard>
-      </div>
-      <div class="col-md-6 col-xl-3">
-        <BCard class="h-100 contact-stat-card">
-          <div class="contact-stat-icon contact-stat-icon-success"><i class="bx bx-check-circle"></i></div>
-          <div>
-            <div class="contact-stat-label">Respondidos</div>
-            <div class="contact-stat-value text-success">{{ formatNumber(catalogs.stats?.responded) }}</div>
-          </div>
-        </BCard>
-      </div>
-      <div class="col-md-6 col-xl-3">
-        <BCard class="h-100 contact-stat-card">
-          <div class="contact-stat-icon contact-stat-icon-neutral"><i class="bx bx-layer"></i></div>
-          <div>
-            <div class="contact-stat-label">Total</div>
-            <div class="contact-stat-value">{{ formatNumber(catalogs.stats?.total) }}</div>
-          </div>
-        </BCard>
-      </div>
-    </div>
+        <div class="site-admin-metrics" aria-label="Resumen de mensajes">
+          <button type="button" :class="{ active: !activeFilterCount }" @click="resetFilters">
+            <span>Total</span><strong>{{ formatNumber(catalogs.stats?.total) }}</strong><small>mensajes</small>
+          </button>
+          <button type="button" :class="{ active: statusFilter === 'new' }" @click="applyStatusFilter('new')">
+            <span>Pendientes</span><strong>{{ formatNumber(catalogs.stats?.new) }}</strong><small>nuevos</small>
+          </button>
+          <button type="button" :class="{ active: statusFilter === 'read' }" @click="applyStatusFilter('read')">
+            <span>En revisión</span><strong>{{ formatNumber(catalogs.stats?.read) }}</strong><small>leídos</small>
+          </button>
+          <button type="button" :class="{ active: statusFilter === 'responded' }" @click="applyStatusFilter('responded')">
+            <span>Resueltos</span><strong>{{ formatNumber(catalogs.stats?.responded) }}</strong><small>respondidos</small>
+          </button>
+          <button type="button" :class="{ active: statusFilter === 'archived' }" @click="applyStatusFilter('archived')">
+            <span>Histórico</span><strong>{{ formatNumber(catalogs.stats?.archived) }}</strong><small>archivados</small>
+          </button>
+        </div>
+      </section>
 
-    <BCard class="mb-3 contact-filter-card">
+      <BAlert v-if="error" variant="danger" show class="site-admin-alert">{{ error }}</BAlert>
+      <BAlert v-if="success" variant="success" show class="site-admin-alert">{{ success }}</BAlert>
+
+    <BCard class="site-admin-filter-card contact-filter-card">
       <div class="row g-3 align-items-end">
         <div class="col-lg-6">
-          <label class="form-label">Buscar</label>
-          <BFormInput v-model="search" placeholder="Nombre, correo, teléfono, asunto o mensaje" @keyup.enter="load" />
+          <label class="form-label">Buscar mensaje</label>
+          <div class="site-admin-search">
+            <i class="bx bx-search"></i>
+            <BFormInput v-model="search" placeholder="Nombre, correo, teléfono, asunto o mensaje" @keyup.enter="load" />
+          </div>
         </div>
         <div class="col-md-4 col-lg-3">
           <label class="form-label">Estado</label>
           <BFormSelect v-model="statusFilter" :options="statusOptions" />
         </div>
-        <div class="col-md-8 col-lg-3 d-flex gap-2 contact-filter-actions">
-          <BButton variant="primary" @click="load()">
-            <i class="bx bx-filter-alt me-1"></i>
-            Filtrar
+        <div class="col-md-8 col-lg-3 d-flex gap-2 contact-filter-actions site-admin-filter-actions">
+          <BButton class="site-admin-filter-button" @click="load(1)">
+            <i class="bx bx-filter-alt"></i>
+            Aplicar
           </BButton>
-          <BButton variant="outline-secondary" @click="resetFilters">Limpiar</BButton>
+          <BButton v-if="activeFilterCount" variant="light" class="site-admin-clear-button" :aria-label="`Limpiar ${activeFilterCount} filtros`" @click="resetFilters">
+            Limpiar <span>{{ activeFilterCount }}</span>
+          </BButton>
         </div>
       </div>
     </BCard>
 
-    <BCard class="contact-list-card">
+    <BCard class="site-admin-table-card contact-list-card">
+      <header class="site-admin-table-heading">
+        <div><span>Bandeja de entrada</span><strong>{{ pagination.total }} mensaje(s)</strong></div>
+        <p><i class="bx bx-info-circle"></i> Los mensajes nuevos aparecen primero para agilizar la respuesta.</p>
+      </header>
       <BTable
         :items="items"
         :busy="loading"
@@ -313,7 +328,7 @@ export default {
         hover
         small
         show-empty
-        table-class="contact-table align-middle mb-0"
+        table-class="site-admin-table contact-table align-middle mb-0"
         :fields="[
           { key: 'contact', label: 'Contacto', thClass: 'contact-th contact-col', tdClass: 'contact-td contact-col' },
           { key: 'message', label: 'Mensaje', thClass: 'contact-th message-col', tdClass: 'contact-td message-col' },
@@ -358,25 +373,25 @@ export default {
             <BButton
               size="sm"
               variant="outline-primary"
-              class="contact-action-btn"
+              class="contact-action-btn is-labeled"
               title="Ver detalle"
               :aria-label="`Ver mensaje de ${item.full_name}`"
               @click="openDetail(item)"
             >
-              <i class="bx bx-show"></i>
+              <i class="bx bx-show"></i><span>Ver</span>
             </BButton>
             <BButton
               size="sm"
               variant="outline-success"
-              class="contact-action-btn"
+              class="contact-action-btn is-labeled"
               title="Responder por correo"
               :aria-label="`Responder a ${item.full_name}`"
               :href="mailto(item)"
             >
-              <i class="bx bx-envelope"></i>
+              <i class="bx bx-envelope"></i><span>Responder</span>
             </BButton>
             <BButton
-              v-if="item.status !== 'responded'"
+              v-if="canManage && item.status !== 'responded'"
               size="sm"
               variant="outline-success"
               class="contact-action-btn"
@@ -387,7 +402,7 @@ export default {
               <i class="bx bx-check-circle"></i>
             </BButton>
             <BButton
-              v-if="item.status !== 'archived'"
+              v-if="canManage && item.status !== 'archived'"
               size="sm"
               variant="outline-secondary"
               class="contact-action-btn"
@@ -398,6 +413,7 @@ export default {
               <i class="bx bx-archive"></i>
             </BButton>
             <BButton
+              v-if="canManage"
               size="sm"
               variant="outline-danger"
               class="contact-action-btn"
@@ -411,7 +427,7 @@ export default {
         </template>
       </BTable>
 
-      <div class="contact-pagination">
+      <div class="site-admin-pagination contact-pagination">
         <div class="text-muted small">{{ pagination.total }} mensaje(s)</div>
         <div class="d-flex align-items-center gap-2">
           <BButton size="sm" variant="outline-secondary" :disabled="pagination.current_page <= 1" @click="load(pagination.current_page - 1)">
@@ -481,11 +497,11 @@ export default {
             <div class="contact-management-form">
               <div>
                 <label class="form-label">Estado</label>
-                <BFormSelect v-model="detailForm.status" :options="formStatusOptions" />
+                <BFormSelect v-model="detailForm.status" :options="formStatusOptions" :disabled="!canManage" />
               </div>
               <div>
                 <label class="form-label">Notas internas</label>
-                <BFormTextarea v-model="detailForm.internal_notes" rows="5" placeholder="Seguimiento, responsable o acuerdo interno" />
+                <BFormTextarea v-model="detailForm.internal_notes" rows="5" placeholder="Seguimiento, responsable o acuerdo interno" :disabled="!canManage" />
               </div>
             </div>
           </aside>
@@ -497,13 +513,14 @@ export default {
             <i class="bx bx-envelope me-1"></i>
             Responder por correo
           </BButton>
-          <BButton variant="primary" :disabled="saving" @click="saveDetail">
+          <BButton v-if="canManage" variant="primary" :disabled="saving" @click="saveDetail">
             <i class="bx bx-save me-1"></i>
             {{ saving ? "Guardando..." : "Guardar gestión" }}
           </BButton>
         </div>
       </div>
     </BModal>
+    </main>
   </Layout>
 </template>
 
@@ -969,6 +986,125 @@ export default {
 
   .contact-row-actions {
     justify-content: flex-start;
+  }
+}
+
+.contact-protection-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.34rem;
+  margin-top: 0.85rem;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.09);
+  padding: 0.42rem 0.68rem;
+  color: rgba(255, 255, 255, 0.84);
+  font-size: 0.58rem;
+  font-weight: 800;
+}
+
+.contact-protection-badge i {
+  color: #efc77f;
+  font-size: 0.85rem;
+}
+
+.contact-person-cell {
+  min-width: 15rem;
+}
+
+.contact-avatar {
+  border-color: #d5e5e8;
+  border-radius: 12px;
+  background: linear-gradient(145deg, #e6f2f3, #f7faf7);
+  color: #0b6c7c;
+}
+
+.contact-name,
+.message-subject {
+  color: #284a5a;
+}
+
+.contact-email,
+.message-subject:hover {
+  color: #0b6c7c;
+}
+
+.contact-row-actions {
+  flex-wrap: wrap;
+  gap: 0.32rem;
+  min-width: 17.5rem;
+}
+
+.contact-action-btn {
+  width: 38px;
+  height: 38px;
+  border-color: #d9e5e8;
+  border-radius: 10px;
+  background: #fff;
+  box-shadow: 0 4px 10px rgba(18, 58, 73, 0.04);
+}
+
+.contact-action-btn.is-labeled {
+  width: auto;
+  min-width: 58px;
+  gap: 0.28rem;
+  padding: 0 0.55rem;
+  font-size: 0.58rem;
+  font-weight: 800;
+}
+
+.contact-action-btn:hover {
+  transform: translateY(-1px);
+}
+
+:deep(.contact-table th) {
+  background: #f5f8f9;
+  border-bottom-color: #e2eaed;
+  color: #738893;
+  font-size: 0.56rem;
+}
+
+:deep(.contact-table td) {
+  border-bottom-color: #e9eff1;
+}
+
+.contact-detail-header {
+  background: linear-gradient(145deg, #ffffff, #f8fbfb);
+}
+
+.contact-message-panel,
+.contact-management-panel,
+.contact-detail-list {
+  border-color: #dce7ea;
+  border-radius: 14px;
+}
+
+.contact-management-form :deep(.form-control),
+.contact-management-form :deep(.form-select) {
+  border-color: #d5e2e5;
+  border-radius: 10px;
+  background-color: #fbfcfd;
+}
+
+@media (max-width: 767.98px) {
+  .contact-row-actions {
+    min-width: 0;
+  }
+
+  .contact-action-btn.is-labeled span {
+    display: none;
+  }
+
+  .contact-action-btn.is-labeled {
+    width: 38px;
+    min-width: 38px;
+    padding: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .contact-action-btn {
+    transition: none;
   }
 }
 </style>

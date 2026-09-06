@@ -2,17 +2,13 @@
 
 namespace App\Events\Messaging;
 
-use Illuminate\Broadcasting\PrivateChannel;
 use Illuminate\Contracts\Broadcasting\ShouldBroadcast;
 
 class MessageDeleted extends MessagingBroadcastEvent implements ShouldBroadcast
 {
-    public function __construct(public string $conversationId, public string $messageId, public string $deletedAt) {}
+    use BroadcastsToMessagingUsers;
 
-    public function broadcastOn(): array
-    {
-        return [new PrivateChannel('messaging.conversation.'.$this->conversationId)];
-    }
+    public function __construct(public string $conversationId, public string $messageId, public string $deletedAt, public array $recipientIds = []) {}
 
     public function broadcastAs(): string
     {

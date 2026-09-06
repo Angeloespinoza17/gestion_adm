@@ -57,6 +57,7 @@ class ConvivenciaCase extends Model
         ['value' => 'testigo', 'label' => 'Testigo'],
         ['value' => 'informante', 'label' => 'Informante'],
         ['value' => 'responsable_seguimiento', 'label' => 'Responsable de seguimiento'],
+        ['value' => 'profesional_apoyo', 'label' => 'Profesional de apoyo'],
         ['value' => 'otro', 'label' => 'Otro'],
     ];
 

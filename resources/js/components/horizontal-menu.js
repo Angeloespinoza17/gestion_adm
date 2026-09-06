@@ -340,6 +340,12 @@ export const menuItems = [
         ]
     },
     {
+        id: 91557,
+        label: 'Bitácora',
+        icon: 'bx-notepad',
+        link: '/bitacora'
+    },
+    {
         id: 9155,
         label: 'Gestión Operativa',
         icon: 'bx-briefcase-alt-2',

@@ -9,6 +9,24 @@
 (function() {
   "use strict";
 
+  document.querySelectorAll('form[data-contact-form]').forEach(form => {
+    form.addEventListener('submit', event => {
+      if (form.dataset.submitting === 'true') {
+        event.preventDefault();
+        return;
+      }
+
+      form.dataset.submitting = 'true';
+      const submitButton = form.querySelector('button[type="submit"]');
+      if (submitButton) {
+        submitButton.disabled = true;
+        submitButton.setAttribute('aria-disabled', 'true');
+        const label = submitButton.querySelector('span');
+        if (label) label.textContent = 'Enviando…';
+      }
+    });
+  });
+
   /**
    * Apply .scrolled class to the body as the page is scrolled down
    */

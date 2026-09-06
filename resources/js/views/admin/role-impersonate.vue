@@ -1,5 +1,6 @@
 <script>
 import axios from "axios";
+import { clearMessagingSession } from "@/modules/messaging/services/messagingAccess";
 
 export default {
   data() {
@@ -46,6 +47,7 @@ export default {
 
         localStorage.setItem("token", token);
         localStorage.removeItem("permissions");
+        clearMessagingSession({ code: "MESSAGING_SESSION_CHANGED" });
         localStorage.setItem(
           "user",
           JSON.stringify({

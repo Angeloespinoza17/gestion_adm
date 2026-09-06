@@ -6,21 +6,48 @@ TASK_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 cd "$TASK_ROOT"
 
-php artisan queue:work database \
+LOCAL_BACKGROUND_PIDS=()
+
+start_worker() {
+    php artisan queue:work database "$@" &
+    LOCAL_BACKGROUND_PIDS+=("$!")
+}
+
+stop_workers() {
+    local worker_pid
+
+    for worker_pid in "${LOCAL_BACKGROUND_PIDS[@]}"; do
+        if kill -0 "$worker_pid" 2>/dev/null; then
+            kill "$worker_pid" 2>/dev/null || true
+        fi
+    done
+
+    for worker_pid in "${LOCAL_BACKGROUND_PIDS[@]}"; do
+        wait "$worker_pid" 2>/dev/null || true
+    done
+}
+
+trap stop_workers EXIT INT TERM HUP
+
+# Las colas interactivas no comparten proceso con trabajos de larga duracion:
+# un analisis pesado no debe bloquear broadcasts ni notificaciones del chat.
+start_worker \
+    --queue=broadcasts,notifications \
+    --tries=3 \
+    --timeout=60 \
+    --sleep=1
+
+start_worker \
+    --queue=default \
+    --tries=3 \
+    --timeout=60 \
+    --sleep=1
+
+start_worker \
     --queue=class-presentations,pedagogical-instruments \
     --tries=3 \
     --timeout=900 \
-    --sleep=1 &
-LOCAL_WORKER_PID=$!
-
-stop_worker() {
-    if kill -0 "$LOCAL_WORKER_PID" 2>/dev/null; then
-        kill "$LOCAL_WORKER_PID" 2>/dev/null || true
-        wait "$LOCAL_WORKER_PID" 2>/dev/null || true
-    fi
-}
-
-trap stop_worker EXIT INT TERM HUP
+    --sleep=1
 
 cd "$TASK_ROOT/public"
 

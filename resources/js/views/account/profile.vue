@@ -139,6 +139,9 @@ export default {
         user_id: profile.id,
         name: profile.name,
         email: profile.email,
+        user_type: profile.user_type || null,
+        staff_id: profile.staff?.id || null,
+        is_staff: profile.is_staff === true || profile.user_type === "staff",
         profile_photo_url: profile.profile_photo_url || null,
       };
       localStorage.setItem("user", JSON.stringify(stored));

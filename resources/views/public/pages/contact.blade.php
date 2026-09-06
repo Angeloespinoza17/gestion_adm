@@ -92,9 +92,13 @@
               <p>Completa el formulario y responderemos tu consulta a la brevedad.</p>
             </div>
 
-            <form action="{{ route('public.contact.store') }}" method="post" class="php-email-form" aria-describedby="contact-form-help">
+            <form action="{{ route('public.contact.store') }}" method="post" class="php-email-form" aria-describedby="contact-form-help contact-form-security" data-contact-form>
               @csrf
-              <input type="text" name="website" value="" tabindex="-1" autocomplete="off" aria-hidden="true" class="d-none">
+              <input type="hidden" name="contact_started_at" value="{{ Illuminate\Support\Facades\Crypt::encryptString((string) now()->timestamp) }}">
+              <div class="contact-form__antibot" aria-hidden="true">
+                <label for="contact-website">Deja este campo vacío</label>
+                <input type="text" id="contact-website" name="website" value="" tabindex="-1" autocomplete="off">
+              </div>
 
               <p id="contact-form-help" class="contact-form__required-note">
                 Los campos marcados con <span aria-hidden="true">*</span><span class="visually-hidden">asterisco</span> son obligatorios.
@@ -236,6 +240,10 @@
                     <span>Enviar mensaje</span>
                     <i class="bi bi-send" aria-hidden="true"></i>
                   </button>
+                  <p id="contact-form-security" class="contact-form__security-note">
+                    <i class="bi bi-shield-check" aria-hidden="true"></i>
+                    Formulario protegido contra envíos automatizados. No incluyas enlaces web.
+                  </p>
                 </div>
               </div>
             </form>

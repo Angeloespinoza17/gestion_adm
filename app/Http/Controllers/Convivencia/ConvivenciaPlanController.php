@@ -5,6 +5,8 @@ namespace App\Http\Controllers\Convivencia;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Convivencia\SaveConvivenciaPlanRequest;
 use App\Models\Convivencia\ConvivenciaPlan;
+use App\Services\Convivencia\ConvivenciaAccessService;
+use App\Services\Convivencia\ConvivenciaAnnualPlanWorkspaceService;
 use App\Services\Convivencia\ConvivenciaPlanService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -13,14 +15,13 @@ class ConvivenciaPlanController extends Controller
 {
     public function __construct(
         private readonly ConvivenciaPlanService $planService,
-    ) {
-    }
+    ) {}
 
     public function index(Request $request): JsonResponse
     {
         $this->authorize('viewAny', ConvivenciaPlan::class);
 
-        $query = app(\App\Services\Convivencia\ConvivenciaAccessService::class)
+        $query = app(ConvivenciaAccessService::class)
             ->applyPlanVisibility(
                 ConvivenciaPlan::query()->with([
                     'academicYear:id,name,year',
@@ -55,6 +56,8 @@ class ConvivenciaPlanController extends Controller
     public function show(ConvivenciaPlan $plan): JsonResponse
     {
         $this->authorize('view', $plan);
+        $accessService = app(ConvivenciaAccessService::class);
+        $user = request()->user();
 
         return response()->json([
             'data' => $plan->load([
@@ -65,9 +68,19 @@ class ConvivenciaPlanController extends Controller
                 'actions.responsibleUser:id,name',
                 'actions.responsibleStaff:id,full_name',
                 'actions.responsibleDepartment:id,name',
-                'attachments.uploadedBy:id,name',
+                'attachments' => fn ($query) => $accessService
+                    ->applyAttachmentVisibility($query, $user)
+                    ->with('uploadedBy:id,name'),
             ]),
         ]);
+    }
+
+    public function exportData(ConvivenciaPlan $plan, ConvivenciaAnnualPlanWorkspaceService $workspace): JsonResponse
+    {
+        $this->authorize('view', $plan);
+        abort_unless(app(ConvivenciaAccessService::class)->canExportReports(request()->user()), 403);
+
+        return response()->json(['data' => $workspace->exportPlan($plan, request()->user())]);
     }
 
     public function update(SaveConvivenciaPlanRequest $request, ConvivenciaPlan $plan): JsonResponse

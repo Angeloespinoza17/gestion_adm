@@ -5,6 +5,8 @@ import { markRaw } from "vue";
 import Swal from "sweetalert2";
 import Layout from "../../layouts/main.vue";
 import LoadingState from "../../components/ui/loading-state.vue";
+import SiteAdminNavigation from "../../components/public-site/site-admin-navigation.vue";
+import "../../components/public-site/site-admin-legacy.css";
 
 const emptyScheduleItem = () => ({
   time: "",
@@ -52,7 +54,7 @@ const emptyForm = () => ({
 });
 
 export default {
-  components: { Ckeditor, Layout, LoadingState },
+  components: { Ckeditor, Layout, LoadingState, SiteAdminNavigation },
   data() {
     return {
       editor: null,
@@ -96,6 +98,23 @@ export default {
     };
   },
   computed: {
+    permissions() {
+      try {
+        const stored = JSON.parse(localStorage.getItem("permissions") || "[]");
+        return Array.isArray(stored) ? stored : [];
+      } catch (error) {
+        return [];
+      }
+    },
+    canManage() {
+      const serverValue = this.catalogs.capabilities?.can_manage;
+      if (typeof serverValue === "boolean") return serverValue;
+      return this.permissions.includes("__superadmin__") || this.permissions.includes("gestionar_eventos");
+    },
+    activeFilterCount() {
+      return [this.search, this.statusFilter, this.categoryFilter, this.featuredFilter]
+        .filter((value) => String(value).trim() !== "").length;
+    },
     isEditing() {
       return Boolean(this.form.id);
     },
@@ -125,6 +144,14 @@ export default {
     this.load();
   },
   methods: {
+    applyStatusFilter(status = "") {
+      this.statusFilter = status;
+      this.load(1);
+    },
+    applyFeaturedFilter(value = "") {
+      this.featuredFilter = value;
+      this.load(1);
+    },
     async ensureEditor() {
       if (this.editor || this.editorLoading) return;
       this.editorLoading = true;
@@ -489,52 +516,47 @@ export default {
 
 <template>
   <Layout>
-    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
-      <div>
-        <h4 class="mb-0">Eventos del sitio web</h4>
-        <div class="text-muted">Gestión de las actividades visibles en /eventos.</div>
-      </div>
-      <BButton variant="primary" @click="openCreate">
-        <i class="bx bx-plus me-1"></i>
-        Nuevo evento
-      </BButton>
-    </div>
+    <main class="site-admin-page site-admin-page--events">
+      <SiteAdminNavigation />
 
-    <BAlert v-if="error" variant="danger" show class="mb-3">{{ error }}</BAlert>
-    <BAlert v-if="success" variant="success" show class="mb-3">{{ success }}</BAlert>
+      <section class="site-admin-hero" aria-labelledby="events-admin-title">
+        <div class="site-admin-hero__copy">
+          <span class="site-admin-eyebrow"><i class="bx bx-calendar-event"></i> Agenda institucional</span>
+          <h1 id="events-admin-title">Eventos</h1>
+          <p>Organiza las actividades públicas, sus fechas, lugares, contenidos e inscripción desde una sola agenda.</p>
+          <BButton v-if="canManage" class="site-admin-primary-action" @click="openCreate">
+            <i class="bx bx-plus"></i>
+            Nuevo evento
+          </BButton>
+        </div>
 
-    <div class="row g-3 mb-3">
-      <div class="col-md-6 col-xl-3">
-        <BCard class="h-100">
-          <div class="text-muted small">Total</div>
-          <div class="fs-4 fw-semibold">{{ formatNumber(catalogs.stats?.total) }}</div>
-        </BCard>
-      </div>
-      <div class="col-md-6 col-xl-3">
-        <BCard class="h-100">
-          <div class="text-muted small">Publicados</div>
-          <div class="fs-4 fw-semibold text-success">{{ formatNumber(catalogs.stats?.published) }}</div>
-        </BCard>
-      </div>
-      <div class="col-md-6 col-xl-3">
-        <BCard class="h-100">
-          <div class="text-muted small">Borradores</div>
-          <div class="fs-4 fw-semibold">{{ formatNumber(catalogs.stats?.draft) }}</div>
-        </BCard>
-      </div>
-      <div class="col-md-6 col-xl-3">
-        <BCard class="h-100">
-          <div class="text-muted small">Destacados</div>
-          <div class="fs-4 fw-semibold text-primary">{{ formatNumber(catalogs.stats?.featured) }}</div>
-        </BCard>
-      </div>
-    </div>
+        <div class="site-admin-metrics site-admin-metrics--four" aria-label="Resumen de eventos">
+          <button type="button" :class="{ active: !activeFilterCount }" @click="resetFilters">
+            <span>Total</span><strong>{{ formatNumber(catalogs.stats?.total) }}</strong><small>actividades</small>
+          </button>
+          <button type="button" :class="{ active: statusFilter === 'published' }" @click="applyStatusFilter('published')">
+            <span>En línea</span><strong>{{ formatNumber(catalogs.stats?.published) }}</strong><small>publicados</small>
+          </button>
+          <button type="button" :class="{ active: statusFilter === 'draft' }" @click="applyStatusFilter('draft')">
+            <span>Pendientes</span><strong>{{ formatNumber(catalogs.stats?.draft) }}</strong><small>borradores</small>
+          </button>
+          <button type="button" :class="{ active: featuredFilter === '1' }" @click="applyFeaturedFilter('1')">
+            <span>Portada</span><strong>{{ formatNumber(catalogs.stats?.featured) }}</strong><small>destacados</small>
+          </button>
+        </div>
+      </section>
 
-    <BCard class="mb-3">
+      <BAlert v-if="error" variant="danger" show class="site-admin-alert">{{ error }}</BAlert>
+      <BAlert v-if="success" variant="success" show class="site-admin-alert">{{ success }}</BAlert>
+
+    <BCard class="site-admin-filter-card">
       <div class="row g-3 align-items-end">
         <div class="col-lg-4">
-          <label class="form-label">Buscar</label>
-          <BFormInput v-model="search" placeholder="Título, resumen, categoría o lugar" @keyup.enter="load" />
+          <label class="form-label">Buscar actividad</label>
+          <div class="site-admin-search">
+            <i class="bx bx-search"></i>
+            <BFormInput v-model="search" placeholder="Título, resumen, categoría o lugar" @keyup.enter="load" />
+          </div>
         </div>
         <div class="col-md-3 col-lg-2">
           <label class="form-label">Estado</label>
@@ -548,19 +570,28 @@ export default {
           <label class="form-label">Destacado</label>
           <BFormSelect v-model="featuredFilter" :options="featuredOptions" />
         </div>
-        <div class="col-md-3 col-lg-2 d-flex gap-2">
-          <BButton variant="secondary" @click="load()">Filtrar</BButton>
-          <BButton variant="light" @click="resetFilters">Limpiar</BButton>
+        <div class="col-md-3 col-lg-2 d-flex gap-2 site-admin-filter-actions">
+          <BButton class="site-admin-filter-button" @click="load(1)"><i class="bx bx-filter-alt"></i> Aplicar</BButton>
+          <BButton v-if="activeFilterCount" variant="light" class="site-admin-clear-button" :aria-label="`Limpiar ${activeFilterCount} filtros`" @click="resetFilters">
+            Limpiar <span>{{ activeFilterCount }}</span>
+          </BButton>
         </div>
       </div>
     </BCard>
 
-    <BCard>
+    <BCard class="site-admin-table-card">
+      <header class="site-admin-table-heading">
+        <div><span>Agenda editorial</span><strong>{{ pagination.total }} evento(s)</strong></div>
+        <p><i class="bx bx-info-circle"></i> Revisa fecha, estado y portada antes de publicar.</p>
+      </header>
       <BTable
         :items="items"
         :busy="loading"
         responsive
+        hover
         small
+        show-empty
+        table-class="site-admin-table align-middle mb-0"
         :fields="[
           { key: 'title', label: 'Evento' },
           { key: 'starts_at', label: 'Fecha' },
@@ -572,52 +603,62 @@ export default {
         <template #table-busy>
           <LoadingState message="Cargando eventos..." compact />
         </template>
+        <template #empty>
+          <div class="site-admin-empty"><i class="bx bx-calendar-x"></i><span>No hay eventos para los filtros seleccionados.</span></div>
+        </template>
         <template #cell(title)="{ item }">
-          <div class="event-title-cell">
-            <div class="fw-semibold text-truncate">{{ item.title }}</div>
-            <div class="text-muted small text-truncate">{{ item.category || "Sin categoría" }} · {{ item.slug }}</div>
-            <div v-if="item.location" class="text-muted small text-truncate">{{ item.location }}</div>
+          <div class="event-title-cell site-entity-cell">
+            <span class="event-title-icon"><i class="bx bx-calendar-event"></i></span>
+            <div class="min-w-0">
+              <div class="fw-semibold text-truncate">{{ item.title }}</div>
+              <div class="text-muted small text-truncate">{{ item.category || "Sin categoría" }} · {{ item.slug }}</div>
+              <div v-if="item.location" class="text-muted small text-truncate"><i class="bx bx-map"></i> {{ item.location }}</div>
+            </div>
           </div>
         </template>
         <template #cell(starts_at)="{ item }">
           <span class="small">{{ formatDate(item.starts_at) }}</span>
         </template>
         <template #cell(status)="{ item }">
-          <BBadge :variant="statusVariant(item.status)">{{ statusLabel(item.status) }}</BBadge>
+          <span :class="['site-status-chip', `is-${item.status || 'draft'}`]">{{ statusLabel(item.status) }}</span>
         </template>
         <template #cell(featured)="{ item }">
-          <BBadge :variant="item.featured ? 'primary' : 'secondary'">{{ item.featured ? "Sí" : "No" }}</BBadge>
+          <span :class="['site-featured-chip', { active: item.featured }]"><i class="bx" :class="item.featured ? 'bxs-star' : 'bx-star'"></i>{{ item.featured ? "Destacado" : "Regular" }}</span>
         </template>
         <template #cell(actions)="{ item }">
-          <div class="d-flex flex-wrap gap-2">
-            <BButton v-if="item.status === 'published'" size="sm" variant="outline-secondary" :href="publicUrl(item)" target="_blank">Ver</BButton>
-            <BButton size="sm" variant="outline-primary" @click="openEdit(item)">Editar</BButton>
+          <div class="site-row-actions">
+            <BButton v-if="item.status === 'published'" size="sm" variant="outline-secondary" class="site-row-action" :href="publicUrl(item)" target="_blank" rel="noopener" :aria-label="`Ver ${item.title} en el sitio web`" title="Ver en el sitio web"><i class="bx bx-link-external"></i><span>Ver</span></BButton>
+            <BButton v-if="canManage" size="sm" variant="outline-primary" class="site-row-action" title="Editar" :aria-label="`Editar ${item.title}`" @click="openEdit(item)"><i class="bx bx-edit-alt"></i><span>Editar</span></BButton>
             <BButton
+              v-if="canManage"
               size="sm"
               :variant="item.status === 'published' ? 'outline-warning' : 'outline-success'"
+              class="site-row-action"
+              :title="item.status === 'published' ? 'Archivar' : 'Publicar'"
+              :aria-label="`${item.status === 'published' ? 'Archivar' : 'Publicar'} ${item.title}`"
               @click="togglePublished(item)"
             >
-              {{ item.status === "published" ? "Archivar" : "Publicar" }}
+              <i class="bx" :class="item.status === 'published' ? 'bx-archive' : 'bx-world'"></i><span>{{ item.status === "published" ? "Archivar" : "Publicar" }}</span>
             </BButton>
-            <BButton size="sm" variant="outline-danger" @click="remove(item)">Eliminar</BButton>
+            <BButton v-if="canManage" size="sm" variant="outline-danger" class="site-row-action is-danger" title="Eliminar" :aria-label="`Eliminar ${item.title}`" @click="remove(item)"><i class="bx bx-trash"></i><span>Eliminar</span></BButton>
           </div>
         </template>
       </BTable>
 
-      <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mt-3">
+      <div class="site-admin-pagination">
         <div class="text-muted small">{{ pagination.total }} evento(s)</div>
         <div class="d-flex align-items-center gap-2">
-          <BButton size="sm" variant="light" :disabled="pagination.current_page <= 1" @click="load(pagination.current_page - 1)">
-            Anterior
+          <BButton size="sm" variant="outline-secondary" :disabled="pagination.current_page <= 1" @click="load(pagination.current_page - 1)">
+            <i class="bx bx-chevron-left"></i> Anterior
           </BButton>
           <span class="small">Página {{ pagination.current_page }} de {{ pagination.last_page }}</span>
           <BButton
             size="sm"
-            variant="light"
+            variant="outline-secondary"
             :disabled="pagination.current_page >= pagination.last_page"
             @click="load(pagination.current_page + 1)"
           >
-            Siguiente
+            Siguiente <i class="bx bx-chevron-right"></i>
           </BButton>
         </div>
       </div>
@@ -858,6 +899,7 @@ export default {
         </BButton>
       </div>
     </BModal>
+    </main>
   </Layout>
 </template>
 
@@ -866,16 +908,40 @@ export default {
   max-width: 520px;
 }
 
+.site-entity-cell {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  min-width: 310px;
+}
+
+.event-title-icon {
+  display: grid;
+  width: 42px;
+  height: 42px;
+  flex: 0 0 42px;
+  place-items: center;
+  border: 1px solid #d5e5e8;
+  border-radius: 12px;
+  background: linear-gradient(145deg, #e7f2f3, #f6f9f5);
+  color: #0b6c7c;
+  font-size: 1.05rem;
+}
+
+.min-w-0 {
+  min-width: 0;
+}
+
 .event-form-section {
-  border: 1px solid #e9edf4;
-  border-radius: 8px;
-  padding: 1rem;
+  border: 1px solid #dce7ea;
+  border-radius: 15px;
+  padding: 1.05rem;
   margin-bottom: 1rem;
-  background: #fff;
+  background: #fbfdfd;
 }
 
 .event-form-section-title {
-  color: #2f3a4a;
+  color: #284b5b;
   font-size: 0.95rem;
   font-weight: 700;
   margin-bottom: 0.85rem;
@@ -895,10 +961,10 @@ export default {
 
 .event-schedule-editor,
 .event-gallery-editor {
-  border: 1px solid #edf1f7;
-  border-radius: 8px;
+  border: 1px solid #dfe9ec;
+  border-radius: 13px;
   padding: 0.85rem;
-  background: #f8fafc;
+  background: #f5f9fa;
 }
 
 .event-repeat-delete {

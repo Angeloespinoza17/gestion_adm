@@ -26,6 +26,11 @@
         SetEnvIfNoCase Authorization "(.+)" HTTP_AUTHORIZATION=$1
     </IfModule>
 
+    # Legacy Convivencia attachments must only be served through the
+    # authenticated download controller. Keep this rule before the generic
+    # static-file bypass so existing files under public/storage are denied.
+    RewriteRule ^storage/convivencia(?:/|$) - [F,L,NC]
+
     # Handle Authorization Header
     RewriteCond %{HTTP:Authorization} .
     RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]

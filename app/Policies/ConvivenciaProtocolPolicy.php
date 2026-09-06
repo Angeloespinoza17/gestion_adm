@@ -11,12 +11,13 @@ class ConvivenciaProtocolPolicy
 {
     public function __construct(
         private readonly ConvivenciaAccessService $accessService,
-    ) {
-    }
+    ) {}
 
     public function viewAny(User $user): bool
     {
-        return $this->accessService->canManageProtocols($user) || $this->accessService->canViewCases($user);
+        return $this->accessService->canManageProtocols($user)
+            || $this->accessService->canActivateProtocols($user)
+            || $this->accessService->canViewCases($user);
     }
 
     public function view(User $user, ConvivenciaProtocol $protocol): bool
@@ -30,6 +31,11 @@ class ConvivenciaProtocolPolicy
     }
 
     public function update(User $user, ConvivenciaProtocol $protocol): bool
+    {
+        return $this->accessService->canManageProtocols($user) && $this->accessService->canViewProtocol($user, $protocol);
+    }
+
+    public function delete(User $user, ConvivenciaProtocol $protocol): bool
     {
         return $this->accessService->canManageProtocols($user) && $this->accessService->canViewProtocol($user, $protocol);
     }

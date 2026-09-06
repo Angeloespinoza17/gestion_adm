@@ -24,6 +24,7 @@ use App\Models\Convivencia\ConvivenciaInterview;
 use App\Models\Convivencia\ConvivenciaMeasure;
 use App\Models\Convivencia\ConvivenciaPlan as ConvivenciaPlanModel;
 use App\Models\Convivencia\ConvivenciaProtocol;
+use App\Models\Convivencia\ConvivenciaProtocolPart;
 use App\Models\Convivencia\ConvivenciaSociogram;
 use App\Models\Infirmary\InfirmaryAccident;
 use App\Models\Infirmary\InfirmaryAttention;
@@ -47,8 +48,8 @@ use App\Models\Messaging\Conversation as MessagingConversation;
 use App\Models\Messaging\Message as MessagingMessage;
 use App\Models\Messaging\MessageAttachment as MessagingMessageAttachment;
 use App\Models\Operational\OperationalTransferRequest;
-use App\Models\PedagogicalManagement\PedagogicalInstrument;
 use App\Models\PedagogicalManagement\ClassPresentation;
+use App\Models\PedagogicalManagement\PedagogicalInstrument;
 use App\Models\PermissionRequest;
 use App\Models\Pme\PmeAction;
 use App\Models\Pme\PmeActivity;
@@ -70,6 +71,8 @@ use App\Models\Pme\PmeStudentSepClassification;
 use App\Models\Psychology\PsychologyCase;
 use App\Models\Psychology\PsychologyDocument;
 use App\Models\Psychology\PsychologyReferral;
+use App\Models\RiskPrevention\RiskMatrix;
+use App\Models\RiskPrevention\RiskMatrixVersion;
 use App\Models\RiskPrevention\RiskPreventionAccident;
 use App\Models\RiskPrevention\RiskPreventionDocument;
 use App\Models\RiskPrevention\RiskPreventionEmergencyDrill;
@@ -78,8 +81,6 @@ use App\Models\RiskPrevention\RiskPreventionEppDelivery;
 use App\Models\RiskPrevention\RiskPreventionEppItem;
 use App\Models\RiskPrevention\RiskPreventionFireExtinguisher;
 use App\Models\RiskPrevention\RiskPreventionTraining;
-use App\Models\RiskPrevention\RiskMatrix;
-use App\Models\RiskPrevention\RiskMatrixVersion;
 use App\Models\Schedule\ScheduleSubject;
 use App\Models\Security\SecurityIncident;
 use App\Models\Security\SecurityShift;
@@ -109,6 +110,7 @@ use App\Policies\ConvivenciaDerivationPolicy;
 use App\Policies\ConvivenciaInterviewPolicy;
 use App\Policies\ConvivenciaMeasurePolicy;
 use App\Policies\ConvivenciaPlanPolicy;
+use App\Policies\ConvivenciaProtocolPartPolicy;
 use App\Policies\ConvivenciaProtocolPolicy;
 use App\Policies\ConvivenciaSociogramPolicy;
 use App\Policies\InfirmaryAccidentPolicy;
@@ -124,20 +126,20 @@ use App\Policies\LibroDigital\SubjectPolicy as LibroDigitalSubjectPolicy;
 use App\Policies\MessageAttachmentPolicy as MessagingMessageAttachmentPolicy;
 use App\Policies\MessagePolicy as MessagingMessagePolicy;
 use App\Policies\OperationalTransferRequestPolicy;
-use App\Policies\PedagogicalManagement\PedagogicalInstrumentPolicy;
-use App\Policies\PedagogicalManagement\ClassPresentationPolicy;
 use App\Policies\PanolEntregaPolicy;
 use App\Policies\PanolInsumoPolicy;
 use App\Policies\PanolMovimientoPolicy;
+use App\Policies\PedagogicalManagement\ClassPresentationPolicy;
+use App\Policies\PedagogicalManagement\PedagogicalInstrumentPolicy;
 use App\Policies\PermissionRequestPolicy;
 use App\Policies\PmePolicy;
 use App\Policies\PsychologyCasePolicy;
 use App\Policies\PsychologyDocumentPolicy;
 use App\Policies\PsychologyReferralPolicy;
-use App\Policies\RiskPreventionPolicy;
+use App\Policies\RiskMatrixPolicy;
 use App\Policies\RiskPreventionEppDeliveryPolicy;
 use App\Policies\RiskPreventionEppItemPolicy;
-use App\Policies\RiskMatrixPolicy;
+use App\Policies\RiskPreventionPolicy;
 use App\Policies\SecurityIncidentPolicy;
 use App\Policies\SecurityShiftPolicy;
 use App\Policies\SocialWork\SocialCasePolicy;
@@ -178,6 +180,7 @@ class AuthServiceProvider extends ServiceProvider
         ConvivenciaDerivation::class => ConvivenciaDerivationPolicy::class,
         ConvivenciaPlanModel::class => ConvivenciaPlanPolicy::class,
         ConvivenciaProtocol::class => ConvivenciaProtocolPolicy::class,
+        ConvivenciaProtocolPart::class => ConvivenciaProtocolPartPolicy::class,
         ConvivenciaInterview::class => ConvivenciaInterviewPolicy::class,
         ConvivenciaMeasure::class => ConvivenciaMeasurePolicy::class,
         ConvivenciaDailyLog::class => ConvivenciaDailyLogPolicy::class,

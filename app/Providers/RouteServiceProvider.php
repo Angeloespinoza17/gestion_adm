@@ -7,6 +7,7 @@ use Illuminate\Foundation\Support\Providers\RouteServiceProvider as ServiceProvi
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Facades\Route;
+use Illuminate\Support\Str;
 
 class RouteServiceProvider extends ServiceProvider
 {
@@ -64,6 +65,39 @@ class RouteServiceProvider extends ServiceProvider
             }
 
             return Limit::perMinute(60)->by('ip:'.$request->ip());
+        });
+
+        $contactLimitResponse = fn (Request $request, array $headers) => redirect()
+            ->route('public.contact')
+            ->withErrors(['formulario' => 'Has realizado varios intentos. Espera unos minutos antes de volver a enviar.'])
+            ->withHeaders($headers);
+
+        RateLimiter::for('public-contact', function (Request $request) use ($contactLimitResponse): array {
+            $ip = $request->ip() ?: 'unknown';
+            $email = Str::lower(trim((string) $request->input('correo')));
+
+            return [
+                Limit::perMinute(4)
+                    ->by('public-contact:minute:'.$ip)
+                    ->response($contactLimitResponse),
+                Limit::perHour(20)
+                    ->by('public-contact:hour:'.$ip)
+                    ->response($contactLimitResponse),
+                Limit::perHour(3)
+                    ->by('public-contact:email:'.hash('sha256', $email ?: 'missing'))
+                    ->response($contactLimitResponse),
+            ];
+        });
+
+        RateLimiter::for('public-web-analytics', function (Request $request): array {
+            $session = (string) $request->input('session_id', 'missing');
+
+            return [
+                Limit::perMinute(120)
+                    ->by('public-web-analytics:ip:'.hash('sha256', (string) $request->ip())),
+                Limit::perMinute(30)
+                    ->by('public-web-analytics:session:'.hash('sha256', $session)),
+            ];
         });
 
         $messagingKey = fn (Request $request): string => $request->user('sanctum')

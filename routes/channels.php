@@ -1,6 +1,5 @@
 <?php
 
-use App\Models\Messaging\Conversation;
 use Illuminate\Support\Facades\Broadcast;
 
 /*
@@ -18,10 +17,9 @@ Broadcast::channel('App.Models.User.{id}', function ($user, $id) {
     return (int) $user->id === (int) $id;
 });
 
-Broadcast::channel('messaging.user.{id}', fn ($user, $id) => $user->active && (int) $user->id === (int) $id);
-Broadcast::channel('messaging.conversation.{publicId}', function ($user, string $publicId) {
-    return $user->active && Conversation::query()
-        ->where('public_id', $publicId)
-        ->whereHas('participants', fn ($query) => $query->where('user_id', $user->id)->whereNull('left_at'))
-        ->exists();
-});
+$messagingRealtimeEnabled = fn (): bool => (bool) config('messaging.enabled')
+    && (bool) config('messaging.realtime.enabled');
+
+Broadcast::channel('messaging.user.{id}', fn ($user, $id) => $messagingRealtimeEnabled()
+    && $user->canUseMessaging()
+    && (int) $user->id === (int) $id);

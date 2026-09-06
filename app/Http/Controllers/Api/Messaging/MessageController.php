@@ -31,9 +31,20 @@ class MessageController extends Controller
         $this->authorize('view', $conversation);
         $syncCursor = now()->subSecond();
         $limit = min(max($request->integer('limit', 40), 1), 100);
-        $query = $conversation->messages()->with(['sender:id,name,profile_photo_path', 'replyTo:id,public_id,body,sender_display_name_snapshot', 'attachments', 'reactions', 'recipients.user:id,name'])->whereNull('deleted_at');
+        $isIncrementalUpdate = $request->filled('updated_since');
+        $messageQuery = $isIncrementalUpdate
+            ? $conversation->messages()->withTrashed()->getQuery()
+            : $conversation->messages()->getQuery();
+        $query = $this->presenter->prepareQuery(
+            $messageQuery,
+            (int) $request->user()->id
+        );
         if ($request->filled('before')) {
-            $before = Message::query()->where('public_id', $request->string('before'))->where('conversation_id', $conversation->id)->firstOrFail();
+            $before = Message::query()
+                ->when($isIncrementalUpdate, fn ($beforeQuery) => $beforeQuery->withTrashed())
+                ->where('public_id', $request->string('before'))
+                ->where('conversation_id', $conversation->id)
+                ->firstOrFail();
             $query->where('id', '<', $before->id);
         }
         $afterId = $request->input('after_id', $request->input('since'));
@@ -43,17 +54,22 @@ class MessageController extends Controller
         } else {
             $query->orderByDesc('id');
         }
-        if ($request->filled('updated_since')) {
+        if ($isIncrementalUpdate) {
             $updatedSince = CarbonImmutable::parse($request->validate(['updated_since' => ['required', 'date']])['updated_since']);
             $query->where('updated_at', '>=', $updatedSince);
         }
         $page = $query->limit($limit + 1)->get();
         $hasMore = $page->count() > $limit;
-        $messages = $page->take($limit)->values();
+        $pageItems = $page->take($limit)->values();
+        $messages = $pageItems->reject(fn (Message $message) => $message->trashed())->values();
+        $deleted = $pageItems->filter(fn (Message $message) => $message->trashed())->map(fn (Message $message) => [
+            'public_id' => $message->public_id,
+            'deleted_at' => $message->deleted_at,
+        ])->values();
         $ids = $messages->pluck('id');
         MessageRecipient::query()->where('user_id', $request->user()->id)->whereIn('message_id', $ids)->whereNull('delivered_at')->update(['delivered_at' => now()]);
 
-        return response()->json(['data' => $messages->map(fn ($message) => $this->presenter->present($message, $request->user()->id))->values(), 'before' => $messages->last()?->public_id, 'has_more' => $hasMore, 'sync_cursor' => $syncCursor->toIso8601String()]);
+        return response()->json(['data' => $messages->map(fn ($message) => $this->presenter->present($message, $request->user()->id))->values(), 'deleted' => $deleted, 'before' => $pageItems->last()?->public_id, 'has_more' => $hasMore, 'sync_cursor' => $syncCursor->toIso8601String()]);
     }
 
     public function store(SendMessageRequest $request, Conversation $conversation): JsonResponse

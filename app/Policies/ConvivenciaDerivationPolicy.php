@@ -10,8 +10,7 @@ class ConvivenciaDerivationPolicy
 {
     public function __construct(
         private readonly ConvivenciaAccessService $accessService,
-    ) {
-    }
+    ) {}
 
     public function viewAny(User $user): bool
     {
@@ -33,11 +32,19 @@ class ConvivenciaDerivationPolicy
 
     public function update(User $user, ConvivenciaDerivation $derivation): bool
     {
-        return $this->create($user) && $this->accessService->canViewDerivation($user, $derivation);
+        return $this->canManageScope($user, $derivation)
+            && $this->accessService->canViewDerivation($user, $derivation);
     }
 
     public function delete(User $user, ConvivenciaDerivation $derivation): bool
     {
         return $this->update($user, $derivation);
+    }
+
+    private function canManageScope(User $user, ConvivenciaDerivation $derivation): bool
+    {
+        return $derivation->scope === 'external'
+            ? $this->accessService->canManageExternalDerivations($user)
+            : $this->accessService->canManageInternalDerivations($user);
     }
 }

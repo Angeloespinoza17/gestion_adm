@@ -15,6 +15,8 @@ use App\Models\Convivencia\ConvivenciaPlan;
 use App\Models\Convivencia\ConvivenciaProtocol;
 use App\Models\Convivencia\ConvivenciaSociogram;
 use App\Models\Department;
+use App\Models\Permission;
+use App\Models\Role;
 use App\Models\StudentProfile;
 use App\Models\User;
 use Carbon\Carbon;
@@ -58,6 +60,19 @@ class ConvivenciaModuleTest extends TestCase
             ]);
     }
 
+    public function test_course_report_filters_indirect_records_by_academic_year_without_invalid_columns(): void
+    {
+        $this->seedAndActAsSuperAdmin();
+        $academicYearId = ConvivenciaCase::query()->whereNotNull('academic_year_id')->value('academic_year_id');
+
+        $this->getJson("/api/convivencia/reports/course?academic_year_id={$academicYearId}")
+            ->assertOk()
+            ->assertJsonStructure([
+                'summary' => ['open_cases', 'interviews', 'measures', 'alerts'],
+                'lists' => ['cases', 'daily_logs', 'derivations', 'interviews', 'measures'],
+            ]);
+    }
+
     public function test_user_without_convivencia_permission_cannot_access_dashboard_api(): void
     {
         $this->seed(ConvivenciaSeeder::class);
@@ -69,6 +84,202 @@ class ConvivenciaModuleTest extends TestCase
         Sanctum::actingAs($user);
 
         $this->getJson('/api/convivencia/dashboard')->assertForbidden();
+    }
+
+    public function test_daily_log_manager_cannot_create_cases_or_derivations_without_destination_permissions(): void
+    {
+        $this->seed(ConvivenciaSeeder::class);
+
+        $user = User::factory()->create(['active' => true]);
+        $role = Role::query()->create([
+            'name' => 'Gestor exclusivo de bitácora',
+            'slug' => 'gestor_exclusivo_bitacora_test',
+            'active' => true,
+        ]);
+        $role->permissions()->attach(
+            Permission::query()->where('slug', 'gestionar_bitacora_inspectoria_convivencia')->value('id')
+        );
+        $user->roles()->attach($role);
+
+        $dailyLog = ConvivenciaDailyLog::query()->firstOrFail();
+        $dailyLog->forceFill([
+            'inspector_user_id' => $user->id,
+            'is_sensitive' => false,
+        ])->save();
+        $caseCount = ConvivenciaCase::query()->count();
+        $derivationCount = ConvivenciaDerivation::query()->count();
+
+        Sanctum::actingAs($user->fresh());
+
+        $this->postJson("/api/convivencia/daily-logs/{$dailyLog->id}/convert-to-case", [])
+            ->assertForbidden();
+        $this->postJson("/api/convivencia/daily-logs/{$dailyLog->id}/convert-to-derivation", [
+            'scope' => 'internal',
+        ])->assertForbidden();
+
+        $this->assertDatabaseCount('convivencia_cases', $caseCount);
+        $this->assertDatabaseCount('convivencia_derivations', $derivationCount);
+    }
+
+    public function test_complaint_manager_needs_case_creation_permission_to_convert_a_complaint(): void
+    {
+        $this->seed(ConvivenciaSeeder::class);
+
+        $permissionIds = Permission::query()
+            ->whereIn('slug', [
+                'gestionar_denuncias_convivencia',
+                'crear_casos_convivencia',
+            ])
+            ->pluck('id', 'slug');
+
+        $complaintManager = User::factory()->create(['active' => true]);
+        $complaintRole = Role::query()->create([
+            'name' => 'Gestor exclusivo de denuncias',
+            'slug' => 'gestor_exclusivo_denuncias_test',
+            'active' => true,
+        ]);
+        $complaintRole->permissions()->attach($permissionIds['gestionar_denuncias_convivencia']);
+        $complaintManager->roles()->attach($complaintRole);
+
+        $complaint = ConvivenciaComplaint::query()->whereNull('case_id')->firstOrFail();
+        $complaint->forceFill([
+            'responsible_user_id' => $complaintManager->id,
+            'is_sensitive' => false,
+        ])->save();
+
+        $payload = [
+            'classification_item_id' => $this->catalogId('classification'),
+            'criticality_item_id' => $this->catalogId('criticality'),
+            'responsible_user_id' => $complaintManager->id,
+        ];
+        $caseCount = ConvivenciaCase::query()->count();
+
+        Sanctum::actingAs($complaintManager->fresh());
+
+        $this->postJson("/api/convivencia/complaints/{$complaint->id}/convert-to-case", $payload)
+            ->assertForbidden();
+        $this->assertDatabaseCount('convivencia_cases', $caseCount);
+        $this->assertNull($complaint->fresh()->case_id);
+
+        $authorizedManager = User::factory()->create(['active' => true]);
+        $authorizedRole = Role::query()->create([
+            'name' => 'Gestor de denuncias con apertura de casos',
+            'slug' => 'gestor_denuncias_crear_casos_test',
+            'active' => true,
+        ]);
+        $authorizedRole->permissions()->attach([
+            $permissionIds['gestionar_denuncias_convivencia'],
+            $permissionIds['crear_casos_convivencia'],
+        ]);
+        $authorizedManager->roles()->attach($authorizedRole);
+
+        $authorizedComplaint = ConvivenciaComplaint::query()
+            ->whereNull('case_id')
+            ->whereKeyNot($complaint->id)
+            ->firstOrFail();
+        $authorizedComplaint->forceFill([
+            'responsible_user_id' => $authorizedManager->id,
+            'is_sensitive' => false,
+        ])->save();
+
+        Sanctum::actingAs($authorizedManager->fresh());
+
+        $this->postJson("/api/convivencia/complaints/{$authorizedComplaint->id}/convert-to-case", [
+            ...$payload,
+            'responsible_user_id' => $authorizedManager->id,
+        ])->assertOk();
+
+        $this->assertDatabaseCount('convivencia_cases', $caseCount + 1);
+        $this->assertNotNull($authorizedComplaint->fresh()->case_id);
+    }
+
+    public function test_anonymous_complaint_does_not_persist_identity_or_contact_data(): void
+    {
+        $this->seedAndActAsSuperAdmin();
+
+        $response = $this->postJson('/api/convivencia/complaints', [
+            'complainant_type' => 'anonimo',
+            'complainant_name' => 'Identidad que debe descartarse',
+            'contact_email' => 'confidencial@example.test',
+            'contact_phone' => '+56 9 1111 2222',
+            'report_text' => 'Relato anónimo con antecedentes suficientes para registrar la denuncia.',
+            'status' => 'recibida',
+            'is_anonymous' => true,
+        ]);
+
+        $response
+            ->assertCreated()
+            ->assertJsonPath('data.is_anonymous', true)
+            ->assertJsonPath('data.complainant_name', null)
+            ->assertJsonPath('data.contact_email', null)
+            ->assertJsonPath('data.contact_phone', null);
+
+        $this->assertDatabaseHas('convivencia_complaints', [
+            'id' => $response->json('data.id'),
+            'is_anonymous' => true,
+            'complainant_name' => null,
+            'contact_email' => null,
+            'contact_phone' => null,
+        ]);
+    }
+
+    public function test_derivation_manager_is_restricted_to_its_authorized_scope(): void
+    {
+        $this->seed(ConvivenciaSeeder::class);
+
+        $user = User::factory()->create(['active' => true]);
+        $role = Role::query()->create([
+            'name' => 'Gestor exclusivo de derivaciones externas',
+            'slug' => 'gestor_derivaciones_externas_test',
+            'active' => true,
+        ]);
+        $role->permissions()->attach(
+            Permission::query()->where('slug', 'gestionar_derivaciones_externas_convivencia')->value('id')
+        );
+        $user->roles()->attach($role);
+
+        $internal = ConvivenciaDerivation::query()->where('scope', 'internal')->firstOrFail();
+        $external = ConvivenciaDerivation::query()->where('scope', 'external')->firstOrFail();
+        ConvivenciaDerivation::query()->update(['is_sensitive' => false]);
+
+        Sanctum::actingAs($user->fresh());
+
+        $list = $this->getJson('/api/convivencia/derivations?per_page=50')
+            ->assertOk()
+            ->json('data');
+
+        $this->assertNotEmpty($list);
+        $this->assertTrue(collect($list)->every(fn (array $item): bool => $item['scope'] === 'external'));
+        $this->getJson("/api/convivencia/derivations/{$external->id}")->assertOk();
+        $this->getJson("/api/convivencia/derivations/{$internal->id}")->assertForbidden();
+        $this->deleteJson("/api/convivencia/derivations/{$internal->id}")->assertForbidden();
+        $this->postJson("/api/convivencia/derivations/{$external->id}/convert-to-case", [
+            'classification_item_id' => $this->catalogId('classification'),
+            'criticality_item_id' => $this->catalogId('criticality'),
+            'responsible_user_id' => $user->id,
+        ])->assertForbidden();
+
+        $payload = [
+            'scope' => 'internal',
+            'status' => 'ingresada',
+            'priority_level' => 'media',
+            'confidentiality_level' => 'reservada',
+            'destination_label' => 'Equipo interno',
+            'derived_at' => Carbon::now()->format('Y-m-d H:i:s'),
+            'motive' => 'Solicitud que no corresponde al alcance autorizado.',
+        ];
+
+        $this->postJson('/api/convivencia/derivations', $payload)->assertForbidden();
+        $this->postJson('/api/convivencia/derivations', [
+            ...$payload,
+            'scope' => 'external',
+            'destination_label' => 'Red comunal externa',
+        ])->assertCreated();
+
+        $this->putJson("/api/convivencia/derivations/{$external->id}", [
+            ...$payload,
+            'scope' => 'internal',
+        ])->assertForbidden();
     }
 
     public function test_can_create_case(): void
@@ -155,6 +366,61 @@ class ConvivenciaModuleTest extends TestCase
         $this->assertDatabaseHas('convivencia_cases', [
             'id' => $complaint->case_id,
         ]);
+
+        $caseCount = ConvivenciaCase::query()->count();
+        $this->postJson("/api/convivencia/complaints/{$complaint->id}/convert-to-case", [
+            'classification_item_id' => $this->catalogId('classification'),
+            'criticality_item_id' => $this->catalogId('criticality'),
+            'responsible_user_id' => $user->id,
+        ])->assertUnprocessable()->assertJsonValidationErrors('record');
+        $this->assertDatabaseCount('convivencia_cases', $caseCount);
+    }
+
+    public function test_can_convert_derivation_to_case_with_traceability_and_without_duplicates(): void
+    {
+        $user = $this->seedAndActAsSuperAdmin();
+        $source = ConvivenciaDerivation::query()->with('student')->firstOrFail();
+        $derivation = $source->replicate();
+        $derivation->case_id = null;
+        $derivation->motive = 'Situación derivada que requiere abrir un expediente formal.';
+        $derivation->narrative = 'Antecedentes técnicos comunicados por la red de apoyo.';
+        $derivation->suggested_actions = 'Mantener acompañamiento y seguimiento semanal.';
+        $derivation->response_text = 'La red confirma recepción de los antecedentes.';
+        $derivation->follow_up_notes = 'Revisar avances con el equipo de convivencia.';
+        $derivation->save();
+
+        $response = $this->postJson("/api/convivencia/derivations/{$derivation->id}/convert-to-case", [
+            'classification_item_id' => $this->catalogId('classification'),
+            'criticality_item_id' => $this->catalogId('criticality'),
+            'responsible_user_id' => $user->id,
+            'is_sensitive' => true,
+        ]);
+
+        $response
+            ->assertOk()
+            ->assertJsonPath('data.origin', 'derivacion')
+            ->assertJsonPath('data.sourceable_id', $derivation->id)
+            ->assertJsonPath('data.initial_report', "Situación derivada que requiere abrir un expediente formal.\n\nAntecedentes técnicos comunicados por la red de apoyo.");
+
+        $caseId = $response->json('data.id');
+        $derivation->refresh();
+        $this->assertSame($caseId, $derivation->case_id);
+        $this->assertDatabaseHas('convivencia_cases', [
+            'id' => $caseId,
+            'sourceable_type' => $derivation->getMorphClass(),
+            'sourceable_id' => $derivation->id,
+            'student_profile_id' => $derivation->student_profile_id,
+            'origin' => 'derivacion',
+            'is_sensitive' => true,
+        ]);
+
+        $caseCount = ConvivenciaCase::query()->count();
+        $this->postJson("/api/convivencia/derivations/{$derivation->id}/convert-to-case", [
+            'classification_item_id' => $this->catalogId('classification'),
+            'criticality_item_id' => $this->catalogId('criticality'),
+            'responsible_user_id' => $user->id,
+        ])->assertUnprocessable()->assertJsonValidationErrors('record');
+        $this->assertDatabaseCount('convivencia_cases', $caseCount);
     }
 
     public function test_can_activate_protocol(): void

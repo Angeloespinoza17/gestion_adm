@@ -12,6 +12,10 @@
 @section('title', $pageTitle)
 @section('description', $pageDescription)
 @section('body_class', 'inner-page student-life-detail-page')
+@section('analytics_page_type', 'detail')
+@section('analytics_content_type', 'student_life')
+@section('analytics_content_id', data_get($post, 'id') ?: $post->slug)
+@section('analytics_content_slug', $post->slug)
 
 @section('content')
   <article class="student-life-detail">

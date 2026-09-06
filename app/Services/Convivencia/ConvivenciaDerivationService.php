@@ -2,6 +2,7 @@
 
 namespace App\Services\Convivencia;
 
+use App\Models\Convivencia\ConvivenciaCase;
 use App\Models\Convivencia\ConvivenciaDerivation;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
@@ -10,20 +11,20 @@ class ConvivenciaDerivationService
 {
     public function __construct(
         private readonly ConvivenciaSupportService $supportService,
-    ) {
-    }
+        private readonly ConvivenciaCaseService $caseService,
+    ) {}
 
     public function store(array $payload, User $user): ConvivenciaDerivation
     {
         return DB::transaction(function () use ($payload, $user) {
-            $derivation = new ConvivenciaDerivation();
+            $derivation = new ConvivenciaDerivation;
             $this->fillDerivation($derivation, $payload, $user, true);
             $derivation->save();
 
             $this->supportService->logStatus($derivation, null, $derivation->status, $user, 'Derivación creada.', 'created');
             $this->syncCaseStatus($derivation, $user);
 
-            return $this->loadDerivation($derivation);
+            return $this->loadDerivation($derivation, $user);
         });
     }
 
@@ -41,43 +42,80 @@ class ConvivenciaDerivationService
 
             $this->syncCaseStatus($derivation, $user);
 
-            return $this->loadDerivation($derivation);
+            return $this->loadDerivation($derivation, $user);
         });
+    }
+
+    public function convertToCase(ConvivenciaDerivation $derivation, array $payload, User $user): ConvivenciaCase
+    {
+        return $this->caseService->createFromDerivation($derivation, $payload, $user);
     }
 
     private function fillDerivation(ConvivenciaDerivation $derivation, array $payload, User $user, bool $creating): void
     {
-        $derivation->fill([
-            'case_id' => $payload['case_id'] ?? null,
-            'academic_year_id' => $payload['academic_year_id'] ?? null,
-            'course_section_id' => $payload['course_section_id'] ?? null,
-            'student_profile_id' => $payload['student_profile_id'] ?? null,
-            'destination_department_id' => $payload['destination_department_id'] ?? null,
-            'destination_staff_id' => $payload['destination_staff_id'] ?? null,
-            'destination_user_id' => $payload['destination_user_id'] ?? null,
-            'external_institution_id' => $payload['external_institution_id'] ?? null,
-            'responsible_user_id' => $payload['responsible_user_id'] ?? $user->id,
-            'scope' => $payload['scope'],
-            'status' => $payload['status'],
-            'priority_level' => $payload['priority_level'],
-            'confidentiality_level' => $payload['confidentiality_level'],
-            'destination_label' => $payload['destination_label'] ?? null,
-            'external_contact_name' => $payload['external_contact_name'] ?? null,
-            'external_contact_email' => $payload['external_contact_email'] ?? null,
-            'external_contact_phone' => $payload['external_contact_phone'] ?? null,
-            'derived_at' => $payload['derived_at'],
-            'sent_at' => $payload['sent_at'] ?? null,
-            'response_due_at' => $payload['response_due_at'] ?? null,
-            'responded_at' => $payload['responded_at'] ?? null,
-            'closed_at' => in_array($payload['status'], ['cerrada', 'rechazada'], true) ? ($payload['closed_at'] ?? now()) : null,
-            'motive' => $payload['motive'],
-            'narrative' => $payload['narrative'] ?? null,
-            'response_text' => $payload['response_text'] ?? null,
-            'suggested_actions' => $payload['suggested_actions'] ?? null,
-            'follow_up_notes' => $payload['follow_up_notes'] ?? null,
-            'is_sensitive' => (bool) ($payload['is_sensitive'] ?? true),
-            'updated_by' => $user->id,
-        ]);
+        $attributes = array_intersect_key($payload, array_flip([
+            'case_id',
+            'academic_year_id',
+            'course_section_id',
+            'student_profile_id',
+            'destination_department_id',
+            'destination_staff_id',
+            'destination_user_id',
+            'external_institution_id',
+            'responsible_user_id',
+            'scope',
+            'status',
+            'priority_level',
+            'confidentiality_level',
+            'destination_label',
+            'external_contact_name',
+            'external_contact_email',
+            'external_contact_phone',
+            'derived_at',
+            'sent_at',
+            'response_due_at',
+            'responded_at',
+            'closed_at',
+            'motive',
+            'narrative',
+            'response_text',
+            'suggested_actions',
+            'follow_up_notes',
+            'is_sensitive',
+        ]));
+
+        if (array_key_exists('is_sensitive', $attributes)) {
+            $attributes['is_sensitive'] = (bool) $attributes['is_sensitive'];
+        }
+
+        $effectiveScope = $attributes['scope'] ?? $derivation->scope;
+        $scopeChanged = $creating || (array_key_exists('scope', $attributes) && $effectiveScope !== $derivation->scope);
+        $irrelevantFields = $effectiveScope === 'internal'
+            ? ['external_institution_id', 'external_contact_name', 'external_contact_email', 'external_contact_phone']
+            : ['destination_department_id', 'destination_staff_id', 'destination_user_id'];
+
+        foreach ($irrelevantFields as $field) {
+            if ($scopeChanged || array_key_exists($field, $payload)) {
+                $attributes[$field] = null;
+            }
+        }
+
+        $isClosing = array_key_exists('status', $payload)
+            && in_array($payload['status'], ['cerrada', 'rechazada'], true);
+
+        if ($isClosing && ! array_key_exists('closed_at', $payload) && $derivation->closed_at === null) {
+            $attributes['closed_at'] = now();
+        }
+
+        if ($creating) {
+            $attributes += [
+                'responsible_user_id' => $user->id,
+                'is_sensitive' => true,
+            ];
+        }
+
+        $attributes['updated_by'] = $user->id;
+        $derivation->fill($attributes);
 
         if ($creating) {
             $derivation->created_by = $user->id;
@@ -88,7 +126,7 @@ class ConvivenciaDerivationService
     {
         $case = $derivation->case;
 
-        if (!$case || in_array($case->status, ['cerrado', 'archivado'], true)) {
+        if (! $case || in_array($case->status, ['cerrado', 'archivado'], true)) {
             return;
         }
 
@@ -103,7 +141,7 @@ class ConvivenciaDerivationService
         }
     }
 
-    private function loadDerivation(ConvivenciaDerivation $derivation): ConvivenciaDerivation
+    private function loadDerivation(ConvivenciaDerivation $derivation, User $user): ConvivenciaDerivation
     {
         return $derivation->fresh([
             'case:id,folio,status,classification_label,criticality_label',
@@ -115,7 +153,9 @@ class ConvivenciaDerivationService
             'destinationUser:id,name',
             'externalInstitution:id,name,category',
             'responsibleUser:id,name',
-            'attachments.uploadedBy:id,name',
+            'attachments' => fn ($query) => app(ConvivenciaAccessService::class)
+                ->applyAttachmentVisibility($query, $user)
+                ->with('uploadedBy:id,name'),
             'statusLogs.changedBy:id,name',
         ]);
     }

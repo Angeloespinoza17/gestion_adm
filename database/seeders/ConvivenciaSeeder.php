@@ -2,13 +2,13 @@
 
 namespace Database\Seeders;
 
-use App\Models\AcademicYear;
 use App\Models\Convivencia\ConvivenciaCatalogItem;
 use App\Models\Convivencia\ConvivenciaExternalInstitution;
 use App\Models\Convivencia\ConvivenciaIdpsDimension;
 use App\Models\Convivencia\ConvivenciaIdpsInstrument;
 use App\Models\Convivencia\ConvivenciaIdpsPeriod;
 use App\Models\Convivencia\ConvivenciaIdpsResult;
+use App\Models\Convivencia\ConvivenciaProtocolPart;
 use App\Models\Convivencia\ConvivenciaSetting;
 use App\Models\CourseSection;
 use App\Models\Permission;
@@ -33,15 +33,17 @@ use Database\Seeders\Modules\StudentModuleSeeder;
 use Database\Seeders\Support\ModuleSeeder;
 use Database\Seeders\Support\PreventsProductionSeeding;
 use Faker\Factory as Faker;
+use Faker\Generator;
 use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 
 class ConvivenciaSeeder extends ModuleSeeder
 {
     use PreventsProductionSeeding;
 
-    private \Faker\Generator $faker;
+    private Generator $faker;
 
     private User $actor;
 
@@ -134,7 +136,7 @@ class ConvivenciaSeeder extends ModuleSeeder
             $interviews = $this->seedInterviews($catalogs, $directCases, $complaintCase, $dailyCase);
 
             $activation = app(ConvivenciaProtocolService::class)->activate([
-                'protocol_id' => $protocols->firstWhere('name', 'Protocolo de Maltrato Escolar')->id,
+                'protocol_id' => $protocols->firstWhere('code', 'RICE-P05')->id,
                 'case_id' => $complaintCase->id,
                 'status' => 'activo',
                 'actions_taken' => 'Entrevista inicial, contención y comunicación a familia.',
@@ -142,20 +144,21 @@ class ConvivenciaSeeder extends ModuleSeeder
             ], $this->convivenciaUser);
 
             $closedActivation = app(ConvivenciaProtocolService::class)->activate([
-                'protocol_id' => $protocols->firstWhere('name', 'Protocolo de Ciberacoso')->id,
+                'protocol_id' => $protocols->firstWhere('code', 'RICE-P06')->id,
                 'complaint_id' => $complaints->get(1)->id,
                 'status' => 'activo',
                 'actions_taken' => 'Recepción de capturas y análisis inicial.',
                 'measures_adopted' => 'Resguardo preventivo y contacto con apoderado.',
             ], $this->directionUser);
 
-            app(ConvivenciaProtocolService::class)->updateActivation($closedActivation, [
-                'status' => 'cerrado',
-                'current_stage_name' => 'Cierre y restitución',
+            $closedActivation = app(ConvivenciaProtocolService::class)->updateActivation($closedActivation, [
+                'status' => 'activo',
                 'closing_summary' => 'Se completó revisión, entrevista y compromiso de no repetición.',
-                'action_type' => 'cierre',
-                'log_notes' => 'Se cierra protocolo con seguimiento derivado al caso.',
+                'action_type' => 'preparacion_cierre',
+                'log_notes' => 'Se registra el resumen que acompañará el cierre de demostración.',
             ], $this->directionUser);
+
+            $this->completeDemoProtocolActivation($closedActivation, $this->directionUser);
 
             app(ConvivenciaCaseService::class)->close($directCases->last(), [
                 'resolution' => 'Se ejecutó mediación, entrevista con familia y medida formativa cumplida.',
@@ -229,7 +232,7 @@ class ConvivenciaSeeder extends ModuleSeeder
         );
 
         $children = [
-            ['slug' => 'convivencia_dashboard', 'name' => 'Dashboard', 'route' => '/convivencia', 'sort' => 1],
+            ['slug' => 'convivencia_dashboard', 'name' => 'Análisis e informes', 'route' => '/convivencia', 'sort' => 1],
             ['slug' => 'convivencia_planes', 'name' => 'Plan de Gestión', 'route' => '/convivencia/planes', 'sort' => 2],
             ['slug' => 'convivencia_casos', 'name' => 'Casos', 'route' => '/convivencia/casos', 'sort' => 3],
             ['slug' => 'convivencia_denuncias', 'name' => 'Denuncias', 'route' => '/convivencia/denuncias', 'sort' => 4],
@@ -336,7 +339,7 @@ class ConvivenciaSeeder extends ModuleSeeder
 
         foreach ($rolePermissionMap as $roleSlug => $permissionSlugs) {
             $role = $rolesBySlug->get($roleSlug);
-            if (!$role) {
+            if (! $role) {
                 continue;
             }
 
@@ -403,11 +406,23 @@ class ConvivenciaSeeder extends ModuleSeeder
         DB::table('convivencia_interviews')->delete();
         DB::table('convivencia_measures')->delete();
         DB::table('convivencia_derivations')->delete();
+        if (Schema::hasTable('convivencia_protocol_activation_parts')) {
+            DB::table('convivencia_protocol_activation_parts')->delete();
+        }
         DB::table('convivencia_protocol_activation_logs')->delete();
         DB::table('convivencia_protocol_activations')->delete();
+        if (Schema::hasTable('convivencia_protocol_activation_steps')) {
+            DB::table('convivencia_protocol_activation_steps')->delete();
+        }
         DB::table('convivencia_complaints')->delete();
+        if (Schema::hasTable('convivencia_protocol_part_links')) {
+            DB::table('convivencia_protocol_part_links')->delete();
+        }
         DB::table('convivencia_protocol_steps')->delete();
         DB::table('convivencia_protocols')->delete();
+        if (Schema::hasTable('convivencia_protocol_parts')) {
+            DB::table('convivencia_protocol_parts')->delete();
+        }
         DB::table('convivencia_case_followups')->delete();
         DB::table('convivencia_case_people')->delete();
         DB::table('convivencia_cases')->delete();
@@ -453,6 +468,22 @@ class ConvivenciaSeeder extends ModuleSeeder
                 ['code' => 'prevencion_conflictos', 'name' => 'Prevención de conflictos'],
                 ['code' => 'participacion', 'name' => 'Participación y ciudadanía'],
                 ['code' => 'seguimiento_casos', 'name' => 'Seguimiento y reparación'],
+            ],
+            'plan_activity_type' => [
+                ['code' => 'charla', 'name' => 'Charla', 'color' => '#4f63d9', 'metadata' => ['icon' => 'bx-conversation']],
+                ['code' => 'intervencion', 'name' => 'Intervención', 'color' => '#d06c4f', 'metadata' => ['icon' => 'bx-support']],
+                ['code' => 'taller', 'name' => 'Taller', 'color' => '#258a70', 'metadata' => ['icon' => 'bx-shape-circle']],
+                ['code' => 'reunion', 'name' => 'Reunión', 'color' => '#3576d3', 'metadata' => ['icon' => 'bx-group']],
+                ['code' => 'capacitacion', 'name' => 'Capacitación', 'color' => '#8a55c5', 'metadata' => ['icon' => 'bx-chalkboard']],
+                ['code' => 'jornada', 'name' => 'Jornada', 'color' => '#b7791f', 'metadata' => ['icon' => 'bx-calendar-star']],
+                ['code' => 'campana', 'name' => 'Campaña', 'color' => '#d6537a', 'metadata' => ['icon' => 'bx-megaphone']],
+                ['code' => 'mediacion', 'name' => 'Mediación', 'color' => '#298b9a', 'metadata' => ['icon' => 'bx-link-alt']],
+                ['code' => 'acompanamiento', 'name' => 'Acompañamiento', 'color' => '#527a44', 'metadata' => ['icon' => 'bx-user-voice']],
+                ['code' => 'seguimiento', 'name' => 'Seguimiento', 'color' => '#64748b', 'metadata' => ['icon' => 'bx-line-chart']],
+                ['code' => 'encuesta', 'name' => 'Encuesta', 'color' => '#7164c4', 'metadata' => ['icon' => 'bx-list-check']],
+                ['code' => 'evaluacion', 'name' => 'Evaluación', 'color' => '#a45d32', 'metadata' => ['icon' => 'bx-bar-chart-alt-2']],
+                ['code' => 'difusion', 'name' => 'Difusión', 'color' => '#3b7ea1', 'metadata' => ['icon' => 'bx-broadcast']],
+                ['code' => 'otro', 'name' => 'Otra actividad', 'color' => '#6b7280', 'metadata' => ['icon' => 'bx-dots-horizontal-rounded']],
             ],
             'protocol_type' => [
                 ['code' => 'maltrato_escolar', 'name' => 'Maltrato escolar'],
@@ -526,7 +557,7 @@ class ConvivenciaSeeder extends ModuleSeeder
                 'name' => $institution['name'],
                 'contact_name' => 'Mesa de atención',
                 'contact_email' => $this->faker->safeEmail(),
-                'contact_phone' => '+569' . $this->faker->numerify('7#######'),
+                'contact_phone' => '+569'.$this->faker->numerify('7#######'),
                 'address' => 'Valdivia, Chile',
                 'notes' => 'Institución disponible para derivaciones del módulo.',
                 'active' => true,
@@ -579,42 +610,282 @@ class ConvivenciaSeeder extends ModuleSeeder
 
     private function seedProtocols(array $catalogs): Collection
     {
-        $service = app(ConvivenciaProtocolService::class);
+        $rice = config('convivencia_rice_2026');
 
-        return collect([
-            [
-                'name' => 'Protocolo de Maltrato Escolar',
-                'code' => 'maltrato_escolar',
-                'criticality' => 'alta',
-            ],
-            [
-                'name' => 'Protocolo de Ciberacoso',
-                'code' => 'ciberacoso',
-                'criticality' => 'alta',
-            ],
-            [
-                'name' => 'Protocolo de Vulneración de Derechos',
-                'code' => 'vulneracion_derechos',
-                'criticality' => 'critica',
-            ],
-        ])->map(function (array $definition) use ($service, $catalogs) {
-            return $service->store([
-                'protocol_type_item_id' => $this->catalogId($catalogs, 'protocol_type', $definition['code']),
-                'criticality_item_id' => $this->catalogId($catalogs, 'criticality', $definition['criticality']),
-                'name' => $definition['name'],
-                'description' => 'Protocolo institucional configurable del módulo Convivencia.',
-                'required_documents' => 'Acta, relato inicial, evidencias y registro de medidas de resguardo.',
-                'safeguard_measures' => 'Resguardo inmediato, comunicación a familia y seguimiento oportuno.',
-                'minimal_actions' => 'Recepción, análisis, activación, entrevistas y cierre con trazabilidad.',
-                'default_due_days' => 5,
-                'status' => 'activo',
-                'steps' => [
-                    ['stage_name' => 'Recepción y análisis inicial', 'responsible_label' => 'Encargada de convivencia', 'due_days' => 1],
-                    ['stage_name' => 'Entrevistas y resguardo', 'responsible_label' => 'Equipo interdisciplinario', 'due_days' => 3],
-                    ['stage_name' => 'Seguimiento y cierre', 'responsible_label' => 'Dirección y convivencia', 'due_days' => 5],
-                ],
-            ], $this->convivenciaUser);
+        if (! is_array($rice) || empty($rice['parts']) || empty($rice['protocols'])) {
+            throw new \RuntimeException('La configuracion convivencia_rice_2026 no contiene partes y protocolos.');
+        }
+
+        $service = app(ConvivenciaProtocolService::class);
+        $parts = $this->seedProtocolParts($rice['parts']);
+
+        return collect($rice['protocols'])
+            ->values()
+            ->map(fn (array $definition) => $service->store(
+                $this->riceProtocolPayload($definition, $parts, $rice, $catalogs),
+                $this->convivenciaUser,
+            ));
+    }
+
+    /**
+     * @param  array<string, array<string, mixed>>  $definitions
+     * @return Collection<string, ConvivenciaProtocolPart>
+     */
+    private function seedProtocolParts(array $definitions): Collection
+    {
+        return collect($definitions)->mapWithKeys(function (array $definition, string $key) {
+            $code = $definition['code'] ?? $key;
+            $part = ConvivenciaProtocolPart::query()->create([
+                'category' => $definition['category'],
+                'code' => $code,
+                'title' => $definition['title'],
+                'description' => $definition['description'] ?? null,
+                'instructions' => $definition['instructions'] ?? null,
+                'responsible_label' => $definition['responsible_label'] ?? null,
+                'population_scope' => $definition['population_scope'] ?? null,
+                'legal_reference' => $definition['legal_reference'] ?? null,
+                'deadline_value' => $definition['deadline_value'] ?? null,
+                'deadline_unit' => $definition['deadline_unit'] ?? null,
+                'deadline_anchor' => $definition['deadline_anchor'] ?? null,
+                'requires_evidence' => (bool) ($definition['requires_evidence'] ?? false),
+                'active' => (bool) ($definition['active'] ?? true),
+                'is_sensitive' => (bool) ($definition['is_sensitive'] ?? true),
+                'metadata' => array_merge([
+                    'source_document' => 'RICE 2026 (con ajuste)',
+                    'development_fixture' => true,
+                ], $definition['metadata'] ?? []),
+                'created_by' => $this->actor->id,
+                'updated_by' => $this->actor->id,
+            ]);
+
+            return [$code => $part];
         });
+    }
+
+    /**
+     * @param  Collection<string, ConvivenciaProtocolPart>  $parts
+     * @param  array<string, mixed>  $rice
+     */
+    private function riceProtocolPayload(array $definition, Collection $parts, array $rice, array $catalogs): array
+    {
+        $stepPartCodes = collect($definition['steps'] ?? [])
+            ->flatMap(fn (array $step) => $step['parts'] ?? [])
+            ->map(fn ($link) => $this->ricePartCode($link))
+            ->filter()
+            ->unique()
+            ->values();
+
+        // protocol.parts se conserva completo en metadata como resumen. Solo las
+        // partes que no estan asignadas a un paso generan un enlace global.
+        $globalPartDefinitions = collect($definition['parts'] ?? [])
+            ->reject(fn ($link) => $stepPartCodes->contains($this->ricePartCode($link)))
+            ->values()
+            ->all();
+
+        $protocolTypeCode = $definition['protocol_type_code'] ?? null;
+        $criticalityCode = $definition['criticality_code'] ?? null;
+        $protocolTypeId = $protocolTypeCode
+            ? $catalogs['protocol_type']->get($protocolTypeCode)?->id
+            : null;
+        $criticalityId = $criticalityCode
+            ? $catalogs['criticality']->get($criticalityCode)?->id
+            : null;
+
+        $steps = collect($definition['steps'] ?? [])->values()->map(function (array $step, int $index) use ($parts) {
+            $deadline = $step['deadline'] ?? [];
+            $extension = $step['extension'] ?? [];
+            $responsibleRoles = array_values($step['responsible_roles'] ?? []);
+            $deadlineUnit = $deadline['unit'] ?? null;
+            $deadlineValue = $deadline['value'] ?? null;
+            $legacyDueDays = in_array($deadlineUnit, ['calendar_days', 'business_days', 'school_days'], true)
+                ? $deadlineValue
+                : null;
+
+            return [
+                'step_order' => $index + 1,
+                'code' => $step['code'],
+                'stage_name' => $step['stage_name'],
+                'description' => $step['description'] ?? null,
+                'step_type' => $step['step_type'] ?? 'gestion',
+                'responsible_label' => $responsibleRoles
+                    ? implode(', ', array_map(fn (string $role) => str_replace('_', ' ', $role), $responsibleRoles))
+                    : null,
+                'due_days' => $legacyDueDays,
+                'deadline_value' => $deadlineValue,
+                'deadline_unit' => $deadlineUnit,
+                'deadline_anchor' => $deadline['anchor'] ?? 'step_started',
+                'can_extend' => (bool) ($extension['allowed'] ?? false),
+                'extension_value' => $extension['value'] ?? null,
+                'extension_unit' => $extension['unit'] ?? null,
+                'completion_rule' => $step['completion_rule'] ?? null,
+                'active' => (bool) ($step['active'] ?? true),
+                'metadata' => array_merge($step['metadata'] ?? [], [
+                    'responsible_roles' => $responsibleRoles,
+                    'extension_requires_approval' => $extension['requires_approval'] ?? false,
+                    'extension_requires_reason' => $extension['requires_reason'] ?? false,
+                    'structured_documents' => array_values($step['documents'] ?? []),
+                    'structured_actions' => array_values($step['actions'] ?? []),
+                    'structured_safeguards' => array_values($step['safeguards'] ?? []),
+                ]),
+                'required_documents' => $this->formatRiceList($step['documents'] ?? []),
+                'minimal_actions' => $this->formatRiceList($step['actions'] ?? []),
+                'safeguard_measures' => $this->formatRiceList($step['safeguards'] ?? []),
+                'part_links' => $this->resolveRicePartLinks($step['parts'] ?? [], $parts),
+            ];
+        })->all();
+
+        $source = $rice['source'] ?? [];
+
+        return [
+            'code' => $definition['code'],
+            'version_label' => $definition['version_label'] ?? 'RICE 2026 con ajuste',
+            'regulatory_source' => $definition['regulatory_source'] ?? ($source['name'] ?? null),
+            'education_scope' => $definition['education_scope'] ?? null,
+            'legal_reference' => $definition['legal_reference'] ?? null,
+            'source_reference' => $definition['source_reference'] ?? null,
+            'effective_from' => $definition['effective_from'] ?? null,
+            'effective_to' => $definition['effective_to'] ?? null,
+            'published_at' => $definition['published_at'] ?? null,
+            'metadata' => [
+                'configuration_schema_version' => $rice['schema_version'] ?? 1,
+                'source' => $source,
+                'source_revision' => $definition['revision'] ?? 1,
+                'review_required' => (bool) ($definition['review_required'] ?? false),
+                'warnings' => array_values($definition['warnings'] ?? []),
+                'global_warnings' => array_values($rice['global_warnings'] ?? []),
+                'scope' => $definition['scope'] ?? [],
+                'references' => array_values($definition['references'] ?? []),
+                'transitions' => array_values($definition['transitions'] ?? []),
+                'structured_documents' => array_values($definition['documents'] ?? []),
+                'structured_actions' => array_values($definition['actions'] ?? []),
+                'structured_safeguards' => array_values($definition['safeguards'] ?? []),
+                'protocol_parts_summary' => array_values($definition['parts'] ?? []),
+                'development_fixture' => true,
+            ],
+            'protocol_type_item_id' => $protocolTypeId,
+            'criticality_item_id' => $criticalityId,
+            'name' => $definition['name'],
+            'type_label' => $definition['type_label'] ?? null,
+            'criticality_label' => $definition['criticality_label'] ?? null,
+            'description' => $definition['description'] ?? null,
+            'required_documents' => $this->formatRiceList($definition['documents'] ?? []),
+            'safeguard_measures' => $this->formatRiceList($definition['safeguards'] ?? []),
+            'minimal_actions' => $this->formatRiceList($definition['actions'] ?? []),
+            'default_due_days' => $definition['default_due_days'] ?? null,
+            'status' => $definition['status'] ?? 'borrador',
+            'is_sensitive' => (bool) ($definition['is_sensitive'] ?? true),
+            'steps' => $steps,
+            'part_links' => $this->resolveRicePartLinks($globalPartDefinitions, $parts),
+        ];
+    }
+
+    /**
+     * @param  array<int, string|array<string, mixed>>  $definitions
+     * @param  Collection<string, ConvivenciaProtocolPart>  $parts
+     * @return array<int, array<string, mixed>>
+     */
+    private function resolveRicePartLinks(array $definitions, Collection $parts): array
+    {
+        return collect($definitions)->values()->map(function ($definition, int $index) use ($parts) {
+            $link = is_string($definition) ? ['code' => $definition] : $definition;
+            $code = $this->ricePartCode($link);
+            $part = $code ? $parts->get($code) : null;
+
+            if (! $part) {
+                throw new \RuntimeException("La parte RICE {$code} no existe en la biblioteca configurada.");
+            }
+
+            return [
+                'protocol_part_id' => $part->id,
+                'is_required' => (bool) ($link['required'] ?? $link['is_required'] ?? true),
+                'sort_order' => $index + 1,
+                'condition' => $link['condition'] ?? null,
+                'configuration' => $link['configuration'] ?? null,
+            ];
+        })->all();
+    }
+
+    private function ricePartCode($definition): ?string
+    {
+        return is_string($definition) ? $definition : ($definition['code'] ?? null);
+    }
+
+    /** @param array<int, string> $items */
+    private function formatRiceList(array $items): ?string
+    {
+        $items = array_values(array_filter($items, fn ($item) => is_string($item) && trim($item) !== ''));
+
+        return $items ? '- '.implode("\n- ", $items) : null;
+    }
+
+    private function completeDemoProtocolActivation($activation, User $user)
+    {
+        $service = app(ConvivenciaProtocolService::class);
+        $steps = $activation->runtimeSteps()->orderBy('step_order')->get();
+
+        foreach ($steps as $step) {
+            foreach ($step->parts()->get() as $part) {
+                $isRequired = (bool) $part->is_required;
+                $condition = (array) data_get($part->snapshot, 'condition', []);
+                $configuration = (array) data_get($part->snapshot, 'configuration', []);
+                $isBlocked = (bool) ($configuration['blocked_for_preschool_child'] ?? false);
+                $status = $isBlocked ? 'not_applicable' : ($isRequired ? 'completed' : 'not_applicable');
+                $activation = $service->updateRuntimePart($part, [
+                    'status' => $status,
+                    'notes' => $status === 'completed'
+                        ? 'Parte obligatoria completada para el escenario de demostración.'
+                        : 'La condición de esta parte opcional no se presenta en el escenario de demostración.',
+                    'evidence_summary' => $status === 'completed' ? 'Evidencia de prueba registrada por el seeder.' : null,
+                    'outcome' => $status === 'completed' ? 'Cumplida' : 'No aplica',
+                    'data' => $condition ? ['condition_confirmed' => $status === 'completed'] : null,
+                ], $user);
+            }
+
+            $completionRule = (array) data_get($step->snapshot, 'completion_rule', []);
+            $completionCriteria = $this->demoCompletionCriteria($completionRule);
+            $activation = $service->completeRuntimeStep($step, [
+                'notes' => "Etapa {$step->step_order} completada para demostrar el recorrido íntegro del protocolo.",
+                'outcome' => 'Etapa completada en datos de desarrollo.',
+                'evidence_summary' => 'Actas y registros ficticios del escenario de demostración.',
+                'completion_criteria' => $completionCriteria,
+            ], $user);
+        }
+
+        return $activation;
+    }
+
+    /** @param array<string, mixed> $rule */
+    private function demoCompletionCriteria(array $rule): array
+    {
+        $criteria = [];
+        foreach (['all', 'any'] as $group) {
+            $definitions = $rule[$group] ?? [];
+            if ($definitions === null || $definitions === '') {
+                continue;
+            }
+            if (! is_array($definitions)) {
+                $definitions = [$definitions];
+            } elseif ($definitions !== [] && ! array_is_list($definitions)) {
+                $definitions = [$definitions];
+            }
+
+            foreach (array_values($definitions) as $index => $definition) {
+                $key = null;
+                if (is_string($definition) || is_int($definition) || is_float($definition)) {
+                    $key = trim((string) $definition);
+                } elseif (is_array($definition)) {
+                    foreach (['key', 'code', 'field', 'name'] as $candidate) {
+                        if (isset($definition[$candidate]) && trim((string) $definition[$candidate]) !== '') {
+                            $key = trim((string) $definition[$candidate]);
+                            break;
+                        }
+                    }
+                }
+                $criteria[$key ?: "{$group}_".($index + 1)] = true;
+            }
+        }
+
+        return $criteria;
     }
 
     private function seedCases(array $catalogs, EloquentCollection $enrollments): Collection
@@ -676,7 +947,7 @@ class ConvivenciaSeeder extends ModuleSeeder
                 'complainant_name' => $complainantTypes[$index] === 'anonimo' ? null : $this->faker->name(),
                 'complainant_type' => $complainantTypes[$index],
                 'contact_email' => $complainantTypes[$index] === 'anonimo' ? null : $this->faker->safeEmail(),
-                'contact_phone' => $complainantTypes[$index] === 'anonimo' ? null : '+569' . $this->faker->numerify('7#######'),
+                'contact_phone' => $complainantTypes[$index] === 'anonimo' ? null : '+569'.$this->faker->numerify('7#######'),
                 'place' => ['Patio', 'WhatsApp', 'Sala 2B', 'Entorno externo'][$index],
                 'received_at' => $this->now->copy()->subDays(12 - $index)->toDateTimeString(),
                 'happened_at' => $this->now->copy()->subDays(13 - $index)->toDateTimeString(),
@@ -963,15 +1234,15 @@ class ConvivenciaSeeder extends ModuleSeeder
                 ['rut' => $rut],
                 [
                     'first_name' => $this->faker->firstName(),
-                    'last_name' => $this->faker->lastName() . ' ' . $this->faker->lastName(),
+                    'last_name' => $this->faker->lastName().' '.$this->faker->lastName(),
                     'birthdate' => $this->now->copy()->subYears(random_int(10, 17))->subDays(random_int(0, 300))->format('Y-m-d'),
-                    'email' => 'estudiante.convivencia' . $index . '@cnscgestion.local',
-                    'phone' => '+569' . $this->faker->numerify('8#######'),
+                    'email' => 'estudiante.convivencia'.$index.'@cnscgestion.local',
+                    'phone' => '+569'.$this->faker->numerify('8#######'),
                     'address' => $this->faker->streetAddress(),
                     'general_status' => 'activo',
                     'guardian_name' => $this->faker->name(),
-                    'guardian_phone' => '+569' . $this->faker->numerify('8#######'),
-                    'guardian_email' => 'apoderado.convivencia' . $index . '@cnscgestion.local',
+                    'guardian_phone' => '+569'.$this->faker->numerify('8#######'),
+                    'guardian_email' => 'apoderado.convivencia'.$index.'@cnscgestion.local',
                     'created_by' => $this->creator()->id,
                     'updated_by' => $this->creator()->id,
                 ],

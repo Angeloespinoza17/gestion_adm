@@ -71,6 +71,11 @@ export default {
               user_id: user.id,
               name: user.name,
               email: user.email,
+              user_type: user.user_type || null,
+              staff_id: user.staff_id || null,
+              student_id: user.student_id || null,
+              guardian_id: user.guardian_id || null,
+              is_staff: user.is_staff === true,
               profile_photo_url: user.profile_photo_url || null,
             };
             localStorage.setItem("user", JSON.stringify(loggedUser));

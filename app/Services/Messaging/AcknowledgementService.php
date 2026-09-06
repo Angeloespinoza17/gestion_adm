@@ -14,6 +14,11 @@ class AcknowledgementService
     public function acknowledge(Message $message, User $actor, ?string $comment): MessageRecipient
     {
         return DB::transaction(function () use ($message, $actor, $comment) {
+            abort_unless($actor->canUseMessaging() && DB::table('conversation_participants')
+                ->where('conversation_id', $message->conversation_id)
+                ->where('user_id', $actor->id)
+                ->whereNull('left_at')
+                ->exists(), 404);
             $recipient = MessageRecipient::query()->where('message_id', $message->id)->where('user_id', $actor->id)->lockForUpdate()->firstOrFail();
             if ($recipient->acknowledged_at) {
                 return $recipient;

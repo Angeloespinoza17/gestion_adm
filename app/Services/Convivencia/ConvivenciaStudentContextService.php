@@ -9,7 +9,6 @@ use App\Models\Convivencia\ConvivenciaDailyLog;
 use App\Models\Convivencia\ConvivenciaDerivation;
 use App\Models\Convivencia\ConvivenciaInterview;
 use App\Models\Convivencia\ConvivenciaMeasure;
-use App\Models\CourseSection;
 use App\Models\StudentEnrollment;
 use App\Models\StudentProfile;
 use App\Models\User;
@@ -21,8 +20,7 @@ class ConvivenciaStudentContextService
 {
     public function __construct(
         private readonly ConvivenciaAccessService $accessService,
-    ) {
-    }
+    ) {}
 
     public function activeAcademicYear(): ?AcademicYear
     {
@@ -33,7 +31,7 @@ class ConvivenciaStudentContextService
     {
         $year = $academicYear ?: $this->activeAcademicYear();
 
-        if (!$year) {
+        if (! $year) {
             return null;
         }
 
@@ -48,7 +46,7 @@ class ConvivenciaStudentContextService
 
     public function ageAt(StudentProfile $student, Carbon|string|null $date = null): ?int
     {
-        if (!$student->birthdate) {
+        if (! $student->birthdate) {
             return null;
         }
 
@@ -182,7 +180,57 @@ class ConvivenciaStudentContextService
     }
 
     /**
-     * @return \Illuminate\Support\Collection<int, array{value:int,label:string}>
+     * Payload mínimo para selectores remotos. Evita cargar antecedentes, alertas,
+     * contactos y métricas de expedientes en un formulario de búsqueda nominal.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    public function studentReferencePayload(
+        string $search,
+        ?int $courseSectionId = null,
+        ?int $selectedId = null,
+        int $limit = 20,
+    ): array {
+        $students = collect();
+
+        if (trim($search) !== '' || $courseSectionId) {
+            $students = $this->studentSearchQuery($search, $courseSectionId)
+                ->limit($limit)
+                ->get();
+        }
+
+        if ($selectedId && ! $students->contains('id', $selectedId)) {
+            $selected = $this->studentSearchQuery('', null)->find($selectedId);
+            if ($selected) {
+                $students->prepend($selected);
+            }
+        }
+
+        return $students
+            ->unique('id')
+            ->values()
+            ->map(function (StudentProfile $student): array {
+                $enrollment = $this->currentEnrollment($student);
+                $course = $enrollment?->courseSection;
+
+                return [
+                    'id' => (int) $student->id,
+                    'label' => (string) $student->registered_name_resolved,
+                    'secondary' => collect([$course?->display_name, $student->rut])->filter()->join(' · ') ?: null,
+                    'status' => null,
+                    'course' => $course?->display_name,
+                    'course_section_id' => $course?->id,
+                    'academic_year' => $enrollment?->snapshot_year_name,
+                    'academic_year_id' => $enrollment?->academic_year_id,
+                    'full_name' => (string) $student->registered_name_resolved,
+                    'identifier' => $student->rut,
+                ];
+            })
+            ->all();
+    }
+
+    /**
+     * @return Collection<int, array{value:int,label:string}>
      */
     public function studentOptions(?int $courseSectionId = null): Collection
     {
@@ -190,11 +238,17 @@ class ConvivenciaStudentContextService
             ->limit(200)
             ->get()
             ->map(function (StudentProfile $student) {
-                $summary = $this->studentSummary($student);
+                $enrollment = $this->currentEnrollment($student);
 
                 return [
                     'value' => $student->id,
-                    'label' => trim(sprintf('%s%s', $student->registered_name_resolved, $summary['course'] ? ' · ' . $summary['course'] : '')),
+                    'label' => trim(sprintf(
+                        '%s%s',
+                        $student->registered_name_resolved,
+                        $enrollment?->snapshot_course_display_name ? ' · '.$enrollment->snapshot_course_display_name : '',
+                    )),
+                    'course_section_id' => $enrollment?->course_section_id,
+                    'academic_year_id' => $enrollment?->academic_year_id,
                 ];
             })
             ->values();

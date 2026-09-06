@@ -4,6 +4,7 @@ import { markRaw } from "vue";
 import Swal from "sweetalert2";
 import Layout from "../../layouts/main.vue";
 import LoadingState from "../ui/loading-state.vue";
+import SiteAdminNavigation from "./site-admin-navigation.vue";
 import {
   createInstallation,
   createStudentLife,
@@ -123,7 +124,7 @@ const asOption = (option) => {
 };
 
 export default {
-  components: { Ckeditor, Layout, LoadingState },
+  components: { Ckeditor, Layout, LoadingState, SiteAdminNavigation },
   props: {
     contentType: {
       type: String,
@@ -906,22 +907,12 @@ export default {
 <template>
   <Layout>
     <main class="web-content" :class="`web-content--${contentType}`">
+      <SiteAdminNavigation />
       <section class="web-content-hero" aria-labelledby="web-content-title">
         <div class="web-content-hero__copy">
           <span class="web-content-eyebrow"><i class="bx bx-globe"></i> Sitio web · {{ copy.eyebrow }}</span>
           <h1 id="web-content-title">{{ copy.title }}</h1>
           <p>{{ copy.description }}</p>
-          <nav class="web-content-switcher" aria-label="Secciones del sitio web">
-            <router-link to="/admin/testimonios" :class="{ active: isTestimonials }">
-              <i class="bx bx-message-rounded-dots"></i> Testimonios
-            </router-link>
-            <router-link to="/admin/vida-estudiantil" :class="{ active: isStudentLife }">
-              <i class="bx bx-images"></i> Vida estudiantil
-            </router-link>
-            <router-link to="/admin/instalaciones" :class="{ active: isInstallations }">
-              <i class="bx bx-buildings"></i> Instalaciones
-            </router-link>
-          </nav>
         </div>
         <div class="web-content-hero__metrics" aria-label="Resumen editorial">
           <article><span>Total</span><strong>{{ summary.total }}</strong><small>{{ copy.metricLabel || "contenidos" }}</small></article>
@@ -1210,4 +1201,47 @@ export default {
 @media(max-width:767.98px){.web-content{padding:.75rem .65rem 1.75rem}.web-content-hero{min-height:0;border-radius:21px;padding:1.3rem}.web-content-hero h1{font-size:2rem}.web-content-hero__copy>p{font-size:.75rem}.web-content-switcher{width:100%;overflow:auto}.web-content-switcher a{flex:0 0 auto}.web-content-hero__metrics{width:100%}.web-content-hero__metrics article{padding:.85rem .3rem}.web-content-hero__metrics strong{font-size:1.3rem}.web-content-toolbar{border-radius:16px}.web-content-filters{grid-template-columns:repeat(2,minmax(0,1fr))}.web-content-search{grid-column:1/-1}.web-content-filter-button{width:100%}.web-content-clear{justify-self:start}.web-content-primary-action{width:100%}.web-content-results{align-items:flex-start;flex-direction:column;gap:.25rem}.web-content-results p{font-size:.56rem}.web-content-grid,.web-content-grid.is-testimonials{grid-template-columns:1fr}.web-content-pagination{justify-content:space-between}.web-content-pagination button{font-size:0}.web-content-pagination button i{font-size:1rem}.web-content-modal{place-items:stretch;padding:0}.web-content-dialog{width:100%;max-height:100vh;border:0;border-radius:0}.web-content-dialog__header{padding:.85rem}.web-content-dialog__header p{display:none}.web-content-dialog__icon{flex-basis:40px;height:40px}.web-content-form__body{padding:.7rem}.web-content-form__section{padding:.8rem}.field-grid,.field-grid--three,.media-editor,.media-fields,.toggle-grid,.installation-features__list{grid-template-columns:1fr}.media-preview{min-height:180px}.media-preview.is-portrait{width:160px}.file-picker>span{align-items:flex-start;flex-wrap:wrap}.file-picker>span>small{width:100%;margin-left:44px}.gallery-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.gallery-editor__heading{align-items:flex-start;flex-direction:column}.web-content-form__footer{align-items:stretch;flex-direction:column}.web-content-form__footer p{display:none}.web-content-form__footer>div{display:grid;grid-template-columns:.8fr 1.2fr}.web-content-form__footer button{width:100%}}
 .web-content-form__section,.field{min-width:0}.field :deep(.ck-editor){width:100%;min-width:0;max-width:100%;overflow:hidden}.field :deep(.ck.ck-toolbar>.ck-toolbar__items){flex-wrap:wrap}
 @media(prefers-reduced-motion:reduce){.web-content *{scroll-behavior:auto!important;transition:none!important}}
+.editorial-order button,
+.web-content-card__actions > * {
+  width: 38px;
+  height: 38px;
+  border-color: #dbe7ea;
+  border-radius: 11px;
+  color: #4c6b79;
+  font-size: 1rem;
+  box-shadow: 0 4px 10px rgba(18, 58, 73, 0.04);
+  transition: border-color 0.18s ease, background-color 0.18s ease, color 0.18s ease, transform 0.18s ease;
+}
+
+.editorial-order button:hover,
+.web-content-card__actions > *:hover,
+.web-content-card__actions > *.selected {
+  border-color: #9bc7cd;
+  background: #e8f4f4;
+  color: #07677a;
+  transform: translateY(-1px);
+}
+
+.web-content-card__actions {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.32rem;
+}
+
+.web-content-card__actions > *.is-danger:hover {
+  border-color: #e6b8bf;
+  background: #fff2f3;
+  color: #a23847;
+}
+
+.web-content-card__actions > *:disabled {
+  transform: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .editorial-order button,
+  .web-content-card__actions > * {
+    transition: none;
+  }
+}
 </style>

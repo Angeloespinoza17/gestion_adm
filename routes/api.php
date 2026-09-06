@@ -4,8 +4,8 @@ use App\Http\Controllers\Accounting\AccountingBudgetExecutionController;
 use App\Http\Controllers\Accounting\AccountingModuleController;
 use App\Http\Controllers\Accounting\AccountingSubsidyController;
 use App\Http\Controllers\Admin\BackupController;
-use App\Http\Controllers\Admin\RoleImpersonationController;
 use App\Http\Controllers\Admin\RelojControlController;
+use App\Http\Controllers\Admin\RoleImpersonationController;
 use App\Http\Controllers\Admin\SuperAdminDashboardController;
 use App\Http\Controllers\Admin\SuperAdminLogbookReviewController;
 use App\Http\Controllers\Admin\SuperAdminSupplyRequestController;
@@ -51,6 +51,7 @@ use App\Http\Controllers\Contracts\ContractClauseController;
 use App\Http\Controllers\Contracts\ContractController;
 use App\Http\Controllers\Contracts\ContractSignerController;
 use App\Http\Controllers\Contracts\ContractTemplateController;
+use App\Http\Controllers\Convivencia\ConvivenciaAnnualPlanController;
 use App\Http\Controllers\Convivencia\ConvivenciaAttachmentController;
 use App\Http\Controllers\Convivencia\ConvivenciaCaseController;
 use App\Http\Controllers\Convivencia\ConvivenciaCatalogController;
@@ -61,9 +62,16 @@ use App\Http\Controllers\Convivencia\ConvivenciaDerivationController;
 use App\Http\Controllers\Convivencia\ConvivenciaIdpsController;
 use App\Http\Controllers\Convivencia\ConvivenciaInterviewController;
 use App\Http\Controllers\Convivencia\ConvivenciaMeasureController;
+use App\Http\Controllers\Convivencia\ConvivenciaPlanActionController;
+use App\Http\Controllers\Convivencia\ConvivenciaPlanActivityController;
+use App\Http\Controllers\Convivencia\ConvivenciaPlanCalendarController;
 use App\Http\Controllers\Convivencia\ConvivenciaPlanController;
+use App\Http\Controllers\Convivencia\ConvivenciaPlanVersionController;
 use App\Http\Controllers\Convivencia\ConvivenciaProtocolController;
+use App\Http\Controllers\Convivencia\ConvivenciaProtocolPartController;
+use App\Http\Controllers\Convivencia\ConvivenciaProtocolRuntimeController;
 use App\Http\Controllers\Convivencia\ConvivenciaPublicComplaintController;
+use App\Http\Controllers\Convivencia\ConvivenciaReferenceController;
 use App\Http\Controllers\Convivencia\ConvivenciaReportController;
 use App\Http\Controllers\Convivencia\ConvivenciaSociogramController;
 use App\Http\Controllers\DeployController;
@@ -74,7 +82,6 @@ use App\Http\Controllers\HomeDashboardController;
 use App\Http\Controllers\HumanResources\HrAbsenceController;
 use App\Http\Controllers\HumanResources\HrImportController;
 use App\Http\Controllers\HumanResources\HrRecruitmentController;
-use App\Http\Controllers\Remuneration\RemunerationDocumentController;
 use App\Http\Controllers\Infirmary\InfirmaryAccidentController;
 use App\Http\Controllers\Infirmary\InfirmaryAttentionCategoryController;
 use App\Http\Controllers\Infirmary\InfirmaryAttentionController;
@@ -115,11 +122,6 @@ use App\Http\Controllers\Inventory\InventoryReportController;
 use App\Http\Controllers\Inventory\InventoryStockController;
 use App\Http\Controllers\Inventory\InventorySubcategoryController;
 use App\Http\Controllers\Inventory\SupplierController as InventorySupplierController;
-use App\Http\Controllers\Supply\SupplyDeliveryController;
-use App\Http\Controllers\Supply\SupplyItemController;
-use App\Http\Controllers\Supply\SupplyReceiptController;
-use App\Http\Controllers\Supply\SupplyRequestController;
-use App\Http\Controllers\Supply\SupplyStoreroomController;
 use App\Http\Controllers\Library\BibliotecaCatalogController;
 use App\Http\Controllers\Library\BibliotecaCatalogsController;
 use App\Http\Controllers\Library\BibliotecaDashboardController;
@@ -144,6 +146,7 @@ use App\Http\Controllers\MaintenanceWorkOrderController;
 use App\Http\Controllers\ManagedDocumentController;
 use App\Http\Controllers\MeController;
 use App\Http\Controllers\NewsPostController;
+use App\Http\Controllers\Operational\OperationalStaffLogbookController;
 use App\Http\Controllers\Operational\OperationalTransferController;
 use App\Http\Controllers\Operational\OperationalTransferDocumentController;
 use App\Http\Controllers\Operational\OperationalTransferImportController;
@@ -190,11 +193,13 @@ use App\Http\Controllers\Porter\PorterVisitController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\Psychology\PsychologyCoordinationController;
 use App\Http\Controllers\PublicSiteContentMediaController;
+use App\Http\Controllers\PublicWebAnalyticsController;
 use App\Http\Controllers\RelevantCalendar\CalendarEventAttachmentController;
 use App\Http\Controllers\RelevantCalendar\CalendarEventController;
 use App\Http\Controllers\RelevantCalendar\CalendarInstitutionController;
 use App\Http\Controllers\RelevantCalendar\CalendarProcessTypeController;
 use App\Http\Controllers\Remuneration\PayslipModuleController;
+use App\Http\Controllers\Remuneration\RemunerationDocumentController;
 use App\Http\Controllers\Remuneration\RemunerationModuleController;
 use App\Http\Controllers\RiskPrevention\PreventiveProgramController;
 use App\Http\Controllers\RiskPrevention\RiskEvidenceController;
@@ -261,12 +266,18 @@ use App\Http\Controllers\Students\StudentEnrollmentController;
 use App\Http\Controllers\Students\StudentEnrollmentManagementController;
 use App\Http\Controllers\Students\StudentPromotionController;
 use App\Http\Controllers\Students\StudentReportController;
+use App\Http\Controllers\Supply\SupplyDeliveryController;
+use App\Http\Controllers\Supply\SupplyItemController;
+use App\Http\Controllers\Supply\SupplyReceiptController;
+use App\Http\Controllers\Supply\SupplyRequestController;
+use App\Http\Controllers\Supply\SupplyStoreroomController;
 use App\Http\Controllers\SystemModuleController;
 use App\Http\Controllers\Tasks\TaskAssignerController;
 use App\Http\Controllers\Tasks\TaskController;
 use App\Http\Controllers\Tasks\TaskReportController;
 use App\Http\Controllers\TestimonialController;
 use App\Http\Controllers\UserController;
+use App\Http\Controllers\WebAnalyticsDashboardController;
 use App\Http\Middleware\NoStoreSensitiveResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
@@ -297,6 +308,10 @@ require __DIR__.'/pedagogical_management.php';
 Route::post('/login', [APIController::class, 'login']);
 Route::post('/forget-password', [APIController::class, 'forget_pass']);
 Route::post('/reset-password', [APIController::class, 'reset_pass']);
+Route::prefix('public/web-analytics')->middleware('throttle:public-web-analytics')->group(function () {
+    Route::post('/page-view', [PublicWebAnalyticsController::class, 'store']);
+    Route::post('/engagement', [PublicWebAnalyticsController::class, 'engagement']);
+});
 Route::prefix('convivencia/public')->middleware('convivencia.installed')->group(function () {
     Route::post('/complaints', [ConvivenciaPublicComplaintController::class, 'store']);
     Route::get('/complaints/{folio}', [ConvivenciaPublicComplaintController::class, 'show']);
@@ -362,7 +377,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::delete('/{internalAnnouncement}', [InternalAnnouncementController::class, 'destroy'])->middleware('permission:gestionar_comunicaciones_internas');
     });
 
-    Route::prefix('messaging')->middleware('throttle:messaging')->group(function () {
+    Route::prefix('messaging')->middleware(['messaging.available', 'throttle:messaging'])->group(function () {
         Route::get('/summary', [MessagingController::class, 'summary']);
         Route::get('/config', [MessagingController::class, 'config']);
         Route::get('/users/search', [MessagingController::class, 'users'])->middleware('throttle:messaging-search');
@@ -523,6 +538,9 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/contact-messages/{contactMessage}', [ContactMessageController::class, 'show'])->middleware('permission:ver_contactos_sitio');
         Route::put('/contact-messages/{contactMessage}', [ContactMessageController::class, 'update'])->middleware('permission:gestionar_contactos_sitio');
         Route::delete('/contact-messages/{contactMessage}', [ContactMessageController::class, 'destroy'])->middleware('permission:gestionar_contactos_sitio');
+
+        Route::get('/web-analytics', [WebAnalyticsDashboardController::class, 'index'])
+            ->middleware('permission:ver_metricas_sitio');
 
         Route::get('/cargos', [CargoController::class, 'index'])->middleware('permission:administrar_cargos');
         Route::post('/cargos', [CargoController::class, 'store'])->middleware('permission:administrar_cargos');
@@ -944,9 +962,14 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/reports', ApoyoProfesionalReportController::class)->middleware('permission:ver_reportes_apoyo_profesional');
     });
 
-    Route::prefix('convivencia')->middleware(['convivencia.installed', 'permission:ver_convivencia'])->group(function () {
+    Route::prefix('convivencia')->middleware([
+        'convivencia.installed',
+        'convivencia.access',
+        NoStoreSensitiveResponse::class,
+    ])->group(function () {
         Route::get('/catalogs', [ConvivenciaCatalogController::class, 'catalogs']);
         Route::get('/students', [ConvivenciaCatalogController::class, 'students']);
+        Route::get('/references/{type}', ConvivenciaReferenceController::class);
         Route::get('/dashboard', ConvivenciaDashboardController::class);
         Route::post('/catalog-items', [ConvivenciaCatalogController::class, 'storeCatalogItem']);
         Route::put('/catalog-items/{catalogItem}', [ConvivenciaCatalogController::class, 'updateCatalogItem']);
@@ -955,6 +978,7 @@ Route::middleware('auth:sanctum')->group(function () {
 
         Route::get('/cases', [ConvivenciaCaseController::class, 'index']);
         Route::post('/cases', [ConvivenciaCaseController::class, 'store']);
+        Route::get('/cases/{case}/export-data', [ConvivenciaCaseController::class, 'exportData']);
         Route::get('/cases/{case}', [ConvivenciaCaseController::class, 'show']);
         Route::put('/cases/{case}', [ConvivenciaCaseController::class, 'update']);
         Route::delete('/cases/{case}', [ConvivenciaCaseController::class, 'destroy']);
@@ -971,27 +995,52 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/complaints/{complaint}/attachments', [ConvivenciaAttachmentController::class, 'storeForComplaint']);
 
         Route::get('/plans', [ConvivenciaPlanController::class, 'index']);
+        Route::get('/annual-plans/workspace', ConvivenciaAnnualPlanController::class);
         Route::post('/plans', [ConvivenciaPlanController::class, 'store']);
+        Route::get('/plans/{plan}/export-data', [ConvivenciaPlanController::class, 'exportData']);
         Route::get('/plans/{plan}', [ConvivenciaPlanController::class, 'show']);
         Route::put('/plans/{plan}', [ConvivenciaPlanController::class, 'update']);
         Route::delete('/plans/{plan}', [ConvivenciaPlanController::class, 'destroy']);
         Route::post('/plans/{plan}/attachments', [ConvivenciaAttachmentController::class, 'storeForPlan']);
+        Route::get('/plans/{plan}/calendar', ConvivenciaPlanCalendarController::class);
+        Route::post('/plans/{plan}/actions', [ConvivenciaPlanActionController::class, 'store']);
+        Route::post('/plans/{plan}/clone-to-year', [ConvivenciaAnnualPlanController::class, 'cloneToYear']);
+        Route::post('/plans/{plan}/versions/{version}/restore', [ConvivenciaPlanVersionController::class, 'restore']);
+        Route::get('/plan-actions/{action}', [ConvivenciaPlanActionController::class, 'show']);
+        Route::put('/plan-actions/{action}', [ConvivenciaPlanActionController::class, 'update']);
+        Route::delete('/plan-actions/{action}', [ConvivenciaPlanActionController::class, 'destroy']);
+        Route::post('/plan-actions/{action}/activities', [ConvivenciaPlanActivityController::class, 'store']);
+        Route::put('/plan-activities/{activity}', [ConvivenciaPlanActivityController::class, 'update']);
+        Route::delete('/plan-activities/{activity}', [ConvivenciaPlanActivityController::class, 'destroy']);
+        Route::post('/plan-activities/{activity}/attachments', [ConvivenciaAttachmentController::class, 'storeForPlanActivity']);
 
         Route::get('/derivations', [ConvivenciaDerivationController::class, 'index']);
         Route::post('/derivations', [ConvivenciaDerivationController::class, 'store']);
         Route::get('/derivations/{derivation}', [ConvivenciaDerivationController::class, 'show']);
         Route::put('/derivations/{derivation}', [ConvivenciaDerivationController::class, 'update']);
         Route::delete('/derivations/{derivation}', [ConvivenciaDerivationController::class, 'destroy']);
+        Route::post('/derivations/{derivation}/convert-to-case', [ConvivenciaDerivationController::class, 'convertToCase']);
         Route::post('/derivations/{derivation}/attachments', [ConvivenciaAttachmentController::class, 'storeForDerivation']);
 
         Route::get('/protocols', [ConvivenciaProtocolController::class, 'index']);
         Route::post('/protocols', [ConvivenciaProtocolController::class, 'store']);
         Route::get('/protocols/{protocol}', [ConvivenciaProtocolController::class, 'show']);
         Route::put('/protocols/{protocol}', [ConvivenciaProtocolController::class, 'update']);
+        Route::delete('/protocols/{protocol}', [ConvivenciaProtocolController::class, 'destroy']);
+        Route::get('/protocol-parts', [ConvivenciaProtocolPartController::class, 'index']);
+        Route::post('/protocol-parts', [ConvivenciaProtocolPartController::class, 'store']);
+        Route::get('/protocol-parts/{protocolPart}', [ConvivenciaProtocolPartController::class, 'show']);
+        Route::put('/protocol-parts/{protocolPart}', [ConvivenciaProtocolPartController::class, 'update']);
+        Route::delete('/protocol-parts/{protocolPart}', [ConvivenciaProtocolPartController::class, 'destroy']);
         Route::get('/protocol-activations', [ConvivenciaProtocolController::class, 'activations']);
         Route::post('/protocol-activations', [ConvivenciaProtocolController::class, 'activate']);
         Route::get('/protocol-activations/{activation}', [ConvivenciaProtocolController::class, 'showActivation']);
+        Route::get('/protocol-activations/{activation}/progress', [ConvivenciaProtocolRuntimeController::class, 'progress']);
+        Route::post('/protocol-activations/{activation}/materialize-runtime', [ConvivenciaProtocolRuntimeController::class, 'materialize']);
         Route::put('/protocol-activations/{activation}', [ConvivenciaProtocolController::class, 'updateActivation']);
+        Route::put('/protocol-activation-steps/{step}', [ConvivenciaProtocolRuntimeController::class, 'updateStep']);
+        Route::post('/protocol-activation-steps/{step}/complete', [ConvivenciaProtocolRuntimeController::class, 'completeStep']);
+        Route::put('/protocol-activation-parts/{part}', [ConvivenciaProtocolRuntimeController::class, 'updatePart']);
         Route::post('/protocol-activations/{activation}/attachments', [ConvivenciaAttachmentController::class, 'storeForProtocolActivation']);
 
         Route::get('/measures', [ConvivenciaMeasureController::class, 'index']);
@@ -1033,6 +1082,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/idps/results', [ConvivenciaIdpsController::class, 'storeResult']);
         Route::put('/idps/results/{result}', [ConvivenciaIdpsController::class, 'updateResult']);
 
+        Route::get('/reports/course/export-data', [ConvivenciaReportController::class, 'exportData']);
         Route::get('/reports/course', ConvivenciaReportController::class);
 
         Route::get('/attachments/{attachment}/download', [ConvivenciaAttachmentController::class, 'download']);
@@ -1314,6 +1364,15 @@ Route::middleware('auth:sanctum')->group(function () {
             Route::get('/statistics/staff-lateness', [InspectoriaStatisticsController::class, 'staffLateness'])
                 ->middleware('permission:ver_estadisticas_inspectoria');
         });
+    });
+
+    Route::prefix('operational/logbook')->group(function () {
+        Route::get('/', [OperationalStaffLogbookController::class, 'index'])
+            ->middleware('permission:operational_logbook.view');
+        Route::post('/', [OperationalStaffLogbookController::class, 'store'])
+            ->middleware('permission:operational_logbook.create');
+        Route::put('/{entry}', [OperationalStaffLogbookController::class, 'update'])
+            ->middleware('permission:operational_logbook.create');
     });
 
     Route::prefix('operational/transfers')->group(function () {

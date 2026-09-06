@@ -21,8 +21,7 @@ class SecurityIncidentController extends Controller
         private readonly SecurityAccessService $accessService,
         private readonly SecurityRoundService $roundService,
         private readonly SecurityIncidentAlertService $alertService,
-    ) {
-    }
+    ) {}
 
     public function index(Request $request): JsonResponse
     {
@@ -50,30 +49,52 @@ class SecurityIncidentController extends Controller
             ->when($search !== '', function ($builder) use ($search) {
                 $builder->where(function ($query) use ($search) {
                     $query
-                        ->where('title', 'like', "%{$search}%")
-                        ->orWhere('description', 'like', "%{$search}%")
-                        ->orWhere('sector_name', 'like', "%{$search}%")
+                        ->where('security_incidents.title', 'like', "%{$search}%")
+                        ->orWhere('security_incidents.description', 'like', "%{$search}%")
+                        ->orWhere('security_incidents.sector_name', 'like', "%{$search}%")
                         ->orWhereHas('shift.staff', fn ($staffQuery) => $staffQuery->where('full_name', 'like', "%{$search}%"));
                 });
             })
-            ->when($priority !== '', fn ($builder) => $builder->where('priority', $priority))
-            ->when($statusId, fn ($builder) => $builder->where('status_id', $statusId))
-            ->when($responsibleUserId, fn ($builder) => $builder->where('current_responsible_user_id', $responsibleUserId))
-            ->when($from !== '', fn ($builder) => $builder->whereDate('created_at', '>=', $from))
-            ->when($to !== '', fn ($builder) => $builder->whereDate('created_at', '<=', $to))
-            ->when($sector !== '', fn ($builder) => $builder->where('sector_name', 'like', "%{$sector}%"))
+            ->when($priority !== '', fn ($builder) => $builder->where('security_incidents.priority', $priority))
+            ->when($statusId, fn ($builder) => $builder->where('security_incidents.status_id', $statusId))
+            ->when($responsibleUserId, fn ($builder) => $builder->where('security_incidents.current_responsible_user_id', $responsibleUserId))
+            ->when($from !== '', fn ($builder) => $builder->whereDate('security_incidents.created_at', '>=', $from))
+            ->when($to !== '', fn ($builder) => $builder->whereDate('security_incidents.created_at', '<=', $to))
+            ->when($sector !== '', fn ($builder) => $builder->where('security_incidents.sector_name', 'like', "%{$sector}%"))
             ->when($pendingOnly, fn ($builder) => $builder->whereHas('status', fn ($statusQuery) => $statusQuery->where('is_closed', false)))
             ->orderByRaw("
-                CASE priority
+                CASE security_incidents.priority
                     WHEN 'critica' THEN 1
                     WHEN 'alta' THEN 2
                     WHEN 'media' THEN 3
                     ELSE 4
                 END
             ")
-            ->orderByDesc('created_at');
+            ->orderByDesc('security_incidents.created_at');
 
-        return response()->json($query->paginate((int) $request->query('per_page', 15)));
+        $summary = (clone $query)
+            ->reorder()
+            ->leftJoin('security_incident_statuses as summary_statuses', 'summary_statuses.id', '=', 'security_incidents.status_id')
+            ->selectRaw('COUNT(security_incidents.id) as total')
+            ->selectRaw('COALESCE(SUM(CASE WHEN COALESCE(summary_statuses.is_closed, 0) = 0 THEN 1 ELSE 0 END), 0) as open_total')
+            ->selectRaw("COALESCE(SUM(CASE WHEN security_incidents.priority = 'critica' OR security_incidents.requires_immediate_attention = 1 THEN 1 ELSE 0 END), 0) as critical_total")
+            ->selectRaw('COALESCE(SUM(CASE WHEN COALESCE(summary_statuses.is_closed, 0) = 0 AND security_incidents.response_due_at IS NOT NULL AND security_incidents.response_due_at < ? THEN 1 ELSE 0 END), 0) as overdue_total', [now()])
+            ->selectRaw('COALESCE(SUM(CASE WHEN security_incidents.current_responsible_user_id IS NULL THEN 1 ELSE 0 END), 0) as unassigned_total')
+            ->first();
+
+        $perPage = min(max((int) $request->query('per_page', 15), 10), 50);
+        $paginator = $query->paginate($perPage);
+
+        return response()->json([
+            ...$paginator->toArray(),
+            'summary' => [
+                'total' => (int) ($summary?->total ?? 0),
+                'open' => (int) ($summary?->open_total ?? 0),
+                'critical' => (int) ($summary?->critical_total ?? 0),
+                'overdue' => (int) ($summary?->overdue_total ?? 0),
+                'unassigned' => (int) ($summary?->unassigned_total ?? 0),
+            ],
+        ]);
     }
 
     public function show(SecurityIncident $securityIncident): JsonResponse
@@ -115,7 +136,7 @@ class SecurityIncidentController extends Controller
                 'response_due_at' => $payload['response_due_at'] ?? $securityIncident->response_due_at,
                 'response_summary' => $payload['response_summary'] ?? $securityIncident->response_summary,
                 'closure_evidence_notes' => $payload['closure_evidence_notes'] ?? $securityIncident->closure_evidence_notes,
-                'responded_at' => !empty($payload['response_summary']) ? now() : $securityIncident->responded_at,
+                'responded_at' => ! empty($payload['response_summary']) ? now() : $securityIncident->responded_at,
             ]);
 
             $assigneeIds = collect((array) ($payload['assignee_user_ids'] ?? []))
@@ -124,7 +145,7 @@ class SecurityIncidentController extends Controller
                 ->values()
                 ->all();
 
-            if (isset($payload['current_responsible_user_id']) && !$assigneeIds) {
+            if (isset($payload['current_responsible_user_id']) && ! $assigneeIds) {
                 $assigneeIds = [(int) $payload['current_responsible_user_id']];
             }
 
@@ -132,7 +153,7 @@ class SecurityIncidentController extends Controller
                 $this->roundService->syncAssignments($securityIncident, $assigneeIds, $request->user());
             }
 
-            if (!empty($payload['comment'])) {
+            if (! empty($payload['comment'])) {
                 SecurityIncidentComment::create([
                     'security_incident_id' => $securityIncident->id,
                     'user_id' => $request->user()->id,
@@ -187,7 +208,7 @@ class SecurityIncidentController extends Controller
         DB::transaction(function () use ($request, $securityIncident) {
             $payload = $request->validated();
 
-            if (!empty($payload['assigned_to_user_id'])) {
+            if (! empty($payload['assigned_to_user_id'])) {
                 $this->roundService->syncAssignments($securityIncident, [(int) $payload['assigned_to_user_id']], $request->user());
             }
 

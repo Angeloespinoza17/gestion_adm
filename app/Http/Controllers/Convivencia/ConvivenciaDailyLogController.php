@@ -5,6 +5,8 @@ namespace App\Http\Controllers\Convivencia;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Convivencia\SaveConvivenciaDailyLogRequest;
 use App\Models\Convivencia\ConvivenciaDailyLog;
+use App\Models\Convivencia\ConvivenciaDerivation;
+use App\Services\Convivencia\ConvivenciaAccessService;
 use App\Services\Convivencia\ConvivenciaDailyLogService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -15,14 +17,13 @@ class ConvivenciaDailyLogController extends Controller
 {
     public function __construct(
         private readonly ConvivenciaDailyLogService $dailyLogService,
-    ) {
-    }
+    ) {}
 
     public function index(Request $request): JsonResponse
     {
         $this->authorize('viewAny', ConvivenciaDailyLog::class);
 
-        $query = app(\App\Services\Convivencia\ConvivenciaAccessService::class)
+        $query = app(ConvivenciaAccessService::class)
             ->applyDailyLogVisibility(
                 ConvivenciaDailyLog::query()->with([
                     'case:id,folio,status',
@@ -72,6 +73,8 @@ class ConvivenciaDailyLogController extends Controller
     public function show(ConvivenciaDailyLog $dailyLog): JsonResponse
     {
         $this->authorize('view', $dailyLog);
+        $accessService = app(ConvivenciaAccessService::class);
+        $user = request()->user();
 
         return response()->json([
             'data' => $dailyLog->load([
@@ -83,7 +86,9 @@ class ConvivenciaDailyLogController extends Controller
                 'type:id,name',
                 'inspectorUser:id,name',
                 'inspectorStaff:id,full_name',
-                'attachments.uploadedBy:id,name',
+                'attachments' => fn ($query) => $accessService
+                    ->applyAttachmentVisibility($query, $user)
+                    ->with('uploadedBy:id,name'),
                 'statusLogs.changedBy:id,name',
             ]),
         ]);
@@ -115,6 +120,7 @@ class ConvivenciaDailyLogController extends Controller
     public function convertToCase(Request $request, ConvivenciaDailyLog $dailyLog): JsonResponse
     {
         $this->authorize('update', $dailyLog);
+        abort_unless(app(ConvivenciaAccessService::class)->canCreateCase($request->user()), 403);
 
         $payload = $request->validate([
             'case_type_item_id' => ['nullable', 'integer', 'exists:convivencia_catalog_items,id'],
@@ -140,6 +146,15 @@ class ConvivenciaDailyLogController extends Controller
     {
         $this->authorize('update', $dailyLog);
 
+        $scope = (string) $request->input('scope', 'internal');
+        $accessService = app(ConvivenciaAccessService::class);
+        abort_unless(
+            $scope === 'external'
+                ? $accessService->canManageExternalDerivations($request->user())
+                : $accessService->canManageInternalDerivations($request->user()),
+            403
+        );
+
         $validator = Validator::make($request->all(), [
             'case_id' => ['nullable', 'integer', 'exists:convivencia_cases,id'],
             'academic_year_id' => ['nullable', 'integer', 'exists:academic_years,id'],
@@ -150,9 +165,9 @@ class ConvivenciaDailyLogController extends Controller
             'destination_user_id' => ['nullable', 'integer', 'exists:users,id'],
             'external_institution_id' => ['nullable', 'integer', 'exists:convivencia_external_institutions,id'],
             'responsible_user_id' => ['nullable', 'integer', 'exists:users,id'],
-            'scope' => ['required', Rule::in(array_column(\App\Models\Convivencia\ConvivenciaDerivation::SCOPE_OPTIONS, 'value'))],
-            'status' => ['required', Rule::in(array_column(\App\Models\Convivencia\ConvivenciaDerivation::STATUS_OPTIONS, 'value'))],
-            'priority_level' => ['required', Rule::in(array_column(\App\Models\Convivencia\ConvivenciaDerivation::PRIORITY_OPTIONS, 'value'))],
+            'scope' => ['required', Rule::in(array_column(ConvivenciaDerivation::SCOPE_OPTIONS, 'value'))],
+            'status' => ['required', Rule::in(array_column(ConvivenciaDerivation::STATUS_OPTIONS, 'value'))],
+            'priority_level' => ['required', Rule::in(array_column(ConvivenciaDerivation::PRIORITY_OPTIONS, 'value'))],
             'confidentiality_level' => ['required', 'string', 'max:50'],
             'destination_label' => ['nullable', 'string', 'max:191'],
             'external_contact_name' => ['nullable', 'string', 'max:160'],
@@ -174,11 +189,11 @@ class ConvivenciaDailyLogController extends Controller
         $validator->after(function ($validator) use ($request) {
             $scope = $request->input('scope');
 
-            if ($scope === 'internal' && !$request->filled('destination_department_id') && !$request->filled('destination_staff_id') && !$request->filled('destination_user_id') && !$request->filled('destination_label')) {
+            if ($scope === 'internal' && ! $request->filled('destination_department_id') && ! $request->filled('destination_staff_id') && ! $request->filled('destination_user_id') && ! $request->filled('destination_label')) {
                 $validator->errors()->add('destination_label', 'Debes indicar un destinatario interno para la derivación.');
             }
 
-            if ($scope === 'external' && !$request->filled('external_institution_id') && !$request->filled('destination_label')) {
+            if ($scope === 'external' && ! $request->filled('external_institution_id') && ! $request->filled('destination_label')) {
                 $validator->errors()->add('external_institution_id', 'Debes indicar una institución externa para la derivación.');
             }
         });

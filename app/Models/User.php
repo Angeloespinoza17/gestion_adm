@@ -6,6 +6,7 @@ use App\Models\Security\SecurityIncident;
 use App\Models\Security\SecurityNotification;
 use App\Models\Security\SecurityShift;
 use App\Services\RiskPrevention\RiskPreventionAccessService;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
@@ -227,6 +228,46 @@ class User extends Authenticatable
         return $this->roles()->where('slug', 'super_admin')->exists();
     }
 
+    public function isStaffAccount(): bool
+    {
+        $userType = (string) $this->user_type;
+
+        return $userType === 'staff'
+            || ($userType === ''
+                && $this->staff_id !== null
+                && $this->student_id === null
+                && $this->guardian_id === null);
+    }
+
+    public function canUseMessaging(): bool
+    {
+        return (bool) $this->active
+            && (string) $this->user_type !== 'role_preview'
+            && $this->isStaffAccount();
+    }
+
+    public function scopeMessagingStaff(Builder $query): Builder
+    {
+        return $query
+            ->where('active', true)
+            ->where(function (Builder $staffQuery): void {
+                $staffQuery->where(function (Builder $canonicalQuery): void {
+                    $canonicalQuery->where('user_type', 'staff');
+                    if ($canonicalQuery->getConnection()->getDriverName() === 'mysql') {
+                        $canonicalQuery->whereRaw('BINARY '.$canonicalQuery->qualifyColumn('user_type').' = ?', ['staff']);
+                    }
+                })->orWhere(function (Builder $legacyQuery): void {
+                    $legacyQuery
+                        ->where(fn (Builder $typeQuery) => $typeQuery
+                            ->whereNull('user_type')
+                            ->orWhere('user_type', ''))
+                        ->whereNotNull('staff_id')
+                        ->whereNull('student_id')
+                        ->whereNull('guardian_id');
+                });
+            });
+    }
+
     /**
      * @return array<int, string>
      */
@@ -259,6 +300,11 @@ class User extends Authenticatable
         if ($this->user_type === 'staff' || $this->staff_id !== null) {
             $permissions[] = 'ver_tareas';
             $permissions[] = 'gestionar_tareas';
+        }
+
+        if ($this->isStaffAccount() && ! $this->hasTemporaryHomeOnlyAccess()) {
+            $permissions[] = 'operational_logbook.view';
+            $permissions[] = 'operational_logbook.create';
         }
 
         if (

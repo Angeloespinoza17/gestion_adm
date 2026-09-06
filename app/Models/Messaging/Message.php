@@ -46,6 +46,16 @@ class Message extends Model
         return $this->hasMany(MessageRecipient::class);
     }
 
+    public function recentAcknowledgements(): HasMany
+    {
+        return $this->hasMany(MessageRecipient::class)
+            ->where('acknowledgement_required', true)
+            ->whereNotNull('acknowledged_at')
+            ->orderByDesc('acknowledged_at')
+            ->orderByDesc('id')
+            ->limit(5);
+    }
+
     public function attachments(): HasMany
     {
         return $this->hasMany(MessageAttachment::class);
@@ -57,6 +67,11 @@ class Message extends Model
     }
 
     public function reactions(): HasMany
+    {
+        return $this->hasMany(MessageReaction::class);
+    }
+
+    public function reactionSummaries(): HasMany
     {
         return $this->hasMany(MessageReaction::class);
     }

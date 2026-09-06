@@ -13,19 +13,18 @@ class ConvivenciaComplaintService
     public function __construct(
         private readonly ConvivenciaSupportService $supportService,
         private readonly ConvivenciaCaseService $caseService,
-    ) {
-    }
+    ) {}
 
     public function store(array $payload, ?User $user = null): ConvivenciaComplaint
     {
         return DB::transaction(function () use ($payload, $user) {
-            $complaint = new ConvivenciaComplaint();
+            $complaint = new ConvivenciaComplaint;
             $this->fillComplaint($complaint, $payload, $user, true);
             $complaint->save();
 
             $this->supportService->logStatus($complaint, null, $complaint->status, $user, 'Denuncia ingresada.', 'created');
 
-            return $this->loadComplaint($complaint);
+            return $this->loadComplaint($complaint, $user);
         });
     }
 
@@ -41,7 +40,7 @@ class ConvivenciaComplaintService
                 $this->supportService->logStatus($complaint, $previousStatus, $complaint->status, $user);
             }
 
-            return $this->loadComplaint($complaint);
+            return $this->loadComplaint($complaint, $user);
         });
     }
 
@@ -52,34 +51,74 @@ class ConvivenciaComplaintService
 
     private function fillComplaint(ConvivenciaComplaint $complaint, array $payload, ?User $user, bool $creating): void
     {
-        $situationType = !empty($payload['situation_type_item_id'])
-            ? ConvivenciaCatalogItem::query()->find($payload['situation_type_item_id'])
-            : null;
+        $attributes = array_intersect_key($payload, array_flip([
+            'academic_year_id',
+            'course_section_id',
+            'affected_student_id',
+            'responsible_user_id',
+            'case_id',
+            'complainant_name',
+            'complainant_type',
+            'contact_email',
+            'contact_phone',
+            'situation_type_label',
+            'place',
+            'received_at',
+            'happened_at',
+            'report_text',
+            'involved_snapshot',
+            'truth_declaration_accepted',
+            'is_anonymous',
+            'is_sensitive',
+            'status',
+            'admissibility_result',
+        ]));
 
-        $complaint->fill([
-            'academic_year_id' => $payload['academic_year_id'] ?? null,
-            'course_section_id' => $payload['course_section_id'] ?? null,
-            'affected_student_id' => $payload['affected_student_id'] ?? null,
-            'situation_type_item_id' => $situationType?->id,
-            'responsible_user_id' => $payload['responsible_user_id'] ?? $complaint->responsible_user_id ?? $user?->id,
-            'case_id' => $payload['case_id'] ?? $complaint->case_id,
-            'complainant_name' => $payload['complainant_name'] ?? null,
-            'complainant_type' => $payload['complainant_type'],
-            'contact_email' => $payload['contact_email'] ?? null,
-            'contact_phone' => $payload['contact_phone'] ?? null,
-            'situation_type_label' => $payload['situation_type_label'] ?? $situationType?->name,
-            'place' => $payload['place'] ?? null,
-            'received_at' => $payload['received_at'] ?? now(),
-            'happened_at' => $payload['happened_at'] ?? null,
-            'report_text' => $payload['report_text'],
-            'involved_snapshot' => array_values($payload['involved_snapshot'] ?? []),
-            'truth_declaration_accepted' => (bool) ($payload['truth_declaration_accepted'] ?? false),
-            'is_anonymous' => ($payload['complainant_type'] ?? null) === 'anonimo' || (bool) ($payload['is_anonymous'] ?? false),
-            'is_sensitive' => (bool) ($payload['is_sensitive'] ?? true),
-            'status' => $payload['status'],
-            'admissibility_result' => $payload['admissibility_result'] ?? null,
-            'updated_by' => $user?->id,
-        ]);
+        if (array_key_exists('involved_snapshot', $attributes) && $attributes['involved_snapshot'] !== null) {
+            $attributes['involved_snapshot'] = array_values((array) $attributes['involved_snapshot']);
+        }
+
+        foreach (['truth_declaration_accepted', 'is_anonymous', 'is_sensitive'] as $booleanField) {
+            if (array_key_exists($booleanField, $attributes)) {
+                $attributes[$booleanField] = (bool) $attributes[$booleanField];
+            }
+        }
+
+        if (array_key_exists('situation_type_item_id', $payload)) {
+            $situationType = ! empty($payload['situation_type_item_id'])
+                ? ConvivenciaCatalogItem::query()->find($payload['situation_type_item_id'])
+                : null;
+            $attributes['situation_type_item_id'] = $situationType?->id;
+
+            if (! array_key_exists('situation_type_label', $payload)) {
+                $attributes['situation_type_label'] = $situationType?->name;
+            }
+        }
+
+        if (($payload['complainant_type'] ?? null) === 'anonimo') {
+            $attributes['is_anonymous'] = true;
+        }
+
+        if ($creating) {
+            $attributes += [
+                'responsible_user_id' => $user?->id,
+                'received_at' => now(),
+                'involved_snapshot' => [],
+                'truth_declaration_accepted' => false,
+                'is_anonymous' => false,
+                'is_sensitive' => true,
+            ];
+        }
+
+        $isAnonymous = (bool) ($attributes['is_anonymous'] ?? $complaint->is_anonymous ?? false);
+        if ($isAnonymous) {
+            $attributes['complainant_name'] = null;
+            $attributes['contact_email'] = null;
+            $attributes['contact_phone'] = null;
+        }
+
+        $attributes['updated_by'] = $user?->id;
+        $complaint->fill($attributes);
 
         if ($creating) {
             $complaint->folio = $this->supportService->nextFolio('DEN', ConvivenciaComplaint::query());
@@ -87,7 +126,7 @@ class ConvivenciaComplaintService
         }
     }
 
-    private function loadComplaint(ConvivenciaComplaint $complaint): ConvivenciaComplaint
+    private function loadComplaint(ConvivenciaComplaint $complaint, ?User $user): ConvivenciaComplaint
     {
         return $complaint->fresh([
             'academicYear:id,name,year',
@@ -97,7 +136,9 @@ class ConvivenciaComplaintService
             'responsibleUser:id,name',
             'case:id,folio,status',
             'protocolActivations.protocol:id,name',
-            'attachments.uploadedBy:id,name',
+            'attachments' => fn ($query) => app(ConvivenciaAccessService::class)
+                ->applyAttachmentVisibility($query, $user)
+                ->with('uploadedBy:id,name'),
             'statusLogs.changedBy:id,name',
         ]);
     }

@@ -22,11 +22,150 @@ let recovering = false;
 let lastConversationParams = {};
 const readRequests = new Map();
 const processedChanges = new Set();
+const processedAcknowledgements = new Set();
 const syncCursorByConversation = new Map();
+const confirmedReadWatermarkByConversation = new Map();
+const conversationRequests = new Map();
+const activePollRequests = new Map();
+const conversationDetailRequests = new Map();
+let configRequest = null;
+let configLoaded = false;
+let summaryRequest = null;
+let conversationRequestSequence = 0;
+let appliedConversationRequestSequence = 0;
+let openRequestSequence = 0;
+let realtimeGlobalRefreshRequest = null;
+let realtimeGlobalRefreshNeedsSummary = false;
+let accessGeneration = 0;
+
+const compareLoadedMessageIds = (conversationId, left, right) => {
+    if (!left || !right) return null;
+    if (left === right) return 0;
+    const messages = state.messagesByConversation[conversationId] || [];
+    const leftIndex = messages.findIndex((item) => item.public_id === left);
+    const rightIndex = messages.findIndex((item) => item.public_id === right);
+    if (leftIndex < 0 || rightIndex < 0) return null;
+    return leftIndex > rightIndex ? 1 : -1;
+};
+
+const messageIdAtLeast = (conversationId, value, reference) => {
+    const comparison = compareLoadedMessageIds(
+        conversationId,
+        value,
+        reference
+    );
+    return comparison !== null && comparison >= 0;
+};
+
+const rememberConfirmedRead = (conversationId, throughMessageId) => {
+    const confirmed = confirmedReadWatermarkByConversation.get(conversationId);
+    if (
+        !confirmed ||
+        compareLoadedMessageIds(conversationId, throughMessageId, confirmed) ===
+            1
+    )
+        confirmedReadWatermarkByConversation.set(
+            conversationId,
+            throughMessageId
+        );
+};
+
+const requestKey = (params = {}) =>
+    JSON.stringify(
+        Object.keys(params)
+            .sort()
+            .reduce((result, key) => {
+                if (params[key] !== undefined && params[key] !== null)
+                    result[key] = params[key];
+                return result;
+            }, {})
+    );
+
+const requestStatus = (error) => Number(error?.response?.status || 0);
+
+const conversationChangeKey = (change) => {
+    let subject = change.message_reference?.public_id || change.message_id;
+    if (change.reaction)
+        subject = [
+            change.reaction.message_id,
+            change.reaction.user_id,
+            change.reaction.reaction,
+            Number(Boolean(change.reaction.active)),
+        ].join(":");
+    else if (change.acknowledgement)
+        subject = [
+            change.acknowledgement.message_id,
+            change.acknowledgement.user_id,
+            change.acknowledgement.acknowledged_at,
+        ].join(":");
+    else if (change.receipt)
+        subject = [
+            change.receipt.reader_id,
+            change.receipt.through_message_id,
+            change.receipt.read_at,
+        ].join(":");
+    subject ||= [
+        change.actor_id,
+        change.removed_user_id,
+        change.updated_user_id,
+    ]
+        .filter((value) => value !== undefined && value !== null)
+        .join(":");
+
+    return [
+        change.action,
+        change.conversation_id,
+        change.occurred_at,
+        subject || "conversation",
+    ].join(":");
+};
+
+const purgeConversationState = (id) => {
+    const conversation =
+        state.conversations.find((item) => item.public_id === id) ||
+        (state.activeConversation?.public_id === id
+            ? state.activeConversation
+            : null);
+    const unread = Number(conversation?.unread_count || 0);
+    if (unread > 0) {
+        state.summary.unread_messages = Math.max(
+            0,
+            Number(state.summary.unread_messages || 0) - unread
+        );
+        state.summary.unread_conversations = Math.max(
+            0,
+            Number(state.summary.unread_conversations || 0) - 1
+        );
+        notifyCountersChanged();
+    }
+    state.conversations = state.conversations.filter(
+        (conversation) => conversation.public_id !== id
+    );
+    delete state.messagesByConversation[id];
+    delete state.hasOlderByConversation[id];
+    syncCursorByConversation.delete(id);
+    confirmedReadWatermarkByConversation.delete(id);
+    readRequests.delete(id);
+    activePollRequests.delete(id);
+    if (state.activeConversation?.public_id === id) {
+        openRequestSequence += 1;
+        state.activeConversation = null;
+        state.loading.messages = false;
+    }
+};
 
 const notifyCountersChanged = () => {
     if (typeof window !== "undefined")
         window.dispatchEvent(new CustomEvent("internal-notifications:refresh"));
+};
+
+const notifyLocalTransportEvent = (kind, payload) => {
+    if (typeof window !== "undefined")
+        window.dispatchEvent(
+            new CustomEvent("messaging:local-event", {
+                detail: { kind, payload },
+            })
+        );
 };
 
 const sortConversations = () => {
@@ -55,34 +194,125 @@ const currentUserId = () => Number(state.config?.user?.id || 0);
 
 const normalizeMessage = (message) => {
     if (!message) return message;
-    const normalized = { ...message };
-    if (
-        normalized.requires_acknowledgement &&
-        Number(normalized.sender_id) !== currentUserId() &&
-        normalized.acknowledgement_status === "not_requested"
-    ) {
-        normalized.acknowledgement_status =
-            normalized.acknowledgement_due_at &&
-            new Date(normalized.acknowledgement_due_at) < new Date()
-                ? "overdue"
-                : "pending";
-    }
-    return normalized;
+    return { ...message };
 };
 
 const recoverConversationMessages = async (id, afterId) => {
     const limit = Number(state.config?.polling?.recovery_limit || 100);
     let cursor = afterId;
     let hasMore = true;
+    let syncCursor = null;
 
     while (hasMore) {
         const { data } = await api.messages(id, { after_id: cursor, limit });
         const items = (data.data || []).map(normalizeMessage);
+        if (!syncCursor && data.sync_cursor) syncCursor = data.sync_cursor;
         mergeMessages(id, items);
         const nextCursor = items.at(-1)?.public_id;
         hasMore = Boolean(data.has_more && nextCursor && nextCursor !== cursor);
         if (nextCursor) cursor = nextCursor;
     }
+
+    return { syncCursor };
+};
+
+const recoverUpdatedMessages = async (id, updatedSince) => {
+    const limit = Number(state.config?.polling?.recovery_limit || 100);
+    let before = null;
+    let hasMore = true;
+    let syncCursor = null;
+    const visited = new Set();
+
+    while (hasMore) {
+        const params = { updated_since: updatedSince, limit };
+        if (before) params.before = before;
+        const { data } = await api.messages(id, params);
+        const items = (data.data || []).map(normalizeMessage);
+        if (!syncCursor && data.sync_cursor) syncCursor = data.sync_cursor;
+        const deletedIds = new Set(
+            (data.deleted || []).map((item) => item.public_id)
+        );
+        if (deletedIds.size)
+            state.messagesByConversation[id] = (
+                state.messagesByConversation[id] || []
+            ).filter((message) => !deletedIds.has(message.public_id));
+        mergeMessages(id, items);
+
+        const nextBefore = data.before || items.at(-1)?.public_id;
+        hasMore = Boolean(
+            data.has_more &&
+                nextBefore &&
+                nextBefore !== before &&
+                !visited.has(nextBefore)
+        );
+        if (nextBefore) {
+            visited.add(nextBefore);
+            before = nextBefore;
+        }
+    }
+
+    return { syncCursor };
+};
+
+const synchronizeConversationMessages = async (id) => {
+    const messages = state.messagesByConversation[id] || [];
+    const knownIds = new Set(messages.map((message) => message.public_id));
+    const last = messages
+        .filter(
+            (message) => !String(message.public_id).startsWith("pending-")
+        )
+        .at(-1);
+    const previousSyncCursor =
+        syncCursorByConversation.get(id) ||
+        new Date(Date.now() - 15000).toISOString();
+
+    let creationSyncCursor = null;
+    let updateSyncCursor = null;
+    if (last) {
+        try {
+            ({ syncCursor: creationSyncCursor } =
+                await recoverConversationMessages(id, last.public_id));
+        } catch (error) {
+            if (requestStatus(error) !== 404) throw error;
+            // El cursor puede ser un mensaje eliminado mientras la pestaña
+            // estuvo desconectada. El delta autorizado entrega su tombstone.
+            ({ syncCursor: updateSyncCursor } =
+                await recoverUpdatedMessages(id, previousSyncCursor));
+        }
+    }
+    if (!updateSyncCursor)
+        ({ syncCursor: updateSyncCursor } = await recoverUpdatedMessages(
+            id,
+            previousSyncCursor
+        ));
+    const nextSyncCursor = updateSyncCursor || creationSyncCursor;
+    if (nextSyncCursor) syncCursorByConversation.set(id, nextSyncCursor);
+
+    const addedMessages = (state.messagesByConversation[id] || []).filter(
+        (message) => !knownIds.has(message.public_id)
+    );
+    const added = addedMessages.length;
+    const hasIncomingMessage = addedMessages.some(
+        (message) => Number(message.sender_id) !== currentUserId()
+    );
+    if (
+        hasIncomingMessage &&
+        state.activeConversation?.public_id === id &&
+        document.visibilityState === "visible"
+    ) {
+        const latest = state.messagesByConversation[id]?.at(-1);
+        if (
+            latest &&
+            !messageIdAtLeast(
+                id,
+                confirmedReadWatermarkByConversation.get(id),
+                latest.public_id
+            )
+        )
+            await messagingStore.markRead(id, latest.public_id);
+    }
+
+    return added;
 };
 
 const replaceConversation = (conversation, preserveUnread = true) => {
@@ -109,20 +339,101 @@ const replaceConversation = (conversation, preserveUnread = true) => {
     sortConversations();
 };
 
+const loadConversationDetail = (id) => {
+    if (conversationDetailRequests.has(id))
+        return conversationDetailRequests.get(id);
+    const request = api
+        .conversation(id)
+        .then(({ data }) => {
+            replaceConversation(data.data);
+            return data.data;
+        })
+        .finally(() => {
+            if (conversationDetailRequests.get(id) === request)
+                conversationDetailRequests.delete(id);
+        });
+    conversationDetailRequests.set(id, request);
+    return request;
+};
+
+const scheduleRealtimeGlobalRefresh = (includeSummary = false) => {
+    realtimeGlobalRefreshNeedsSummary ||= includeSummary;
+    if (realtimeGlobalRefreshRequest) return realtimeGlobalRefreshRequest;
+
+    const delay = import.meta.env.MODE === "test"
+        ? 0
+        : Math.round(250 + Math.random() * 1750);
+    realtimeGlobalRefreshRequest = new Promise((resolve, reject) => {
+        setTimeout(async () => {
+            try {
+                await messagingStore.loadConversations(
+                    lastConversationParams,
+                    true
+                );
+                if (realtimeGlobalRefreshNeedsSummary)
+                    await messagingStore.loadSummary();
+                resolve();
+            } catch (error) {
+                reject(error);
+            } finally {
+                realtimeGlobalRefreshNeedsSummary = false;
+                realtimeGlobalRefreshRequest = null;
+            }
+        }, delay);
+    });
+
+    return realtimeGlobalRefreshRequest;
+};
+
 export const messagingStore = {
     state: readonly(state),
 
-    async loadConfig() {
-        state.config = (await api.config()).data;
-        return state.config;
+    async loadConfig(force = false) {
+        if (configLoaded && !force) return state.config;
+        if (configRequest) return configRequest;
+
+        const generation = accessGeneration;
+        const request = api
+            .config()
+            .then(({ data }) => {
+                if (generation !== accessGeneration) return state.config;
+                state.config = data;
+                configLoaded = true;
+                return state.config;
+            })
+            .finally(() => {
+                if (configRequest === request) configRequest = null;
+            });
+        configRequest = request;
+
+        return configRequest;
     },
 
     async loadSummary() {
-        const previousUnread = Number(state.summary.unread_messages || 0);
-        state.summary = (await api.summary()).data;
-        if (previousUnread !== Number(state.summary.unread_messages || 0))
-            notifyCountersChanged();
-        return state.summary;
+        if (summaryRequest) return summaryRequest;
+
+        const generation = accessGeneration;
+        const request = api
+            .summary()
+            .then(({ data }) => {
+                if (generation !== accessGeneration) return state.summary;
+                const previousUnread = Number(
+                    state.summary.unread_messages || 0
+                );
+                state.summary = data;
+                if (
+                    previousUnread !==
+                    Number(state.summary.unread_messages || 0)
+                )
+                    notifyCountersChanged();
+                return state.summary;
+            })
+            .finally(() => {
+                if (summaryRequest === request) summaryRequest = null;
+            });
+        summaryRequest = request;
+
+        return summaryRequest;
     },
 
     async loadConversations(params = {}, silent = false) {
@@ -130,11 +441,41 @@ export const messagingStore = {
             state.loading.conversations = true;
             lastConversationParams = { ...params };
         }
+        const key = requestKey(params);
+        const sequence = ++conversationRequestSequence;
+        const generation = accessGeneration;
+        const existingRequest = conversationRequests.get(key);
+        if (existingRequest) {
+            existingRequest.sequence = sequence;
+            try {
+                return await existingRequest.promise;
+            } finally {
+                if (!silent) state.loading.conversations = false;
+            }
+        }
+        const entry = { sequence, promise: null };
+        const request = api
+            .conversations(params)
+            .then(({ data }) => {
+                if (
+                    generation === accessGeneration &&
+                    entry.sequence >= appliedConversationRequestSequence
+                ) {
+                    appliedConversationRequestSequence = entry.sequence;
+                    state.conversations = data.data || [];
+                    sortConversations();
+                }
+                return data.data || [];
+            })
+            .finally(() => {
+                if (conversationRequests.get(key) === entry)
+                    conversationRequests.delete(key);
+            });
+        entry.promise = request;
+        conversationRequests.set(key, entry);
+
         try {
-            const { data } = await api.conversations(params);
-            state.conversations = data.data || [];
-            sortConversations();
-            return state.conversations;
+            return await request;
         } finally {
             if (!silent) state.loading.conversations = false;
         }
@@ -142,20 +483,50 @@ export const messagingStore = {
 
     async markRead(id, throughMessageId) {
         if (!id || !throughMessageId) return null;
-        const key = `${id}:${throughMessageId}`;
-        if (readRequests.has(key)) return readRequests.get(key);
-        const conversation = state.conversations.find(
-            (item) => item.public_id === id
-        );
-        const previousUnread = Number(
-            conversation?.unread_count ||
-                state.activeConversation?.unread_count ||
-                0
-        );
+        if (
+            messageIdAtLeast(
+                id,
+                confirmedReadWatermarkByConversation.get(id),
+                throughMessageId
+            )
+        )
+            return null;
 
-        const request = api
-            .read(id, throughMessageId)
-            .then(({ data }) => {
+        const pending = readRequests.get(id);
+        if (
+            pending &&
+            messageIdAtLeast(
+                id,
+                pending.throughMessageId,
+                throughMessageId
+            )
+        )
+            return pending.request;
+
+        const previousRequest = pending?.request || Promise.resolve();
+        const request = previousRequest
+            .catch(() => null)
+            .then(async () => {
+                if (
+                    messageIdAtLeast(
+                        id,
+                        confirmedReadWatermarkByConversation.get(id),
+                        throughMessageId
+                    )
+                )
+                    return null;
+                const conversation = state.conversations.find(
+                    (item) => item.public_id === id
+                );
+                const previousUnread = Number(
+                    conversation?.unread_count ||
+                        (state.activeConversation?.public_id === id
+                            ? state.activeConversation?.unread_count
+                            : 0) ||
+                        0
+                );
+                const { data } = await api.read(id, throughMessageId);
+                rememberConfirmedRead(id, throughMessageId);
                 const updated = Number(data.data?.updated || 0);
                 if (conversation) conversation.unread_count = 0;
                 if (state.activeConversation?.public_id === id)
@@ -170,16 +541,21 @@ export const messagingStore = {
                         0,
                         Number(state.summary.unread_conversations || 0) - 1
                     );
-                notifyCountersChanged();
+                if (previousUnread > 0 || updated > 0)
+                    notifyCountersChanged();
                 return data.data;
             })
-            .finally(() => readRequests.delete(key));
+            .finally(() => {
+                if (readRequests.get(id)?.request === request)
+                    readRequests.delete(id);
+            });
 
-        readRequests.set(key, request);
+        readRequests.set(id, { throughMessageId, request });
         return request;
     },
 
     async open(id) {
+        const sequence = ++openRequestSequence;
         state.loading.messages = true;
         state.error = null;
         try {
@@ -187,6 +563,7 @@ export const messagingStore = {
                 api.conversation(id),
                 api.messages(id),
             ]);
+            if (sequence !== openRequestSequence) return null;
             state.activeConversation = conversation.data.data;
             state.messagesByConversation[id] = (
                 messages.data.data || []
@@ -195,20 +572,35 @@ export const messagingStore = {
                 syncCursorByConversation.set(id, messages.data.sync_cursor);
             state.hasOlderByConversation[id] = Boolean(messages.data.has_more);
             const last = state.messagesByConversation[id].at(-1);
-            if (last) await this.markRead(id, last.public_id);
+            const detailUnread = Number(
+                state.activeConversation.unread_count || 0
+            );
+            const detailLastId =
+                state.activeConversation.last_message?.public_id || null;
+            const canTrustReadState = Boolean(
+                detailLastId && detailLastId === last?.public_id
+            );
+            if (last && (!canTrustReadState || detailUnread > 0))
+                await this.markRead(id, last.public_id);
+            else if (last && canTrustReadState)
+                rememberConfirmedRead(id, last.public_id);
             return last;
         } catch (error) {
+            if (sequence !== openRequestSequence) return null;
             state.error =
                 error.response?.data?.message ||
                 "No fue posible abrir la conversación.";
             throw error;
         } finally {
-            state.loading.messages = false;
+            if (sequence === openRequestSequence)
+                state.loading.messages = false;
         }
     },
 
     close() {
+        openRequestSequence += 1;
         state.activeConversation = null;
+        state.loading.messages = false;
     },
 
     async refreshActiveConversation() {
@@ -222,20 +614,24 @@ export const messagingStore = {
     async pollActiveConversation() {
         const id = state.activeConversation?.public_id;
         if (!id) return 0;
-        const cursor =
-            syncCursorByConversation.get(id) ||
-            new Date(Date.now() - 15000).toISOString();
-        const { data } = await api.messages(id, {
-            updated_since: cursor,
-            limit: Number(state.config?.polling?.recovery_limit || 100),
-        });
-        const items = (data.data || []).map(normalizeMessage);
-        mergeMessages(id, items);
-        if (data.sync_cursor)
-            syncCursorByConversation.set(id, data.sync_cursor);
-        const last = state.messagesByConversation[id]?.at(-1);
-        if (last) await this.markRead(id, last.public_id);
-        return items.length;
+        if (activePollRequests.has(id)) return activePollRequests.get(id);
+
+        let request;
+        request = synchronizeConversationMessages(id)
+            .catch((error) => {
+                if ([403, 404].includes(requestStatus(error))) {
+                    purgeConversationState(id);
+                    return 0;
+                }
+                throw error;
+            })
+            .finally(() => {
+                if (activePollRequests.get(id) === request)
+                    activePollRequests.delete(id);
+            });
+
+        activePollRequests.set(id, request);
+        return request;
     },
 
     async loadOlder() {
@@ -267,25 +663,12 @@ export const messagingStore = {
         recovering = true;
         try {
             const id = state.activeConversation?.public_id;
-            const last = id
-                ? (state.messagesByConversation[id] || [])
-                      .filter(
-                          (message) =>
-                              !String(message.public_id).startsWith("pending-")
-                      )
-                      .at(-1)
-                : null;
             const requests = [
                 this.loadConversations(lastConversationParams, true),
                 this.loadSummary(),
             ];
-            if (id && last) {
-                requests.push(recoverConversationMessages(id, last.public_id));
-            }
+            if (id) requests.push(this.pollActiveConversation());
             await Promise.all(requests);
-            const latest = id ? state.messagesByConversation[id]?.at(-1) : null;
-            if (id && latest && document.visibilityState === "visible")
-                await this.markRead(id, latest.public_id);
         } finally {
             recovering = false;
         }
@@ -330,6 +713,7 @@ export const messagingStore = {
                 conversation.last_message_at = sent.sent_at;
                 sortConversations();
             }
+            notifyLocalTransportEvent("sentMessage", { message: sent });
             return sent;
         } catch (error) {
             optimistic.status = "error";
@@ -382,6 +766,50 @@ export const messagingStore = {
         const id = state.activeConversation?.public_id;
         if (id && normalized?.conversation_id === id)
             mergeMessages(id, [normalized]);
+    },
+
+    async applyRealtimeMessageReference(
+        action,
+        reference,
+        { refreshGlobal = true } = {}
+    ) {
+        const conversationId = reference?.conversation_id;
+        if (!conversationId) return null;
+
+        // Los eventos sólo son referencias compactas. El contenido se obtiene
+        // siempre desde un endpoint autorizado antes de incorporarlo al hilo.
+        if (state.activeConversation?.public_id === conversationId)
+            return this.pollActiveConversation();
+
+        if (!refreshGlobal) return null;
+
+        await scheduleRealtimeGlobalRefresh(action === "created");
+        return null;
+    },
+
+    applySentMessageFromTab(message) {
+        if (!message?.conversation_id) return;
+        const id = message.conversation_id;
+        if (
+            state.activeConversation?.public_id === id ||
+            state.messagesByConversation[id]
+        )
+            mergeMessages(id, [normalizeMessage(message)]);
+        const conversation = state.conversations.find(
+            (item) => item.public_id === id
+        );
+        if (conversation) {
+            conversation.last_message = {
+                public_id: message.public_id,
+                body: message.body,
+                subject: message.subject,
+                sender: message.sender?.name,
+                priority: message.priority,
+                sent_at: message.sent_at,
+            };
+            conversation.last_message_at = message.sent_at;
+            sortConversations();
+        }
     },
 
     updateRealtimeMessage(message) {
@@ -472,20 +900,54 @@ export const messagingStore = {
         const message = id
             ? state.messagesByConversation[id]?.find(
                   (item) => item.public_id === acknowledgement?.message_id
-              )
+        )
             : null;
         if (!message) return;
+        const key = `${acknowledgement.message_id}:${acknowledgement.user_id}`;
+        if (processedAcknowledgements.has(key)) return;
+        processedAcknowledgements.add(key);
+        if (processedAcknowledgements.size > 1000)
+            processedAcknowledgements.delete(
+                processedAcknowledgements.values().next().value
+            );
         const patch = { ...message };
-        if (Number(acknowledgement.user_id) === currentUserId())
+        const acknowledgedByCurrentUser =
+            Number(acknowledgement.user_id) === currentUserId();
+        if (acknowledgedByCurrentUser) {
             patch.acknowledgement_status = "acknowledged";
-        if (Number(message.sender_id) === currentUserId())
-            patch.acknowledgement_summary = acknowledgement.summary;
+            state.summary.pending_acknowledgements = Math.max(
+                0,
+                Number(state.summary.pending_acknowledgements || 0) - 1
+            );
+        }
+        if (Number(message.sender_id) === currentUserId()) {
+            if (acknowledgement.summary)
+                patch.acknowledgement_summary = acknowledgement.summary;
+            else if (patch.acknowledgement_summary) {
+                const summary = { ...patch.acknowledgement_summary };
+                summary.acknowledged = Math.min(
+                    Number(summary.total || Number.MAX_SAFE_INTEGER),
+                    Number(summary.acknowledged || 0) + 1
+                );
+                if (Number(summary.overdue || 0) > 0)
+                    summary.overdue = Math.max(
+                        0,
+                        Number(summary.overdue) - 1
+                    );
+                else
+                    summary.pending = Math.max(
+                        0,
+                        Number(summary.pending || 0) - 1
+                    );
+                patch.acknowledgement_summary = summary;
+            }
+        }
         mergeMessages(id, [patch]);
     },
 
-    async applyConversationChange(change) {
+    async applyConversationChange(change, allowRefresh = true) {
         if (!change?.conversation_id) return;
-        const changeKey = `${change.action}:${change.conversation_id}:${change.occurred_at}`;
+        const changeKey = conversationChangeKey(change);
         if (processedChanges.has(changeKey)) return;
         processedChanges.add(changeKey);
         if (processedChanges.size > 500)
@@ -496,22 +958,33 @@ export const messagingStore = {
             change.action === "participant_removed" &&
             Number(change.removed_user_id) === userId
         ) {
-            state.conversations = state.conversations.filter(
-                (item) => item.public_id !== change.conversation_id
-            );
-            if (state.activeConversation?.public_id === change.conversation_id)
-                this.close();
+            purgeConversationState(change.conversation_id);
+            if (allowRefresh) await this.loadSummary();
             return;
         }
 
         let conversation = state.conversations.find(
             (item) => item.public_id === change.conversation_id
         );
+        if (
+            !conversation &&
+            state.activeConversation?.public_id === change.conversation_id
+        )
+            conversation = state.activeConversation;
         if (!conversation) {
-            await Promise.all([
-                this.loadConversations(lastConversationParams, true),
-                this.loadSummary(),
-            ]);
+            const refreshableUnknownActions = [
+                "conversation_created",
+                "message_created",
+                "message_updated",
+            ];
+            if (
+                !allowRefresh ||
+                !refreshableUnknownActions.includes(change.action)
+            )
+                return;
+            await scheduleRealtimeGlobalRefresh(
+                change.action !== "conversation_created"
+            );
             conversation = state.conversations.find(
                 (item) => item.public_id === change.conversation_id
             );
@@ -520,37 +993,75 @@ export const messagingStore = {
 
         if (Object.prototype.hasOwnProperty.call(change, "is_locked"))
             conversation.is_locked = change.is_locked;
-        if (Object.prototype.hasOwnProperty.call(change, "last_message"))
+        if (
+            Object.prototype.hasOwnProperty.call(change, "last_message") &&
+            (change.last_message !== null ||
+                change.action === "message_deleted")
+        )
             conversation.last_message = change.last_message;
         if (change.last_message?.sent_at)
             conversation.last_message_at = change.last_message.sent_at;
         if (change.last_message_at !== undefined)
             conversation.last_message_at = change.last_message_at;
+        if (change.action === "message_deleted" && change.message_id)
+            this.removeRealtimeMessage({
+                conversation_id: change.conversation_id,
+                message_id: change.message_id,
+            });
+        if (
+            change.action === "message_reaction_updated" &&
+            change.reaction
+        )
+            this.applyReactionChange(change.reaction);
+        if (change.action === "messages_read" && change.receipt)
+            this.applyReadReceipt(change.receipt);
+
+        let readWhileVisible = false;
+        if (
+            ["message_created", "message_updated"].includes(change.action) &&
+            state.activeConversation?.public_id === change.conversation_id &&
+            document.visibilityState === "visible"
+        ) {
+            try {
+                const added = await this.pollActiveConversation();
+                const referencedId =
+                    change.message_reference?.public_id ||
+                    change.last_message?.public_id;
+                readWhileVisible =
+                    change.action === "message_created" &&
+                    (added > 0 ||
+                        Boolean(
+                            referencedId &&
+                                messageIdAtLeast(
+                                    change.conversation_id,
+                                    confirmedReadWatermarkByConversation.get(
+                                        change.conversation_id
+                                    ),
+                                    referencedId
+                                )
+                        ));
+            } catch (_) {
+                readWhileVisible = false;
+            }
+        }
 
         if (
             change.action === "message_created" &&
             Number(change.actor_id) !== userId
         ) {
-            conversation.unread_count =
-                Number(conversation.unread_count || 0) +
-                Number(change.unread_delta || 1);
-            state.summary.unread_messages =
-                Number(state.summary.unread_messages || 0) +
-                Number(change.unread_delta || 1);
-            if (conversation.unread_count === Number(change.unread_delta || 1))
-                state.summary.unread_conversations =
-                    Number(state.summary.unread_conversations || 0) + 1;
-            notifyCountersChanged();
-            if (
-                state.activeConversation?.public_id ===
-                    change.conversation_id &&
-                document.visibilityState === "visible" &&
-                change.last_message?.public_id
-            ) {
-                this.markRead(
-                    change.conversation_id,
-                    change.last_message.public_id
-                ).catch(() => {});
+
+            if (!readWhileVisible) {
+                const unreadDelta = Number(change.unread_delta || 1);
+                const previouslyUnread = Number(
+                    conversation.unread_count || 0
+                );
+                conversation.unread_count = previouslyUnread + unreadDelta;
+                state.summary.unread_messages =
+                    Number(state.summary.unread_messages || 0) + unreadDelta;
+                if (previouslyUnread === 0)
+                    state.summary.unread_conversations =
+                        Number(state.summary.unread_conversations || 0) + 1;
+                notifyCountersChanged();
             }
         }
 
@@ -575,43 +1086,83 @@ export const messagingStore = {
 
         if (
             change.action === "message_acknowledged" &&
-            Number(change.actor_id) === userId
+            change.acknowledgement
         ) {
-            state.summary.pending_acknowledgements = Math.max(
-                0,
-                Number(state.summary.pending_acknowledgements || 0) - 1
-            );
+            this.applyAcknowledgement(change.acknowledgement);
         }
 
         if (
             [
-                "conversation_created",
                 "conversation_updated",
                 "participants_updated",
                 "ownership_transferred",
-            ].includes(change.action)
+            ].includes(change.action) &&
+            state.activeConversation?.public_id === change.conversation_id
         ) {
             try {
-                const { data } = await api.conversation(change.conversation_id);
-                replaceConversation(data.data);
+                await loadConversationDetail(change.conversation_id);
             } catch (error) {
                 if (
                     error.response?.status === 403 ||
                     error.response?.status === 404
                 ) {
-                    state.conversations = state.conversations.filter(
-                        (item) => item.public_id !== change.conversation_id
-                    );
+                    purgeConversationState(change.conversation_id);
                 }
             }
         }
 
-        if (change.action === "message_deleted")
+        if (change.action === "message_deleted" && allowRefresh)
             this.loadSummary().catch(() => {});
         sortConversations();
     },
 
+    applyTransportSummary(summary) {
+        if (!summary) return;
+        const previousUnread = Number(state.summary.unread_messages || 0);
+        state.summary = { ...state.summary, ...summary };
+        if (
+            previousUnread !== Number(state.summary.unread_messages || 0)
+        )
+            notifyCountersChanged();
+    },
+
     setPollingState(status) {
         state.pollingConnectionState = status;
+    },
+
+    resetForAccessRevoked() {
+        accessGeneration += 1;
+        openRequestSequence += 1;
+        conversationRequestSequence += 1;
+        appliedConversationRequestSequence = conversationRequestSequence;
+        recovering = false;
+        lastConversationParams = {};
+        configLoaded = false;
+        configRequest = null;
+        summaryRequest = null;
+        realtimeGlobalRefreshRequest = null;
+        realtimeGlobalRefreshNeedsSummary = false;
+        readRequests.clear();
+        processedChanges.clear();
+        processedAcknowledgements.clear();
+        syncCursorByConversation.clear();
+        confirmedReadWatermarkByConversation.clear();
+        conversationRequests.clear();
+        activePollRequests.clear();
+        conversationDetailRequests.clear();
+        state.conversations = [];
+        state.activeConversation = null;
+        state.messagesByConversation = {};
+        state.hasOlderByConversation = {};
+        state.summary = {};
+        state.config = {};
+        state.error = null;
+        Object.assign(state.loading, {
+            conversations: false,
+            messages: false,
+            older: false,
+            sending: false,
+        });
+        state.pollingConnectionState = "unavailable";
     },
 };

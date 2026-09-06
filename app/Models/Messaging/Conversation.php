@@ -30,7 +30,14 @@ class Conversation extends Model
 
     public function activeParticipants(): HasMany
     {
-        return $this->participants()->whereNull('left_at');
+        return $this->participants()
+            ->whereNull('left_at')
+            ->whereHas('user', fn (Builder $query) => $query->messagingStaff());
+    }
+
+    public function participantPreviews(): HasMany
+    {
+        return $this->hasMany(ConversationParticipant::class);
     }
 
     public function messages(): HasMany
@@ -55,6 +62,10 @@ class Conversation extends Model
 
     public function scopeVisibleTo(Builder $query, User $user): Builder
     {
+        if (! $user->canUseMessaging()) {
+            return $query->whereRaw('1 = 0');
+        }
+
         return $query->whereHas('participants', fn (Builder $q) => $q->where('user_id', $user->id)->whereNull('left_at'));
     }
 

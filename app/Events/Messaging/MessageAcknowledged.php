@@ -2,17 +2,13 @@
 
 namespace App\Events\Messaging;
 
-use Illuminate\Broadcasting\PrivateChannel;
 use Illuminate\Contracts\Broadcasting\ShouldBroadcast;
 
 class MessageAcknowledged extends MessagingBroadcastEvent implements ShouldBroadcast
 {
-    public function __construct(public string $conversationId, public array $acknowledgement) {}
+    use BroadcastsToMessagingUsers;
 
-    public function broadcastOn(): array
-    {
-        return [new PrivateChannel('messaging.conversation.'.$this->conversationId)];
-    }
+    public function __construct(public string $conversationId, public array $acknowledgement, public array $recipientIds = []) {}
 
     public function broadcastAs(): string
     {

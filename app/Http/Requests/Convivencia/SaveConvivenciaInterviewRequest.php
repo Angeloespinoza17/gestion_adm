@@ -15,6 +15,10 @@ class SaveConvivenciaInterviewRequest extends FormRequest
 
     public function rules(): array
     {
+        $participantsRule = $this->isMethod('POST')
+            ? ['required', 'array', 'min:1']
+            : ['sometimes', 'nullable', 'array', 'min:1'];
+
         return [
             'case_id' => ['nullable', 'integer', 'exists:convivencia_cases,id'],
             'student_profile_id' => ['nullable', 'integer', 'exists:student_profiles,id'],
@@ -32,7 +36,7 @@ class SaveConvivenciaInterviewRequest extends FormRequest
             'follow_up_status' => ['required', Rule::in(array_column(ConvivenciaInterview::FOLLOW_UP_STATUS_OPTIONS, 'value'))],
             'internal_notes' => ['nullable', 'string'],
             'is_sensitive' => ['sometimes', 'boolean'],
-            'participants' => ['required', 'array', 'min:1'],
+            'participants' => $participantsRule,
             'participants.*.student_profile_id' => ['nullable', 'integer', 'exists:student_profiles,id'],
             'participants.*.user_id' => ['nullable', 'integer', 'exists:users,id'],
             'participants.*.staff_id' => ['nullable', 'integer', 'exists:staff,id'],

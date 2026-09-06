@@ -149,6 +149,11 @@ describe("Perfil de cuenta", () => {
     const submitted = axios.post.mock.calls[0][1];
     expect(submitted.get("name")).toBe("Ana María Soto");
     expect(wrapper.vm.profile.name).toBe("Ana María Soto");
-    expect(JSON.parse(localStorage.getItem("user")).name).toBe("Ana María Soto");
+    expect(JSON.parse(localStorage.getItem("user"))).toMatchObject({
+      name: "Ana María Soto",
+      user_type: "staff",
+      staff_id: 17,
+      is_staff: true,
+    });
   });
 });

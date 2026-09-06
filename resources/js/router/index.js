@@ -1,5 +1,54 @@
 import { createRouter, createWebHistory } from "vue-router";
 import axios from "axios";
+import {
+    loadMessagingAccess,
+    STAFF_ACCESS_MARKER,
+} from "../modules/messaging/services/messagingAccess";
+
+export const CONVIVENCIA_MODULE_PERMISSIONS = Object.freeze([
+    "ver_convivencia",
+    "ver_dashboard_convivencia",
+    "gestionar_plan_convivencia",
+    "crear_casos_convivencia",
+    "ver_casos_convivencia",
+    "editar_casos_convivencia",
+    "cerrar_casos_convivencia",
+    "ver_casos_sensibles_convivencia",
+    "gestionar_denuncias_convivencia",
+    "gestionar_protocolos_convivencia",
+    "activar_protocolos_convivencia",
+    "gestionar_entrevistas_convivencia",
+    "gestionar_medidas_formativas_convivencia",
+    "gestionar_derivaciones_internas_convivencia",
+    "gestionar_derivaciones_externas_convivencia",
+    "ver_sociogramas_convivencia",
+    "gestionar_sociogramas_convivencia",
+    "ver_reportes_curso_convivencia",
+    "gestionar_bitacora_inspectoria_convivencia",
+    "exportar_reportes_convivencia",
+    "administrar_configuraciones_convivencia",
+]);
+
+const CONVIVENCIA_CASE_VIEW_PERMISSIONS = Object.freeze([
+    "ver_convivencia",
+    "ver_casos_convivencia",
+    "editar_casos_convivencia",
+    "cerrar_casos_convivencia",
+]);
+
+const convivenciaPermissions = (...permissions) => Object.freeze(
+    Array.from(new Set(permissions.flat()))
+);
+
+const convivenciaRoute = (path, title, permissionsAny) => ({
+    path,
+    meta: {
+        authRequired: true,
+        title,
+        permissionsAny: convivenciaPermissions(permissionsAny),
+    },
+    component: () => import("../views/convivencia/index.vue"),
+});
 
 const pmeSepRoute = (path, title) => ({
     path,
@@ -192,7 +241,11 @@ const routes = [
     {
         path: "/mensajeria/:conversationId?",
         name: "messaging",
-        meta: { authRequired: true, title: "Mensajería" },
+        meta: {
+            authRequired: true,
+            staffOnly: true,
+            title: "Mensajería de funcionarios",
+        },
         component: () => import("../modules/messaging/views/MessagingView.vue"),
     },
     {
@@ -706,6 +759,16 @@ const routes = [
         component: () => import("../views/superadmin/usage-level.vue"),
     },
     {
+        path: "/admin/metricas-web",
+        name: "admin-web-analytics",
+        meta: {
+            authRequired: true,
+            title: "Métricas del sitio web",
+            permission: "ver_metricas_sitio",
+        },
+        component: () => import("../views/admin/web-analytics.vue"),
+    },
+    {
         path: "/admin/noticias",
         meta: {
             authRequired: true,
@@ -1216,6 +1279,19 @@ const routes = [
             permission: "ver_licencias_medicas_estudiantes",
         },
         component: () => import("../views/student-health/medical-leaves.vue"),
+    },
+    {
+        path: "/bitacora",
+        meta: {
+            authRequired: true,
+            title: "Bitácora de funcionarios",
+            permission: "operational_logbook.view",
+        },
+        component: () => import("../views/operational/logbook/index.vue"),
+    },
+    {
+        path: "/operational/bitacora",
+        redirect: "/bitacora",
     },
     {
         path: "/operational/transfers",
@@ -1856,113 +1932,62 @@ const routes = [
         },
         component: () => import("../views/orientation/index.vue"),
     },
-    {
-        path: "/convivencia",
-        meta: {
-            authRequired: true,
-            title: "Panel general de Convivencia",
-            permission: "ver_convivencia",
-        },
-        component: () => import("../views/convivencia/index.vue"),
-    },
-    {
-        path: "/convivencia/planes",
-        meta: {
-            authRequired: true,
-            title: "Plan de Gestión de Convivencia",
-            permission: "ver_convivencia",
-        },
-        component: () => import("../views/convivencia/index.vue"),
-    },
-    {
-        path: "/convivencia/casos",
-        meta: {
-            authRequired: true,
-            title: "Casos de Convivencia",
-            permission: "ver_convivencia",
-        },
-        component: () => import("../views/convivencia/index.vue"),
-    },
+    convivenciaRoute("/convivencia", "Análisis e informes de Convivencia", convivenciaPermissions(
+        CONVIVENCIA_CASE_VIEW_PERMISSIONS,
+        "ver_dashboard_convivencia",
+        "ver_reportes_curso_convivencia"
+    )),
+    convivenciaRoute("/convivencia/planes", "Plan de Gestión de Convivencia", convivenciaPermissions(
+        CONVIVENCIA_CASE_VIEW_PERMISSIONS,
+        "gestionar_plan_convivencia"
+    )),
+    convivenciaRoute("/convivencia/casos", "Expedientes de Convivencia", convivenciaPermissions(
+        CONVIVENCIA_CASE_VIEW_PERMISSIONS,
+        "crear_casos_convivencia",
+        "gestionar_denuncias_convivencia",
+        "gestionar_derivaciones_internas_convivencia",
+        "gestionar_derivaciones_externas_convivencia"
+    )),
     {
         path: "/convivencia/denuncias",
-        meta: {
-            authRequired: true,
-            title: "Denuncias de Convivencia",
-            permission: "ver_convivencia",
-        },
-        component: () => import("../views/convivencia/index.vue"),
+        redirect: (to) => ({ path: "/convivencia/casos", query: { ...to.query, tipo: "denuncias" } }),
     },
     {
         path: "/convivencia/derivaciones",
-        meta: {
-            authRequired: true,
-            title: "Derivaciones de Convivencia",
-            permission: "ver_convivencia",
-        },
-        component: () => import("../views/convivencia/index.vue"),
+        redirect: (to) => ({ path: "/convivencia/casos", query: { ...to.query, tipo: "derivaciones" } }),
     },
-    {
-        path: "/convivencia/protocolos",
-        meta: {
-            authRequired: true,
-            title: "Protocolos de Convivencia",
-            permission: "ver_convivencia",
-        },
-        component: () => import("../views/convivencia/index.vue"),
-    },
-    {
-        path: "/convivencia/entrevistas",
-        meta: {
-            authRequired: true,
-            title: "Entrevistas de Convivencia",
-            permission: "ver_convivencia",
-        },
-        component: () => import("../views/convivencia/index.vue"),
-    },
-    {
-        path: "/convivencia/medidas",
-        meta: {
-            authRequired: true,
-            title: "Medidas Formativas",
-            permission: "ver_convivencia",
-        },
-        component: () => import("../views/convivencia/index.vue"),
-    },
-    {
-        path: "/convivencia/bitacora",
-        meta: {
-            authRequired: true,
-            title: "Bitácora de Inspectoría",
-            permission: "ver_convivencia",
-        },
-        component: () => import("../views/convivencia/index.vue"),
-    },
-    {
-        path: "/convivencia/sociogramas",
-        meta: {
-            authRequired: true,
-            title: "Sociogramas",
-            permission: "ver_convivencia",
-        },
-        component: () => import("../views/convivencia/index.vue"),
-    },
-    {
-        path: "/convivencia/idps",
-        meta: {
-            authRequired: true,
-            title: "Indicadores IDPS",
-            permission: "ver_convivencia",
-        },
-        component: () => import("../views/convivencia/index.vue"),
-    },
+    convivenciaRoute("/convivencia/protocolos", "Protocolos de Convivencia", convivenciaPermissions(
+        CONVIVENCIA_CASE_VIEW_PERMISSIONS,
+        "gestionar_protocolos_convivencia",
+        "activar_protocolos_convivencia"
+    )),
+    convivenciaRoute("/convivencia/entrevistas", "Entrevistas de Convivencia", convivenciaPermissions(
+        CONVIVENCIA_CASE_VIEW_PERMISSIONS,
+        "gestionar_entrevistas_convivencia"
+    )),
+    convivenciaRoute("/convivencia/medidas", "Medidas Formativas", convivenciaPermissions(
+        CONVIVENCIA_CASE_VIEW_PERMISSIONS,
+        "gestionar_medidas_formativas_convivencia"
+    )),
+    convivenciaRoute("/convivencia/bitacora", "Bitácora de Inspectoría", convivenciaPermissions(
+        CONVIVENCIA_CASE_VIEW_PERMISSIONS,
+        "gestionar_bitacora_inspectoria_convivencia"
+    )),
+    convivenciaRoute("/convivencia/sociogramas", "Sociogramas", convivenciaPermissions(
+        "ver_sociogramas_convivencia",
+        "gestionar_sociogramas_convivencia"
+    )),
+    convivenciaRoute("/convivencia/idps", "Indicadores IDPS", convivenciaPermissions(
+        CONVIVENCIA_CASE_VIEW_PERMISSIONS,
+        "ver_dashboard_convivencia",
+        "gestionar_plan_convivencia",
+        "ver_reportes_curso_convivencia",
+        "exportar_reportes_convivencia",
+        "administrar_configuraciones_convivencia"
+    )),
     {
         path: "/convivencia/reportes",
-        meta: {
-            authRequired: true,
-            title: "Reportes por Curso",
-            permission: "ver_convivencia",
-        },
-        component: () => import("../views/convivencia/index.vue"),
+        redirect: (to) => ({ path: "/convivencia", query: { ...to.query } }),
     },
     {
         path: "/apoyo-profesional",
@@ -2475,8 +2500,7 @@ const routes = [
     },
     {
         path: "/chat",
-        meta: { authRequired: true, title: "Chat" },
-        component: () => import("../views/chat/chat.vue"),
+        redirect: "/mensajeria",
     },
     {
         path: "/file-manager",
@@ -3146,6 +3170,20 @@ router.beforeEach(async (routeTo, routeFrom, next) => {
     }
 
     axios.defaults.headers.common["Authorization"] = `Bearer ${token}`;
+
+    const staffOnly = routeTo.matched.some((route) => route.meta.staffOnly);
+    if (staffOnly) {
+        let staffPermissions = [];
+        try {
+            staffPermissions = await loadMessagingAccess({ token });
+        } catch (_) {
+            return next({ path: "/inicio" });
+        }
+
+        if (!staffPermissions.includes(STAFF_ACCESS_MARKER)) {
+            return next({ path: "/inicio" });
+        }
+    }
 
     const requiredPermission = routeTo.meta.permission;
     const requiredPermissions = Array.from(

@@ -10,13 +10,17 @@ class ConversationPolicy
 {
     public function view(User $user, Conversation $conversation): Response
     {
-        return $user->active && $conversation->participants()->where('user_id', $user->id)->whereNull('left_at')->exists()
+        return $user->canUseMessaging() && $conversation->participants()->where('user_id', $user->id)->whereNull('left_at')->exists()
             ? Response::allow()
             : Response::denyAsNotFound();
     }
 
     public function send(User $user, Conversation $conversation): bool
     {
+        if (! $user->canUseMessaging()) {
+            return false;
+        }
+
         $participant = $conversation->participants()->where('user_id', $user->id)->whereNull('left_at')->first();
         if (! $participant || ! $participant->can_write || $conversation->is_locked) {
             return false;
@@ -27,6 +31,7 @@ class ConversationPolicy
 
     public function manage(User $user, Conversation $conversation): bool
     {
-        return $conversation->participants()->where('user_id', $user->id)->whereNull('left_at')->whereIn('role', ['owner', 'admin'])->exists();
+        return $user->canUseMessaging()
+            && $conversation->participants()->where('user_id', $user->id)->whereNull('left_at')->whereIn('role', ['owner', 'admin'])->exists();
     }
 }

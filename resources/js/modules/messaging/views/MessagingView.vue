@@ -11,14 +11,18 @@ import { useRoute, useRouter } from "vue-router";
 import Layout from "../../../layouts/main.vue";
 import api from "../api/messagingApi";
 import { messagingStore as store } from "../stores/messagingStore";
-import { useMessagingHttpPolling } from "../composables/useMessagingHttpPolling";
+import { useMessagingTransport } from "../composables/useMessagingTransport";
+import { filterMessagingStaffUsers } from "../services/messagingAccess";
 
 const route = useRoute();
 const router = useRouter();
 const timeline = ref(null);
 const composerInput = ref(null);
 const currentUser = ref({});
-const pollingEnabled = ref(false);
+const transportEnabled = ref(false);
+const initializingView = ref(true);
+const initializationError = ref("");
+const initializationRetryable = ref(false);
 
 const query = ref("");
 const activeFilter = ref("all");
@@ -62,6 +66,10 @@ const manageUserQuery = ref("");
 const manageUsers = ref([]);
 const manageSearching = ref(false);
 const groupActionId = ref(null);
+const managedParticipants = ref([]);
+const managedParticipantCount = ref(0);
+const managedParticipantsCursor = ref(null);
+const managedParticipantsLoading = ref(false);
 
 const ackMessage = ref(null);
 const ackComment = ref("");
@@ -71,6 +79,9 @@ let conversationSearchTimer;
 let userSearchTimer;
 let manageUserSearchTimer;
 let copyTimer;
+let userSearchSequence = 0;
+let manageUserSearchSequence = 0;
+let managedParticipantsSequence = 0;
 
 const activeId = computed(() => store.state.activeConversation?.public_id);
 const activeConversation = computed(() => store.state.activeConversation);
@@ -83,8 +94,10 @@ const participants = computed(
             (item) => !item.left_at
         ) || []
 );
-const activeParticipant = computed(() =>
-    participants.value.find((item) => item.id === currentUser.value.id)
+const activeParticipant = computed(
+    () =>
+        activeConversation.value?.current_participant ||
+        participants.value.find((item) => item.id === currentUser.value.id)
 );
 const canManageGroup = computed(
     () =>
@@ -94,7 +107,10 @@ const canManageGroup = computed(
 const isGroupOwner = computed(() => activeParticipant.value?.role === "owner");
 const manageCandidates = computed(() => {
     const participantIds = new Set(
-        participants.value.map((participant) => participant.id)
+        (managedParticipants.value.length
+            ? managedParticipants.value
+            : participants.value
+        ).map((participant) => participant.id)
     );
     return manageUsers.value.filter((user) => !participantIds.has(user.id));
 });
@@ -105,7 +121,9 @@ const canSend = computed(() => {
     return ["owner", "admin"].includes(activeParticipant.value?.role);
 });
 const participantCaption = computed(() => {
-    const count = participants.value.length;
+    const count = Number(
+        activeConversation.value?.participant_count ?? participants.value.length
+    );
     if (activeConversation.value?.type === "direct")
         return "Conversación privada";
     return `${count} ${count === 1 ? "participante" : "participantes"}`;
@@ -124,7 +142,11 @@ const groupReady = computed(
 const connectionLabel = computed(
     () =>
         ({
-            polling: "Actualización automática",
+            connected: "En tiempo real",
+            connecting: "Conectando…",
+            reconnecting: "Reconectando…",
+            polling: "Modo compatible",
+            follower: "Sincronizado en otra pestaña",
             syncing: "Actualizando…",
             offline: "Sin conexión",
             unavailable: "Actualización pausada",
@@ -215,7 +237,9 @@ const fileSize = (bytes = 0) =>
         : `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 const conversationPhoto = (conversation) =>
     conversation.type === "direct"
-        ? conversation.participants?.[0]?.photo
+        ? (conversation.participants || []).find(
+              (participant) => participant.id !== currentUser.value.id
+          )?.photo || null
         : null;
 const messagePreview = (conversation) => {
     const message = conversation.last_message;
@@ -224,8 +248,8 @@ const messagePreview = (conversation) => {
     return `${message.sender ? `${message.sender}: ` : ""}${content}`;
 };
 
-useMessagingHttpPolling(activeId, {
-    enabled: pollingEnabled,
+useMessagingTransport(activeId, {
+    enabled: transportEnabled,
     refreshConversations: () =>
         store.loadConversations(conversationParams(), true),
 });
@@ -276,18 +300,22 @@ watch(query, () => {
 });
 
 watch(userQuery, () => {
+    userSearchSequence += 1;
     clearTimeout(userSearchTimer);
     if (userQuery.value.trim().length < 2) {
         users.value = [];
+        searching.value = false;
         return;
     }
     userSearchTimer = setTimeout(searchUsers, 280);
 });
 
 watch(manageUserQuery, () => {
+    manageUserSearchSequence += 1;
     clearTimeout(manageUserSearchTimer);
     if (manageUserQuery.value.trim().length < 2) {
         manageUsers.value = [];
+        manageSearching.value = false;
         return;
     }
     manageUserSearchTimer = setTimeout(searchManageUsers, 280);
@@ -313,6 +341,7 @@ async function setFilter(filter) {
 
 async function openConversation(id, replace = false) {
     await store.open(id);
+    if (activeId.value !== id) return;
     const destination = { path: `/mensajeria/${id}`, query: route.query };
     if (route.params.conversationId !== id)
         await router[replace ? "replace" : "push"](destination);
@@ -344,15 +373,21 @@ function closeCreate() {
 }
 
 async function searchUsers() {
+    const sequence = ++userSearchSequence;
+    const term = userQuery.value.trim();
     searching.value = true;
     createError.value = "";
     try {
-        users.value = (await api.users(userQuery.value.trim())).data.data;
+        const result = (await api.users(term)).data.data;
+        if (sequence === userSearchSequence)
+            users.value = filterMessagingStaffUsers(result);
     } catch (error) {
-        createError.value =
-            error.response?.data?.message || "No fue posible buscar usuarios.";
+        if (sequence === userSearchSequence)
+            createError.value =
+                error.response?.data?.message ||
+                "No fue posible buscar usuarios.";
     } finally {
-        searching.value = false;
+        if (sequence === userSearchSequence) searching.value = false;
     }
 }
 
@@ -407,6 +442,60 @@ async function createGroup() {
     }
 }
 
+const normalizeManagedParticipant = (participant) => ({
+    id: participant.user_id ?? participant.id,
+    name: participant.name || participant.user?.name || "Usuario",
+    email: participant.email || participant.user?.email || "",
+    photo: participant.photo || participant.user?.profile_photo_url || null,
+    role: participant.role,
+    left_at: participant.left_at,
+});
+
+async function loadManagedParticipants(reset = false) {
+    const conversationId = activeId.value;
+    if (!conversationId || (!reset && !managedParticipantsCursor.value)) return;
+    const sequence = ++managedParticipantsSequence;
+    const cursor = reset ? null : managedParticipantsCursor.value;
+    managedParticipantsLoading.value = true;
+    try {
+        const { data } = await api.participants(conversationId, {
+            limit: 100,
+            ...(cursor ? { cursor } : {}),
+        });
+        if (
+            sequence !== managedParticipantsSequence ||
+            activeId.value !== conversationId ||
+            !groupEditOpen.value
+        )
+            return;
+        const incoming = (data.data || [])
+            .map(normalizeManagedParticipant)
+            .filter((participant) => !participant.left_at);
+        const merged = new Map(
+            (reset ? [] : managedParticipants.value).map((participant) => [
+                participant.id,
+                participant,
+            ])
+        );
+        incoming.forEach((participant) => merged.set(participant.id, participant));
+        managedParticipants.value = [...merged.values()];
+        managedParticipantCount.value = Number(
+            data.participant_count ??
+                activeConversation.value?.participant_count ??
+                managedParticipants.value.length
+        );
+        managedParticipantsCursor.value = data.next_cursor || null;
+    } catch (error) {
+        if (sequence === managedParticipantsSequence)
+            groupEditError.value =
+                error.response?.data?.message ||
+                "No fue posible cargar los integrantes.";
+    } finally {
+        if (sequence === managedParticipantsSequence)
+            managedParticipantsLoading.value = false;
+    }
+}
+
 function openGroupManager() {
     if (!canManageGroup.value) return;
     groupEditForm.value = {
@@ -421,7 +510,13 @@ function openGroupManager() {
     groupEditNotice.value = "";
     manageUserQuery.value = "";
     manageUsers.value = [];
+    managedParticipants.value = [];
+    managedParticipantCount.value = Number(
+        activeConversation.value?.participant_count || 0
+    );
+    managedParticipantsCursor.value = null;
     groupEditOpen.value = true;
+    loadManagedParticipants(true);
 }
 
 function closeGroupManager() {
@@ -430,24 +525,35 @@ function closeGroupManager() {
     groupEditNotice.value = "";
     manageUserQuery.value = "";
     manageUsers.value = [];
+    managedParticipantsSequence += 1;
+    managedParticipants.value = [];
+    managedParticipantsCursor.value = null;
+    managedParticipantsLoading.value = false;
 }
 
 async function searchManageUsers() {
+    const sequence = ++manageUserSearchSequence;
+    const term = manageUserQuery.value.trim();
     manageSearching.value = true;
     groupEditError.value = "";
     try {
-        manageUsers.value =
-            (await api.users(manageUserQuery.value.trim())).data.data || [];
+        const result = (await api.users(term)).data.data || [];
+        if (sequence === manageUserSearchSequence)
+            manageUsers.value = filterMessagingStaffUsers(result);
     } catch (error) {
-        groupEditError.value =
-            error.response?.data?.message || "No fue posible buscar usuarios.";
+        if (sequence === manageUserSearchSequence)
+            groupEditError.value =
+                error.response?.data?.message ||
+                "No fue posible buscar usuarios.";
     } finally {
-        manageSearching.value = false;
+        if (sequence === manageUserSearchSequence)
+            manageSearching.value = false;
     }
 }
 
 async function refreshManagedGroup(message = "") {
     await store.refreshActiveConversation();
+    if (groupEditOpen.value) await loadManagedParticipants(true);
     groupEditNotice.value = message;
 }
 
@@ -677,18 +783,52 @@ async function acknowledge() {
     }
 }
 
-onMounted(async () => {
-    await store.loadConfig();
-    currentUser.value = store.state.config.user || {};
-    await Promise.all([store.loadSummary(), store.loadConversations()]);
-    const id =
-        route.params.conversationId || store.state.conversations[0]?.public_id;
-    if (id) await openConversation(id, true);
-    pollingEnabled.value = true;
-});
+async function initializeMessagingView(force = false) {
+    initializingView.value = true;
+    initializationError.value = "";
+    initializationRetryable.value = false;
+    transportEnabled.value = false;
+    try {
+        await store.loadConfig(force);
+        if (store.state.config.enabled === false) {
+            initializationError.value =
+                "La mensajería interna no está habilitada en este entorno.";
+            store.setPollingState("unavailable");
+            return;
+        }
+        currentUser.value = store.state.config.user || {};
+        if (currentUser.value.is_staff !== true) {
+            store.setPollingState("unavailable");
+            await router.replace("/inicio");
+            return;
+        }
+        await Promise.all([store.loadSummary(), store.loadConversations()]);
+        const id =
+            route.params.conversationId ||
+            store.state.conversations[0]?.public_id;
+        if (id) await openConversation(id, true);
+        transportEnabled.value = true;
+    } catch (error) {
+        const status = Number(error.response?.status || 0);
+        const disabled =
+            error.response?.data?.code === "MESSAGING_DISABLED";
+        initializationRetryable.value =
+            !disabled && ![401, 403, 419].includes(status);
+        initializationError.value = disabled
+            ? "La mensajería interna está deshabilitada temporalmente."
+            : [401, 403, 419].includes(status)
+            ? "Tu sesión no tiene acceso a la mensajería interna."
+            : "No fue posible cargar la mensajería. Puedes reintentar cuando se restablezca el servicio.";
+        store.setPollingState("unavailable");
+    } finally {
+        initializingView.value = false;
+    }
+}
+
+onMounted(() => initializeMessagingView());
 
 onBeforeUnmount(() => {
-    pollingEnabled.value = false;
+    transportEnabled.value = false;
     clearTimeout(conversationSearchTimer);
     clearTimeout(userSearchTimer);
     clearTimeout(manageUserSearchTimer);
@@ -705,10 +845,10 @@ onBeforeUnmount(() => {
                         ><i class="bx bx-shield-quarter"></i> Centro de
                         comunicaciones</span
                     >
-                    <h1>Mensajería</h1>
+                    <h1>Mensajería de funcionarios</h1>
                     <p>
-                        Conecta equipos, comparte archivos y gestiona
-                        comunicaciones importantes.
+                        Comunicación interna entre funcionarios para coordinar,
+                        compartir archivos y gestionar información importante.
                     </p>
                 </div>
 
@@ -740,6 +880,32 @@ onBeforeUnmount(() => {
             </header>
 
             <div
+                v-if="initializationError"
+                class="messaging-alert messaging-alert--danger"
+                role="alert"
+            >
+                <i class="bx bx-error-circle"></i
+                ><span>{{ initializationError }}</span>
+                <button
+                    v-if="initializationRetryable"
+                    type="button"
+                    class="messaging-alert-retry"
+                    :disabled="initializingView"
+                    @click="initializeMessagingView(true)"
+                >
+                    <i
+                        class="bx"
+                        :class="
+                            initializingView
+                                ? 'bx-loader-alt bx-spin'
+                                : 'bx-refresh'
+                        "
+                    ></i>
+                    Reintentar
+                </button>
+            </div>
+
+            <div
                 v-if="store.state.error"
                 class="messaging-alert messaging-alert--danger"
                 role="alert"
@@ -748,7 +914,7 @@ onBeforeUnmount(() => {
                 ><span>{{ store.state.error }}</span>
             </div>
 
-            <section class="messenger-shell">
+            <section v-if="!initializationError" class="messenger-shell">
                 <aside
                     class="conversation-panel"
                     :class="{ 'mobile-hidden': activeId }"
@@ -1692,7 +1858,10 @@ onBeforeUnmount(() => {
                     <section class="participant-section">
                         <header>
                             <h4>Participantes</h4>
-                            <span>{{ participants.length }}</span>
+                            <span>{{
+                                activeConversation.participant_count ??
+                                participants.length
+                            }}</span>
                         </header>
                         <div class="participant-list">
                             <div
@@ -1793,8 +1962,8 @@ onBeforeUnmount(() => {
                             <p>
                                 {{
                                     createMode === "group"
-                                        ? "Reúne a las personas adecuadas en un espacio compartido."
-                                        : "Busca a una persona para comenzar a conversar."
+                                        ? "Reúne a los funcionarios adecuados en un espacio compartido."
+                                        : "Busca a un funcionario para comenzar a conversar."
                                 }}
                             </p>
                         </div>
@@ -1898,7 +2067,7 @@ onBeforeUnmount(() => {
                                 <i class="bx bx-search"></i>
                                 <input
                                     v-model="userQuery"
-                                    placeholder="Buscar por nombre o correo…"
+                                    placeholder="Buscar funcionario por nombre o correo…"
                                 />
                                 <i
                                     v-if="searching"
@@ -1944,7 +2113,7 @@ onBeforeUnmount(() => {
                             </button>
                             <p v-if="!searching && !users.length">
                                 <i class="bx bx-user-x"></i> No encontramos
-                                usuarios con esa búsqueda.
+                                funcionarios con esa búsqueda.
                             </p>
                         </div>
 
@@ -2013,7 +2182,7 @@ onBeforeUnmount(() => {
                             <input
                                 v-model="userQuery"
                                 autofocus
-                                placeholder="Buscar por nombre o correo…"
+                                placeholder="Buscar funcionario por nombre o correo…"
                             />
                             <i
                                 v-if="searching"
@@ -2050,14 +2219,14 @@ onBeforeUnmount(() => {
                                 class="search-prompt"
                             >
                                 <span><i class="bx bx-user-voice"></i></span
-                                ><strong>Encuentra a una persona</strong>
+                                ><strong>Encuentra a un funcionario</strong>
                                 <p>
                                     Escribe al menos dos caracteres para buscar.
                                 </p>
                             </div>
                             <p v-else-if="!searching && !users.length">
                                 <i class="bx bx-user-x"></i> No encontramos
-                                usuarios con esa búsqueda.
+                                funcionarios con esa búsqueda.
                             </p>
                         </div>
                         <div v-if="createError" class="dialog-error">
@@ -2208,8 +2377,8 @@ onBeforeUnmount(() => {
                                 <div>
                                     <strong>Integrantes</strong
                                     ><small
-                                        >{{ participants.length }} personas en
-                                        el grupo.</small
+                                        >{{ managedParticipantCount }} funcionarios
+                                        en el grupo.</small
                                     >
                                 </div>
                             </header>
@@ -2220,7 +2389,7 @@ onBeforeUnmount(() => {
                                 <i class="bx bx-search"></i>
                                 <input
                                     v-model="manageUserQuery"
-                                    placeholder="Agregar por nombre o correo…"
+                                    placeholder="Agregar funcionario por nombre o correo…"
                                 />
                                 <i
                                     v-if="manageSearching"
@@ -2272,13 +2441,25 @@ onBeforeUnmount(() => {
                                     "
                                 >
                                     <i class="bx bx-user-check"></i> No hay
-                                    usuarios nuevos con esa búsqueda.
+                                    funcionarios nuevos con esa búsqueda.
                                 </p>
                             </div>
 
                             <div class="managed-participant-list">
+                                <div
+                                    v-if="
+                                        managedParticipantsLoading &&
+                                        !managedParticipants.length
+                                    "
+                                    class="managed-participants-loading"
+                                >
+                                    <span
+                                        class="spinner-border spinner-border-sm"
+                                    ></span>
+                                    Cargando integrantes…
+                                </div>
                                 <article
-                                    v-for="participant in participants"
+                                    v-for="participant in managedParticipants"
                                     :key="participant.id"
                                 >
                                     <span
@@ -2378,6 +2559,27 @@ onBeforeUnmount(() => {
                                         title="Propietario"
                                     ></i>
                                 </article>
+                                <button
+                                    v-if="managedParticipantsCursor"
+                                    type="button"
+                                    class="load-more-participants"
+                                    :disabled="managedParticipantsLoading"
+                                    @click="loadManagedParticipants()"
+                                >
+                                    <i
+                                        class="bx"
+                                        :class="
+                                            managedParticipantsLoading
+                                                ? 'bx-loader-alt bx-spin'
+                                                : 'bx-chevron-down'
+                                        "
+                                    ></i>
+                                    {{
+                                        managedParticipantsLoading
+                                            ? "Cargando…"
+                                            : "Cargar más integrantes"
+                                    }}
+                                </button>
                             </div>
                         </section>
                     </div>
@@ -2579,6 +2781,19 @@ button {
     color: #a83a47;
     background: #fff0f2;
     border: 1px solid #f5cdd3;
+}
+.messaging-alert-retry {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    margin-left: auto;
+    padding: 6px 10px;
+    color: #8c2f3a;
+    background: #fff;
+    border: 1px solid #efc0c7;
+    border-radius: 8px;
+    font-size: 11px;
+    font-weight: 700;
 }
 
 .messenger-shell {
@@ -4614,6 +4829,30 @@ button {
 }
 .managed-participant-list article:last-child {
     border-bottom: 0;
+}
+.managed-participants-loading,
+.load-more-participants {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 10px;
+    color: var(--msg-muted);
+    background: #f7f8fb;
+    border: 1px solid #e4e7ed;
+    border-radius: 9px;
+    font-size: 8.5px;
+}
+.load-more-participants {
+    margin-top: 8px;
+    color: var(--msg-brand);
+    font-weight: 750;
+    cursor: pointer;
+}
+.load-more-participants:disabled {
+    cursor: wait;
+    opacity: 0.65;
 }
 .managed-participant-copy {
     flex: 1;

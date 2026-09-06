@@ -119,7 +119,15 @@ describe("Acceso institucional", () => {
         message: "success",
         data: {
           token: "token-prueba",
-          user: { id: 7, name: "Ana Soto", email: "ana@example.test", profile_photo_url: null },
+          user: {
+            id: 7,
+            name: "Ana Soto",
+            email: "ana@example.test",
+            user_type: "staff",
+            staff_id: 15,
+            is_staff: true,
+            profile_photo_url: null,
+          },
         },
       },
     });
@@ -128,7 +136,13 @@ describe("Acceso institucional", () => {
     await wrapper.vm.login();
 
     expect(localStorage.getItem("token")).toBe("token-prueba");
-    expect(JSON.parse(localStorage.getItem("user"))).toMatchObject({ user_id: 7, name: "Ana Soto" });
+    expect(JSON.parse(localStorage.getItem("user"))).toMatchObject({
+      user_id: 7,
+      name: "Ana Soto",
+      user_type: "staff",
+      staff_id: 15,
+      is_staff: true,
+    });
     expect(routerPush).toHaveBeenCalledWith("/inicio");
   });
 });

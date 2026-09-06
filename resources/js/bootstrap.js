@@ -30,6 +30,12 @@ window.axios.interceptors.request.use((config) => {
             config.headers["X-Authorization"] || value;
         config.headers["X-Api-Token"] = config.headers["X-Api-Token"] || token;
     }
+    const socketId = window.Echo?.socketId?.();
+    if (socketId) {
+        config.headers = config.headers || {};
+        config.headers["X-Socket-ID"] =
+            config.headers["X-Socket-ID"] || socketId;
+    }
     return config;
 });
 

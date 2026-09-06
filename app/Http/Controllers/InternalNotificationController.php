@@ -2,6 +2,10 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\User;
+use App\Notifications\Messaging\AcknowledgementReminderNotification;
+use App\Notifications\Messaging\NewMessageNotification;
+use Illuminate\Database\Eloquent\Relations\MorphMany;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Notifications\DatabaseNotification;
@@ -20,7 +24,7 @@ class InternalNotificationController extends Controller
         $user = $request->user();
         $status = $filters['status'] ?? 'all';
         $search = trim($filters['search'] ?? '');
-        $query = $user->notifications()->latest();
+        $query = $this->visibleNotifications($user)->latest();
 
         if ($status === 'unread') {
             $query->whereNull('read_at');
@@ -36,11 +40,19 @@ class InternalNotificationController extends Controller
         }
 
         $notifications = $query->paginate($limit);
+        $counts = $this->visibleNotifications($user)
+            // La relación ordena por created_at; MySQL en modo estricto no
+            // permite ese ORDER BY sobre una consulta agregada sin GROUP BY.
+            ->reorder()
+            ->selectRaw('COUNT(*) AS total_count')
+            ->selectRaw('COALESCE(SUM(CASE WHEN read_at IS NULL THEN 1 ELSE 0 END), 0) AS unread_count')
+            ->selectRaw('COALESCE(SUM(CASE WHEN read_at IS NOT NULL THEN 1 ELSE 0 END), 0) AS read_count')
+            ->first();
 
         return response()->json([
-            'unread_count' => $user->unreadNotifications()->count(),
-            'total_count' => $user->notifications()->count(),
-            'read_count' => $user->readNotifications()->count(),
+            'unread_count' => (int) ($counts?->unread_count ?? 0),
+            'total_count' => (int) ($counts?->total_count ?? 0),
+            'read_count' => (int) ($counts?->read_count ?? 0),
             'data' => $notifications->getCollection()
                 ->map(fn (DatabaseNotification $notification) => [
                     'id' => $notification->id,
@@ -68,7 +80,7 @@ class InternalNotificationController extends Controller
 
     public function markAsRead(Request $request, string $notification): JsonResponse
     {
-        $item = $request->user()->notifications()->findOrFail($notification);
+        $item = $this->visibleNotifications($request->user())->findOrFail($notification);
         $item->markAsRead();
 
         return response()->json([
@@ -79,11 +91,27 @@ class InternalNotificationController extends Controller
 
     public function markAllAsRead(Request $request): JsonResponse
     {
-        $request->user()->unreadNotifications()->update(['read_at' => now()]);
+        $this->visibleNotifications($request->user())
+            ->whereNull('read_at')
+            ->update(['read_at' => now()]);
 
         return response()->json([
             'message' => 'Notificaciones marcadas como leídas.',
             'unread_count' => 0,
         ]);
+    }
+
+    private function visibleNotifications(User $user): MorphMany
+    {
+        $query = $user->notifications();
+
+        if (! $user->canUseMessaging()) {
+            $query->whereNotIn('type', [
+                NewMessageNotification::class,
+                AcknowledgementReminderNotification::class,
+            ]);
+        }
+
+        return $query;
     }
 }

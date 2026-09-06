@@ -25,6 +25,16 @@ class ConvivenciaAttachment extends Model
         ['value' => 'otro', 'label' => 'Otro'],
     ];
 
+    public const CONFIDENTIALITY_OPTIONS = [
+        ['value' => 'general', 'label' => 'General'],
+        ['value' => 'interna', 'label' => 'Interna'],
+        ['value' => 'reservada', 'label' => 'Reservada'],
+        ['value' => 'confidencial', 'label' => 'Confidencial'],
+        ['value' => 'alta_confidencialidad', 'label' => 'Alta confidencialidad'],
+    ];
+
+    public const NON_SENSITIVE_CONFIDENTIALITY_LEVELS = ['general', 'interna'];
+
     protected $fillable = [
         'case_id',
         'student_profile_id',
@@ -62,5 +72,11 @@ class ConvivenciaAttachment extends Model
     public function uploadedBy(): BelongsTo
     {
         return $this->belongsTo(User::class, 'uploaded_by');
+    }
+
+    public function requiresSensitiveAccess(): bool
+    {
+        return $this->is_sensitive
+            || ! in_array($this->confidentiality_level, self::NON_SENSITIVE_CONFIDENTIALITY_LEVELS, true);
     }
 }

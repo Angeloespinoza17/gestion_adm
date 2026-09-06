@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Convivencia;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Convivencia\SaveConvivenciaMeasureRequest;
 use App\Models\Convivencia\ConvivenciaMeasure;
+use App\Services\Convivencia\ConvivenciaAccessService;
 use App\Services\Convivencia\ConvivenciaMeasureService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -13,14 +14,13 @@ class ConvivenciaMeasureController extends Controller
 {
     public function __construct(
         private readonly ConvivenciaMeasureService $measureService,
-    ) {
-    }
+    ) {}
 
     public function index(Request $request): JsonResponse
     {
         $this->authorize('viewAny', ConvivenciaMeasure::class);
 
-        $query = app(\App\Services\Convivencia\ConvivenciaAccessService::class)
+        $query = app(ConvivenciaAccessService::class)
             ->applyMeasureVisibility(
                 ConvivenciaMeasure::query()->with([
                     'case:id,folio,status',
@@ -59,6 +59,8 @@ class ConvivenciaMeasureController extends Controller
     public function show(ConvivenciaMeasure $measure): JsonResponse
     {
         $this->authorize('view', $measure);
+        $accessService = app(ConvivenciaAccessService::class);
+        $user = request()->user();
 
         return response()->json([
             'data' => $measure->load([
@@ -69,7 +71,9 @@ class ConvivenciaMeasureController extends Controller
                 'responsibleUser:id,name',
                 'responsibleStaff:id,full_name',
                 'validator:id,name',
-                'attachments.uploadedBy:id,name',
+                'attachments' => fn ($query) => $accessService
+                    ->applyAttachmentVisibility($query, $user)
+                    ->with('uploadedBy:id,name'),
                 'statusLogs.changedBy:id,name',
             ]),
         ]);

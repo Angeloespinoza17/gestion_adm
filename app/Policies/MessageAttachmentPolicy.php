@@ -10,7 +10,7 @@ class MessageAttachmentPolicy
 {
     public function view(User $user, MessageAttachment $attachment): Response
     {
-        return $user->active && $attachment->message->conversation->participants()->where('user_id', $user->id)->whereNull('left_at')->exists()
+        return $user->canUseMessaging() && $attachment->message->conversation->participants()->where('user_id', $user->id)->whereNull('left_at')->exists()
             ? Response::allow()
             : Response::denyAsNotFound();
     }

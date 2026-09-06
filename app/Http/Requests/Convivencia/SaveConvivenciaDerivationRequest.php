@@ -2,7 +2,9 @@
 
 namespace App\Http\Requests\Convivencia;
 
+use App\Models\Convivencia\ConvivenciaCase;
 use App\Models\Convivencia\ConvivenciaDerivation;
+use App\Services\Convivencia\ConvivenciaAccessService;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
@@ -51,12 +53,35 @@ class SaveConvivenciaDerivationRequest extends FormRequest
     {
         $validator->after(function ($validator) {
             $scope = $this->input('scope');
+            $derivation = $this->route('derivation');
+            $effectiveValue = function (string $field) use ($derivation) {
+                if ($this->exists($field)) {
+                    return $this->input($field);
+                }
 
-            if ($scope === 'internal' && !$this->filled('destination_department_id') && !$this->filled('destination_staff_id') && !$this->filled('destination_user_id') && !$this->filled('destination_label')) {
+                return $derivation?->getAttribute($field);
+            };
+
+            if ($this->filled('case_id') && ! $validator->errors()->has('case_id')) {
+                $case = ConvivenciaCase::query()->find($this->integer('case_id'));
+                if ($case && ! app(ConvivenciaAccessService::class)->canViewCase($this->user(), $case)) {
+                    $validator->errors()->add('case_id', 'No tienes acceso al caso seleccionado.');
+                }
+            }
+
+            if ($scope === 'internal' && ! collect([
+                $effectiveValue('destination_department_id'),
+                $effectiveValue('destination_staff_id'),
+                $effectiveValue('destination_user_id'),
+                $effectiveValue('destination_label'),
+            ])->contains(fn ($value) => filled($value))) {
                 $validator->errors()->add('destination_label', 'Debes indicar un destinatario interno para la derivación.');
             }
 
-            if ($scope === 'external' && !$this->filled('external_institution_id') && !$this->filled('destination_label')) {
+            if ($scope === 'external' && ! collect([
+                $effectiveValue('external_institution_id'),
+                $effectiveValue('destination_label'),
+            ])->contains(fn ($value) => filled($value))) {
                 $validator->errors()->add('external_institution_id', 'Debes indicar una institución externa para la derivación.');
             }
         });

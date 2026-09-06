@@ -36,7 +36,7 @@ class ContactMessageController extends Controller
         return response()->json($items);
     }
 
-    public function catalogs(): JsonResponse
+    public function catalogs(Request $request): JsonResponse
     {
         return response()->json([
             'statuses' => $this->statuses(),
@@ -46,6 +46,9 @@ class ContactMessageController extends Controller
                 'read' => ContactMessage::query()->where('status', ContactMessage::STATUS_READ)->count(),
                 'responded' => ContactMessage::query()->where('status', ContactMessage::STATUS_RESPONDED)->count(),
                 'archived' => ContactMessage::query()->where('status', ContactMessage::STATUS_ARCHIVED)->count(),
+            ],
+            'capabilities' => [
+                'can_manage' => (bool) $request->user()?->hasPermission('gestionar_contactos_sitio'),
             ],
         ]);
     }

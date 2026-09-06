@@ -72,6 +72,24 @@ export default {
         { label: "Cursos asociados", value: (extra.associated_courses || []).join(", ") },
         { label: "Caso asociado", value: extra.case_folio },
         { label: "Destino de derivación", value: extra.derivation_destination },
+        { label: "Cargo", value: extra.staff_position },
+        { label: "Acta de ronda", value: extra.act_number },
+        { label: "Nochero responsable", value: extra.nochero_name },
+        { label: "Horario del turno", value: extra.shift_window },
+        { label: "Cobertura", value: extra.coverage_label },
+        { label: "Sectores revisados", value: Number.isInteger(extra.sector_count) ? extra.sector_count : null },
+        { label: "Novedades detectadas", value: Number.isInteger(extra.incident_count) ? extra.incident_count : null },
+        { label: "Evidencias adjuntas", value: Number.isInteger(extra.evidence_count) ? extra.evidence_count : null },
+        { label: "Geolocalización", value: extra.geolocation_recorded ? `Registrada${extra.location_accuracy ? ` · precisión ${extra.location_accuracy} m` : ""}` : null },
+        { label: "Sector de la incidencia", value: extra.sector_name },
+        { label: "Estado operativo", value: extra.status_label },
+        { label: "Responsable actual", value: extra.responsible },
+        { label: "Fecha compromiso", value: extra.response_due_at ? this.formatDate(extra.response_due_at) : null },
+        { label: "Respondida", value: extra.responded_at ? this.formatDate(extra.responded_at) : null },
+        { label: "Resuelta", value: extra.resolved_at ? this.formatDate(extra.resolved_at) : null },
+        { label: "Atención inmediata", value: extra.requires_immediate_attention ? "Sí, requiere atención prioritaria" : null },
+        { label: "Seguimientos", value: Number.isInteger(extra.comments_count) ? extra.comments_count : null },
+        { label: "Asignaciones", value: Number.isInteger(extra.assignments_count) ? extra.assignments_count : null },
       ];
 
       return facts.filter((fact) => fact.value !== null && fact.value !== undefined && fact.value !== "");
@@ -86,7 +104,15 @@ export default {
         { label: "Acción realizada", value: extra.action_taken || extra.immediate_action },
         { label: "Seguimiento", value: extra.follow_up_note },
         { label: "Contacto con apoderado", value: extra.guardian_contact_note },
+        { label: "Respuesta operativa", value: extra.response_summary },
+        { label: "Evidencia y notas de cierre", value: extra.closure_evidence_notes },
       ].filter((item) => item.value);
+    },
+    detailSectors() {
+      return this.selectedEntry?.extra?.sectors || [];
+    },
+    detailIncidents() {
+      return this.selectedEntry?.extra?.incidents || [];
     },
   },
   mounted() {
@@ -168,6 +194,7 @@ export default {
     },
     priorityClass(priority) {
       return {
+        critica: "logbook-badge--danger",
         urgente: "logbook-badge--danger",
         alta: "logbook-badge--warning",
         media: "logbook-badge--info",
@@ -175,9 +202,11 @@ export default {
       }[priority] || "logbook-badge--muted";
     },
     statusClass(status) {
-      if (["cerrado", "revisado"].includes(status)) return "logbook-badge--success";
-      if (["en_seguimiento", "destacado"].includes(status)) return "logbook-badge--warning";
-      if (["convertido_caso", "convertido_derivacion"].includes(status)) return "logbook-badge--violet";
+      if (["cerrado", "revisado", "resuelta"].includes(status)) return "logbook-badge--success";
+      if (["en_seguimiento", "destacado", "observado", "pendiente", "en_revision"].includes(status)) return "logbook-badge--warning";
+      if (status === "requiere_atencion") return "logbook-badge--danger";
+      if (status === "sin_novedad") return "logbook-badge--success";
+      if (["convertido_caso", "convertido_derivacion", "derivada"].includes(status)) return "logbook-badge--violet";
       return "logbook-badge--muted";
     },
   },
@@ -194,8 +223,8 @@ export default {
           <div class="logbook-hero__eyebrow"><i class="bx bx-lock-alt"></i> Herramienta exclusiva de Superadmin</div>
           <h1>Revisión central de bitácoras</h1>
           <p>
-            Una sola línea de tiempo para supervisar Inspectoría, Portería, Enfermería y Convivencia Escolar,
-            sin alterar los registros de origen.
+            Una sola línea de tiempo para supervisar Inspectoría, Portería, Enfermería, Convivencia Escolar,
+            funcionarios, rondas e incidencias nocturnas, sin alterar los registros de origen.
           </p>
           <div class="logbook-hero__trust">
             <span><i class="bx bx-show"></i> Sólo lectura</span>
@@ -325,7 +354,7 @@ export default {
                   </td>
                   <td>
                     <div v-if="entry.student" class="logbook-person"><i class="bx bx-user"></i><span><strong>{{ entry.student.name }}</strong><small>{{ entry.course?.name || entry.student.rut || "Sin curso" }}</small></span></div>
-                    <span v-else class="logbook-no-person">Registro general</span>
+                    <span v-else class="logbook-no-person">{{ entry.source === 'staff_logbook' ? 'Registro de funcionario' : entry.source === 'security_rounds' ? 'Ronda institucional' : entry.source === 'security_incidents' ? 'Incidencia nocturna' : 'Registro general' }}</span>
                   </td>
                   <td>
                     <div class="d-flex flex-column align-items-start gap-1">
@@ -400,6 +429,25 @@ export default {
           <section class="logbook-detail__narratives">
             <article v-for="item in detailNarratives" :key="item.label"><span>{{ item.label }}</span><p>{{ item.value }}</p></article>
           </section>
+          <section v-if="detailSectors.length" class="logbook-detail__source-section">
+            <div class="logbook-detail__section-title"><i class="bx bx-map-alt"></i><div><span>Recorrido nocturno</span><strong>Sectores revisados</strong></div></div>
+            <div class="logbook-detail__sector-grid">
+              <article v-for="(sector, index) in detailSectors" :key="`${sector.name}-${index}`">
+                <div><strong>{{ sector.name }}</strong><span class="logbook-badge" :class="statusClass(sector.state)">{{ humanize(sector.state) }}</span></div>
+                <p v-if="sector.observations">{{ sector.observations }}</p>
+              </article>
+            </div>
+          </section>
+          <section v-if="detailIncidents.length" class="logbook-detail__source-section">
+            <div class="logbook-detail__section-title"><i class="bx bx-error-circle"></i><div><span>Seguimiento operativo</span><strong>Novedades de la ronda</strong></div></div>
+            <div class="logbook-detail__incident-list">
+              <article v-for="incident in detailIncidents" :key="incident.id">
+                <div class="logbook-detail__incident-head"><strong>{{ incident.title }}</strong><span class="logbook-badge" :class="priorityClass(incident.priority)">{{ humanize(incident.priority) }}</span></div>
+                <p>{{ incident.description }}</p>
+                <div class="logbook-detail__incident-meta"><span v-if="incident.sector"><i class="bx bx-map-pin"></i>{{ incident.sector }}</span><span><i class="bx bx-pulse"></i>{{ incident.status || "Sin estado" }}</span><span v-if="incident.responsible"><i class="bx bx-user-check"></i>{{ incident.responsible }}</span></div>
+              </article>
+            </div>
+          </section>
           <div class="logbook-detail__footer">
             <span>Identificador de origen: {{ selectedEntry.source }} #{{ selectedEntry.source_id }}</span>
             <RouterLink v-if="sourceDefinition(selectedEntry.source).route" :to="sourceDefinition(selectedEntry.source).route" @click="showDetail = false">
@@ -438,7 +486,7 @@ export default {
 .logbook-metric--teal .logbook-metric__icon { color: #0f766e; background: #e8fbf7; }
 .logbook-metric--amber .logbook-metric__icon { color: #b45309; background: #fff7e6; }
 .logbook-metric--rose .logbook-metric__icon { color: #be3652; background: #fff0f3; }
-.logbook-source-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: .75rem; margin-bottom: 1rem; }
+.logbook-source-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(205px, 1fr)); gap: .75rem; margin-bottom: 1rem; }
 .logbook-source { --source-accent: #5b5bd6; display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: .7rem; padding: .85rem; border: 1px solid #e5eaf3; border-radius: 16px; text-align: left; background: #fff; transition: .2s ease; }
 .logbook-source:hover, .logbook-source--active { border-color: color-mix(in srgb, var(--source-accent) 55%, #fff); box-shadow: 0 8px 20px color-mix(in srgb, var(--source-accent) 12%, transparent); transform: translateY(-1px); }
 .logbook-source--active { box-shadow: inset 0 0 0 1px var(--source-accent), 0 8px 20px color-mix(in srgb, var(--source-accent) 12%, transparent); }
@@ -524,6 +572,23 @@ export default {
 .logbook-detail__narratives article { padding: .9rem; border: 1px solid #e5e9f1; border-radius: 14px; background: #fff; }
 .logbook-detail__narratives span { color: #6d5ce7; font-size: .65rem; font-weight: 750; letter-spacing: .04em; text-transform: uppercase; }
 .logbook-detail__narratives p { margin: .4rem 0 0; color: #4e596d; font-size: .76rem; line-height: 1.65; white-space: pre-wrap; }
+.logbook-detail__source-section { margin-top: 1rem; padding: 1rem; border: 1px solid #e5e9f1; border-radius: 14px; background: #fff; }
+.logbook-detail__section-title { display: flex; align-items: center; gap: .65rem; margin-bottom: .8rem; }
+.logbook-detail__section-title > i { display: grid; width: 36px; height: 36px; place-items: center; border-radius: 11px; color: #4f46e5; background: #eef2ff; font-size: 1.05rem; }
+.logbook-detail__section-title span, .logbook-detail__section-title strong { display: block; }
+.logbook-detail__section-title span { color: #8a93a4; font-size: .6rem; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; }
+.logbook-detail__section-title strong { margin-top: .08rem; color: #2c3548; font-size: .8rem; }
+.logbook-detail__sector-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .6rem; }
+.logbook-detail__sector-grid article { padding: .7rem; border: 1px solid #edf0f5; border-radius: 11px; background: #fafbfe; }
+.logbook-detail__sector-grid article > div { display: flex; align-items: center; justify-content: space-between; gap: .5rem; }
+.logbook-detail__sector-grid strong { color: #374154; font-size: .72rem; }
+.logbook-detail__sector-grid p, .logbook-detail__incident-list p { margin: .45rem 0 0; color: #657085; font-size: .69rem; line-height: 1.5; }
+.logbook-detail__incident-list { display: grid; gap: .65rem; }
+.logbook-detail__incident-list article { padding: .75rem; border: 1px solid #edf0f5; border-radius: 11px; background: #fafbfe; }
+.logbook-detail__incident-head { display: flex; align-items: center; justify-content: space-between; gap: .65rem; }
+.logbook-detail__incident-head > strong { color: #374154; font-size: .74rem; }
+.logbook-detail__incident-meta { display: flex; flex-wrap: wrap; gap: .65rem; margin-top: .55rem; color: #7c8596; font-size: .63rem; }
+.logbook-detail__incident-meta span { display: inline-flex; align-items: center; gap: .22rem; }
 .logbook-detail__footer { display: flex; justify-content: space-between; gap: 1rem; margin-top: 1rem; padding-top: .8rem; border-top: 1px solid #e2e6ee; color: #8b94a4; font-size: .66rem; }
 .logbook-detail__footer a { color: #554fc7; font-weight: 700; }
 .bx-spin { animation: logbook-spin .8s linear infinite; }
@@ -559,6 +624,7 @@ export default {
   .logbook-mobile-card__foot button { display: inline-flex; align-items: center; gap: .15rem; border: 0; color: #4f46e5; background: transparent; font-size: .7rem; font-weight: 750; }
   .logbook-detail__facts { grid-template-columns: repeat(2, 1fr); }
   .logbook-detail__footer { align-items: flex-start; flex-direction: column; }
+  .logbook-detail__sector-grid { grid-template-columns: 1fr; }
 }
 @media (max-width: 480px) {
   .logbook-metrics { grid-template-columns: 1fr; }

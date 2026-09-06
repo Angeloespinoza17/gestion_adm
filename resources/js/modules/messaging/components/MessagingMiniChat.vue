@@ -9,7 +9,7 @@ import {
 } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import api from "../api/messagingApi";
-import { useMessagingHttpPolling } from "../composables/useMessagingHttpPolling";
+import { useMessagingTransport } from "../composables/useMessagingTransport";
 import { messagingStore as store } from "../stores/messagingStore";
 
 const route = useRoute();
@@ -33,7 +33,7 @@ let baseDocumentTitle = "CNSC Gestión";
 
 const hidden = computed(() => route.path.startsWith("/mensajeria"));
 const activeId = computed(() => store.state.activeConversation?.public_id);
-const pollingEnabled = computed(
+const transportEnabled = computed(
     () => initialized.value && available.value && !hidden.value
 );
 const messages = computed(
@@ -45,7 +45,11 @@ const unreadCount = computed(() =>
 const connectionLabel = computed(
     () =>
         ({
-            polling: "Actualización automática",
+            connected: "En tiempo real",
+            connecting: "Conectando…",
+            reconnecting: "Reconectando…",
+            polling: "Modo compatible",
+            follower: "Sincronizado en otra pestaña",
             syncing: "Actualizando…",
             offline: "Sin conexión",
             unavailable: "Actualización pausada",
@@ -92,7 +96,9 @@ const typeIcon = (type) =>
         : "bx-user";
 const conversationPhoto = (conversation) =>
     conversation?.type === "direct"
-        ? conversation.participants?.[0]?.photo
+        ? (conversation.participants || []).find(
+              (participant) => participant.id !== currentUser.value.id
+          )?.photo || null
         : null;
 const time = (date) =>
     new Intl.DateTimeFormat("es-CL", {
@@ -121,8 +127,8 @@ const acknowledgementComplete = (message) => {
     );
 };
 
-useMessagingHttpPolling(activeId, {
-    enabled: pollingEnabled,
+useMessagingTransport(activeId, {
+    enabled: transportEnabled,
     refreshConversations: () =>
         expanded.value ? store.loadConversations({}, true) : Promise.resolve(),
 });
@@ -131,13 +137,24 @@ async function initialize() {
     if (initialized.value || initializing.value || hidden.value) return;
     initializing.value = true;
     try {
-        await Promise.all([store.loadConfig(), store.loadSummary()]);
+        await store.loadConfig(true);
         currentUser.value = store.state.config.user || {};
-        available.value = Boolean(store.state.config.enabled ?? true);
+        available.value = Boolean(
+            (store.state.config.enabled ?? true) &&
+                currentUser.value.is_staff === true
+        );
+        if (!available.value) {
+            initialized.value = true;
+            return;
+        }
+        await store.loadSummary();
         initialized.value = true;
     } catch (requestError) {
         available.value = false;
-        if (requestError.response?.status !== 401)
+        if (
+            requestError.response?.status !== 401 &&
+            requestError.response?.data?.code !== "MESSAGING_DISABLED"
+        )
             console.warn(
                 "No fue posible iniciar el chat flotante.",
                 requestError
@@ -202,6 +219,7 @@ async function openConversation(id) {
     acknowledgementComment.value = "";
     try {
         await store.open(id);
+        if (activeId.value !== id) return;
         miniView.value = "thread";
         scrollBottom();
     } catch (requestError) {
@@ -415,7 +433,7 @@ onBeforeUnmount(() => {
                             ><i class="bx bx-message-square-dots"></i
                         ></span>
                         <div class="mini-header-copy">
-                            <strong>Mensajes</strong
+                            <strong>Mensajería de funcionarios</strong
                             ><small>{{
                                 unreadCount
                                     ? `${unreadCount} sin leer`

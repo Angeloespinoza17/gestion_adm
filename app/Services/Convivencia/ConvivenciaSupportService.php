@@ -3,7 +3,6 @@
 namespace App\Services\Convivencia;
 
 use App\Models\Convivencia\ConvivenciaCase;
-use App\Models\Convivencia\ConvivenciaCasePerson;
 use App\Models\Convivencia\ConvivenciaInterview;
 use App\Models\Convivencia\ConvivenciaPlan;
 use App\Models\Convivencia\ConvivenciaProtocol;
@@ -11,6 +10,7 @@ use App\Models\Convivencia\ConvivenciaSociogram;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Validation\ValidationException;
 
 class ConvivenciaSupportService
 {
@@ -19,7 +19,7 @@ class ConvivenciaSupportService
         $year = now()->format('Y');
         $base = sprintf('CONV-%s-%s-', strtoupper($prefix), $year);
         $last = (clone $query)
-            ->where($column, 'like', $base . '%')
+            ->where($column, 'like', $base.'%')
             ->orderByDesc($column)
             ->value($column);
 
@@ -29,7 +29,7 @@ class ConvivenciaSupportService
             $sequence = ((int) $matches[1]) + 1;
         }
 
-        return $base . str_pad((string) $sequence, 4, '0', STR_PAD_LEFT);
+        return $base.str_pad((string) $sequence, 4, '0', STR_PAD_LEFT);
     }
 
     /**
@@ -66,21 +66,41 @@ class ConvivenciaSupportService
      */
     public function syncPlanActions(ConvivenciaPlan $plan, array $actions): void
     {
-        $plan->actions()->delete();
+        $existing = $plan->actions()->withTrashed()->get()->keyBy('id');
+        $retainedIds = [];
 
-        foreach ($actions as $action) {
+        foreach (array_values($actions) as $index => $action) {
             if (empty($action['title'])) {
                 continue;
             }
 
-            $plan->actions()->create([
+            $record = null;
+            if (! empty($action['id'])) {
+                $record = $existing->get((int) $action['id']);
+                if (! $record) {
+                    throw ValidationException::withMessages([
+                        'actions' => ['Una de las acciones no pertenece al plan editado.'],
+                    ]);
+                }
+                if ($record->trashed()) {
+                    $record->restore();
+                }
+            }
+
+            $attributes = [
                 'dimension_item_id' => $action['dimension_item_id'] ?? null,
                 'responsible_user_id' => $action['responsible_user_id'] ?? null,
                 'responsible_staff_id' => $action['responsible_staff_id'] ?? null,
                 'responsible_department_id' => $action['responsible_department_id'] ?? null,
                 'action_type' => $action['action_type'] ?? 'preventiva',
                 'title' => $action['title'],
+                'objective' => $action['objective'] ?? null,
                 'description' => $action['description'] ?? null,
+                'target_audience' => $action['target_audience'] ?? null,
+                'planned_month' => $action['planned_month'] ?? null,
+                'date_precision' => $action['date_precision'] ?? 'exact',
+                'sort_order' => $action['sort_order'] ?? ($index + 1),
+                'weight_percent' => $action['weight_percent'] ?? 0,
                 'dimension_label' => $action['dimension_label'] ?? null,
                 'responsible_label' => $action['responsible_label'] ?? null,
                 'starts_on' => $action['starts_on'] ?? null,
@@ -88,12 +108,32 @@ class ConvivenciaSupportService
                 'required_resources' => $action['required_resources'] ?? null,
                 'indicator_summary' => $action['indicator_summary'] ?? null,
                 'verification_means' => $action['verification_means'] ?? null,
-                'status' => $action['status'] ?? 'borrador',
+                'status' => $action['status'] ?? 'planificada',
                 'advance_percentage' => $action['advance_percentage'] ?? 0,
                 'observations' => $action['observations'] ?? null,
                 'evidence_summary' => $action['evidence_summary'] ?? null,
-            ]);
+            ];
+            if ($attributes['date_precision'] === 'month') {
+                $attributes['starts_on'] = null;
+                $attributes['ends_on'] = null;
+            } else {
+                $attributes['planned_month'] = null;
+            }
+
+            if ($record) {
+                $record->fill($attributes)->save();
+            } else {
+                $record = $plan->actions()->create($attributes);
+            }
+
+            $retainedIds[] = $record->id;
         }
+
+        $removedQuery = $plan->actions();
+        if ($retainedIds !== []) {
+            $removedQuery->whereNotIn('id', $retainedIds);
+        }
+        $removedQuery->delete();
     }
 
     /**
@@ -151,31 +191,73 @@ class ConvivenciaSupportService
      */
     public function syncSociogramStructure(ConvivenciaSociogram $sociogram, array $questions, array $answers = []): void
     {
-        $sociogram->answers()->delete();
-        $sociogram->questions()->delete();
+        $this->syncSociogramQuestions($sociogram, $questions);
+        $this->syncSociogramAnswers($sociogram, $answers);
+    }
 
-        $questionMap = [];
+    /**
+     * Reconciles questions by their visible order so answers attached to retained
+     * questions survive an update that does not submit an answers collection.
+     *
+     * @param  array<int, array<string, mixed>>  $questions
+     */
+    public function syncSociogramQuestions(ConvivenciaSociogram $sociogram, array $questions): void
+    {
+        $existingQuestions = $sociogram->questions()->orderBy('id')->get()->values();
+        $retainedIds = [];
 
         foreach (array_values($questions) as $index => $question) {
             if (empty($question['prompt'])) {
                 continue;
             }
 
-            $created = $sociogram->questions()->create([
+            $attributes = [
                 'prompt' => $question['prompt'],
                 'selection_type' => $question['selection_type'] ?? 'positiva',
                 'max_choices' => $question['max_choices'] ?? 3,
                 'active' => (bool) ($question['active'] ?? true),
-            ]);
+            ];
 
-            $questionMap[$index + 1] = $created->id;
+            $existing = $existingQuestions->get($index);
+
+            if ($existing) {
+                $existing->fill($attributes)->save();
+                $retainedIds[] = $existing->id;
+
+                continue;
+            }
+
+            $retainedIds[] = $sociogram->questions()->create($attributes)->id;
         }
+
+        $obsoleteIds = $existingQuestions
+            ->pluck('id')
+            ->diff($retainedIds)
+            ->values();
+
+        if ($obsoleteIds->isNotEmpty()) {
+            $sociogram->answers()->whereIn('question_id', $obsoleteIds)->delete();
+            $sociogram->questions()->whereIn('id', $obsoleteIds)->delete();
+        }
+    }
+
+    /**
+     * @param  array<int, array<string, mixed>>  $answers
+     */
+    public function syncSociogramAnswers(ConvivenciaSociogram $sociogram, array $answers): void
+    {
+        $sociogram->answers()->delete();
+
+        $questionMap = $sociogram->questions()
+            ->orderBy('id')
+            ->pluck('id')
+            ->values();
 
         foreach ($answers as $answer) {
             $questionOrder = (int) ($answer['question_order'] ?? 0);
-            $questionId = $questionMap[$questionOrder] ?? null;
+            $questionId = $questionMap->get($questionOrder - 1);
 
-            if (!$questionId) {
+            if (! $questionId) {
                 continue;
             }
 
@@ -191,7 +273,7 @@ class ConvivenciaSupportService
 
     public function logStatus(Model $model, ?string $previousStatus, string $newStatus, ?User $user, ?string $comment = null, string $eventType = 'status_change'): void
     {
-        if (!method_exists($model, 'statusLogs')) {
+        if (! method_exists($model, 'statusLogs')) {
             return;
         }
 

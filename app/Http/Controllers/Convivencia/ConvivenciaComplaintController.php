@@ -3,8 +3,10 @@
 namespace App\Http\Controllers\Convivencia;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Convivencia\ConvertConvivenciaRecordToCaseRequest;
 use App\Http\Requests\Convivencia\SaveConvivenciaComplaintRequest;
 use App\Models\Convivencia\ConvivenciaComplaint;
+use App\Services\Convivencia\ConvivenciaAccessService;
 use App\Services\Convivencia\ConvivenciaComplaintService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -13,14 +15,13 @@ class ConvivenciaComplaintController extends Controller
 {
     public function __construct(
         private readonly ConvivenciaComplaintService $complaintService,
-    ) {
-    }
+    ) {}
 
     public function index(Request $request): JsonResponse
     {
         $this->authorize('viewAny', ConvivenciaComplaint::class);
 
-        $query = app(\App\Services\Convivencia\ConvivenciaAccessService::class)
+        $query = app(ConvivenciaAccessService::class)
             ->applyComplaintVisibility(
                 ConvivenciaComplaint::query()->with([
                     'affectedStudent:id,first_name,last_name,registered_name,rut',
@@ -55,7 +56,9 @@ class ConvivenciaComplaintController extends Controller
             ->when($request->query('from'), fn ($builder, $value) => $builder->whereDate('received_at', '>=', $value))
             ->when($request->query('to'), fn ($builder, $value) => $builder->whereDate('received_at', '<=', $value));
 
-        return response()->json($query->latest('received_at')->paginate((int) $request->query('per_page', 12)));
+        $perPage = min(max((int) $request->query('per_page', 12), 1), 50);
+
+        return response()->json($query->latest('received_at')->paginate($perPage));
     }
 
     public function store(SaveConvivenciaComplaintRequest $request): JsonResponse
@@ -73,6 +76,8 @@ class ConvivenciaComplaintController extends Controller
     public function show(ConvivenciaComplaint $complaint): JsonResponse
     {
         $this->authorize('view', $complaint);
+        $accessService = app(ConvivenciaAccessService::class);
+        $user = request()->user();
 
         return response()->json([
             'data' => $complaint->load([
@@ -83,7 +88,9 @@ class ConvivenciaComplaintController extends Controller
                 'responsibleUser:id,name,email',
                 'case:id,folio,status',
                 'protocolActivations.protocol:id,name',
-                'attachments.uploadedBy:id,name',
+                'attachments' => fn ($query) => $accessService
+                    ->applyAttachmentVisibility($query, $user)
+                    ->with('uploadedBy:id,name'),
                 'statusLogs.changedBy:id,name',
             ]),
         ]);
@@ -112,22 +119,12 @@ class ConvivenciaComplaintController extends Controller
         ]);
     }
 
-    public function convertToCase(Request $request, ConvivenciaComplaint $complaint): JsonResponse
+    public function convertToCase(ConvertConvivenciaRecordToCaseRequest $request, ConvivenciaComplaint $complaint): JsonResponse
     {
         $this->authorize('update', $complaint);
+        abort_unless(app(ConvivenciaAccessService::class)->canCreateCase($request->user()), 403);
 
-        $payload = $request->validate([
-            'case_type_item_id' => ['nullable', 'integer', 'exists:convivencia_catalog_items,id'],
-            'classification_item_id' => ['required', 'integer', 'exists:convivencia_catalog_items,id'],
-            'subclassification_item_id' => ['nullable', 'integer', 'exists:convivencia_catalog_items,id'],
-            'criticality_item_id' => ['required', 'integer', 'exists:convivencia_catalog_items,id'],
-            'responsible_user_id' => ['required', 'integer', 'exists:users,id'],
-            'responsible_staff_id' => ['nullable', 'integer', 'exists:staff,id'],
-            'is_sensitive' => ['sometimes', 'boolean'],
-            'follow_up_due_at' => ['nullable', 'date'],
-        ]);
-
-        $case = $this->complaintService->convertToCase($complaint, $payload, $request->user());
+        $case = $this->complaintService->convertToCase($complaint, $request->validated(), $request->user());
 
         return response()->json([
             'message' => 'La denuncia fue convertida correctamente en un caso.',

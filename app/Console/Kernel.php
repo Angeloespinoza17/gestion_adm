@@ -51,9 +51,12 @@ class Kernel extends ConsoleKernel
             ->onOneServer();
         $schedule->command('messaging:send-acknowledgement-reminders')
             ->everyThirtyMinutes()
-            ->withoutOverlapping();
+            ->onOneServer()
+            ->withoutOverlapping()
+            ->when(fn (): bool => (bool) config('messaging.enabled'));
         $schedule->command('messaging:cleanup-temporary-uploads')
             ->hourly()
+            ->onOneServer()
             ->withoutOverlapping();
         $schedule->command('social-work:evaluate-risks')
             ->dailyAt('06:50')

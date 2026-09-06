@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 const read = (path) => readFileSync(path, "utf8");
@@ -35,16 +35,19 @@ describe("Sistema visual del sitio público CNSC", () => {
     expect(layout).toContain('class="site-invitation"');
   });
 
-  it("presenta una portada editorial con medios web optimizados", () => {
+  it("presenta una portada editorial con la fachada institucional optimizada", () => {
     expect(home).toContain("hero-eyebrow");
     expect(home).toContain("hero-actions");
     expect(home).toContain("hero-identity-chips");
     expect(home).toContain("school-crest-card");
     expect(home).toContain("event-ticker__list");
-    expect(home).toContain("video-2-web.mp4");
-    expect(home).toContain("hero-poster.webp");
-    expect(home).toContain('media="(min-width: 768px)"');
-    expect(home).not.toContain("video-2.mp4");
+    expect(home).toContain("school-facade-hero.webp");
+    expect(home).toContain('class="hero-background-image"');
+    expect(home).toContain('fetchpriority="high"');
+    expect(home).not.toContain("<video");
+    expect(home).not.toContain("video-2-web.mp4");
+    expect(existsSync("public/niceschool/assets/img/education/school-facade-hero.webp")).toBe(true);
+    expect(premiumCss).toContain(".public-site .hero .hero-background-image");
     expect(home).toContain('href="{{ route(\'public.educational-project\') }}" class="btn-primary"');
     expect(home).toContain("Conoce nuestro proyecto educativo");
   });
@@ -108,6 +111,12 @@ describe("Sistema visual del sitio público CNSC", () => {
     expect(contact).toContain('aria-invalid="{{ $errors->has');
     expect(contact).toContain('role="alert"');
     expect(contact).toContain("@csrf");
+    expect(contact).toContain('name="contact_started_at"');
+    expect(contact).toContain('class="contact-form__antibot"');
+    expect(contact).toContain("Formulario protegido contra envíos automatizados. No incluyas enlaces web.");
+    expect(publicJs).toContain("form[data-contact-form]");
+    expect(publicJs).toContain("form.dataset.submitting");
+    expect(premiumCss).toContain(".public-site .contact-form__antibot");
     expect(premiumCss).toContain(".public-site.contact-page .contact-map__frame");
     expect(premiumCss).toMatch(/\.public-site\.contact-page \.contact-map \{[^}]*height: 500px;/s);
     expect(premiumCss).toContain("filter: grayscale(100%) sepia(32%) saturate(440%) hue-rotate(165deg) brightness(94%) contrast(92%);");

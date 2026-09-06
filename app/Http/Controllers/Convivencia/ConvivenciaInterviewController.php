@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Convivencia;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Convivencia\SaveConvivenciaInterviewRequest;
 use App\Models\Convivencia\ConvivenciaInterview;
+use App\Services\Convivencia\ConvivenciaAccessService;
 use App\Services\Convivencia\ConvivenciaInterviewService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -13,14 +14,13 @@ class ConvivenciaInterviewController extends Controller
 {
     public function __construct(
         private readonly ConvivenciaInterviewService $interviewService,
-    ) {
-    }
+    ) {}
 
     public function index(Request $request): JsonResponse
     {
         $this->authorize('viewAny', ConvivenciaInterview::class);
 
-        $query = app(\App\Services\Convivencia\ConvivenciaAccessService::class)
+        $query = app(ConvivenciaAccessService::class)
             ->applyInterviewVisibility(
                 ConvivenciaInterview::query()->with([
                     'case:id,folio,status',
@@ -58,6 +58,8 @@ class ConvivenciaInterviewController extends Controller
     public function show(ConvivenciaInterview $interview): JsonResponse
     {
         $this->authorize('view', $interview);
+        $accessService = app(ConvivenciaAccessService::class);
+        $user = request()->user();
 
         return response()->json([
             'data' => $interview->load([
@@ -70,7 +72,9 @@ class ConvivenciaInterviewController extends Controller
                 'participants.student:id,first_name,last_name,registered_name,rut',
                 'participants.user:id,name',
                 'participants.staff:id,full_name',
-                'attachments.uploadedBy:id,name',
+                'attachments' => fn ($query) => $accessService
+                    ->applyAttachmentVisibility($query, $user)
+                    ->with('uploadedBy:id,name'),
                 'statusLogs.changedBy:id,name',
             ]),
         ]);

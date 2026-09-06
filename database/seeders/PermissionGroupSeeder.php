@@ -58,9 +58,10 @@ class PermissionGroupSeeder extends Seeder
                 'slug' => 'sitio_publico',
                 'module_slug' => 'public_site',
                 'name' => 'Sitio publico',
-                'description' => 'Gestión de noticias, eventos, testimonios, vida estudiantil, instalaciones, organizaciones y mensajes del sitio público.',
+                'description' => 'Gestión de métricas, noticias, eventos, testimonios, vida estudiantil, instalaciones, organizaciones y mensajes del sitio público.',
                 'sort_order' => 20,
                 'permissions' => [
+                    'ver_metricas_sitio',
                     'ver_noticias',
                     'gestionar_noticias',
                     'ver_eventos',
@@ -781,6 +782,17 @@ class PermissionGroupSeeder extends Seeder
                     'rrhh.seleccion.gestionar',
                     'rrhh.seleccion.importar',
                     'rrhh.psicolaborales.confidencial',
+                ],
+            ],
+            [
+                'slug' => 'operational_staff_logbook',
+                'module_slug' => 'operational_staff_logbook',
+                'name' => 'Bitácora de funcionarios',
+                'description' => 'Registro personal de funcionarios y consulta institucional protegida.',
+                'sort_order' => 256,
+                'permissions' => [
+                    'operational_logbook.view',
+                    'operational_logbook.create',
                 ],
             ],
             [

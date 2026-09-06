@@ -16,20 +16,69 @@ export default {
       notifications: [],
       unreadCount: 0,
       refreshTimer: null,
+      eventRefreshTimer: null,
+      refreshFailures: 0,
     };
   },
   mounted() {
     this.loadNotifications();
-    this.refreshTimer = window.setInterval(() => this.loadNotifications(), 45000);
-    window.addEventListener("internal-notifications:refresh", this.loadNotifications);
+    window.addEventListener("internal-notifications:refresh", this.handleRefreshRequested);
+    window.addEventListener("online", this.handleOnline);
+    window.addEventListener("offline", this.handleOffline);
+    document.addEventListener("visibilitychange", this.handleVisibilityChange);
   },
   beforeUnmount() {
-    if (this.refreshTimer) window.clearInterval(this.refreshTimer);
-    window.removeEventListener("internal-notifications:refresh", this.loadNotifications);
+    if (this.refreshTimer) window.clearTimeout(this.refreshTimer);
+    if (this.eventRefreshTimer) window.clearTimeout(this.eventRefreshTimer);
+    window.removeEventListener("internal-notifications:refresh", this.handleRefreshRequested);
+    window.removeEventListener("online", this.handleOnline);
+    window.removeEventListener("offline", this.handleOffline);
+    document.removeEventListener("visibilitychange", this.handleVisibilityChange);
   },
   methods: {
+    handleRefreshRequested() {
+      if (this.eventRefreshTimer) window.clearTimeout(this.eventRefreshTimer);
+      this.eventRefreshTimer = window.setTimeout(() => {
+        this.eventRefreshTimer = null;
+        this.loadNotifications();
+      }, 1500);
+    },
+    scheduleRefresh() {
+      if (this.refreshTimer) window.clearTimeout(this.refreshTimer);
+      this.refreshTimer = null;
+      if (document.visibilityState === "hidden" || !navigator.onLine) return;
+
+      const baseDelay = Math.min(300000, 90000 * (2 ** this.refreshFailures));
+      const jitter = 0.8 + Math.random() * 0.4;
+      this.refreshTimer = window.setTimeout(
+        () => this.loadNotifications(),
+        Math.round(baseDelay * jitter),
+      );
+    },
+    handleVisibilityChange() {
+      if (document.visibilityState === "hidden") {
+        if (this.refreshTimer) window.clearTimeout(this.refreshTimer);
+        this.refreshTimer = null;
+        return;
+      }
+      this.loadNotifications();
+    },
+    handleOnline() {
+      this.refreshFailures = 0;
+      this.loadNotifications();
+    },
+    handleOffline() {
+      if (this.refreshTimer) window.clearTimeout(this.refreshTimer);
+      this.refreshTimer = null;
+    },
     async loadNotifications() {
       if (this.loading) return;
+      if (document.visibilityState === "hidden" || !navigator.onLine) {
+        this.scheduleRefresh();
+        return;
+      }
+      if (this.refreshTimer) window.clearTimeout(this.refreshTimer);
+      this.refreshTimer = null;
       this.loading = true;
 
       try {
@@ -38,12 +87,15 @@ export default {
         });
         this.notifications = response.data.data || [];
         this.unreadCount = Number(response.data.unread_count || 0);
+        this.refreshFailures = 0;
       } catch (error) {
+        this.refreshFailures = Math.min(2, this.refreshFailures + 1);
         if (error?.response?.status !== 401) {
           console.warn("No se pudieron cargar las notificaciones internas.", error);
         }
       } finally {
         this.loading = false;
+        this.scheduleRefresh();
       }
     },
     async openNotification(notification) {

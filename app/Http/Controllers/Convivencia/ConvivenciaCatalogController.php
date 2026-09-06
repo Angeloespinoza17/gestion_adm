@@ -4,14 +4,28 @@ namespace App\Http\Controllers\Convivencia;
 
 use App\Http\Controllers\Controller;
 use App\Models\AcademicYear;
+use App\Models\Convivencia\ConvivenciaAttachment;
+use App\Models\Convivencia\ConvivenciaCase;
 use App\Models\Convivencia\ConvivenciaCatalogItem;
+use App\Models\Convivencia\ConvivenciaComplaint;
+use App\Models\Convivencia\ConvivenciaDailyLog;
+use App\Models\Convivencia\ConvivenciaDerivation;
 use App\Models\Convivencia\ConvivenciaExternalInstitution;
+use App\Models\Convivencia\ConvivenciaIdpsResult;
+use App\Models\Convivencia\ConvivenciaInterview;
+use App\Models\Convivencia\ConvivenciaMeasure;
+use App\Models\Convivencia\ConvivenciaPlan;
+use App\Models\Convivencia\ConvivenciaPlanAction;
+use App\Models\Convivencia\ConvivenciaProtocol;
+use App\Models\Convivencia\ConvivenciaProtocolActivation;
+use App\Models\Convivencia\ConvivenciaSociogram;
 use App\Models\CourseSection;
 use App\Models\Department;
 use App\Models\Staff;
 use App\Models\User;
 use App\Services\Convivencia\ConvivenciaAccessService;
 use App\Services\Convivencia\ConvivenciaStudentContextService;
+use App\Services\Convivencia\ConvivenciaSupportProfessionalService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -20,8 +34,8 @@ class ConvivenciaCatalogController extends Controller
     public function __construct(
         private readonly ConvivenciaAccessService $accessService,
         private readonly ConvivenciaStudentContextService $studentContextService,
-    ) {
-    }
+        private readonly ConvivenciaSupportProfessionalService $supportProfessionalService,
+    ) {}
 
     public function catalogs(Request $request): JsonResponse
     {
@@ -29,25 +43,35 @@ class ConvivenciaCatalogController extends Controller
 
         $academicYears = AcademicYear::query()->ordered()->get(['id', 'name', 'year', 'is_active', 'is_closed']);
         $activeAcademicYearId = $academicYears->firstWhere('is_active', true)?->id;
+        $canAccessNominalCatalogs = $this->accessService->canAccessNominalCatalogs($request->user());
 
         return response()->json([
             'academic_years' => $academicYears,
             'active_academic_year_id' => $activeAcademicYearId,
+            'current_user_id' => $request->user()->id,
+            'current_staff_id' => $request->user()->staff_id,
             'courses' => CourseSection::query()
                 ->with('educationLevel:id,name')
                 ->when($activeAcademicYearId, fn ($query) => $query->where('academic_year_id', $activeAcademicYearId))
                 ->orderBy('display_name')
                 ->get(['id', 'academic_year_id', 'education_level_id', 'display_name', 'section_name']),
-            'students' => $this->studentContextService->studentOptions(),
-            'staff' => Staff::query()
-                ->with('cargo:id,name,slug')
-                ->where('active', true)
-                ->orderBy('full_name')
-                ->get(['id', 'full_name', 'institutional_email', 'cargo_id']),
-            'users' => User::query()
-                ->where('active', true)
-                ->orderBy('name')
-                ->get(['id', 'name', 'email', 'staff_id']),
+            'students' => $canAccessNominalCatalogs ? $this->studentContextService->studentOptions() : [],
+            'staff' => $canAccessNominalCatalogs
+                ? Staff::query()
+                    ->with('cargo:id,name,slug')
+                    ->where('active', true)
+                    ->orderBy('full_name')
+                    ->get(['id', 'full_name', 'institutional_email', 'cargo_id'])
+                : [],
+            'support_professionals' => $canAccessNominalCatalogs
+                ? $this->supportProfessionalService->options()
+                : [],
+            'users' => $canAccessNominalCatalogs
+                ? User::query()
+                    ->where('active', true)
+                    ->orderBy('name')
+                    ->get(['id', 'name', 'email', 'staff_id'])
+                : [],
             'departments' => Department::query()
                 ->where('active', true)
                 ->orderBy('name')
@@ -56,7 +80,9 @@ class ConvivenciaCatalogController extends Controller
                 ->where('active', true)
                 ->orderBy('category')
                 ->orderBy('name')
-                ->get(['id', 'category', 'name', 'contact_name', 'contact_email', 'contact_phone']),
+                ->get($canAccessNominalCatalogs
+                    ? ['id', 'category', 'name', 'contact_name', 'contact_email', 'contact_phone']
+                    : ['id', 'category', 'name']),
             'catalogs' => ConvivenciaCatalogItem::query()
                 ->where('active', true)
                 ->orderBy('group')
@@ -64,25 +90,25 @@ class ConvivenciaCatalogController extends Controller
                 ->orderBy('name')
                 ->get(['id', 'parent_id', 'group', 'code', 'name', 'description', 'color', 'metadata'])
                 ->groupBy('group'),
-            'case_status_options' => \App\Models\Convivencia\ConvivenciaCase::STATUS_OPTIONS,
-            'case_origin_options' => \App\Models\Convivencia\ConvivenciaCase::ORIGIN_OPTIONS,
-            'person_type_options' => \App\Models\Convivencia\ConvivenciaCase::PERSON_TYPE_OPTIONS,
-            'person_role_options' => \App\Models\Convivencia\ConvivenciaCase::PERSON_ROLE_OPTIONS,
-            'derivation_status_options' => \App\Models\Convivencia\ConvivenciaDerivation::STATUS_OPTIONS,
-            'derivation_priority_options' => \App\Models\Convivencia\ConvivenciaDerivation::PRIORITY_OPTIONS,
-            'derivation_scope_options' => \App\Models\Convivencia\ConvivenciaDerivation::SCOPE_OPTIONS,
-            'plan_status_options' => \App\Models\Convivencia\ConvivenciaPlan::STATUS_OPTIONS,
-            'plan_action_type_options' => \App\Models\Convivencia\ConvivenciaPlanAction::TYPE_OPTIONS,
-            'protocol_status_options' => \App\Models\Convivencia\ConvivenciaProtocol::STATUS_OPTIONS,
-            'protocol_activation_status_options' => \App\Models\Convivencia\ConvivenciaProtocolActivation::STATUS_OPTIONS,
-            'measure_status_options' => \App\Models\Convivencia\ConvivenciaMeasure::STATUS_OPTIONS,
-            'interview_follow_up_status_options' => \App\Models\Convivencia\ConvivenciaInterview::FOLLOW_UP_STATUS_OPTIONS,
-            'daily_log_status_options' => \App\Models\Convivencia\ConvivenciaDailyLog::STATUS_OPTIONS,
-            'sociogram_status_options' => \App\Models\Convivencia\ConvivenciaSociogram::STATUS_OPTIONS,
-            'complaint_status_options' => \App\Models\Convivencia\ConvivenciaComplaint::STATUS_OPTIONS,
-            'complaint_type_options' => \App\Models\Convivencia\ConvivenciaComplaint::COMPLAINANT_TYPE_OPTIONS,
-            'idps_scope_options' => \App\Models\Convivencia\ConvivenciaIdpsResult::SCOPE_OPTIONS,
-            'attachment_categories' => \App\Models\Convivencia\ConvivenciaAttachment::CATEGORY_OPTIONS,
+            'case_status_options' => ConvivenciaCase::STATUS_OPTIONS,
+            'case_origin_options' => ConvivenciaCase::ORIGIN_OPTIONS,
+            'person_type_options' => ConvivenciaCase::PERSON_TYPE_OPTIONS,
+            'person_role_options' => ConvivenciaCase::PERSON_ROLE_OPTIONS,
+            'derivation_status_options' => ConvivenciaDerivation::STATUS_OPTIONS,
+            'derivation_priority_options' => ConvivenciaDerivation::PRIORITY_OPTIONS,
+            'derivation_scope_options' => ConvivenciaDerivation::SCOPE_OPTIONS,
+            'plan_status_options' => ConvivenciaPlan::STATUS_OPTIONS,
+            'plan_action_type_options' => ConvivenciaPlanAction::TYPE_OPTIONS,
+            'protocol_status_options' => ConvivenciaProtocol::STATUS_OPTIONS,
+            'protocol_activation_status_options' => ConvivenciaProtocolActivation::STATUS_OPTIONS,
+            'measure_status_options' => ConvivenciaMeasure::STATUS_OPTIONS,
+            'interview_follow_up_status_options' => ConvivenciaInterview::FOLLOW_UP_STATUS_OPTIONS,
+            'daily_log_status_options' => ConvivenciaDailyLog::STATUS_OPTIONS,
+            'sociogram_status_options' => ConvivenciaSociogram::STATUS_OPTIONS,
+            'complaint_status_options' => ConvivenciaComplaint::STATUS_OPTIONS,
+            'complaint_type_options' => ConvivenciaComplaint::COMPLAINANT_TYPE_OPTIONS,
+            'idps_scope_options' => ConvivenciaIdpsResult::SCOPE_OPTIONS,
+            'attachment_categories' => ConvivenciaAttachment::CATEGORY_OPTIONS,
             'capabilities' => [
                 'can_view_dashboard' => $this->accessService->canViewDashboard($request->user()),
                 'can_manage_plans' => $this->accessService->canManagePlans($request->user()),
@@ -110,20 +136,22 @@ class ConvivenciaCatalogController extends Controller
 
     public function students(Request $request): JsonResponse
     {
-        abort_unless($this->accessService->canViewModule($request->user()), 403);
+        abort_unless($this->accessService->canAccessNominalCatalogs($request->user()), 403);
 
-        $search = trim((string) $request->query('search'));
-        $courseSectionId = $request->query('course_section_id');
+        $payload = $request->validate([
+            'search' => ['nullable', 'string', 'max:120'],
+            'course_section_id' => ['nullable', 'integer', 'exists:course_sections,id'],
+            'selected_id' => ['nullable', 'integer', 'exists:student_profiles,id'],
+            'limit' => ['nullable', 'integer', 'min:1', 'max:60'],
+        ]);
 
         return response()->json([
-            'data' => $search === ''
-                ? []
-                : $this->studentContextService->searchPayload(
-                    $search,
-                    $courseSectionId ? (int) $courseSectionId : null,
-                    12,
-                    $request->user(),
-                ),
+            'data' => $this->studentContextService->studentReferencePayload(
+                trim((string) ($payload['search'] ?? '')),
+                isset($payload['course_section_id']) ? (int) $payload['course_section_id'] : null,
+                isset($payload['selected_id']) ? (int) $payload['selected_id'] : null,
+                (int) ($payload['limit'] ?? 20),
+            ),
         ]);
     }
 

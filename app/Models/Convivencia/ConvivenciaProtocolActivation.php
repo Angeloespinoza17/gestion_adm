@@ -27,12 +27,16 @@ class ConvivenciaProtocolActivation extends Model
         'case_id',
         'complaint_id',
         'current_step_id',
+        'current_activation_step_id',
         'activated_by',
         'activated_at',
         'status',
         'current_stage_name',
         'due_at',
         'involved_snapshot',
+        'protocol_snapshot',
+        'progress_percentage',
+        'revision',
         'actions_taken',
         'measures_adopted',
         'closing_summary',
@@ -46,11 +50,14 @@ class ConvivenciaProtocolActivation extends Model
         'due_at' => 'datetime',
         'closed_at' => 'datetime',
         'involved_snapshot' => 'array',
+        'protocol_snapshot' => 'array',
+        'progress_percentage' => 'float',
+        'revision' => 'integer',
     ];
 
     public function protocol(): BelongsTo
     {
-        return $this->belongsTo(ConvivenciaProtocol::class, 'protocol_id');
+        return $this->belongsTo(ConvivenciaProtocol::class, 'protocol_id')->withTrashed();
     }
 
     public function case(): BelongsTo
@@ -68,6 +75,25 @@ class ConvivenciaProtocolActivation extends Model
         return $this->belongsTo(ConvivenciaProtocolStep::class, 'current_step_id');
     }
 
+    public function currentActivationStep(): BelongsTo
+    {
+        return $this->belongsTo(ConvivenciaProtocolActivationStep::class, 'current_activation_step_id');
+    }
+
+    public function runtimeSteps(): HasMany
+    {
+        return $this->hasMany(ConvivenciaProtocolActivationStep::class, 'activation_id')
+            ->orderBy('step_order')
+            ->orderBy('id');
+    }
+
+    public function runtimeParts(): HasMany
+    {
+        return $this->hasMany(ConvivenciaProtocolActivationPart::class, 'activation_id')
+            ->orderBy('sort_order')
+            ->orderBy('id');
+    }
+
     public function activatedBy(): BelongsTo
     {
         return $this->belongsTo(User::class, 'activated_by');
@@ -81,5 +107,10 @@ class ConvivenciaProtocolActivation extends Model
     public function statusLogs(): MorphMany
     {
         return $this->morphMany(ConvivenciaStatusLog::class, 'loggable')->latest('changed_at')->latest('id');
+    }
+
+    public function attachments(): MorphMany
+    {
+        return $this->morphMany(ConvivenciaAttachment::class, 'attachable')->latest('created_at');
     }
 }

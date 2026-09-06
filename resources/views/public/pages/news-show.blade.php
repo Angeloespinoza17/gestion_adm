@@ -109,6 +109,10 @@
 @section('body_class', 'inner-page public-detail-page news-details-page')
 @section('title', $post->title . ' | Noticias')
 @section('description', $description)
+@section('analytics_page_type', 'detail')
+@section('analytics_content_type', 'news')
+@section('analytics_content_id', $post->id)
+@section('analytics_content_slug', $post->slug)
 
 @section('content')
   <header

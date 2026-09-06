@@ -18,8 +18,11 @@ class SecurityShift extends Model
     use HasFactory;
 
     public const STATUS_PROGRAMADO = 'programado';
+
     public const STATUS_EN_CURSO = 'en_curso';
+
     public const STATUS_FINALIZADO = 'finalizado';
+
     public const STATUS_CANCELADO = 'cancelado';
 
     public const STATUS_OPTIONS = [
@@ -30,6 +33,7 @@ class SecurityShift extends Model
     ];
 
     public const SCHEDULE_SINGLE = 'single';
+
     public const SCHEDULE_WEEKLY = 'weekly';
 
     public const SCHEDULE_OPTIONS = [
@@ -149,7 +153,7 @@ class SecurityShift extends Model
 
     public function getIsWeeklyTemplateAttribute(): bool
     {
-        return $this->schedule_type === self::SCHEDULE_WEEKLY && !$this->parent_shift_id;
+        return $this->schedule_type === self::SCHEDULE_WEEKLY && ! $this->parent_shift_id;
     }
 
     public function getIsGeneratedShiftAttribute(): bool
@@ -185,8 +189,8 @@ class SecurityShift extends Model
     {
         if ($this->is_weekly_template) {
             $days = implode(', ', $this->weekday_labels);
-            $from = $this->template_start_time ? substr((string) $this->template_start_time, 0, 5) : '--:--';
-            $to = $this->template_end_time ? substr((string) $this->template_end_time, 0, 5) : '--:--';
+            $from = SecurityShiftScheduleService::REGISTRATION_START_TIME;
+            $to = SecurityShiftScheduleService::REGISTRATION_END_TIME;
 
             return trim("Semanal: {$days} · {$from} a {$to}");
         }

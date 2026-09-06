@@ -100,6 +100,10 @@
 @section('body_class', 'inner-page public-detail-page event-details-page')
 @section('title', $event->title . ' | Eventos')
 @section('description', $description)
+@section('analytics_page_type', 'detail')
+@section('analytics_content_type', 'event')
+@section('analytics_content_id', $event->id)
+@section('analytics_content_slug', $event->slug)
 
 @section('content')
   <header

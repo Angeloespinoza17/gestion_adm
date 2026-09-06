@@ -8,7 +8,7 @@ class CreateConversationRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        return (bool) $this->user()?->active;
+        return (bool) $this->user()?->canUseMessaging();
     }
 
     public function rules(): array
