@@ -33,6 +33,7 @@ Route::middleware(['auth:sanctum', 'permission:psychology.access'])->prefix('psy
     Route::post('/cases/{case}/close', [PsychologyCaseController::class, 'close'])->middleware('permission:psychology.cases.close');
     Route::post('/cases/{case}/reopen', [PsychologyCaseController::class, 'reopen'])->middleware('permission:psychology.cases.reopen');
     Route::post('/cases/{case}/activities', [PsychologyWorkflowController::class, 'storeActivity'])->middleware('permission:psychology.sessions.create');
+    Route::patch('/activities/{activity}', [PsychologyWorkflowController::class, 'updateActivity'])->middleware(['permission:psychology.sessions.create', 'throttle:60,1']);
     Route::post('/activities/{activity}/finalize', [PsychologyWorkflowController::class, 'finalizeActivity'])->middleware('permission:psychology.sessions.create');
     Route::post('/activities/{activity}/export', [PsychologyWorkflowController::class, 'exportActivity'])->middleware('throttle:20,1');
     Route::post('/activities/{activity}/addenda', [PsychologyWorkflowController::class, 'addAddendum'])->middleware('permission:psychology.sessions.create');

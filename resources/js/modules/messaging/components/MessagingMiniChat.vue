@@ -29,7 +29,7 @@ const acknowledgementComment = ref("");
 const acknowledgementSaving = ref(false);
 const timeline = ref(null);
 let titleTimer = null;
-let baseDocumentTitle = "CNSC Gestión";
+let baseDocumentTitle = "CNSC Valdivia";
 
 const hidden = computed(() => route.path.startsWith("/mensajeria"));
 const activeId = computed(() => store.state.activeConversation?.public_id);
@@ -352,7 +352,7 @@ watch(
 
 onMounted(() => {
     baseDocumentTitle =
-        document.title.replace(/^\(\d+\)\s*/, "") || "CNSC Gestión";
+        document.title.replace(/^\(\d+\)\s*/, "") || "CNSC Valdivia";
     updateTabAlert();
     document.addEventListener("visibilitychange", handleVisibilityChange);
 });

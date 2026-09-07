@@ -20,6 +20,8 @@ use App\Models\User;
 use App\Services\SocialWork\AlertService;
 use Database\Seeders\SocialWorkSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Crypt;
+use Illuminate\Support\Facades\DB;
 use Laravel\Sanctum\Sanctum;
 use Tests\TestCase;
 
@@ -122,6 +124,49 @@ class SocialWorkModuleTest extends TestCase
             'confidentiality' => 'restringido',
             'participant_types' => ['staff'],
         ])->assertUnprocessable()->assertJsonValidationErrors('participant_staff_ids');
+    }
+
+    public function test_social_worker_can_correct_finalized_interview_with_encrypted_revision_history(): void
+    {
+        $case = $this->createCase();
+        $created = $this->postJson("/api/social-work/cases/{$case->id}/interventions", [
+            'kind' => 'entrevista',
+            'activity_date' => today()->toDateString(),
+            'objective' => 'Entrevista inicial',
+            'description' => 'Contenido original del acta social.',
+            'status' => 'finalizada',
+            'confidentiality' => 'restringido',
+            'participant_types' => ['student'],
+        ])->assertCreated();
+        $interventionId = $created->json('data.id');
+        $intervention = Intervention::query()->findOrFail($interventionId);
+
+        $this->patchJson("/api/social-work/interventions/{$interventionId}", [
+            'kind' => 'entrevista',
+            'activity_date' => today()->toDateString(),
+            'objective' => 'Entrevista inicial corregida',
+            'description' => 'Contenido corregido del acta social.',
+            'status' => 'finalizada',
+            'confidentiality' => 'restringido',
+            'participant_types' => ['student'],
+            'change_reason' => 'Corrección acordada tras revisar el acta.',
+            'record_updated_at' => $intervention->updated_at->toIso8601String(),
+        ])->assertOk()
+            ->assertJsonPath('data.description', 'Contenido corregido del acta social.')
+            ->assertJsonPath('data.status', 'finalizada');
+
+        $revision = DB::table('interview_record_revisions')->where([
+            'module' => 'social_work',
+            'record_id' => $interventionId,
+        ])->first();
+        $this->assertNotNull($revision);
+        $before = json_decode(Crypt::decryptString($revision->before_payload), true);
+        $this->assertSame('Contenido original del acta social.', $before['description']);
+        $this->assertDatabaseHas('social_work_audit_events', [
+            'action' => 'intervention.updated',
+            'auditable_id' => $interventionId,
+            'reason' => 'Corrección acordada tras revisar el acta.',
+        ]);
     }
 
     public function test_referring_teacher_does_not_gain_case_access(): void
@@ -305,7 +350,7 @@ class SocialWorkModuleTest extends TestCase
         Sanctum::actingAs($coordinator);
 
         $this->getJson('/api/social-work/referral-students')->assertOk()->assertJsonPath('data.0.id', $this->student->id);
-        $this->postJson('/api/social-work/referrals', [
+        $response = $this->postJson('/api/social-work/referrals', [
             'student_profile_id' => $this->student->id, 'referral_date' => '2026-08-16',
             'source_unit' => 'Inspectoría', 'source_person' => 'Coordinación de Inspectoría',
             'reason' => 'Solicitud de acompañamiento', 'description' => 'Antecedentes observables.',
@@ -317,6 +362,14 @@ class SocialWorkModuleTest extends TestCase
             ->assertJsonPath('total', 1)
             ->assertJsonPath('data.0.creator.name', $coordinator->name);
         $this->getJson('/api/social-work/cases')->assertForbidden();
+
+        $notification = $this->socialWorker->notifications()
+            ->get()
+            ->first(fn ($item) => ($item->data['event_type'] ?? null) === 'social_work.referral.created');
+        $this->assertNotNull($notification);
+        $this->assertSame($response->json('data.id'), $notification->data['event']['resource']['id']);
+        $this->assertSame('/social-work/referrals', $notification->data['action_url']);
+        $this->assertStringNotContainsString('Antecedentes observables', $notification->data['message']);
     }
 
     public function test_assigned_professional_can_see_a_referral_created_by_another_user(): void

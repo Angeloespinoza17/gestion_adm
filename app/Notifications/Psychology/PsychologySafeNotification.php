@@ -2,6 +2,7 @@
 
 namespace App\Notifications\Psychology;
 
+use App\Support\Notifications\NotificationEnvelope;
 use Illuminate\Bus\Queueable;
 use Illuminate\Notifications\Notification;
 
@@ -18,6 +19,16 @@ class PsychologySafeNotification extends Notification
 
     public function toArray(object $notifiable): array
     {
-        return ['title' => $this->title, 'message' => $this->message, 'url' => $this->url, 'module' => 'psychology'];
+        return NotificationEnvelope::make(
+            eventKey: 'psychology.notice:'.hash('sha256', $this->title.'|'.$this->url.'|'.$this->message),
+            eventType: 'psychology.notice',
+            module: 'psychology',
+            title: $this->title,
+            message: $this->message,
+            resource: ['type' => 'psychology_notice', 'id' => hash('sha256', $this->title.'|'.$this->url)],
+            actionUrl: $this->url,
+            icon: 'bx bx-brain',
+            priority: str_contains(mb_strtolower($this->title), 'vencid') ? 'alta' : 'media',
+        );
     }
 }

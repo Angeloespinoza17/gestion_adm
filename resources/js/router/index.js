@@ -724,7 +724,7 @@ const routes = [
         meta: {
             authRequired: true,
             title: "Revisión de bitácoras",
-            superAdminOnly: true,
+            permission: "superadmin.logbooks.view",
         },
         component: () => import("../views/superadmin/logbook-review.vue"),
     },
@@ -3154,7 +3154,7 @@ const router = createRouter({
 
 // Before each route evaluates...
 router.beforeEach(async (routeTo, routeFrom, next) => {
-    document.title = "CNSC Gestión";
+    document.title = "CNSC Valdivia";
 
     const authRequired = routeTo.matched.some(
         (route) => route.meta.authRequired

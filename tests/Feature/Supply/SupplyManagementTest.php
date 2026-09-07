@@ -80,13 +80,50 @@ class SupplyManagementTest extends TestCase
             ->assertCreated()
             ->assertJsonPath('data.section', 'cleaning')
             ->assertJsonPath('data.inventory_item.item_type', 'consumable')
-            ->assertJsonPath('data.inventory_item.stock_quantity', '0.00');
+            ->assertJsonPath('data.inventory_item.stock_quantity', '0.00')
+            ->assertJsonMissingPath('data.reference_photo_path');
 
         $item = SupplyItem::query()->with('inventoryItem')->firstOrFail();
         $this->assertNotNull($item->reference_photo_path);
         Storage::disk('local')->assertExists($item->reference_photo_path);
         $this->get("/api/supplies/items/{$item->id}/photo")->assertOk();
         $this->assertSame('Insumos de aseo', $item->inventoryItem->category->name);
+    }
+
+    public function test_manager_can_replace_a_private_reference_photo_without_leaving_the_previous_file(): void
+    {
+        Storage::fake('local');
+
+        $item = $this->createSupply('cleaning', 'cleaner', 'Limpiador con fotografía', 'litro', 2);
+
+        $firstResponse = $this->post("/api/supplies/items/{$item->id}/photo", [
+            'photo' => UploadedFile::fake()->image('foto-inicial.jpg', 640, 480),
+        ]);
+        $firstResponse
+            ->assertOk()
+            ->assertJsonPath('message', 'Foto de referencia actualizada.')
+            ->assertJsonMissingPath('data.reference_photo_path');
+
+        $firstPath = $item->fresh()->reference_photo_path;
+        $this->assertNotNull($firstPath);
+        Storage::disk('local')->assertExists($firstPath);
+
+        $secondResponse = $this->post("/api/supplies/items/{$item->id}/photo", [
+            'photo' => UploadedFile::fake()->image('foto-actualizada.png', 800, 600),
+        ]);
+        $secondResponse
+            ->assertOk()
+            ->assertJsonPath('message', 'Foto de referencia actualizada.')
+            ->assertJsonMissingPath('data.reference_photo_path');
+
+        $updatedPath = $item->fresh()->reference_photo_path;
+        $this->assertNotSame($firstPath, $updatedPath);
+        Storage::disk('local')->assertMissing($firstPath);
+        Storage::disk('local')->assertExists($updatedPath);
+
+        $this->get("/api/supplies/items/{$item->id}/photo")
+            ->assertOk()
+            ->assertHeader('content-type', 'image/png');
     }
 
     public function test_manager_can_view_and_edit_a_cleaning_supply(): void

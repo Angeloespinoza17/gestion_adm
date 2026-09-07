@@ -553,8 +553,10 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::put('/organigram/{staff}/relations', [OrganigramController::class, 'sync'])->middleware('permission:administrar_organigrama');
     });
 
+    Route::get('/superadmin/logbooks', [SuperAdminLogbookReviewController::class, 'index'])
+        ->middleware('permission:superadmin.logbooks.view');
+
     Route::prefix('superadmin')->middleware('superadmin')->group(function () {
-        Route::get('/logbooks', [SuperAdminLogbookReviewController::class, 'index']);
         Route::get('/reloj-control/users', [RelojControlController::class, 'users'])->middleware('throttle:30,1');
         Route::post('/reloj-control/attendance', [RelojControlController::class, 'attendance'])->middleware('throttle:20,1');
         Route::post('/reloj-control/reports', [RelojControlController::class, 'reports'])->middleware('throttle:10,1');
@@ -1244,16 +1246,16 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/open-library', OpenLibraryController::class)->middleware(['permission:ver_modulo_biblioteca', 'throttle:20,1']);
 
         Route::get('/categorias', [BibliotecaManagementController::class, 'categories'])->middleware('permission:ver_modulo_biblioteca');
-        Route::post('/categorias', [BibliotecaManagementController::class, 'storeCategory'])->middleware('permission:ver_modulo_biblioteca');
-        Route::put('/categorias/{categoria}', [BibliotecaManagementController::class, 'updateCategory'])->middleware('permission:ver_modulo_biblioteca');
-        Route::delete('/categorias/{categoria}', [BibliotecaManagementController::class, 'destroyCategory'])->middleware('permission:ver_modulo_biblioteca');
-        Route::post('/subcategorias', [BibliotecaManagementController::class, 'storeSubcategory'])->middleware('permission:ver_modulo_biblioteca');
-        Route::put('/subcategorias/{subcategoria}', [BibliotecaManagementController::class, 'updateSubcategory'])->middleware('permission:ver_modulo_biblioteca');
-        Route::delete('/subcategorias/{subcategoria}', [BibliotecaManagementController::class, 'destroySubcategory'])->middleware('permission:ver_modulo_biblioteca');
+        Route::post('/categorias', [BibliotecaManagementController::class, 'storeCategory'])->middleware('permission:gestionar_categorias_biblioteca');
+        Route::put('/categorias/{categoria}', [BibliotecaManagementController::class, 'updateCategory'])->middleware('permission:gestionar_categorias_biblioteca');
+        Route::delete('/categorias/{categoria}', [BibliotecaManagementController::class, 'destroyCategory'])->middleware('permission:gestionar_categorias_biblioteca');
+        Route::post('/subcategorias', [BibliotecaManagementController::class, 'storeSubcategory'])->middleware('permission:gestionar_categorias_biblioteca');
+        Route::put('/subcategorias/{subcategoria}', [BibliotecaManagementController::class, 'updateSubcategory'])->middleware('permission:gestionar_categorias_biblioteca');
+        Route::delete('/subcategorias/{subcategoria}', [BibliotecaManagementController::class, 'destroySubcategory'])->middleware('permission:gestionar_categorias_biblioteca');
         Route::get('/ubicaciones', [BibliotecaManagementController::class, 'locations'])->middleware('permission:ver_modulo_biblioteca');
-        Route::post('/ubicaciones', [BibliotecaManagementController::class, 'storeLocation'])->middleware('permission:ver_modulo_biblioteca');
-        Route::put('/ubicaciones/{ubicacion}', [BibliotecaManagementController::class, 'updateLocation'])->middleware('permission:ver_modulo_biblioteca');
-        Route::delete('/ubicaciones/{ubicacion}', [BibliotecaManagementController::class, 'destroyLocation'])->middleware('permission:ver_modulo_biblioteca');
+        Route::post('/ubicaciones', [BibliotecaManagementController::class, 'storeLocation'])->middleware('permission:gestionar_almacenaje_biblioteca');
+        Route::put('/ubicaciones/{ubicacion}', [BibliotecaManagementController::class, 'updateLocation'])->middleware('permission:gestionar_almacenaje_biblioteca');
+        Route::delete('/ubicaciones/{ubicacion}', [BibliotecaManagementController::class, 'destroyLocation'])->middleware('permission:gestionar_almacenaje_biblioteca');
 
         Route::get('/obras', [BibliotecaCatalogController::class, 'index'])->middleware('permission:ver_modulo_biblioteca');
         Route::post('/obras', [BibliotecaCatalogController::class, 'store'])->middleware('permission:crear_libros_biblioteca');
@@ -1263,7 +1265,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/obras/{obra}', [BibliotecaCatalogController::class, 'show'])->middleware('permission:ver_modulo_biblioteca');
         Route::put('/obras/{obra}', [BibliotecaCatalogController::class, 'update'])->middleware('permission:editar_libros_biblioteca');
         Route::delete('/obras/{obra}', [BibliotecaCatalogController::class, 'destroy'])->middleware('permission:eliminar_libros_biblioteca');
-        Route::post('/materiales', [BibliotecaCatalogController::class, 'storeMaterial'])->middleware('permission:ver_modulo_biblioteca');
+        Route::post('/materiales', [BibliotecaCatalogController::class, 'storeMaterial'])->middleware('permission:gestionar_materiales_biblioteca');
 
         Route::get('/ejemplares', [BibliotecaInventoryController::class, 'index'])->middleware('permission:ver_modulo_biblioteca');
         Route::post('/ejemplares', [BibliotecaInventoryController::class, 'store'])->middleware('permission:administrar_inventario_biblioteca');
@@ -1314,16 +1316,16 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/uso-espacios/{usoEspacio}/status/{status}', [BibliotecaSpaceController::class, 'transition'])->middleware('permission:gestionar_uso_espacios_biblioteca');
 
         Route::get('/textos-escolares', [BibliotecaTextbookController::class, 'overview'])->middleware('permission:ver_modulo_biblioteca');
-        Route::post('/textos-escolares/recepciones', [BibliotecaTextbookController::class, 'storeReception'])->middleware('permission:ver_modulo_biblioteca');
-        Route::post('/textos-escolares/ordenes', [BibliotecaTextbookController::class, 'storeOrder'])->middleware('permission:ver_modulo_biblioteca');
+        Route::post('/textos-escolares/recepciones', [BibliotecaTextbookController::class, 'storeReception'])->middleware('permission:gestionar_textos_escolares_biblioteca');
+        Route::post('/textos-escolares/ordenes', [BibliotecaTextbookController::class, 'storeOrder'])->middleware('permission:gestionar_textos_escolares_biblioteca');
         Route::get('/textos-escolares/ordenes/{orden}', [BibliotecaTextbookController::class, 'showOrder'])->middleware('permission:ver_modulo_biblioteca');
-        Route::post('/textos-escolares/ordenes/{orden}/listado', [BibliotecaTextbookController::class, 'generateRoster'])->middleware('permission:ver_modulo_biblioteca');
-        Route::put('/textos-escolares/entregas/{entrega}', [BibliotecaTextbookController::class, 'updateDelivery'])->middleware('permission:ver_modulo_biblioteca');
+        Route::post('/textos-escolares/ordenes/{orden}/listado', [BibliotecaTextbookController::class, 'generateRoster'])->middleware('permission:gestionar_textos_escolares_biblioteca');
+        Route::put('/textos-escolares/entregas/{entrega}', [BibliotecaTextbookController::class, 'updateDelivery'])->middleware('permission:gestionar_textos_escolares_biblioteca');
 
         Route::get('/pases', [BibliotecaPassController::class, 'index'])->middleware('permission:ver_modulo_biblioteca');
-        Route::post('/pases', [BibliotecaPassController::class, 'store'])->middleware('permission:ver_modulo_biblioteca');
-        Route::put('/pases/{pase}', [BibliotecaPassController::class, 'update'])->middleware('permission:ver_modulo_biblioteca');
-        Route::post('/pases/{pase}/{status}', [BibliotecaPassController::class, 'transition'])->middleware('permission:ver_modulo_biblioteca');
+        Route::post('/pases', [BibliotecaPassController::class, 'store'])->middleware('permission:gestionar_pases_biblioteca');
+        Route::put('/pases/{pase}', [BibliotecaPassController::class, 'update'])->middleware('permission:gestionar_pases_biblioteca');
+        Route::post('/pases/{pase}/{status}', [BibliotecaPassController::class, 'transition'])->middleware('permission:gestionar_pases_biblioteca');
 
         Route::get('/reportes', BibliotecaReportController::class)->middleware('permission:ver_estadisticas_biblioteca');
     });
@@ -1670,9 +1672,9 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::put('/reservations/{dependencyReservation}/cancel', [DependencyReservationController::class, 'cancel'])
             ->middleware('permission:cancelar_reservas');
         Route::put('/reservations/{dependencyReservation}/approve', [DependencyReservationController::class, 'approve'])
-            ->middleware('permission:ver_reservas');
+            ->middleware('permission:aprobar_reservas');
         Route::put('/reservations/{dependencyReservation}/reject', [DependencyReservationController::class, 'reject'])
-            ->middleware('permission:ver_reservas');
+            ->middleware('permission:rechazar_reservas');
         Route::get('/calendar/events', [DependencyReservationController::class, 'events'])
             ->middleware('permission:ver_reservas');
         Route::get('/statistics/catalogs', [SpaceStatisticsController::class, 'catalogs'])

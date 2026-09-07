@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\User;
 use App\Notifications\Messaging\AcknowledgementReminderNotification;
 use App\Notifications\Messaging\NewMessageNotification;
+use App\Support\Notifications\NotificationEnvelope;
 use Illuminate\Database\Eloquent\Relations\MorphMany;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -54,18 +55,7 @@ class InternalNotificationController extends Controller
             'total_count' => (int) ($counts?->total_count ?? 0),
             'read_count' => (int) ($counts?->read_count ?? 0),
             'data' => $notifications->getCollection()
-                ->map(fn (DatabaseNotification $notification) => [
-                    'id' => $notification->id,
-                    'type' => class_basename($notification->type),
-                    'title' => $notification->data['title'] ?? 'Notificación',
-                    'message' => $notification->data['message'] ?? '',
-                    'icon' => $notification->data['icon'] ?? 'bx bx-bell',
-                    'priority' => $notification->data['priority'] ?? 'media',
-                    'action_url' => $notification->data['action_url'] ?? null,
-                    'data' => $notification->data,
-                    'read_at' => $notification->read_at,
-                    'created_at' => $notification->created_at,
-                ])
+                ->map(fn (DatabaseNotification $notification) => $this->payload($notification))
                 ->values(),
             'meta' => [
                 'current_page' => $notifications->currentPage(),
@@ -113,5 +103,30 @@ class InternalNotificationController extends Controller
         }
 
         return $query;
+    }
+
+    /** @return array<string, mixed> */
+    private function payload(DatabaseNotification $notification): array
+    {
+        $data = $notification->data;
+        $actionUrl = NotificationEnvelope::safeActionUrl(
+            $data['action_url'] ?? $data['url'] ?? null
+        );
+
+        return [
+            'id' => $notification->id,
+            'type' => class_basename($notification->type),
+            'title' => $data['title'] ?? 'Notificación',
+            'message' => $data['message'] ?? '',
+            'icon' => $data['icon'] ?? 'bx bx-bell',
+            'priority' => NotificationEnvelope::priority($data['priority'] ?? 'media'),
+            'module' => $data['module'] ?? $data['event']['module'] ?? null,
+            'event_type' => $data['event_type'] ?? $data['event']['type'] ?? null,
+            'event' => $data['event'] ?? null,
+            'action_url' => $actionUrl,
+            'data' => $data,
+            'read_at' => $notification->read_at,
+            'created_at' => $notification->created_at,
+        ];
     }
 }

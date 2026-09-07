@@ -6,6 +6,8 @@ use App\Models\StudentProfile;
 use App\Models\User;
 use App\Notifications\Messaging\AcknowledgementReminderNotification;
 use App\Notifications\Messaging\NewMessageNotification;
+use App\Notifications\OperationalEventNotification;
+use App\Services\Notifications\OperationalNotificationService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -84,6 +86,69 @@ class InternalNotificationHistoryTest extends TestCase
         $this->assertNotNull(DB::table('notifications')->where('id', $generalId)->value('read_at'));
         $this->assertNull(DB::table('notifications')->where('id', $messageId)->value('read_at'));
         $this->assertNull(DB::table('notifications')->where('id', $reminderId)->value('read_at'));
+    }
+
+    public function test_operational_notifications_are_encapsulated_and_idempotent_per_recipient(): void
+    {
+        $user = User::factory()->create(['active' => true]);
+        $inactive = User::factory()->create(['active' => false]);
+        $service = app(OperationalNotificationService::class);
+        $eventKey = 'test.referral.created:77';
+        $notification = new OperationalEventNotification(
+            eventKey: $eventKey,
+            eventType: 'test.referral.created',
+            module: 'social_work',
+            title: 'Nueva derivación',
+            message: 'Existe una derivación pendiente de revisión.',
+            resource: ['type' => 'test_referral', 'id' => 77, 'code' => 'DER-00077'],
+            actionUrl: '/social-work/referrals',
+            icon: 'bx bx-git-branch',
+            priority: 'urgente',
+            actor: $user,
+            context: ['status' => 'enviada'],
+        );
+
+        $this->assertSame(1, $service->send([$user, $user, $inactive], $notification, $eventKey));
+        $this->assertSame(0, $service->send($user, $notification, $eventKey));
+        $this->assertDatabaseCount('notifications', 1);
+
+        Sanctum::actingAs($user);
+        $this->getJson('/api/internal-notifications')
+            ->assertOk()
+            ->assertJsonPath('data.0.module', 'social_work')
+            ->assertJsonPath('data.0.priority', 'critica')
+            ->assertJsonPath('data.0.event.schema', 'cnsc.operational-notification.v1')
+            ->assertJsonPath('data.0.event.key', $eventKey)
+            ->assertJsonPath('data.0.event.resource.code', 'DER-00077')
+            ->assertJsonPath('data.0.action_url', '/social-work/referrals');
+    }
+
+    public function test_history_supports_legacy_url_and_rejects_external_action_urls(): void
+    {
+        $user = User::factory()->create(['active' => true]);
+        $legacyId = $this->createNotification($user, 'Aviso legado', false);
+        DB::table('notifications')->where('id', $legacyId)->update([
+            'data' => json_encode([
+                'title' => 'Aviso legado',
+                'message' => 'Notificación anterior',
+                'url' => '/psychology/referrals',
+            ], JSON_THROW_ON_ERROR),
+        ]);
+        $externalId = $this->createNotification($user, 'Enlace externo', false);
+        DB::table('notifications')->where('id', $externalId)->update([
+            'data' => json_encode([
+                'title' => 'Enlace externo',
+                'message' => 'No debe navegar fuera del sistema',
+                'action_url' => 'https://example.test/phishing',
+            ], JSON_THROW_ON_ERROR),
+        ]);
+
+        Sanctum::actingAs($user);
+        $response = $this->getJson('/api/internal-notifications?limit=50')->assertOk();
+        $items = collect($response->json('data'))->keyBy('id');
+
+        $this->assertSame('/psychology/referrals', $items[$legacyId]['action_url']);
+        $this->assertNull($items[$externalId]['action_url']);
     }
 
     private function createNotification(User $user, string $title, bool $read, string $type = 'Tests\\Notification'): string

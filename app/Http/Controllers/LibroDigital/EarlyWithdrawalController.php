@@ -14,6 +14,7 @@ use App\Services\LibroDigital\CanonicalJson;
 use App\Services\LibroDigital\LibroDigitalAccessContext;
 use App\Services\LibroDigital\RecordRevisionWriter;
 use App\Services\Porter\PorterStudentContextService;
+use App\Services\Porter\StudentWithdrawalNotificationService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -28,6 +29,7 @@ class EarlyWithdrawalController extends LibroDigitalController
         private readonly CanonicalJson $canonical,
         private readonly RecordRevisionWriter $revisions,
         private readonly AuditEventWriter $audit,
+        private readonly StudentWithdrawalNotificationService $withdrawalNotifications,
     ) {
         parent::__construct($access);
     }
@@ -65,6 +67,7 @@ class EarlyWithdrawalController extends LibroDigitalController
             throw new LibroDigitalException('El estudiante no pertenece a la nómina vigente del libro.', 'LCD_WITHDRAWAL_STUDENT_OUTSIDE_ROSTER', 422);
         }
         $student = $link->student()->firstOrFail();
+        $inspector = $this->students->assignedInspector($link->enrollment()->first());
         $authorized = $this->students->resolveAuthorizedPerson($student, ['name' => $data['person_name'], 'rut' => $data['person_rut'] ?? null]);
         $restriction = $this->students->resolvePickupRestriction($student, ['name' => $data['person_name'], 'rut' => $data['person_rut'] ?? null]);
         $requiresAuthorization = (bool) $student->pickup_restriction || $restriction['restricted'] || ! $authorized['authorized'];
@@ -83,12 +86,14 @@ class EarlyWithdrawalController extends LibroDigitalController
             throw new LibroDigitalException('Ya existe una salida vigente para el estudiante en esa fecha.', 'LCD_WITHDRAWAL_DUPLICATE', 422);
         }
 
-        [$lcdWithdrawal, $porter] = DB::transaction(function () use ($request, $aggregate, $link, $student, $data, $authorized, $restriction, $requiresAuthorization, $canOverride, $occurredAt): array {
+        [$lcdWithdrawal, $porter] = DB::transaction(function () use ($request, $aggregate, $link, $student, $inspector, $data, $authorized, $restriction, $requiresAuthorization, $canOverride, $occurredAt): array {
             $status = $requiresAuthorization ? ($canOverride ? 'autorizado' : 'observado') : 'registrado';
             $porter = PorterStudentWithdrawal::query()->create([
                 'student_profile_id' => $student->id,
                 'academic_year_id' => $aggregate->academic_year_id,
                 'course_section_id' => $link->course_section_id,
+                'inspector_staff_id' => $inspector?->id,
+                'inspector_name_snapshot' => $inspector?->full_name,
                 'registered_by' => $request->user()->id,
                 'authorized_by' => $canOverride ? $request->user()->id : null,
                 'status' => $status,
@@ -156,6 +161,7 @@ class EarlyWithdrawalController extends LibroDigitalController
             return [$lcd, $porter];
         }, 3);
         $this->audit->write('lcd.early_withdrawal.created', 'create', $lcdWithdrawal, actor: $request->user(), schoolId: $aggregate->school_id, academicYearId: $aggregate->academic_year_id, after: $this->auditPayload($lcdWithdrawal, $porter), request: $request);
+        $this->withdrawalNotifications->created($porter, $request->user());
 
         return $this->dataResponse($this->payload($lcdWithdrawal->load(['student', 'porterWithdrawal'])), 201, $lcdWithdrawal->revision);
     }

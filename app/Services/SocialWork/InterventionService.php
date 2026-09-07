@@ -6,12 +6,26 @@ use App\Events\SocialWork\SocialInterventionCreated;
 use App\Models\SocialWork\Intervention;
 use App\Models\SocialWork\SocialCase;
 use App\Models\User;
+use App\Services\Records\InterviewRecordRevisionService;
+use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
 class InterventionService
 {
-    public function __construct(private readonly AuditService $audit) {}
+    private const REVISION_FIELDS = [
+        'student_profile_id', 'kind', 'type', 'activity_date', 'starts_at', 'ends_at',
+        'responsible_user_id', 'modality', 'place', 'contact_number', 'contact_person',
+        'contact_relationship', 'contact_result', 'objective', 'description',
+        'professional_observations', 'highly_confidential_notes', 'result', 'agreements',
+        'next_action', 'due_at', 'next_intervention_at', 'status', 'confidentiality',
+        'participants', 'structured_data',
+    ];
+
+    public function __construct(
+        private readonly AuditService $audit,
+        private readonly InterviewRecordRevisionService $revisions,
+    ) {}
 
     public function create(?SocialCase $case, array $data, User $user): Intervention
     {
@@ -34,6 +48,53 @@ class InterventionService
             event(new SocialInterventionCreated($intervention));
 
             return $intervention->load('commitments');
+        });
+    }
+
+    public function update(Intervention $intervention, array $data, User $user): Intervention
+    {
+        return DB::transaction(function () use ($intervention, $data, $user) {
+            $locked = Intervention::query()->with('case')->lockForUpdate()->findOrFail($intervention->id);
+            if (! $locked->case || in_array($locked->case->status, ['cerrado', 'anulado'], true)) {
+                throw ValidationException::withMessages([
+                    'case_id' => 'Un caso cerrado o anulado no permite corregir atenciones; debe reabrirse primero.',
+                ]);
+            }
+            if ($locked->status === 'anulada') {
+                throw ValidationException::withMessages([
+                    'status' => 'Una atención anulada no puede ser modificada.',
+                ]);
+            }
+
+            $expectedVersion = Carbon::parse($data['record_updated_at']);
+            if (! $locked->updated_at?->equalTo($expectedVersion)) {
+                throw ValidationException::withMessages([
+                    'record' => 'La ficha fue modificada por otra persona. Recárgala antes de guardar tus cambios.',
+                ]);
+            }
+
+            $reason = (string) $data['change_reason'];
+            unset($data['change_reason'], $data['record_updated_at'], $data['commitments']);
+            if ($locked->status === 'finalizada' && ($data['status'] ?? 'finalizada') !== 'finalizada') {
+                throw ValidationException::withMessages([
+                    'status' => 'Una atención finalizada no puede volver a borrador.',
+                ]);
+            }
+
+            $before = $locked->only(self::REVISION_FIELDS);
+            $data = $this->prepareParticipants($locked->case, $data);
+            $locked->fill($data)->forceFill(['updated_by' => $user->id])->save();
+            $after = $locked->fresh()->only(self::REVISION_FIELDS);
+
+            $this->revisions->record('social_work', $locked, $user, $reason, $before, $after, $locked->case_id);
+            $this->audit->record('intervention.updated', $locked, $user, $before, $after, $reason);
+            $locked->case->forceFill([
+                'last_activity_at' => now(),
+                'next_milestone' => $locked->next_action ?: $locked->case->next_milestone,
+                'updated_by' => $user->id,
+            ])->save();
+
+            return $locked->fresh(['responsible:id,name', 'commitments.responsible:id,name']);
         });
     }
 

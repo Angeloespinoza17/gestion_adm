@@ -14,7 +14,7 @@ export default defineConfig({
             output: {
                 assetFileNames: (css) => {
                     if (css.name.split('.').pop() == 'css') {
-                        return 'css/' + `[name]` + '.min.' + 'css';
+                        return 'css/' + `[name]-[hash]` + '.min.' + 'css';
                     } else {
                         return 'icons/' + css.name;
                     }

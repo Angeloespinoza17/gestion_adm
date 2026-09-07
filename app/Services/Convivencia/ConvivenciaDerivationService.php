@@ -5,6 +5,8 @@ namespace App\Services\Convivencia;
 use App\Models\Convivencia\ConvivenciaCase;
 use App\Models\Convivencia\ConvivenciaDerivation;
 use App\Models\User;
+use App\Notifications\OperationalEventNotification;
+use App\Services\Notifications\OperationalNotificationService;
 use Illuminate\Support\Facades\DB;
 
 class ConvivenciaDerivationService
@@ -12,11 +14,12 @@ class ConvivenciaDerivationService
     public function __construct(
         private readonly ConvivenciaSupportService $supportService,
         private readonly ConvivenciaCaseService $caseService,
+        private readonly OperationalNotificationService $notifications,
     ) {}
 
     public function store(array $payload, User $user): ConvivenciaDerivation
     {
-        return DB::transaction(function () use ($payload, $user) {
+        $derivation = DB::transaction(function () use ($payload, $user) {
             $derivation = new ConvivenciaDerivation;
             $this->fillDerivation($derivation, $payload, $user, true);
             $derivation->save();
@@ -26,11 +29,19 @@ class ConvivenciaDerivationService
 
             return $this->loadDerivation($derivation, $user);
         });
+
+        $this->notifyRecipients($derivation, $user, 'created');
+
+        return $derivation;
     }
 
     public function update(ConvivenciaDerivation $derivation, array $payload, User $user): ConvivenciaDerivation
     {
-        return DB::transaction(function () use ($derivation, $payload, $user) {
+        $before = $derivation->only([
+            'destination_department_id', 'destination_staff_id', 'destination_user_id',
+            'responsible_user_id', 'status', 'priority_level',
+        ]);
+        $derivation = DB::transaction(function () use ($derivation, $payload, $user) {
             $previousStatus = $derivation->status;
 
             $this->fillDerivation($derivation, $payload, $user, false);
@@ -44,6 +55,12 @@ class ConvivenciaDerivationService
 
             return $this->loadDerivation($derivation, $user);
         });
+
+        if ($before !== $derivation->only(array_keys($before))) {
+            $this->notifyRecipients($derivation, $user, 'updated');
+        }
+
+        return $derivation;
     }
 
     public function convertToCase(ConvivenciaDerivation $derivation, array $payload, User $user): ConvivenciaCase
@@ -148,15 +165,66 @@ class ConvivenciaDerivationService
             'academicYear:id,name,year',
             'courseSection:id,display_name',
             'student:id,first_name,last_name,registered_name,rut',
-            'destinationDepartment:id,name',
+            'destinationDepartment:id,name,responsible_staff_id',
+            'destinationDepartment.responsibleStaff.user:id,name,staff_id,active',
             'destinationStaff:id,full_name',
-            'destinationUser:id,name',
+            'destinationStaff.user:id,name,staff_id,active',
+            'destinationUser:id,name,staff_id,active',
             'externalInstitution:id,name,category',
-            'responsibleUser:id,name',
+            'responsibleUser:id,name,staff_id,active',
             'attachments' => fn ($query) => app(ConvivenciaAccessService::class)
                 ->applyAttachmentVisibility($query, $user)
                 ->with('uploadedBy:id,name'),
             'statusLogs.changedBy:id,name',
         ]);
+    }
+
+    private function notifyRecipients(ConvivenciaDerivation $derivation, User $actor, string $action): void
+    {
+        $derivation->loadMissing([
+            'destinationUser',
+            'destinationStaff.user',
+            'destinationDepartment.responsibleStaff.user',
+            'responsibleUser',
+        ]);
+        $recipients = collect([
+            $derivation->destinationUser,
+            $derivation->destinationStaff?->user,
+            $derivation->destinationDepartment?->responsibleStaff?->user,
+            $derivation->responsibleUser,
+        ])->filter(fn (?User $recipient): bool => $recipient
+            && (int) $recipient->id !== (int) $actor->id
+            && app(ConvivenciaAccessService::class)->canViewDerivation($recipient, $derivation));
+        $eventKey = sprintf(
+            'convivencia.derivation.%s:%d:%s:%s:%s',
+            $action,
+            $derivation->id,
+            $derivation->status,
+            $derivation->destination_user_id ?: $derivation->destination_staff_id ?: $derivation->destination_department_id,
+            $derivation->responsible_user_id,
+        );
+
+        $this->notifications->send(
+            $recipients,
+            new OperationalEventNotification(
+                eventKey: $eventKey,
+                eventType: 'convivencia.derivation.'.$action,
+                module: 'convivencia',
+                title: $action === 'created' ? 'Nueva derivación de Convivencia' : 'Derivación de Convivencia actualizada',
+                message: 'Tienes una derivación interna de Convivencia que requiere revisión autorizada.',
+                resource: [
+                    'type' => 'convivencia_derivation',
+                    'id' => $derivation->id,
+                    'code' => $derivation->case?->folio,
+                ],
+                actionUrl: '/convivencia/derivaciones',
+                icon: 'bx bx-git-branch',
+                priority: $derivation->priority_level,
+                occurredAt: $derivation->updated_at,
+                actor: $actor,
+                context: ['scope' => $derivation->scope, 'status' => $derivation->status],
+            ),
+            $eventKey,
+        );
     }
 }

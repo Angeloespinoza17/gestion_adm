@@ -142,6 +142,23 @@ export default {
       if (notification.priority === "baja") return "secondary";
       return "primary";
     },
+    moduleLabel(notification) {
+      const labels = {
+        inspectoria: "Inspectoría",
+        porter: "Portería",
+        social_work: "Trabajo Social",
+        psychology: "Psicología",
+        psychology_coordination: "Coordinación",
+        apoyo_profesional: "Equipo de Apoyo",
+        convivencia: "Convivencia",
+        infirmary: "Enfermería",
+        staff_permissions: "Permisos",
+        operational_transfers: "Traslados",
+        security: "Seguridad",
+        risk_prevention: "Prevención",
+      };
+      return labels[notification.module] || null;
+    },
     formatDateTime(value) {
       if (!value) return "";
       const date = new Date(String(value).replace(" ", "T"));
@@ -232,6 +249,7 @@ export default {
           <span class="internal-notifications__title">{{ notification.title }}</span>
           <span class="internal-notifications__message">{{ notification.message }}</span>
           <span class="internal-notifications__time">
+            <b v-if="moduleLabel(notification)">{{ moduleLabel(notification) }}</b>
             <i class="mdi mdi-clock-outline"></i>{{ formatDateTime(notification.created_at) }}
           </span>
         </span>
@@ -413,9 +431,23 @@ export default {
 }
 
 .internal-notifications__time {
+  align-items: center;
   color: var(--bs-secondary-color);
+  display: flex;
   font-size: 0.68rem;
+  gap: 0.3rem;
   margin-top: 0.35rem;
+}
+
+.internal-notifications__time b {
+  background: #eef0ff;
+  border-radius: 999px;
+  color: #5652cf;
+  font-size: 0.45rem;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+  padding: 0.12rem 0.35rem;
+  text-transform: uppercase;
 }
 
 .internal-notifications__time i {

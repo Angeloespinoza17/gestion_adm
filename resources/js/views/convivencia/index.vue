@@ -161,7 +161,7 @@ export default {
       protocols: tabState(() => ({ id: null, protocol_type_item_id: null, criticality_item_id: null, name: "", description: "", default_due_days: 5, status: "activo", steps: [emptyProtocolStep()] })),
       protocolActivationForm: { protocol_id: null, case_id: null, complaint_id: null, status: "activo", current_stage_name: "", actions_taken: "", measures_adopted: "" },
       measures: tabState(() => ({ id: null, case_id: null, student_profile_id: null, course_section_id: null, measure_type_item_id: null, responsible_user_id: null, responsible_staff_id: null, validated_by: null, assigned_at: "", due_at: "", closed_at: "", status: "asignada", description: "", training_objective: "", evidence_summary: "", student_reflection: "", repair_action: "", responsible_notes: "", closure_notes: "", is_sensitive: false })),
-      interviews: tabState(() => ({ id: null, case_id: null, student_profile_id: null, course_section_id: null, interview_type_item_id: null, responsible_user_id: null, interview_at: "", motive: "", topics: "", agreements: "", commitments: "", follow_up_date: "", follow_up_status: "pendiente", internal_notes: "", participants: [emptyInterviewParticipant()], is_sensitive: false })),
+      interviews: tabState(() => ({ id: null, record_updated_at: "", change_reason: "", case_id: null, student_profile_id: null, course_section_id: null, interview_type_item_id: null, responsible_user_id: null, interview_at: "", motive: "", topics: "", agreements: "", commitments: "", follow_up_date: "", follow_up_status: "pendiente", internal_notes: "", participants: [emptyInterviewParticipant()], is_sensitive: false })),
       dailyLogs: tabState(() => ({ id: null, case_id: null, academic_year_id: null, student_profile_id: null, course_section_id: null, daily_log_type_item_id: null, inspector_user_id: null, inspector_staff_id: null, happened_at: "", place: "", description: "", immediate_action: "", involved_snapshot: [], status: "registrado", guardian_informed: false, guardian_contact_note: "", is_sensitive: false })),
       sociograms: tabState(() => ({ id: null, academic_year_id: null, course_section_id: null, title: "", applied_on: currentLocalDateTime().slice(0, 10), status: "borrador", confidentiality_level: "alta_confidencialidad", interpretation: "", is_sensitive: true, questions: [emptyQuestion()], answers: [] })),
       idps: { loading: false, saving: false, modal: null, overview: null, periodForm: { id: null, academic_year_id: null, name: "", starts_on: "", ends_on: "", status: "abierto", notes: "" }, dimensionForm: { id: null, code: "", name: "", description: "", active: true }, instrumentForm: { id: null, dimension_id: null, name: "", description: "", response_type: "escala", scale_label: "", active: true }, resultForm: { id: null, period_id: null, dimension_id: null, instrument_id: null, academic_year_id: null, course_section_id: null, education_level_id: null, related_plan_id: null, result_scope: "curso", reference_label: "", score: "", percentage: "", sample_size: "", qualitative_observations: "", improvement_actions: "", is_sensitive: false } },
@@ -555,7 +555,7 @@ export default {
         derivaciones: () => ({ id: null, case_id: null, academic_year_id: this.catalogs.active_academic_year_id, student_profile_id: null, course_section_id: null, scope: "internal", status: "ingresada", priority_level: "media", confidentiality_level: "reservada", destination_department_id: null, destination_user_id: null, destination_staff_id: null, external_institution_id: null, responsible_user_id: null, destination_label: "", external_contact_name: "", external_contact_email: "", external_contact_phone: "", derived_at: toInputDateTime(new Date().toISOString()), sent_at: "", response_due_at: "", responded_at: "", closed_at: "", motive: "", narrative: "", response_text: "", suggested_actions: "", follow_up_notes: "", is_sensitive: false }),
         protocolos: () => ({ id: null, protocol_type_item_id: null, criticality_item_id: null, name: "", description: "", default_due_days: 5, status: "activo", steps: [emptyProtocolStep()] }),
         medidas: () => ({ id: null, case_id: null, student_profile_id: null, course_section_id: null, measure_type_item_id: null, responsible_user_id: null, responsible_staff_id: null, validated_by: null, assigned_at: toInputDateTime(new Date().toISOString()), due_at: "", closed_at: "", status: "asignada", description: "", training_objective: "", evidence_summary: "", student_reflection: "", repair_action: "", responsible_notes: "", closure_notes: "", is_sensitive: false }),
-        entrevistas: () => ({ id: null, case_id: null, student_profile_id: null, course_section_id: null, interview_type_item_id: null, responsible_user_id: null, interview_at: toInputDateTime(new Date().toISOString()), motive: "", topics: "", agreements: "", commitments: "", follow_up_date: "", follow_up_status: "pendiente", internal_notes: "", participants: [emptyInterviewParticipant()], is_sensitive: false }),
+        entrevistas: () => ({ id: null, record_updated_at: "", change_reason: "", case_id: null, student_profile_id: null, course_section_id: null, interview_type_item_id: null, responsible_user_id: null, interview_at: toInputDateTime(new Date().toISOString()), motive: "", topics: "", agreements: "", commitments: "", follow_up_date: "", follow_up_status: "pendiente", internal_notes: "", participants: [emptyInterviewParticipant()], is_sensitive: false }),
         bitacora: () => ({ id: null, case_id: null, academic_year_id: this.catalogs.active_academic_year_id, student_profile_id: null, course_section_id: null, daily_log_type_item_id: null, inspector_user_id: this.inspectorUserId(), inspector_staff_id: null, happened_at: toInputDateTime(new Date().toISOString()), place: "", description: "", immediate_action: "", involved_snapshot: [], status: "registrado", guardian_informed: false, guardian_contact_note: "", is_sensitive: false }),
         sociogramas: () => ({ id: null, academic_year_id: this.catalogs.active_academic_year_id, course_section_id: null, title: "", applied_on: currentLocalDateTime().slice(0, 10), status: "borrador", confidentiality_level: "alta_confidencialidad", interpretation: "", is_sensitive: true, questions: [emptyQuestion()], answers: [] }),
       };
@@ -956,6 +956,14 @@ export default {
       } finally {
         this.recordLoadingId = null;
       }
+    },
+    async editCaseInterview(item) {
+      if (this.catalogs.capabilities?.can_manage_interviews !== true || !item?.id) return;
+      this.caseDetailModal = false;
+      const navigation = this.$router.push('/convivencia/entrevistas');
+      if (navigation?.catch) await navigation.catch(() => {});
+      await this.$nextTick();
+      await this.editItem('entrevistas', item);
     },
     async deleteItem(endpoint, id, reload, text = "Se archivará el registro seleccionado.") {
       const confirmation = await confirmConvivenciaAction({ title: "Confirmar eliminación", text, confirmButtonText: "Sí, eliminar" });
@@ -1670,6 +1678,24 @@ export default {
           <div class="case-detail__text mb-3">{{ caseDetail.background || "-" }}</div>
           <div class="small text-muted mb-1">Medidas inmediatas</div>
           <div class="case-detail__text">{{ caseDetail.immediate_measures || "-" }}</div>
+        </BCard>
+        <BCard class="case-detail__section case-detail__interviews border-0 shadow-sm">
+          <div class="case-detail__section-title"><i class="bx bx-conversation"></i><h6>Actas de entrevista</h6><span class="case-detail__count">{{ caseDetail.interviews?.length || 0 }}</span></div>
+          <div v-if="caseDetail.interviews?.length" class="case-interview-list">
+            <article v-for="interview in caseDetail.interviews" :key="`case-interview-${interview.id}`" class="case-interview-card">
+              <span class="case-interview-card__icon"><i class="bx bx-message-rounded-detail"></i></span>
+              <div>
+                <b>{{ interview.interview_type_label || 'Entrevista de convivencia' }}</b>
+                <small>{{ formatDateTime(interview.interview_at) }} · {{ interview.responsible_user?.name || 'Sin responsable' }}</small>
+                <p>{{ interview.motive || 'Sin motivo visible.' }}</p>
+              </div>
+              <div class="case-interview-card__actions">
+                <StatusBadge :status="interview.follow_up_status" />
+                <button v-if="catalogs.capabilities?.can_manage_interviews === true" type="button" class="case-interview-card__edit" @click="editCaseInterview(interview)"><i class="bx bx-edit-alt"></i>Editar acta</button>
+              </div>
+            </article>
+          </div>
+          <div v-else class="case-detail__empty">Este expediente aún no tiene actas de entrevista asociadas.</div>
         </BCard>
         <div class="row g-3">
           <div class="col-lg-6">
@@ -2455,6 +2481,62 @@ export default {
   line-height: 1.65;
 }
 
+.case-interview-list {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.case-interview-card {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem;
+  border: 1px solid #dce6ef;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #fbfdff, #f7fbfa);
+}
+
+.case-interview-card__icon {
+  display: grid;
+  width: 38px;
+  height: 38px;
+  color: #27856c;
+  font-size: 1.15rem;
+  place-items: center;
+  border-radius: 11px;
+  background: #e8f7f2;
+}
+
+.case-interview-card > div:nth-child(2) {
+  display: grid;
+  min-width: 0;
+  gap: 0.12rem;
+}
+
+.case-interview-card b { color: #344162; font-size: 0.8rem; }
+.case-interview-card small { color: #7b8799; font-size: 0.66rem; }
+.case-interview-card p { margin: 0.2rem 0 0; color: #56647b; font-size: 0.72rem; }
+.case-interview-card__actions { display: flex; align-items: center; gap: 0.55rem; }
+.case-interview-card__edit {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.42rem 0.62rem;
+  color: #3158b4;
+  font-size: 0.66rem;
+  font-weight: 780;
+  border: 1px solid #cfd9f4;
+  border-radius: 9px;
+  background: #f3f6ff;
+}
+.case-interview-card__edit:hover,
+.case-interview-card__edit:focus-visible {
+  color: #243f8b;
+  border-color: #98ace3;
+  box-shadow: 0 5px 13px rgba(49, 88, 180, 0.11);
+}
+
 .case-detail__section-title .case-detail__count {
   display: grid;
   min-width: 24px;
@@ -2590,6 +2672,15 @@ export default {
   .case-detail__hero-actions {
     width: 100%;
     align-items: stretch;
+  }
+
+  .case-interview-card {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .case-interview-card__actions {
+    grid-column: 1 / -1;
+    justify-content: space-between;
   }
 }
 </style>

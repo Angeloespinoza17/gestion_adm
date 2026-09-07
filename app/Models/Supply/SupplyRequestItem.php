@@ -15,6 +15,8 @@ class SupplyRequestItem extends Model
         'unit_snapshot', 'requested_quantity', 'final_quantity', 'reference_photo_path', 'sort_order',
     ];
 
+    protected $hidden = ['reference_photo_path'];
+
     protected $casts = [
         'requested_quantity' => 'decimal:2',
         'final_quantity' => 'decimal:2',

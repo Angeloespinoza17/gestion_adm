@@ -30,7 +30,8 @@ Route::middleware('auth:sanctum')->prefix('social-work')->group(function () {
     Route::get('/cases/{case}/timeline', [CaseController::class, 'timeline'])->middleware('permission:social_work.cases.view');
 
     Route::get('/cases/{case}/interventions', [WorkflowController::class, 'interventions'])->middleware('permission:social_work.cases.view');
-    Route::post('/cases/{case}/interventions', [WorkflowController::class, 'storeIntervention'])->middleware('permission:social_work.actions.manage');
+    Route::post('/cases/{case}/interventions', [WorkflowController::class, 'storeIntervention']);
+    Route::patch('/interventions/{intervention}', [WorkflowController::class, 'updateIntervention'])->middleware('throttle:60,1');
     Route::post('/interventions/{intervention}/convert', [WorkflowController::class, 'convertIntervention'])->middleware('permission:social_work.actions.manage');
     Route::post('/cases/{case}/protocols', [WorkflowController::class, 'activateProtocol'])->middleware('permission:social_work.protocols.manage');
     Route::post('/case-protocols/{activation}/advance', [WorkflowController::class, 'advanceProtocol'])->middleware('permission:social_work.protocols.manage');

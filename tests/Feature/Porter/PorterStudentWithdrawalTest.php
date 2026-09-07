@@ -286,6 +286,48 @@ class PorterStudentWithdrawalTest extends TestCase
             ->assertJsonPath('data.inspector.id', $inspector->id);
     }
 
+    public function test_observed_withdrawal_notifies_inspector_and_authorizers_and_reports_resolution(): void
+    {
+        $porter = $this->createUserWithPermissions(['ver_porteria', 'registrar_retiro_porteria']);
+        $authorizer = $this->createUserWithPermissions(['autorizar_retiros_porteria']);
+        [$student, , , $inspector] = $this->createActiveStudent();
+        $inspectorUser = User::factory()->create([
+            'name' => $inspector->full_name,
+            'staff_id' => $inspector->id,
+            'active' => true,
+        ]);
+
+        Sanctum::actingAs($porter);
+        $withdrawalId = $this->postJson('/api/porter/withdrawals', [
+            'student_profile_id' => $student->id,
+            'inspector_staff_id' => $inspector->id,
+            'person_name' => 'Persona sin autorización',
+            'person_relationship' => 'otro',
+            'reason' => 'otro',
+        ])->assertCreated()->assertJsonPath('data.status', 'observado')->json('data.id');
+
+        foreach ([$inspectorUser, $authorizer] as $recipient) {
+            $notification = $recipient->notifications()->firstOrFail();
+            $this->assertSame('withdrawal.created', $notification->data['event_type']);
+            $this->assertSame('porter', $notification->data['module']);
+            $this->assertSame('cnsc.operational-notification.v1', $notification->data['event']['schema']);
+            $this->assertSame($withdrawalId, $notification->data['event']['resource']['id']);
+            $this->assertSame('alta', $notification->data['priority']);
+        }
+
+        Sanctum::actingAs($authorizer);
+        $this->postJson("/api/porter/withdrawals/{$withdrawalId}/resolve", [
+            'decision' => 'autorizado',
+            'reason' => 'Identidad verificada y autorización confirmada.',
+        ])->assertOk();
+
+        $statusNotification = $inspectorUser->notifications()
+            ->get()
+            ->first(fn ($notification) => ($notification->data['event_type'] ?? null) === 'withdrawal.status_changed');
+        $this->assertNotNull($statusNotification);
+        $this->assertSame('autorizado', $statusNotification->data['event']['context']['status']);
+    }
+
     private function createUserWithPermissions(array $permissionSlugs): User
     {
         $user = User::factory()->create([

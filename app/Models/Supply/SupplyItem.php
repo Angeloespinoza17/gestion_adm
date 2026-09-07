@@ -35,6 +35,8 @@ class SupplyItem extends Model
         'reference_photo_path',
     ];
 
+    protected $hidden = ['reference_photo_path'];
+
     protected $appends = ['photo_url'];
 
     public function getPhotoUrlAttribute(): ?string

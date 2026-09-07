@@ -18,8 +18,11 @@ class SaveConvivenciaInterviewRequest extends FormRequest
         $participantsRule = $this->isMethod('POST')
             ? ['required', 'array', 'min:1']
             : ['sometimes', 'nullable', 'array', 'min:1'];
+        $updateRules = $this->isMethod('POST') ? ['nullable'] : ['required'];
 
         return [
+            'change_reason' => [...$updateRules, 'string', 'min:5', 'max:1000'],
+            'record_updated_at' => [...$updateRules, 'date'],
             'case_id' => ['nullable', 'integer', 'exists:convivencia_cases,id'],
             'student_profile_id' => ['nullable', 'integer', 'exists:student_profiles,id'],
             'course_section_id' => ['nullable', 'integer', 'exists:course_sections,id'],
@@ -45,6 +48,15 @@ class SaveConvivenciaInterviewRequest extends FormRequest
             'participants.*.full_name' => ['required_with:participants', 'string', 'max:191'],
             'participants.*.contact_reference' => ['nullable', 'string', 'max:191'],
             'participants.*.notes' => ['nullable', 'string'],
+        ];
+    }
+
+    public function messages(): array
+    {
+        return [
+            'change_reason.required' => 'Indica brevemente por qué se corrige el acta.',
+            'change_reason.min' => 'El motivo de la corrección debe tener al menos 5 caracteres.',
+            'record_updated_at.required' => 'Recarga el acta antes de editarla para comprobar su versión actual.',
         ];
     }
 }

@@ -14,6 +14,7 @@ vi.mock("axios", () => ({
 }));
 
 const source = readFileSync("resources/js/views/account/login.vue", "utf8");
+const appLayoutSource = readFileSync("resources/views/layouts/app.blade.php", "utf8");
 const routerPush = vi.fn();
 
 const mountLogin = () => mount(Login, {
@@ -76,6 +77,25 @@ describe("Acceso institucional", () => {
     expect(source).toContain("login-mobile-brand");
     expect(source).toContain("@media (max-width: 575.98px)");
     expect(source).not.toContain("profileImg");
+  });
+
+  it("reserva el tamaño del escudo antes de cargar el CSS diferido", () => {
+    const wrapper = mountLogin();
+    const logos = wrapper.findAll("img[data-cnsc-auth-logo]");
+
+    expect(logos).toHaveLength(2);
+    logos.forEach((logo) => {
+      expect(logo.attributes("width")).toBe("44");
+      expect(logo.attributes("height")).toBe("44");
+    });
+    expect(appLayoutSource).toContain("request()->is('login')");
+    expect(appLayoutSource).toContain("resources/js/views/account/login.vue");
+    expect(appLayoutSource).toContain("manifestStylesheet");
+    expect(appLayoutSource).toContain("build/css/login.min.css");
+    expect(appLayoutSource).toContain('rel="stylesheet"');
+    expect(appLayoutSource).toContain("filemtime(public_path($loginStylesheet))");
+    expect(appLayoutSource).toContain('rel="preload" as="image"');
+    expect(appLayoutSource).toContain("img[data-cnsc-auth-logo]");
   });
 
   it("renderiza campos con semántica de autenticación y recuperación", () => {

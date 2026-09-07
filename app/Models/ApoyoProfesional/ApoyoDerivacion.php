@@ -80,6 +80,11 @@ class ApoyoDerivacion extends Model
         return $this->belongsTo(User::class, 'destination_user_id');
     }
 
+    public function createdBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'created_by');
+    }
+
     public function documents(): MorphMany
     {
         return $this->morphMany(ApoyoAdjunto::class, 'documentable')->latest('id');

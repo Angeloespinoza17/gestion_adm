@@ -93,6 +93,8 @@ class PsychologyWorkflowService
             $this->audit->record('referral.status_changed', $referral, $user, ['status' => $from], ['status' => $to], $context['reason'] ?? null);
             if ($to === 'submitted') {
                 $this->notifications->referralSubmitted($referral);
+            } else {
+                $this->notifications->referralStatusChanged($referral, $user);
             }
             event(new PsychologyRecordChanged('referral', $referral->id, $to));
 

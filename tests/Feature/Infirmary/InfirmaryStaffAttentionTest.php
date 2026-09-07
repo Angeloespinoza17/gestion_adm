@@ -21,9 +21,8 @@ class InfirmaryStaffAttentionTest extends TestCase
         parent::setUp();
 
         $user = User::factory()->create(['active' => true]);
-        $role = Role::query()->create([
+        $role = Role::query()->firstOrCreate(['slug' => 'super_admin'], [
             'name' => 'Super administrador',
-            'slug' => 'super_admin',
             'active' => true,
         ]);
         $user->roles()->attach($role);
@@ -215,6 +214,39 @@ class InfirmaryStaffAttentionTest extends TestCase
             ->assertJsonCount(1, 'data')
             ->assertJsonPath('data.0.subject_type', InfirmaryAttention::SUBJECT_STUDENT)
             ->assertJsonPath('data.0.correlative_number', 2);
+    }
+
+    public function test_referral_notifies_the_explicit_responsible_once_without_exposing_clinical_details(): void
+    {
+        $staff = Staff::query()->create([
+            'full_name' => 'Daniela Rojas Pérez',
+            'rut' => '16666111-3',
+            'status' => 'activo',
+            'active' => true,
+        ]);
+        $responsible = User::factory()->create(['active' => true]);
+        $payload = $this->payload($staff);
+        $payload['priority'] = 'emergencia';
+        $payload['referrals'] = [[
+            'referral_type' => 'derivacion_a_direccion',
+            'referred_at' => now()->format('Y-m-d H:i:s'),
+            'responsible_user_id' => $responsible->id,
+            'reason' => 'Antecedente clínico reservado que no debe aparecer en la campana.',
+        ]];
+
+        $response = $this->postJson('/api/infirmary/staff-attentions', $payload)->assertCreated();
+        $attentionId = $response->json('data.id');
+
+        $notification = $responsible->notifications()->firstOrFail();
+        $this->assertSame('infirmary.referral.created', $notification->data['event_type']);
+        $this->assertSame('cnsc.operational-notification.v1', $notification->data['event']['schema']);
+        $this->assertSame($attentionId, $notification->data['event']['context']['attention_id']);
+        $this->assertSame('critica', $notification->data['priority']);
+        $this->assertStringNotContainsString('Antecedente clínico', $notification->data['message']);
+        $this->assertNull($notification->data['action_url']);
+
+        $this->putJson("/api/infirmary/staff-attentions/{$attentionId}", $payload)->assertOk();
+        $this->assertCount(1, $responsible->fresh()->notifications);
     }
 
     private function payload(Staff $staff): array

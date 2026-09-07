@@ -220,6 +220,11 @@ class LibroDigitalSupplementaryApiTest extends TestCase
         $this->assertNull(\DB::table('porter_student_withdrawals')->where('id', $porterId)->value('person_rut'));
         $ciphertext = (string) \DB::table('lcd_early_withdrawals')->where('id', $id)->value('withdrawal_snapshot_encrypted');
         $this->assertStringNotContainsString('11.111.111-1', $ciphertext);
+        $notification = $user->notifications()->firstOrFail();
+        $this->assertSame('withdrawal.created', $notification->data['event_type']);
+        $this->assertSame($porterId, $notification->data['event']['resource']['id']);
+        $this->assertSame('cnsc.operational-notification.v1', $notification->data['event']['schema']);
+        $this->assertArrayNotHasKey('person_rut', $notification->data['event']['context']);
 
         $this->withHeaders(['Idempotency-Key' => 'lcd-withdrawal-return-0001', 'If-Match' => '1'])
             ->postJson('/api/libro-digital/v1/early-withdrawals/'.$id.'/return', [

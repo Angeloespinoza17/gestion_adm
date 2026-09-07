@@ -12,6 +12,7 @@ use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\Storage;
 use Laravel\Sanctum\Sanctum;
 use Tests\TestCase;
@@ -64,8 +65,17 @@ class PsychologyModuleTest extends TestCase
         $unqualified = User::factory()->create(['active' => true]);
         $this->postJson("/api/psychology/referrals/{$referral->id}/assign", ['user_id' => $unqualified->id, 'reason' => 'Asignación inválida'])->assertUnprocessable()->assertJsonValidationErrors(['user_id']);
         $this->postJson("/api/psychology/referrals/{$referral->id}/assign", ['user_id' => $psychologist->id, 'reason' => 'Distribución de carga'])->assertOk()->assertJsonPath('data.assigned_user.id', $psychologist->id);
+        $assignmentNotice = $psychologist->notifications()->firstOrFail();
+        $this->assertSame('psychology.referral.assigned', $assignmentNotice->data['event_type']);
+        $this->assertSame('cnsc.operational-notification.v1', $assignmentNotice->data['event']['schema']);
+        $this->assertSame($referral->id, $assignmentNotice->data['event']['resource']['id']);
         $this->postJson("/api/psychology/referrals/{$referral->id}/transition", ['status' => 'completed', 'reason' => 'Intento de salto'])->assertUnprocessable()->assertJsonValidationErrors(['status']);
         $this->postJson("/api/psychology/referrals/{$referral->id}/transition", ['status' => 'under_review', 'reason' => 'Antecedentes revisados'])->assertOk();
+        $statusNotice = $inspector->notifications()
+            ->get()
+            ->first(fn ($item) => ($item->data['event_type'] ?? null) === 'psychology.referral.status_changed');
+        $this->assertNotNull($statusNotice);
+        $this->assertSame('under_review', $statusNotice->data['event']['context']['status']);
         $this->postJson("/api/psychology/referrals/{$referral->id}/transition", ['status' => 'accepted', 'reason' => 'Corresponde al área'])->assertOk();
 
         Sanctum::actingAs($psychologist);
@@ -290,6 +300,47 @@ class PsychologyModuleTest extends TestCase
             'action' => 'activity.pdf_exported',
             'auditable_id' => $first->json('data.id'),
             'user_id' => $psychologist->id,
+        ]);
+    }
+
+    public function test_psychologist_can_correct_finalized_interview_with_encrypted_revision_history(): void
+    {
+        $psychologist = $this->userWithRole('psicologo');
+        $case = PsychologyCase::factory()->create(['responsible_user_id' => $psychologist->id]);
+        Sanctum::actingAs($psychologist);
+        $payload = [
+            'type' => 'student_interview',
+            'activity_on' => now()->toDateString(),
+            'participant_types' => ['student'],
+            'interviewee_type' => 'student',
+            'interviewee_name' => 'Estudiante prueba',
+            'institutional_summary' => 'Resumen original protegido.',
+            'visibility' => 'psychology_team',
+            'status' => 'finalized',
+        ];
+        $created = $this->postJson("/api/psychology/cases/{$case->id}/activities", $payload)->assertCreated();
+        $activityId = $created->json('data.id');
+        $activity = \App\Models\Psychology\PsychologyActivity::query()->findOrFail($activityId);
+
+        $this->patchJson("/api/psychology/activities/{$activityId}", array_merge($payload, [
+            'institutional_summary' => 'Resumen corregido sin perder la versión anterior.',
+            'change_reason' => 'Corrección validada del acta de entrevista.',
+            'record_updated_at' => $activity->updated_at->toIso8601String(),
+        ]))->assertOk()
+            ->assertJsonPath('data.institutional_summary', 'Resumen corregido sin perder la versión anterior.')
+            ->assertJsonPath('data.status', 'finalized');
+
+        $revision = DB::table('interview_record_revisions')->where([
+            'module' => 'psychology',
+            'record_id' => $activityId,
+        ])->first();
+        $this->assertNotNull($revision);
+        $before = json_decode(Crypt::decryptString($revision->before_payload), true);
+        $this->assertSame('Resumen original protegido.', $before['institutional_summary']);
+        $this->assertDatabaseHas('psychology_audit_events', [
+            'action' => 'activity.updated',
+            'auditable_id' => $activityId,
+            'reason' => 'Corrección validada del acta de entrevista.',
         ]);
     }
 

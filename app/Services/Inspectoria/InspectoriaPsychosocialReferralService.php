@@ -6,13 +6,18 @@ use App\Models\Inspectoria\InspectoriaAttention;
 use App\Models\Psychology\PsychologyReferral;
 use App\Models\SocialWork\Referral;
 use App\Models\User;
+use App\Notifications\OperationalEventNotification;
+use App\Services\Notifications\OperationalNotificationService;
 use App\Services\Psychology\PsychologyWorkflowService;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 
 class InspectoriaPsychosocialReferralService
 {
-    public function __construct(private readonly PsychologyWorkflowService $psychologyWorkflow) {}
+    public function __construct(
+        private readonly PsychologyWorkflowService $psychologyWorkflow,
+        private readonly OperationalNotificationService $notifications,
+    ) {}
 
     public function sync(InspectoriaAttention $attention, User $actor): ?Referral
     {
@@ -88,6 +93,42 @@ class InspectoriaPsychosocialReferralService
                     ]);
                 }
             }
+        }
+
+        if ($socialReferral->wasRecentlyCreated) {
+            $recipient = User::query()
+                ->whereKey($attention->psychosocial_referral_user_id)
+                ->where('active', true)
+                ->first();
+            $eventKey = 'social_work.referral.created:'.$socialReferral->id;
+            $this->notifications->send(
+                $recipient,
+                new OperationalEventNotification(
+                    eventKey: $eventKey,
+                    eventType: 'social_work.referral.created',
+                    module: 'social_work',
+                    title: 'Nueva derivación psicosocial',
+                    message: 'Inspectoría te asignó una derivación psicosocial pendiente de revisión.',
+                    resource: [
+                        'type' => 'social_work_referral',
+                        'id' => $socialReferral->id,
+                        'code' => $attention->attention_code,
+                    ],
+                    actionUrl: $recipient?->hasPermission('social_work.referrals.submit')
+                        ? '/social-work/referrals'
+                        : '/psychology/referrals',
+                    icon: 'bx bx-git-branch',
+                    priority: $socialReferral->urgency,
+                    occurredAt: $attention->psychosocial_referred_at,
+                    actor: $actor,
+                    context: [
+                        'attention_id' => $attention->id,
+                        'assigned_user_id' => $attention->psychosocial_referral_user_id,
+                        'status' => $socialReferral->status,
+                    ],
+                ),
+                $eventKey,
+            );
         }
 
         return $socialReferral;

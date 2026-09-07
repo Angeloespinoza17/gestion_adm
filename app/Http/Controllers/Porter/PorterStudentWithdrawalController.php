@@ -10,17 +10,15 @@ use App\Models\PorterAuthorizationRequest;
 use App\Models\PorterStudentWithdrawal;
 use App\Models\Staff;
 use App\Models\StudentProfile;
-use App\Notifications\StudentWithdrawalCreatedNotification;
 use App\Services\Porter\PorterAccessService;
 use App\Services\Porter\PorterAuditService;
 use App\Services\Porter\PorterStudentContextService;
+use App\Services\Porter\StudentWithdrawalNotificationService;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Log;
-use Throwable;
 
 class PorterStudentWithdrawalController extends Controller
 {
@@ -28,6 +26,7 @@ class PorterStudentWithdrawalController extends Controller
         private readonly PorterAccessService $accessService,
         private readonly PorterAuditService $auditService,
         private readonly PorterStudentContextService $studentContextService,
+        private readonly StudentWithdrawalNotificationService $withdrawalNotifications,
     ) {}
 
     public function index(Request $request): JsonResponse
@@ -244,7 +243,7 @@ class PorterStudentWithdrawalController extends Controller
             ],
         );
 
-        $this->notifyInspector($withdrawal, $inspector);
+        $this->withdrawalNotifications->created($withdrawal, $user);
 
         return response()->json([
             'message' => $withdrawal->status === 'observado'
@@ -299,6 +298,8 @@ class PorterStudentWithdrawalController extends Controller
             $request,
         );
 
+        $this->withdrawalNotifications->statusChanged($porterStudentWithdrawal->fresh(), $request->user());
+
         return response()->json([
             'message' => 'La resolución del retiro fue registrada correctamente.',
             'data' => $porterStudentWithdrawal->fresh()->load([
@@ -351,6 +352,8 @@ class PorterStudentWithdrawalController extends Controller
             $request,
         );
 
+        $this->withdrawalNotifications->statusChanged($porterStudentWithdrawal->fresh(), $request->user());
+
         return response()->json([
             'message' => 'Retiro anulado correctamente.',
             'data' => $porterStudentWithdrawal->fresh(),
@@ -370,32 +373,5 @@ class PorterStudentWithdrawalController extends Controller
             'attachment_original_name' => $attachment->getClientOriginalName(),
             'attachment_mime_type' => $attachment->getClientMimeType(),
         ]);
-    }
-
-    private function notifyInspector(PorterStudentWithdrawal $withdrawal, Staff $inspector): void
-    {
-        $recipient = $inspector->user()
-            ->where('active', true)
-            ->first();
-
-        if (! $recipient) {
-            Log::warning('No se pudo crear la notificación interna del retiro porque la inspectora no tiene una cuenta activa.', [
-                'withdrawal_id' => $withdrawal->id,
-                'inspector_staff_id' => $inspector->id,
-            ]);
-
-            return;
-        }
-
-        try {
-            $recipient->notify(new StudentWithdrawalCreatedNotification($withdrawal));
-        } catch (Throwable $exception) {
-            Log::warning('No se pudo crear la notificación interna del retiro.', [
-                'withdrawal_id' => $withdrawal->id,
-                'inspector_staff_id' => $inspector->id,
-                'recipient_user_id' => $recipient->id,
-                'error' => $exception->getMessage(),
-            ]);
-        }
     }
 }

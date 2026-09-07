@@ -5,12 +5,16 @@ namespace App\Services\Convivencia;
 use App\Models\Convivencia\ConvivenciaCatalogItem;
 use App\Models\Convivencia\ConvivenciaInterview;
 use App\Models\User;
+use App\Services\Records\InterviewRecordRevisionService;
+use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 
 class ConvivenciaInterviewService
 {
     public function __construct(
         private readonly ConvivenciaSupportService $supportService,
+        private readonly InterviewRecordRevisionService $revisions,
     ) {}
 
     public function store(array $payload, User $user): ConvivenciaInterview
@@ -30,21 +34,53 @@ class ConvivenciaInterviewService
     public function update(ConvivenciaInterview $interview, array $payload, User $user): ConvivenciaInterview
     {
         return DB::transaction(function () use ($interview, $payload, $user) {
-            $previousStatus = $interview->follow_up_status;
+            $locked = ConvivenciaInterview::query()->with('participants')->lockForUpdate()->findOrFail($interview->id);
+            $expectedVersion = Carbon::parse($payload['record_updated_at']);
+            if (! $locked->updated_at?->equalTo($expectedVersion)) {
+                throw ValidationException::withMessages([
+                    'record' => 'El acta fue modificada por otra persona. Recárgala antes de guardar tus cambios.',
+                ]);
+            }
 
-            $this->fillInterview($interview, $payload, $user, false);
-            $interview->save();
+            $reason = (string) $payload['change_reason'];
+            unset($payload['change_reason'], $payload['record_updated_at']);
+            $previousStatus = $locked->follow_up_status;
+            $before = $this->revisionPayload($locked);
+
+            $this->fillInterview($locked, $payload, $user, false);
+            $locked->save();
 
             if (array_key_exists('participants', $payload)) {
-                $this->supportService->syncInterviewParticipants($interview, (array) ($payload['participants'] ?? []));
+                $this->supportService->syncInterviewParticipants($locked, (array) ($payload['participants'] ?? []));
             }
 
-            if ($previousStatus !== $interview->follow_up_status) {
-                $this->supportService->logStatus($interview, $previousStatus, $interview->follow_up_status, $user);
+            $locked->load('participants');
+            $after = $this->revisionPayload($locked);
+            $this->revisions->record('convivencia', $locked, $user, $reason, $before, $after, $locked->case_id);
+
+            if ($previousStatus !== $locked->follow_up_status) {
+                $this->supportService->logStatus($locked, $previousStatus, $locked->follow_up_status, $user, $reason);
+            } else {
+                $this->supportService->logStatus($locked, $previousStatus, $locked->follow_up_status, $user, $reason, 'record_corrected');
             }
 
-            return $this->loadInterview($interview, $user);
+            return $this->loadInterview($locked, $user);
         });
+    }
+
+    private function revisionPayload(ConvivenciaInterview $interview): array
+    {
+        return array_merge($interview->only([
+            'case_id', 'student_profile_id', 'course_section_id', 'interview_type_item_id',
+            'responsible_user_id', 'responsible_staff_id', 'interview_type_label', 'interview_at',
+            'motive', 'topics', 'agreements', 'commitments', 'follow_up_date', 'follow_up_status',
+            'internal_notes', 'is_sensitive',
+        ]), [
+            'participants' => $interview->participants->map(fn ($participant) => $participant->only([
+                'student_profile_id', 'user_id', 'staff_id', 'participant_type', 'participant_role',
+                'full_name', 'contact_reference', 'notes',
+            ]))->values()->all(),
+        ]);
     }
 
     private function fillInterview(ConvivenciaInterview $interview, array $payload, User $user, bool $creating): void

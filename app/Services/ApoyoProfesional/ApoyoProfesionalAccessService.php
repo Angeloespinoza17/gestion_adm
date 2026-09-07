@@ -12,20 +12,35 @@ use Illuminate\Support\Facades\Schema;
 class ApoyoProfesionalAccessService
 {
     public const VIEW_PERMISSION = 'ver_modulo_apoyo_profesional';
+
     public const CREATE_ATTENTION_PERMISSION = 'crear_atencion_apoyo_profesional';
+
     public const EDIT_OWN_ATTENTION_PERMISSION = 'editar_atencion_propia_apoyo_profesional';
+
     public const EDIT_ANY_ATTENTION_PERMISSION = 'editar_cualquier_atencion_apoyo_profesional';
+
     public const DELETE_ATTENTION_PERMISSION = 'eliminar_atencion_apoyo_profesional';
+
     public const VIEW_OWN_ATTENTIONS_PERMISSION = 'ver_atenciones_propias_apoyo_profesional';
+
     public const VIEW_TEAM_ATTENTIONS_PERMISSION = 'ver_atenciones_equipo_apoyo_profesional';
+
     public const VIEW_CONFIDENTIAL_ATTENTIONS_PERMISSION = 'ver_atenciones_confidenciales_apoyo_profesional';
+
     public const CREATE_DERIVATION_PERMISSION = 'crear_derivacion_apoyo_profesional';
+
     public const RESPOND_DERIVATION_PERMISSION = 'responder_derivacion_apoyo_profesional';
+
     public const CREATE_FOLLOW_UP_PERMISSION = 'crear_seguimiento_apoyo_profesional';
+
     public const CLOSE_CASE_PERMISSION = 'cerrar_caso_apoyo_profesional';
+
     public const CREATE_PLAN_PERMISSION = 'crear_plan_apoyo_profesional';
+
     public const VIEW_REPORTS_PERMISSION = 'ver_reportes_apoyo_profesional';
+
     public const EXPORT_REPORTS_PERMISSION = 'exportar_reportes_apoyo_profesional';
+
     public const MANAGE_CONFIGURATION_PERMISSION = 'administrar_configuracion_apoyo_profesional';
 
     private const EXCLUDED_ROLE_SLUGS = [
@@ -68,7 +83,7 @@ class ApoyoProfesionalAccessService
     public function isInstalled(): bool
     {
         foreach ($this->requiredTables() as $table) {
-            if (!Schema::hasTable($table)) {
+            if (! Schema::hasTable($table)) {
                 return false;
             }
         }
@@ -172,7 +187,7 @@ class ApoyoProfesionalAccessService
 
     public function isAuthorizedProfessional(?User $user): bool
     {
-        if (!$user || !$user->active || $this->isExcludedProfessional($user)) {
+        if (! $user || ! $user->active || $this->isExcludedProfessional($user)) {
             return false;
         }
 
@@ -196,7 +211,7 @@ class ApoyoProfesionalAccessService
 
     public function professionalProfileForUser(?User $user): ?ApoyoProfesionalProfile
     {
-        if (!$user) {
+        if (! $user) {
             return null;
         }
 
@@ -251,11 +266,11 @@ class ApoyoProfesionalAccessService
             return $this->canViewOwnAttentions($user);
         }
 
-        if (!$this->canViewTeamAttentions($user)) {
+        if (! $this->canViewTeamAttentions($user)) {
             return false;
         }
 
-        if ($isConfidential && !$this->canViewConfidentialAttentions($user)) {
+        if ($isConfidential && ! $this->canViewConfidentialAttentions($user)) {
             return false;
         }
 
@@ -286,8 +301,16 @@ class ApoyoProfesionalAccessService
             return true;
         }
 
+        $receivesDestinationArea = ApoyoProfesionalProfile::query()
+            ->where('user_id', $user->id)
+            ->where('area_slug', $derivation->destination_area_slug)
+            ->where('active', true)
+            ->where('can_receive_derivations', true)
+            ->exists();
+
         return (int) $derivation->destination_user_id === (int) $user->id
-            || (int) $derivation->created_by === (int) $user->id;
+            || (int) $derivation->created_by === (int) $user->id
+            || $receivesDestinationArea;
     }
 
     public function applyAttentionVisibility(Builder $query, User $user): Builder
@@ -326,10 +349,18 @@ class ApoyoProfesionalAccessService
             return $query;
         }
 
-        return $query->where(function (Builder $inner) use ($user) {
+        $destinationAreas = ApoyoProfesionalProfile::query()
+            ->where('user_id', $user->id)
+            ->where('active', true)
+            ->where('can_receive_derivations', true)
+            ->pluck('area_slug');
+
+        return $query->where(function (Builder $inner) use ($user, $destinationAreas) {
             $inner
                 ->where('created_by', $user->id)
                 ->orWhere('destination_user_id', $user->id)
+                ->when($destinationAreas->isNotEmpty(), fn (Builder $areas) => $areas
+                    ->orWhereIn('destination_area_slug', $destinationAreas))
                 ->orWhereHas('attention', function (Builder $attentionQuery) use ($user) {
                     $this->applyAttentionVisibility($attentionQuery, $user);
                 });
@@ -395,7 +426,7 @@ class ApoyoProfesionalAccessService
      */
     private function hasAny(?User $user, array $permissions): bool
     {
-        if (!$user || !$user->active) {
+        if (! $user || ! $user->active) {
             return false;
         }
 

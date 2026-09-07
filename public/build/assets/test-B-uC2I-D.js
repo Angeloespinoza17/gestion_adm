@@ -1,1 +1,0 @@
-/* empty css                                                                               */import{d as e,k as a,aW as s,au as n,aj as r,j as c}from"../js/app-ZWB5YLqt.js";const p={};function u(l,t,_,d,f,i){const o=n("Layout");return r(),a(o,null,{default:s(()=>[...t[0]||(t[0]=[c("div",null,"ok",-1)])]),_:1})}const x=e(p,[["render",u]]);export{x as default};

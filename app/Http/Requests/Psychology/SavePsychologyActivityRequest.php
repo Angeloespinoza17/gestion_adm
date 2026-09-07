@@ -16,7 +16,11 @@ class SavePsychologyActivityRequest extends FormRequest
     {
         $isInterview = fn () => in_array($this->input('type'), ['student_interview', 'guardian_interview', 'teacher_interview'], true);
 
+        $updateRules = $this->isMethod('POST') ? ['nullable'] : ['required'];
+
         return [
+            'change_reason' => [...$updateRules, 'string', 'min:5', 'max:1000'],
+            'record_updated_at' => [...$updateRules, 'date'],
             'type' => ['required', 'string', 'max:80'],
             'interview_number' => ['nullable', 'integer', 'between:1,9999'],
             'activity_on' => ['required', 'date'],
@@ -63,6 +67,9 @@ class SavePsychologyActivityRequest extends FormRequest
         return [
             'participant_types.required' => 'Selecciona al menos una persona participante.',
             'participant_types.min' => 'Selecciona al menos una persona participante.',
+            'change_reason.required' => 'Indica brevemente por qué se corrige la ficha.',
+            'change_reason.min' => 'El motivo de la corrección debe tener al menos 5 caracteres.',
+            'record_updated_at.required' => 'Recarga la ficha antes de editarla para comprobar su versión actual.',
             'interviewee_type.required' => 'Selecciona el tipo de persona entrevistada.',
             'interviewee_name.required' => 'Indica el nombre de la persona entrevistada.',
             'ends_at.after_or_equal' => 'La hora de término no puede ser anterior a la hora de inicio.',

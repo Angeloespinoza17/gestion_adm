@@ -3,12 +3,15 @@
 namespace App\Services\Infirmary;
 
 use App\Models\Infirmary\InfirmaryAttention;
+use App\Models\Infirmary\InfirmaryAttentionReferral;
 use App\Models\Infirmary\InfirmaryMedication;
 use App\Models\Infirmary\InfirmaryMedicationAdministration;
 use App\Models\Infirmary\InfirmaryMedicationMovement;
 use App\Models\Staff;
 use App\Models\StudentProfile;
 use App\Models\User;
+use App\Notifications\OperationalEventNotification;
+use App\Services\Notifications\OperationalNotificationService;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 
@@ -18,6 +21,7 @@ class InfirmaryAttentionService
         private readonly InfirmaryStudentContextService $studentContextService,
         private readonly InfirmaryMedicationStockService $stockService,
         private readonly InfirmarySequenceService $sequenceService,
+        private readonly OperationalNotificationService $notifications,
     ) {}
 
     public function store(array $payload, User $user): InfirmaryAttention
@@ -37,6 +41,15 @@ class InfirmaryAttentionService
     {
         return DB::transaction(function () use ($attention, $payload, $user) {
             $attention->load(['administrations.medication', 'treatments', 'referrals', 'calls', 'followUps']);
+            $existingReferralKeys = $attention->referrals
+                ->mapWithKeys(fn (InfirmaryAttentionReferral $referral): array => [
+                    $this->referralKey(
+                        $referral->referral_type,
+                        $referral->responsible_user_id,
+                        $referral->referred_at,
+                    ) => true,
+                ])
+                ->all();
 
             $this->revertAdministrations($attention, $user);
             $attention->administrations()->delete();
@@ -48,7 +61,7 @@ class InfirmaryAttentionService
             $this->fillAttention($attention, $payload, $user, false);
             $attention->save();
 
-            $this->syncNestedData($attention, $payload, $user);
+            $this->syncNestedData($attention, $payload, $user, $existingReferralKeys);
 
             return $this->loadAttention($attention);
         });
@@ -211,8 +224,13 @@ class InfirmaryAttentionService
         return $nextNumber;
     }
 
-    private function syncNestedData(InfirmaryAttention $attention, array $payload, User $user): void
-    {
+    /** @param  array<string, bool>  $existingReferralKeys */
+    private function syncNestedData(
+        InfirmaryAttention $attention,
+        array $payload,
+        User $user,
+        array $existingReferralKeys = [],
+    ): void {
         foreach ($payload['treatments'] ?? [] as $treatmentPayload) {
             $treatment = $attention->treatments()->create($this->normalizeTreatmentPayload($treatmentPayload));
 
@@ -246,7 +264,7 @@ class InfirmaryAttentionService
         }
 
         foreach ($payload['referrals'] ?? [] as $referralPayload) {
-            $attention->referrals()->create([
+            $referral = $attention->referrals()->create([
                 'referral_type' => $referralPayload['referral_type'],
                 'referred_at' => Carbon::parse($referralPayload['referred_at'])->format('Y-m-d H:i:s'),
                 'responsible_user_id' => $referralPayload['responsible_user_id'] ?? null,
@@ -255,6 +273,15 @@ class InfirmaryAttentionService
                 'observations' => $referralPayload['observations'] ?? null,
                 'result' => $referralPayload['result'] ?? null,
             ]);
+
+            $referralKey = $this->referralKey(
+                $referral->referral_type,
+                $referral->responsible_user_id,
+                $referral->referred_at,
+            );
+            if (! isset($existingReferralKeys[$referralKey])) {
+                $this->notifyReferral($attention, $referral, $user);
+            }
         }
 
         foreach ($payload['calls'] ?? [] as $callPayload) {
@@ -320,6 +347,68 @@ class InfirmaryAttentionService
             'other_treatments' => $payload['other_treatments'] ?? null,
             'notes' => $payload['notes'] ?? null,
         ];
+    }
+
+    private function notifyReferral(
+        InfirmaryAttention $attention,
+        InfirmaryAttentionReferral $referral,
+        User $actor,
+    ): void {
+        if (! $referral->responsible_user_id) {
+            return;
+        }
+
+        $recipient = User::query()
+            ->whereKey($referral->responsible_user_id)
+            ->where('active', true)
+            ->first();
+        if (! $recipient) {
+            return;
+        }
+
+        $eventKey = 'infirmary.referral.created:'.$referral->id;
+        $subjectLabel = $attention->subject_type === InfirmaryAttention::SUBJECT_STAFF
+            ? 'un funcionario'
+            : 'una estudiante';
+
+        $this->notifications->send(
+            $recipient,
+            new OperationalEventNotification(
+                eventKey: $eventKey,
+                eventType: 'infirmary.referral.created',
+                module: 'infirmary',
+                title: 'Nueva derivación desde Enfermería',
+                message: sprintf(
+                    'Enfermería registró una derivación de %s para %s bajo tu responsabilidad.',
+                    str_replace('_', ' ', $referral->referral_type),
+                    $subjectLabel,
+                ),
+                resource: ['type' => 'infirmary_attention_referral', 'id' => $referral->id],
+                actionUrl: $recipient->hasPermission('ver_enfermeria')
+                    ? ($attention->subject_type === InfirmaryAttention::SUBJECT_STAFF
+                        ? '/infirmary/staff-attentions'
+                        : '/infirmary/attentions')
+                    : null,
+                icon: 'bx bx-plus-medical',
+                priority: $attention->priority,
+                occurredAt: $referral->referred_at,
+                actor: $actor,
+                context: [
+                    'attention_id' => $attention->id,
+                    'referral_type' => $referral->referral_type,
+                ],
+            ),
+            $eventKey,
+        );
+    }
+
+    private function referralKey(string $type, mixed $responsibleUserId, mixed $referredAt): string
+    {
+        return implode('|', [
+            $type,
+            (string) ($responsibleUserId ?: 0),
+            Carbon::parse($referredAt)->format('Y-m-d H:i:s'),
+        ]);
     }
 
     private function calculateBmi(mixed $weight, mixed $height): ?float

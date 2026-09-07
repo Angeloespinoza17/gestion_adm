@@ -29,6 +29,7 @@ use App\Services\SocialWork\CaseService;
 use App\Services\SocialWork\InterventionService;
 use App\Services\SocialWork\ReportGenerationService;
 use App\Services\SocialWork\RiskAssessmentService;
+use App\Services\SocialWork\SocialWorkNotificationService;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -56,6 +57,20 @@ class WorkflowController extends Controller
         }
 
         return response()->json(['message' => 'Intervención registrada.', 'data' => $service->create($case, $data, $request->user())], 201);
+    }
+
+    public function updateIntervention(StoreInterventionRequest $request, Intervention $intervention, AccessService $access, InterventionService $service): JsonResponse
+    {
+        abort_unless($intervention->case && $access->canViewCase($request->user(), $intervention->case), 403);
+        $data = $request->validated();
+        if (array_key_exists('highly_confidential_notes', $data) && ! $request->user()->hasPermission('social_work.highly_confidential.view')) {
+            abort(403);
+        }
+
+        return response()->json([
+            'message' => 'Ficha corregida con historial protegido.',
+            'data' => $service->update($intervention, $data, $request->user()),
+        ]);
     }
 
     public function activateProtocol(Request $request, SocialCase $case, AccessService $access, AuditService $audit): JsonResponse
@@ -199,22 +214,33 @@ class WorkflowController extends Controller
         return response()->json(['data' => $students]);
     }
 
-    public function storeReferral(Request $request, InspectoriaAccessService $inspectoria): JsonResponse
-    {
+    public function storeReferral(
+        Request $request,
+        InspectoriaAccessService $inspectoria,
+        SocialWorkNotificationService $notifications,
+    ): JsonResponse {
         $data = $request->validate(['student_profile_id' => ['required', 'exists:student_profiles,id'], 'course_section_id' => ['nullable', 'exists:course_sections,id'], 'referral_date' => ['required', 'date'], 'source_unit' => ['required', 'string', 'max:80'], 'source_person' => ['nullable', 'string'], 'reason' => ['required', 'string'], 'description' => ['nullable', 'string'], 'observed_background' => ['nullable', 'string'], 'previous_actions' => ['nullable', 'string'], 'urgency' => ['required', 'in:baja,normal,alta,urgente'], 'immediate_risk' => ['boolean'], 'contact_data' => ['nullable', 'string'], 'status' => ['sometimes', 'in:borrador,enviada'], 'confidentiality' => ['sometimes', 'in:interno,restringido,altamente_restringido']]);
         abort_unless($inspectoria->canAccessStudent($request->user(), (int) $data['student_profile_id']), 403, 'La alumna no pertenece a los cursos asignados.');
         $referral = Referral::create(array_merge($data, ['created_by' => $request->user()->id, 'updated_by' => $request->user()->id]));
 
+        $notifications->referralCreated($referral, $request->user());
+
         return response()->json(['message' => 'Derivación enviada a Trabajo Social. Esto no concede acceso al caso.', 'data' => $referral->load(['student', 'courseSection', 'creator'])], 201);
     }
 
-    public function convertReferral(Request $request, Referral $referral, CaseService $cases): JsonResponse
-    {
+    public function convertReferral(
+        Request $request,
+        Referral $referral,
+        CaseService $cases,
+        SocialWorkNotificationService $notifications,
+    ): JsonResponse {
         abort_unless($request->user()->hasPermission('social_work.referrals.manage') && $request->user()->hasPermission('social_work.cases.create'), 403);
         abort_if($referral->case_id, 422, 'La derivación ya está vinculada a un caso.');
         $data = $request->validate(['title' => ['required', 'string'], 'priority' => ['required', 'in:baja,media,alta,urgente'], 'risk_level' => ['required', 'in:sin_evaluar,bajo,medio,alto,critico'], 'responsible_user_id' => ['required', 'exists:users,id']]);
         $case = $cases->create(array_merge($data, ['primary_student_id' => $referral->student_profile_id, 'course_section_id' => $referral->course_section_id, 'origin' => 'derivacion', 'reason' => $referral->reason, 'initial_description' => $referral->description, 'confidentiality' => $referral->confidentiality, 'status' => 'recibido']), $request->user());
         $referral->update(['case_id' => $case->id, 'status' => 'convertida_caso', 'received_at' => now(), 'updated_by' => $request->user()->id]);
+
+        $notifications->referralConverted($referral, $case, $request->user());
 
         return response()->json(['message' => 'Derivación convertida en caso.', 'data' => $case], 201);
     }

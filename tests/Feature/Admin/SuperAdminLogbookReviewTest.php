@@ -135,7 +135,7 @@ class SuperAdminLogbookReviewTest extends TestCase
             ->assertJsonValidationErrors('date_to');
     }
 
-    public function test_logbook_review_is_exclusive_to_active_superadmins(): void
+    public function test_logbook_review_requires_the_dedicated_permission(): void
     {
         $this->getJson('/api/superadmin/logbooks')->assertUnauthorized();
 
@@ -148,6 +148,11 @@ class SuperAdminLogbookReviewTest extends TestCase
         $regularUser->roles()->attach($regularRole);
         Sanctum::actingAs($regularUser);
         $this->getJson('/api/superadmin/logbooks')->assertForbidden();
+
+        $subdirector = User::factory()->create(['active' => true]);
+        $subdirector->roles()->attach(Role::query()->where('slug', 'subdirector')->firstOrFail());
+        Sanctum::actingAs($subdirector);
+        $this->getJson('/api/superadmin/logbooks')->assertOk();
 
         $inactiveSuperAdmin = $this->superAdmin(active: false);
         Sanctum::actingAs($inactiveSuperAdmin);

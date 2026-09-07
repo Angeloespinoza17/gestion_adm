@@ -99,6 +99,8 @@ const normalizers = {
       "responsible_staff_id", "interview_type_label", "interview_at", "motive", "topics", "agreements", "commitments",
       "follow_up_date", "follow_up_status", "internal_notes", "is_sensitive",
     ], { is_sensitive: false });
+    normalized.record_updated_at = record.updated_at || "";
+    normalized.change_reason = "";
     normalized.interview_at = dateTime(record.interview_at);
     normalized.participants = (record.participants || []).map((participant) => pick(participant, participantFields));
     return normalized;

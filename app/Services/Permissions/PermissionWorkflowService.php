@@ -12,10 +12,10 @@ use App\Models\User;
 use App\Notifications\PendingPermissionReviewNotification;
 use App\Notifications\PermissionRequestStatusNotification;
 use Carbon\Carbon;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Notification;
-use Illuminate\Support\Collection;
 use Illuminate\Validation\ValidationException;
 use Throwable;
 
@@ -23,7 +23,7 @@ class PermissionWorkflowService
 {
     public function saveDraft(PermissionRequest $permissionRequest, array $payload, User $actor, bool $isNew): PermissionRequest
     {
-        if (!$isNew && !$permissionRequest->isEditable() && !$actor->isSuperAdmin()) {
+        if (! $isNew && ! $permissionRequest->isEditable() && ! $actor->isSuperAdmin()) {
             throw ValidationException::withMessages([
                 'status' => 'La solicitud ya no puede editarse desde este estado.',
             ]);
@@ -107,13 +107,13 @@ class PermissionWorkflowService
 
     public function submit(PermissionRequest $permissionRequest, User $actor, ?string $comment = null): PermissionRequest
     {
-        if (!$permissionRequest->isEditable() && !$actor->isSuperAdmin()) {
+        if (! $permissionRequest->isEditable() && ! $actor->isSuperAdmin()) {
             throw ValidationException::withMessages([
                 'status' => 'Solo se pueden enviar solicitudes en borrador u observadas.',
             ]);
         }
 
-        if ($permissionRequest->permissionType?->requires_attachment && !$permissionRequest->documents()->exists()) {
+        if ($permissionRequest->permissionType?->requires_attachment && ! $permissionRequest->documents()->exists()) {
             throw ValidationException::withMessages([
                 'documents' => 'Este tipo de permiso requiere al menos un documento de respaldo.',
             ]);
@@ -162,13 +162,13 @@ class PermissionWorkflowService
 
     public function approve(PermissionRequest $permissionRequest, User $actor, array $payload = []): PermissionRequest
     {
-        if (!$permissionRequest->current_step) {
+        if (! $permissionRequest->current_step) {
             throw ValidationException::withMessages([
                 'status' => 'La solicitud no tiene una etapa pendiente de aprobación.',
             ]);
         }
 
-        if ((int) $permissionRequest->requested_by_user_id === (int) $actor->id && !$actor->isSuperAdmin()) {
+        if ((int) $permissionRequest->requested_by_user_id === (int) $actor->id && ! $actor->isSuperAdmin()) {
             throw ValidationException::withMessages([
                 'approver' => 'No puedes aprobar tu propia solicitud.',
             ]);
@@ -212,11 +212,11 @@ class PermissionWorkflowService
                 $permissionRequest->salary_discount_days = $payload['salary_discount_days'];
             }
 
-            if (!empty($payload['visible_observations'])) {
+            if (! empty($payload['visible_observations'])) {
                 $permissionRequest->visible_observations = $payload['visible_observations'];
             }
 
-            if (!empty($payload['internal_observations'])) {
+            if (! empty($payload['internal_observations'])) {
                 $permissionRequest->internal_observations = $payload['internal_observations'];
             }
 
@@ -224,7 +224,7 @@ class PermissionWorkflowService
             $currentIndex = array_search($permissionRequest->current_step, $steps, true);
             $nextStep = $currentIndex === false ? null : ($steps[$currentIndex + 1] ?? null);
 
-            if ($nextStep && !$actor->isSuperAdmin()) {
+            if ($nextStep && ! $actor->isSuperAdmin()) {
                 $permissionRequest->current_step = $nextStep;
                 $permissionRequest->status = $this->statusForStep($nextStep);
             } else {
@@ -441,11 +441,11 @@ class PermissionWorkflowService
             return $permissionRequest->with_pay;
         }
 
-        if ($permissionType->allows_with_pay && !$permissionType->allows_without_pay) {
+        if ($permissionType->allows_with_pay && ! $permissionType->allows_without_pay) {
             return true;
         }
 
-        if (!$permissionType->allows_with_pay && $permissionType->allows_without_pay) {
+        if (! $permissionType->allows_with_pay && $permissionType->allows_without_pay) {
             return false;
         }
 
@@ -471,14 +471,14 @@ class PermissionWorkflowService
         }
 
         if ($startTime && $endTime) {
-            $start = Carbon::parse($payload['start_date'] . ' ' . $startTime);
-            $end = Carbon::parse($payload['end_date'] . ' ' . $endTime);
+            $start = Carbon::parse($payload['start_date'].' '.$startTime);
+            $end = Carbon::parse($payload['end_date'].' '.$endTime);
             $hours = round($start->diffInMinutes($end) / 60, 2);
 
             return [
                 'hours' => $hours,
                 'days' => round($hours / 8, 2),
-                'label' => rtrim(rtrim(number_format($hours, 2, '.', ''), '0'), '.') . ' horas',
+                'label' => rtrim(rtrim(number_format($hours, 2, '.', ''), '0'), '.').' horas',
                 'is_full_day' => false,
                 'is_half_day' => false,
             ];
@@ -489,7 +489,7 @@ class PermissionWorkflowService
         return [
             'hours' => null,
             'days' => $days,
-            'label' => $days === 1.0 ? 'Jornada completa' : rtrim(rtrim(number_format($days, 2, '.', ''), '0'), '.') . ' días',
+            'label' => $days === 1.0 ? 'Jornada completa' : rtrim(rtrim(number_format($days, 2, '.', ''), '0'), '.').' días',
             'is_full_day' => true,
             'is_half_day' => false,
         ];
@@ -497,7 +497,7 @@ class PermissionWorkflowService
 
     private function stepsForType(?PermissionType $permissionType): array
     {
-        if (!$permissionType) {
+        if (! $permissionType) {
             return [];
         }
 
@@ -530,7 +530,7 @@ class PermissionWorkflowService
 
     private function resolvePayrollStatus(PermissionRequest $permissionRequest): string
     {
-        if (!$permissionRequest->affects_salary && $permissionRequest->with_pay !== false) {
+        if (! $permissionRequest->affects_salary && $permissionRequest->with_pay !== false) {
             return 'no_aplica';
         }
 
@@ -541,9 +541,9 @@ class PermissionWorkflowService
     {
         $permissionRequest->loadMissing([
             'permissionType.watchers.role:id,name,slug',
-            'permissionType.watchers.user:id,name,email,staff_id',
+            'permissionType.watchers.user:id,name,email,staff_id,active',
             'staff.permissionWatchers.role:id,name,slug',
-            'staff.permissionWatchers.user:id,name,email,staff_id',
+            'staff.permissionWatchers.user:id,name,email,staff_id,active',
             'requestedBy:id,name,email',
             'directManagerUser:id,name,email,staff_id',
         ]);
@@ -562,11 +562,11 @@ class PermissionWorkflowService
             $sourceLabel = $this->labelForWatcher($typeWatcher, 'type');
 
             foreach ($users as $user) {
-                if (!$user || !$user->active) {
+                if (! $user || ! $user->active) {
                     continue;
                 }
 
-                if (!isset($resolved[$user->id])) {
+                if (! isset($resolved[$user->id])) {
                     $resolved[$user->id] = [
                         'permission_request_id' => $permissionRequest->id,
                         'user_id' => $user->id,
@@ -599,17 +599,17 @@ class PermissionWorkflowService
             $sourceLabel = $this->labelForWatcher($staffWatcher, 'staff');
 
             foreach ($users as $user) {
-                if (!$user || !$user->active) {
+                if (! $user || ! $user->active) {
                     continue;
                 }
 
-                if (!isset($resolved[$user->id])) {
+                if (! isset($resolved[$user->id])) {
                     $resolved[$user->id] = [
                         'permission_request_id' => $permissionRequest->id,
                         'user_id' => $user->id,
                         'permission_type_watcher_id' => null,
                         'staff_permission_watcher_id' => $staffWatcher->id,
-                        'source_type' => 'staff_' . $staffWatcher->target_type,
+                        'source_type' => 'staff_'.$staffWatcher->target_type,
                         'source_label' => $sourceLabel,
                         'notify' => (bool) $staffWatcher->notify,
                         'can_view' => (bool) $staffWatcher->can_view,
@@ -659,7 +659,7 @@ class PermissionWorkflowService
         string $headline,
         array $excludeUserIds = [],
     ): void {
-        $permissionRequest->loadMissing('watchers.user:id,name,email');
+        $permissionRequest->loadMissing('watchers.user:id,name,email,active');
 
         $watchers = $permissionRequest->watchers
             ->filter(fn (PermissionRequestWatcher $watcher) => $watcher->notify && $watcher->user)
@@ -668,7 +668,7 @@ class PermissionWorkflowService
 
         $users = $watchers
             ->pluck('user')
-            ->filter(fn (?User $user) => $user && !empty($user->email))
+            ->filter(fn (?User $user) => $user && $user->active)
             ->unique('id')
             ->values();
 
@@ -719,7 +719,7 @@ class PermissionWorkflowService
     private function sendNotificationSafely(Collection $users, object $notification, string $context, PermissionRequest $permissionRequest): bool
     {
         $users = $users
-            ->filter(fn (?User $user) => $user && !empty($user->email))
+            ->filter(fn (?User $user) => $user && $user->active)
             ->unique('id')
             ->values();
 
@@ -780,12 +780,12 @@ class PermissionWorkflowService
         $prefix = $scope === 'staff' ? 'Funcionario' : 'Tipo';
 
         return match ($watcher->target_type) {
-            'manager' => $prefix . ': Jefatura directa',
-            'direction' => $prefix . ': Dirección',
-            'hr' => $prefix . ': RRHH / Administración',
-            'role' => $prefix . ': Rol ' . ($watcher->role?->name ?? 'Sin rol'),
-            'user' => $prefix . ': Usuario ' . ($watcher->user?->name ?? 'Sin usuario'),
-            default => $prefix . ': Configuración',
+            'manager' => $prefix.': Jefatura directa',
+            'direction' => $prefix.': Dirección',
+            'hr' => $prefix.': RRHH / Administración',
+            'role' => $prefix.': Rol '.($watcher->role?->name ?? 'Sin rol'),
+            'user' => $prefix.': Usuario '.($watcher->user?->name ?? 'Sin usuario'),
+            default => $prefix.': Configuración',
         };
     }
 
@@ -824,7 +824,7 @@ class PermissionWorkflowService
             'documents.validatedByUser:id,name,email',
             'replacements.replacedStaff:id,full_name',
             'replacements.replacementStaff:id,full_name',
-            'watchers.user:id,name,email',
+            'watchers.user:id,name,email,active',
             'logs.user:id,name,email',
         ]);
     }

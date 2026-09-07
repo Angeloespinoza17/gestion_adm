@@ -796,6 +796,16 @@ class PermissionGroupSeeder extends Seeder
                 ],
             ],
             [
+                'slug' => 'supervision_institucional',
+                'module_slug' => 'superadmin',
+                'name' => 'Supervisión institucional',
+                'description' => 'Herramientas transversales de consulta y supervisión institucional.',
+                'sort_order' => 257,
+                'permissions' => [
+                    'superadmin.logbooks.view',
+                ],
+            ],
+            [
                 'slug' => 'trabajo_social',
                 'module_slug' => 'social_work',
                 'name' => 'Trabajo Social',

@@ -17,6 +17,8 @@ use App\Services\Psychology\PsychologyAccessService;
 use App\Services\Psychology\PsychologyAuditService;
 use App\Services\Psychology\PsychologyCoordinationService;
 use App\Services\Psychology\PsychologyNotificationService;
+use App\Services\Records\InterviewRecordRevisionService;
+use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -41,6 +43,7 @@ class PsychologyWorkflowController extends Controller
         private readonly PsychologyNotificationService $notifications,
         private readonly PsychologyAccessService $access,
         private readonly PsychologyCoordinationService $coordinationService,
+        private readonly InterviewRecordRevisionService $revisions,
     ) {}
 
     public function storeActivity(SavePsychologyActivityRequest $request, PsychologyCase $case): JsonResponse
@@ -88,6 +91,65 @@ class PsychologyWorkflowController extends Controller
         });
 
         return response()->json(['message' => 'Actividad registrada.', 'data' => $activity->load('responsibleUser:id,name')], 201);
+    }
+
+    public function updateActivity(SavePsychologyActivityRequest $request, PsychologyActivity $activity): JsonResponse
+    {
+        $this->authorize('update', $activity->case);
+        abort_unless($this->access->canManageActivity($request->user(), $activity), 403);
+        abort_unless($request->user()->hasPermission('psychology.sessions.create'), 403);
+
+        $updated = DB::transaction(function () use ($request, $activity) {
+            $locked = PsychologyActivity::query()->lockForUpdate()->findOrFail($activity->id);
+            $expectedVersion = Carbon::parse($request->validated('record_updated_at'));
+            if (! $locked->updated_at?->equalTo($expectedVersion)) {
+                throw ValidationException::withMessages([
+                    'record' => 'La ficha fue modificada por otra persona. Recárgala antes de guardar tus cambios.',
+                ]);
+            }
+
+            $payload = $request->safe()->except(['change_reason', 'record_updated_at', 'coordination']);
+            if ($locked->status === 'finalized' && ($payload['status'] ?? 'finalized') !== 'finalized') {
+                throw ValidationException::withMessages([
+                    'status' => 'Una ficha finalizada no puede volver a borrador.',
+                ]);
+            }
+
+            $snapshotFields = array_values(array_unique([...array_keys($payload), 'status', 'finalized_at', 'finalized_by']));
+            $before = $locked->only($snapshotFields);
+            $finalizing = $locked->status === 'draft' && ($payload['status'] ?? 'draft') === 'finalized';
+            if ($finalizing) {
+                $payload['finalized_at'] = now();
+                $payload['finalized_by'] = $request->user()->id;
+            }
+
+            $locked->fill($payload)->forceFill(['updated_by' => $request->user()->id])->save();
+            $after = $locked->fresh()->only($snapshotFields);
+            $reason = $request->string('change_reason')->toString();
+
+            $this->revisions->record(
+                'psychology',
+                $locked,
+                $request->user(),
+                $reason,
+                $before,
+                $after,
+                $locked->case_id,
+            );
+            $this->audit->record('activity.updated', $locked, $request->user(), $before, $after, $reason);
+
+            $latest = $locked->case->activities()->latest('activity_on')->latest('id')->first();
+            $locked->case->forceFill([
+                'last_activity_at' => now(),
+                'next_action' => $latest?->next_steps ?? $locked->case->next_action,
+                'next_review_on' => $latest?->next_action_on ?? $locked->case->next_review_on,
+                'updated_by' => $request->user()->id,
+            ])->save();
+
+            return $locked->fresh(['responsibleUser:id,name', 'addenda.author:id,name']);
+        });
+
+        return response()->json(['message' => 'Ficha corregida con historial protegido.', 'data' => $updated]);
     }
 
     public function finalizeActivity(Request $request, PsychologyActivity $activity): JsonResponse

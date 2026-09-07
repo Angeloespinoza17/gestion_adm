@@ -108,7 +108,13 @@ export default {
 
         <header class="login-brand">
           <span class="login-brand__logo">
-            <img :src="cnscLogo" alt="Colegio Nuestra Señora del Carmen" />
+            <img
+              :src="cnscLogo"
+              alt="Colegio Nuestra Señora del Carmen"
+              width="44"
+              height="44"
+              data-cnsc-auth-logo
+            />
           </span>
           <span class="login-brand__name">
             <strong>CNSC</strong>
@@ -144,7 +150,13 @@ export default {
       <section class="login-access">
         <header class="login-mobile-brand">
           <span class="login-brand__logo login-brand__logo--mobile">
-            <img :src="cnscLogo" alt="Colegio Nuestra Señora del Carmen" />
+            <img
+              :src="cnscLogo"
+              alt="Colegio Nuestra Señora del Carmen"
+              width="44"
+              height="44"
+              data-cnsc-auth-logo
+            />
           </span>
           <span>
             <strong>CNSC Gestión</strong>

@@ -22,6 +22,8 @@ use App\Models\User;
 use Carbon\Carbon;
 use Database\Seeders\ConvivenciaSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Crypt;
+use Illuminate\Support\Facades\DB;
 use Laravel\Sanctum\Sanctum;
 use Tests\TestCase;
 
@@ -506,11 +508,73 @@ class ConvivenciaModuleTest extends TestCase
         ]);
     }
 
+    public function test_can_correct_case_interview_with_encrypted_revision_history(): void
+    {
+        $user = $this->seedAndActAsSuperAdmin();
+        $case = ConvivenciaCase::query()->firstOrFail();
+        $student = StudentProfile::query()->findOrFail($case->student_profile_id);
+        $created = $this->postJson('/api/convivencia/interviews', [
+            'case_id' => $case->id,
+            'student_profile_id' => $student->id,
+            'course_section_id' => $case->course_section_id,
+            'interview_type_item_id' => $this->catalogId('interview_type'),
+            'responsible_user_id' => $user->id,
+            'interview_at' => Carbon::now()->format('Y-m-d H:i:s'),
+            'motive' => 'Motivo original del acta.',
+            'topics' => 'Temas originales.',
+            'follow_up_status' => 'pendiente',
+            'participants' => [[
+                'participant_type' => 'estudiante',
+                'participant_role' => 'entrevistado',
+                'full_name' => $student->registered_name_resolved,
+                'student_profile_id' => $student->id,
+            ]],
+        ])->assertCreated();
+        $interviewId = $created->json('data.id');
+        $interview = ConvivenciaInterview::query()->findOrFail($interviewId);
+
+        $this->putJson("/api/convivencia/interviews/{$interviewId}", [
+            'case_id' => $case->id,
+            'student_profile_id' => $student->id,
+            'course_section_id' => $case->course_section_id,
+            'interview_type_item_id' => $this->catalogId('interview_type'),
+            'responsible_user_id' => $user->id,
+            'interview_at' => $interview->interview_at->format('Y-m-d H:i:s'),
+            'motive' => 'Motivo corregido del acta.',
+            'topics' => 'Temas originales.',
+            'follow_up_status' => 'pendiente',
+            'participants' => [[
+                'participant_type' => 'estudiante',
+                'participant_role' => 'entrevistado',
+                'full_name' => $student->registered_name_resolved,
+                'student_profile_id' => $student->id,
+            ]],
+            'change_reason' => 'Corrección posterior a la revisión del acta.',
+            'record_updated_at' => $interview->updated_at->toIso8601String(),
+        ])->assertOk()
+            ->assertJsonPath('data.motive', 'Motivo corregido del acta.');
+
+        $revision = DB::table('interview_record_revisions')->where([
+            'module' => 'convivencia',
+            'record_id' => $interviewId,
+        ])->first();
+        $this->assertNotNull($revision);
+        $before = json_decode(Crypt::decryptString($revision->before_payload), true);
+        $this->assertSame('Motivo original del acta.', $before['motive']);
+        $this->assertDatabaseHas('convivencia_status_logs', [
+            'loggable_id' => $interviewId,
+            'event_type' => 'record_corrected',
+            'comment' => 'Corrección posterior a la revisión del acta.',
+        ]);
+    }
+
     public function test_can_create_internal_derivation(): void
     {
         $user = $this->seedAndActAsSuperAdmin();
         $case = ConvivenciaCase::query()->firstOrFail();
         $department = Department::query()->firstOrFail();
+        $recipient = User::factory()->create(['active' => true]);
+        $recipient->roles()->attach(Role::query()->where('slug', 'super_admin')->value('id'));
 
         $response = $this->postJson('/api/convivencia/derivations', [
             'case_id' => $case->id,
@@ -521,6 +585,7 @@ class ConvivenciaModuleTest extends TestCase
             'priority_level' => 'media',
             'confidentiality_level' => 'reservada',
             'destination_department_id' => $department->id,
+            'destination_user_id' => $recipient->id,
             'responsible_user_id' => $user->id,
             'derived_at' => Carbon::now()->format('Y-m-d H:i:s'),
             'motive' => 'Derivación interna creada desde prueba automatizada.',
@@ -533,6 +598,13 @@ class ConvivenciaModuleTest extends TestCase
             'scope' => 'internal',
             'motive' => 'Derivación interna creada desde prueba automatizada.',
         ]);
+
+        $derivationId = $response->json('data.id');
+        $notification = $recipient->notifications()->firstOrFail();
+        $this->assertSame('convivencia.derivation.created', $notification->data['event_type']);
+        $this->assertSame($derivationId, $notification->data['event']['resource']['id']);
+        $this->assertSame('/convivencia/derivaciones', $notification->data['action_url']);
+        $this->assertStringNotContainsString('Se solicita intervención', $notification->data['message']);
     }
 
     public function test_can_create_external_derivation(): void

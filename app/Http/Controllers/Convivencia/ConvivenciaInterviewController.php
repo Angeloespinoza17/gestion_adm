@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Convivencia;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Convivencia\SaveConvivenciaInterviewRequest;
+use App\Models\Convivencia\ConvivenciaCase;
 use App\Models\Convivencia\ConvivenciaInterview;
 use App\Services\Convivencia\ConvivenciaAccessService;
 use App\Services\Convivencia\ConvivenciaInterviewService;
@@ -83,6 +84,11 @@ class ConvivenciaInterviewController extends Controller
     public function update(SaveConvivenciaInterviewRequest $request, ConvivenciaInterview $interview): JsonResponse
     {
         $this->authorize('update', $interview);
+
+        $targetCaseId = $request->validated('case_id');
+        if ($targetCaseId && (int) $targetCaseId !== (int) $interview->case_id) {
+            $this->authorize('view', ConvivenciaCase::query()->findOrFail($targetCaseId));
+        }
 
         $updated = $this->interviewService->update($interview, $request->validated(), $request->user());
 

@@ -138,6 +138,9 @@ const blankActivity = () => {
     const now = new Date();
 
     return {
+        id: null,
+        record_updated_at: "",
+        change_reason: "",
         type: "student_interview",
         interview_number: null,
         activity_on: deviceDate(now),
@@ -265,6 +268,31 @@ const resetActivityForm = () => {
 const openActivityForm = () => {
     api.error.value = "";
     resetActivityForm();
+    openForm("activity");
+};
+const openActivityEdit = (item) => {
+    if (!item?.id) return;
+
+    const defaults = blankActivity();
+    const hydrated = Object.fromEntries(
+        Object.keys(defaults)
+            .filter((key) => !["coordination", "coordination_enabled"].includes(key))
+            .map((key) => [key, item[key] ?? defaults[key]])
+    );
+    Object.assign(activity, defaults, hydrated, {
+        id: item.id,
+        record_updated_at: item.updated_at || "",
+        change_reason: "",
+        activity_on: item.activity_on?.slice(0, 10) || "",
+        starts_at: item.starts_at?.slice(0, 5) || "",
+        ends_at: item.ends_at?.slice(0, 5) || "",
+        next_action_on: item.next_action_on?.slice(0, 10) || "",
+        participant_types: [...(item.participant_types || [])],
+        coordination_enabled: false,
+        coordination: blankCoordination(),
+    });
+    selectedActivity.value = null;
+    api.error.value = "";
     openForm("activity");
 };
 const openForm = (name) => {
@@ -681,20 +709,26 @@ const reloadCase = async () => {
 };
 const saveActivity = async (finalized = false) => {
     activity.status = finalized ? "finalized" : "draft";
-    activity.ends_at = deviceTime();
+    if (!activity.id) activity.ends_at = deviceTime();
     const payload = {
         ...activity,
         coordination: activity.coordination_enabled
             ? { ...activity.coordination }
             : undefined,
     };
+    const activityId = payload.id;
+    delete payload.id;
     delete payload.coordination_enabled;
     if (!activity.coordination_enabled) delete payload.coordination;
     try {
-        await api.post(
-            `/api/psychology/cases/${selected.value.id}/activities`,
-            payload
-        );
+        if (activityId) {
+            await api.patch(`/api/psychology/activities/${activityId}`, payload);
+        } else {
+            await api.post(
+                `/api/psychology/cases/${selected.value.id}/activities`,
+                payload
+            );
+        }
         await reloadCase();
         resetActivityForm();
         closeForm();
@@ -2158,7 +2192,13 @@ onMounted(load);
                                     <div class="psi-modal-heading mb-4">
                                         <div>
                                             <span>Registro confidencial</span>
-                                            <h5 class="mb-1">Nueva atención</h5>
+                                            <h5 class="mb-1">
+                                                {{
+                                                    activity.id
+                                                        ? "Editar ficha de atención"
+                                                        : "Nueva atención"
+                                                }}
+                                            </h5>
                                             <p class="text-muted small mb-0">
                                                 Registro de entrevista, acuerdos
                                                 y seguimiento. Los campos
@@ -2780,6 +2820,7 @@ onMounted(load);
                                     </div>
 
                                     <div
+                                        v-if="!activity.id"
                                         class="psi-form-section psi-coordination-inline"
                                     >
                                         <div class="psi-coordination-toggle">
@@ -2921,6 +2962,26 @@ onMounted(load);
                                         </div>
                                     </div>
 
+                                    <div
+                                        v-if="activity.id"
+                                        class="psi-form-section psi-correction-reason"
+                                    >
+                                        <h6>Motivo de la corrección</h6>
+                                        <p>
+                                            Se conservará una copia cifrada de la
+                                            versión anterior junto con este motivo.
+                                        </p>
+                                        <textarea
+                                            v-model="activity.change_reason"
+                                            class="form-control"
+                                            rows="2"
+                                            minlength="5"
+                                            maxlength="1000"
+                                            required
+                                            placeholder="Ej.: Corrección de fecha y acuerdos según revisión del acta."
+                                        ></textarea>
+                                    </div>
+
                                     <div class="psi-form-actions">
                                         <button
                                             type="button"
@@ -2931,6 +2992,7 @@ onMounted(load);
                                             Cancelar
                                         </button>
                                         <button
+                                            v-if="!activity.id || activity.status === 'draft'"
                                             type="button"
                                             class="btn btn-outline-primary"
                                             :disabled="api.loading.value"
@@ -2951,7 +3013,9 @@ onMounted(load);
                                             {{
                                                 api.loading.value
                                                     ? "Guardando…"
-                                                    : "Finalizar atención"
+                                                    : activity.id
+                                                      ? "Guardar corrección"
+                                                      : "Finalizar atención"
                                             }}
                                         </button>
                                     </div>
@@ -3039,6 +3103,16 @@ onMounted(load);
                                                 <div
                                                     class="psi-record-row-actions"
                                                 >
+                                                    <button
+                                                        v-if="catalogs.capabilities.create_activity"
+                                                        type="button"
+                                                        class="psi-record-icon-button is-edit"
+                                                        title="Editar ficha"
+                                                        aria-label="Editar ficha"
+                                                        @click="openActivityEdit(item)"
+                                                    >
+                                                        <i class="bx bx-edit-alt"></i>
+                                                    </button>
                                                     <button
                                                         type="button"
                                                         class="psi-record-icon-button"
@@ -5268,6 +5342,15 @@ onMounted(load);
             </div>
             <template #footer>
                 <button
+                    v-if="catalogs.capabilities.create_activity"
+                    type="button"
+                    class="btn btn-outline-primary"
+                    @click="openActivityEdit(selectedActivity)"
+                >
+                    <i class="bx bx-edit-alt me-1"></i>
+                    Editar ficha
+                </button>
+                <button
                     type="button"
                     class="btn btn-light"
                     @click="selectedActivity = null"
@@ -5738,6 +5821,16 @@ onMounted(load);
     color: #c84f55;
     background: #fff3f3;
     border-color: #f2c9cb;
+}
+.psi-record-icon-button.is-edit {
+    color: #1f6b60;
+    background: #eef9f6;
+    border-color: #c6e8df;
+}
+.psi-record-icon-button.is-edit:hover,
+.psi-record-icon-button.is-edit:focus-visible {
+    color: #155047;
+    border-color: #7cc8b5;
 }
 .psi-record-icon-button.is-pdf:hover,
 .psi-record-icon-button.is-pdf:focus-visible {
@@ -6801,6 +6894,15 @@ onMounted(load);
     background: #6a55a0;
     border-radius: 50%;
     font-size: 0.7rem;
+}
+.psi-correction-reason {
+    background: linear-gradient(135deg, #f3f8ff, #f8f3ff);
+    border-color: #dbe2f2;
+}
+.psi-correction-reason p {
+    margin: -0.45rem 0 0.75rem 1.9rem;
+    color: #718096;
+    font-size: 0.76rem;
 }
 .psi-form-error {
     display: flex;

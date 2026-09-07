@@ -35,7 +35,7 @@ class ConvivenciaAccessService
     private const OWNERSHIP_COLUMNS = [
         'convivencia_cases' => ['responsible_user_id'],
         'convivencia_complaints' => ['responsible_user_id'],
-        'convivencia_derivations' => ['responsible_user_id'],
+        'convivencia_derivations' => ['responsible_user_id', 'destination_user_id'],
         'convivencia_interviews' => ['responsible_user_id'],
         'convivencia_measures' => ['responsible_user_id'],
         'convivencia_plans' => ['responsible_user_id'],
@@ -568,6 +568,7 @@ class ConvivenciaAccessService
             $record->getAttribute('created_by'),
             $record->getAttribute('updated_by'),
             $record->getAttribute('responsible_user_id'),
+            $record->getAttribute('destination_user_id'),
             $record->getAttribute('inspector_user_id'),
             $record->getAttribute('activated_by'),
             $record->getAttribute('closed_by'),

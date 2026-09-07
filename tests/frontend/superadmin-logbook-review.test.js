@@ -2,6 +2,7 @@
 
 import { flushPromises, mount } from "@vue/test-utils";
 import axios from "axios";
+import { readFileSync } from "node:fs";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import LogbookReview from "../../resources/js/views/superadmin/logbook-review.vue";
 
@@ -87,6 +88,17 @@ describe("Revisión central de bitácoras para Superadmin", () => {
   beforeEach(() => {
     axios.get.mockReset();
     axios.get.mockResolvedValue({ data: response });
+  });
+
+  it("protege la ruta Vue con el permiso explícito de supervisión", () => {
+    const router = readFileSync("resources/js/router/index.js", "utf8");
+    const routeStart = router.indexOf('path: "/superadmin/bitacoras"');
+    const routeEnd = router.indexOf("component:", routeStart);
+    const routeDefinition = router.slice(routeStart, routeEnd);
+
+    expect(routeStart).toBeGreaterThan(-1);
+    expect(routeDefinition).toContain('permission: "superadmin.logbooks.view"');
+    expect(routeDefinition).not.toContain("superAdminOnly");
   });
 
   it("renders all real sources, including staff and night-shift logbooks, in one read-only workspace", async () => {

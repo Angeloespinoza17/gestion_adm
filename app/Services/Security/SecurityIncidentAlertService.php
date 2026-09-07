@@ -13,7 +13,7 @@ class SecurityIncidentAlertService
 {
     public function dispatchIfNeeded(SecurityIncident $incident): void
     {
-        if (!in_array($incident->priority, ['alta', 'critica'], true)) {
+        if (! in_array($incident->priority, ['alta', 'critica'], true)) {
             return;
         }
 
@@ -52,13 +52,13 @@ class SecurityIncidentAlertService
             );
         }
 
-        $mailableRecipients = $recipients->filter(fn (User $user) => !empty($user->email))->values();
-        if ($mailableRecipients->isNotEmpty()) {
-            Notification::send($mailableRecipients, new SecurityIncidentPriorityNotification($incident));
-            $createdNotifications->each->update([
-                'sent_via_mail_at' => now(),
-            ]);
-        }
+        Notification::send($recipients, new SecurityIncidentPriorityNotification($incident));
+        $mailableRecipientIds = $recipients
+            ->filter(fn (User $user) => ! empty($user->email))
+            ->pluck('id');
+        $createdNotifications
+            ->whereIn('user_id', $mailableRecipientIds)
+            ->each->update(['sent_via_mail_at' => now()]);
 
         $incident->forceFill([
             'alert_sent_at' => now(),

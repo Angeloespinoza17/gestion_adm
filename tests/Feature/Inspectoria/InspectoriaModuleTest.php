@@ -142,6 +142,14 @@ class InspectoriaModuleTest extends TestCase
         $this->assertSame('enviada', $referral->status);
         $this->assertSame('Se solicita evaluación del equipo psicosocial.', $referral->description);
 
+        $notification = $professional->notifications()
+            ->get()
+            ->first(fn ($item) => ($item->data['event_type'] ?? null) === 'social_work.referral.created');
+        $this->assertNotNull($notification);
+        $this->assertSame('cnsc.operational-notification.v1', $notification->data['event']['schema']);
+        $this->assertSame($referral->id, $notification->data['event']['resource']['id']);
+        $this->assertStringNotContainsString('Se solicita evaluación', $notification->data['message']);
+
         $this->getJson('/api/inspectoria/catalogs')
             ->assertOk()
             ->assertJsonFragment([
