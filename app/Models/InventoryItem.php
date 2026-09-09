@@ -142,6 +142,6 @@ class InventoryItem extends Model
 
     public function supplyItem(): HasOne
     {
-        return $this->hasOne(SupplyItem::class, 'inventory_item_id');
+        return $this->hasOne(SupplyItem::class, 'inventory_item_id')->withTrashed();
     }
 }

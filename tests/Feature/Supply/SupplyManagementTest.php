@@ -158,7 +158,7 @@ class SupplyManagementTest extends TestCase
         ]);
     }
 
-    public function test_manager_can_delete_an_unused_cleaning_supply_and_its_private_photo(): void
+    public function test_manager_archives_an_unused_cleaning_supply_and_preserves_its_private_photo(): void
     {
         Storage::fake('local');
 
@@ -176,25 +176,47 @@ class SupplyManagementTest extends TestCase
 
         $this->deleteJson("/api/supplies/items/{$item->id}")
             ->assertOk()
-            ->assertJsonPath('message', 'Insumo eliminado correctamente.');
+            ->assertJsonPath('archived', true)
+            ->assertJsonPath('message', 'Producto eliminado del registro. Su ficha, fotografía, existencias y movimientos se conservaron para trazabilidad.');
 
-        $this->assertDatabaseMissing('supply_items', ['id' => $item->id]);
-        $this->assertDatabaseMissing('inventory_items', ['id' => $inventoryItemId]);
-        Storage::disk('local')->assertMissing($photoPath);
+        $this->assertSoftDeleted('supply_items', ['id' => $item->id]);
+        $this->assertDatabaseHas('inventory_items', [
+            'id' => $inventoryItemId,
+            'active' => false,
+        ]);
+        Storage::disk('local')->assertExists($photoPath);
     }
 
-    public function test_manager_cannot_delete_a_cleaning_supply_with_historical_movements(): void
+    public function test_manager_can_remove_a_cleaning_supply_with_stock_without_losing_history(): void
     {
         $item = $this->createSupply('cleaning', 'paper', 'Papel con trazabilidad', 'rollo', 10);
         $this->receive($item, 20);
 
         $this->deleteJson("/api/supplies/items/{$item->id}")
-            ->assertUnprocessable()
-            ->assertJsonValidationErrors(['item']);
+            ->assertOk()
+            ->assertJsonPath('archived', true)
+            ->assertJsonPath('message', 'Producto eliminado del registro. Su ficha, fotografía, existencias y movimientos se conservaron para trazabilidad.');
 
-        $this->assertDatabaseHas('supply_items', ['id' => $item->id]);
-        $this->assertDatabaseHas('inventory_items', ['id' => $item->inventory_item_id]);
+        $this->assertSoftDeleted('supply_items', ['id' => $item->id]);
+        $this->assertDatabaseHas('inventory_items', [
+            'id' => $item->inventory_item_id,
+            'active' => false,
+            'stock_quantity' => 20,
+        ]);
+        $this->assertDatabaseHas('supply_receipt_items', ['supply_item_id' => $item->id]);
+        $this->assertDatabaseHas('inventory_stock_movements', ['inventory_item_id' => $item->inventory_item_id]);
         $this->assertSame('20.00', $item->inventoryItem->fresh()->stock_quantity);
+
+        $this->getJson('/api/supplies/items?section=cleaning')
+            ->assertOk()
+            ->assertJsonMissing(['id' => $item->id]);
+
+        $this->getJson('/api/supplies/receipts?section=cleaning')
+            ->assertOk()
+            ->assertJsonPath('data.0.items.0.supply_item.inventory_item.name', 'Papel con trazabilidad')
+            ->assertJsonPath('data.0.items.0.supply_item.inventory_item.stock_quantity', '20.00');
+
+        $this->getJson("/api/supplies/items/{$item->id}")->assertNotFound();
     }
 
     public function test_read_only_user_can_view_but_cannot_edit_or_delete_a_cleaning_supply(): void
@@ -228,6 +250,25 @@ class SupplyManagementTest extends TestCase
             'id' => $item->inventory_item_id,
             'name' => 'Escobillón institucional',
         ]);
+    }
+
+    public function test_delivery_product_search_only_returns_active_items_with_available_stock(): void
+    {
+        $available = $this->createSupply('cleaning', 'cleaner', 'Buscador disponible', 'litro', 2);
+        $inactive = $this->createSupply('cleaning', 'cleaner', 'Buscador inactivo', 'litro', 2);
+        $empty = $this->createSupply('cleaning', 'cleaner', 'Buscador sin stock', 'litro', 2);
+
+        $this->receive($available, 12);
+        $this->receive($inactive, 8);
+        $inactive->inventoryItem()->update(['active' => false]);
+
+        $this->getJson('/api/supplies/items?section=cleaning&search=Buscador&stock_status=available&active_only=1&per_page=20')
+            ->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.id', $available->id)
+            ->assertJsonPath('data.0.inventory_item.name', 'Buscador disponible')
+            ->assertJsonMissing(['id' => $inactive->id])
+            ->assertJsonMissing(['id' => $empty->id]);
     }
 
     public function test_manager_can_register_and_move_maintenance_storeroom_tools(): void

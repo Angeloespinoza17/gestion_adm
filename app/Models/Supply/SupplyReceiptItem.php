@@ -29,6 +29,6 @@ class SupplyReceiptItem extends Model
 
     public function supplyItem(): BelongsTo
     {
-        return $this->belongsTo(SupplyItem::class);
+        return $this->belongsTo(SupplyItem::class)->withTrashed();
     }
 }

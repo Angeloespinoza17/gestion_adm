@@ -91,6 +91,7 @@ class SupplyItemController extends Controller
         $storeroomId = $request->integer('storeroom_id');
         $search = trim((string) $request->query('search'));
         $stockStatus = trim((string) $request->query('stock_status'));
+        $activeOnly = $request->boolean('active_only');
 
         validator(['stock_status' => $stockStatus], [
             'stock_status' => ['nullable', Rule::in(['available', 'low', 'empty'])],
@@ -104,6 +105,7 @@ class SupplyItemController extends Controller
                 $section === SupplyItem::SECTION_MAINTENANCE_STOREROOM && $storeroomId > 0,
                 fn ($query) => $query->where('supply_items.storeroom_id', $storeroomId),
             )
+            ->when($activeOnly, fn ($query) => $query->where('supply_inventory.active', true))
             ->when($search !== '', function ($query) use ($search): void {
                 $query->where(function ($query) use ($search): void {
                     $query->where('supply_inventory.name', 'like', "%{$search}%")
@@ -256,61 +258,34 @@ class SupplyItemController extends Controller
         ]);
     }
 
-    public function destroy(SupplyItem $item): JsonResponse
+    public function destroy(Request $request, SupplyItem $item): JsonResponse
     {
         $section = $item->section;
 
-        $photoPath = DB::transaction(function () use ($item): ?string {
+        DB::transaction(function () use ($item, $request): void {
             $lockedItem = SupplyItem::query()
                 ->with('inventoryItem')
                 ->lockForUpdate()
                 ->findOrFail($item->getKey());
 
-            if (
-                $lockedItem->receiptItems()->exists()
-                || $lockedItem->deliveryItems()->exists()
-                || $lockedItem->requestItems()->exists()
-            ) {
-                throw ValidationException::withMessages([
-                    'item' => 'No se puede eliminar un insumo con compras, entregas o solicitudes asociadas. Desactívalo para conservar su trazabilidad.',
-                ]);
-            }
-
             $inventoryItem = $lockedItem->inventoryItem;
             $isAttachedInventoryItem = $lockedItem->section === SupplyItem::SECTION_MAINTENANCE_STOREROOM;
 
-            if (
-                ! $isAttachedInventoryItem
-                && $inventoryItem
-                && (
-                    (float) $inventoryItem->stock_quantity !== 0.0
-                    || $inventoryItem->stockMovements()->exists()
-                    || $inventoryItem->movements()->exists()
-                )
-            ) {
-                throw ValidationException::withMessages([
-                    'item' => 'No se puede eliminar un insumo con existencias o movimientos históricos. Desactívalo para conservar su trazabilidad.',
-                ]);
-            }
-
-            $photoPath = $lockedItem->reference_photo_path;
             $lockedItem->delete();
 
             if (! $isAttachedInventoryItem && $inventoryItem) {
-                $inventoryItem->delete();
+                $inventoryItem->update([
+                    'active' => false,
+                    'updated_by' => $request->user()->id,
+                ]);
             }
-
-            return $photoPath;
         });
-
-        if ($photoPath) {
-            Storage::disk('local')->delete($photoPath);
-        }
 
         return response()->json([
             'message' => $section === SupplyItem::SECTION_MAINTENANCE_STOREROOM
-                ? 'Artículo retirado del pañol correctamente. Su ficha original permanece en Inventario.'
-                : 'Insumo eliminado correctamente.',
+                ? 'Artículo retirado del pañol. Su ficha, fotografía e historial permanecen conservados en Inventario.'
+                : 'Producto eliminado del registro. Su ficha, fotografía, existencias y movimientos se conservaron para trazabilidad.',
+            'archived' => true,
         ]);
     }
 
